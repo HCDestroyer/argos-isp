@@ -2515,20 +2515,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/diario": {
@@ -10023,6 +10013,8 @@
           "nombre",
           "tipo",
           "padre_id",
+          "imputable",
+          "auxiliar_cliente",
           "activa",
           "version",
           "created_at",
@@ -10054,6 +10046,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "imputable": {
+            "type": "boolean",
+            "description": "Recibe movimientos (false = cuenta de agrupación)"
+          },
+          "auxiliar_cliente": {
+            "type": "boolean",
+            "description": "Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id"
           },
           "activa": {
             "type": "boolean"

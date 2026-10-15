@@ -25,6 +25,11 @@ export const Cuenta = definirEsquema(
         nombre: texto,
         tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
         padre_id: nulable(id),
+        imputable: { ...booleano, description: 'Recibe movimientos (false = cuenta de agrupación)' },
+        auxiliar_cliente: {
+            ...booleano,
+            description: 'Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id',
+        },
         activa: booleano,
         ...auditable,
     }),

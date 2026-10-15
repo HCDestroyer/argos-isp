@@ -1163,6 +1163,10 @@ export interface components {
             /** @enum {string} */
             tipo: "activo" | "pasivo" | "ingreso" | "gasto";
             padre_id: number | null;
+            /** @description Recibe movimientos (false = cuenta de agrupación) */
+            imputable: boolean;
+            /** @description Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id */
+            auxiliar_cliente: boolean;
             activa: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -3034,15 +3038,6 @@ export interface operations {
             };
             /** @description Sin el permiso libro.ver */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
