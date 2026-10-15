@@ -99,6 +99,18 @@ export const vencerFacturasValidator = vine.compile(
     }),
 )
 
+export const corteValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad()
+            .optional()
+            .meta({ description: 'Solo este servicio; si falta, las horas de corte pendientes de hoy' }),
+        ignorar_hora: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Baja de estado aunque no haya llegado la hora de corte (laboratorio)' }),
+    }),
+)
+
 export const anularFacturaValidator = vine.compile(vine.object({ motivo: motivo() }))
 
 /*

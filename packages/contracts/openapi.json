@@ -1935,6 +1935,110 @@
         "x-implementado": false
       }
     },
+    "/api/v1/facturas/corte": {
+      "post": {
+        "operationId": "facturasCorte",
+        "summary": "Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo este servicio; si falta, las horas de corte pendientes de hoy"
+                  },
+                  "ignorar_hora": {
+                    "description": "Baja de estado aunque no haya llegado la hora de corte (laboratorio)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del corte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/generar": {
       "post": {
         "operationId": "facturasGenerar",
@@ -12644,6 +12748,47 @@
           "prefijo": {
             "type": "string",
             "description": "Asignación que contiene la IP (prefijo más largo)"
+          }
+        }
+      },
+      "ResultadoCorte": {
+        "type": "object",
+        "required": [
+          "horas",
+          "evaluados",
+          "cambiados",
+          "errores",
+          "vencimiento"
+        ],
+        "properties": {
+          "horas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Horas de corte procesadas (HH:MM; * = corte manual)"
+          },
+          "evaluados": {
+            "type": "integer",
+            "description": "Servicios evaluados"
+          },
+          "cambiados": {
+            "type": "integer",
+            "description": "Servicios que cambiaron de estado"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron evaluar (ver log)"
+          },
+          "vencimiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultadoVencimiento"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

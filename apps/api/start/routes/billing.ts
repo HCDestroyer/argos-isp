@@ -11,6 +11,7 @@ import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
+import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { exigirAlcance } from '#core/acl'
 import {
@@ -21,6 +22,7 @@ import {
     PlantillaFacturacion,
     Promesa,
     ResultadoGeneracion,
+    ResultadoCorte,
     ResultadoVencimiento,
 } from '#billing/esquemas'
 
@@ -120,6 +122,18 @@ const facturas: Ruta[] = [
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Resultado del vencimiento', esquema: ResultadoVencimiento },
         handler: (ctx, { cuerpo }) => new VencerFacturas().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/facturas/corte',
+        operacion: 'facturasCorte',
+        resumen: 'Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.generar',
+        cuerpo: v.corteValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Resultado del corte', esquema: ResultadoCorte },
+        handler: (ctx, { cuerpo }) => new EjecutarCorte().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',

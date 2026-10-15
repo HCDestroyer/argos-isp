@@ -156,6 +156,17 @@ export const ResultadoVencimiento = definirEsquema(
     }),
 )
 
+export const ResultadoCorte = definirEsquema(
+    'ResultadoCorte',
+    objeto({
+        horas: { ...lista(texto), description: 'Horas de corte procesadas (HH:MM; * = corte manual)' },
+        evaluados: { type: 'integer', description: 'Servicios evaluados' },
+        cambiados: { type: 'integer', description: 'Servicios que cambiaron de estado' },
+        errores: { type: 'integer', description: 'Servicios que no se pudieron evaluar (ver log)' },
+        vencimiento: nulable(ResultadoVencimiento),
+    }),
+)
+
 export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
 
 export const Pago = definirEsquema(

@@ -247,6 +247,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/facturas/corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios */
+        post: operations["facturasCorte"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/facturas/generar": {
         parameters: {
             query?: never;
@@ -1760,6 +1777,17 @@ export interface components {
             /** @description Asignación que contiene la IP (prefijo más largo) */
             prefijo: string;
         };
+        ResultadoCorte: {
+            /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
+            horas: string[];
+            /** @description Servicios evaluados */
+            evaluados: number;
+            /** @description Servicios que cambiaron de estado */
+            cambiados: number;
+            /** @description Servicios que no se pudieron evaluar (ver log) */
+            errores: number;
+            vencimiento: components["schemas"]["ResultadoVencimiento"] | null;
+        };
         ResultadoGeneracion: {
             generadas: number;
             /** @description Ya tenían factura del periodo */
@@ -2926,6 +2954,74 @@ export interface operations {
             };
             /** @description No implementado todavía */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    facturasCorte: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo este servicio; si falta, las horas de corte pendientes de hoy */
+                    servicio_id?: number;
+                    /** @description Baja de estado aunque no haya llegado la hora de corte (laboratorio) */
+                    ignorar_hora?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del corte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoCorte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
