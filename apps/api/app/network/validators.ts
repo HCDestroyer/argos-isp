@@ -87,15 +87,16 @@ export const crearPoolIpv6Validator = vine.compile(
 |--------------------------------------------------------------------------
 */
 
-const kbps = () => vine.number().withoutDecimals().min(0).max(100_000_000)
+const kbps = () => vine.number().withoutDecimals().min(1).max(100_000_000)
 
 const camposPlan = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     precio: dinero(),
     bajada_kbps: kbps(),
     subida_kbps: kbps(),
-    bajada_limitada_kbps: kbps().optional(),
-    subida_limitada_kbps: kbps().optional(),
+    // > 0: con 0 el servicio limitado navegaría a velocidad completa (aaa lo usa al limitar)
+    bajada_limitada_kbps: kbps().min(1),
+    subida_limitada_kbps: kbps().min(1),
     reuso: vine.number().withoutDecimals().min(1).max(64).optional(),
     dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
     tamano_prefijo_delegado: vine
@@ -115,8 +116,8 @@ export const editarPlanValidator = vine.compile(
         precio: dinero().optional(),
         bajada_kbps: kbps().optional(),
         subida_kbps: kbps().optional(),
-        bajada_limitada_kbps: kbps().optional(),
-        subida_limitada_kbps: kbps().optional(),
+        bajada_limitada_kbps: kbps().min(1).optional(),
+        subida_limitada_kbps: kbps().min(1).optional(),
         reuso: vine.number().withoutDecimals().min(1).max(64).optional(),
         dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
         tamano_prefijo_delegado: vine

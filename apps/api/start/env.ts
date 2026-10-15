@@ -63,6 +63,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     |----------------------------------------------------------
     */
     INTERNAL_TOKEN: Env.schema.string(),
+    /** 32 bytes en base64: cifra pass_ppp y secretos de routers (formato v1, la comparten aaa y coa) */
+    AAA_PPP_KEY: Env.schema.string.optional(),
     ACCESS_TOKEN_EXPIRA: Env.schema.string.optional(),
     CORS_ORIGINS: Env.schema.string.optional(),
 

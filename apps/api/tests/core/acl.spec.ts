@@ -42,9 +42,9 @@ test.group('ACL y endpoints sin implementar', () => {
         })
     })
 
-    test('admin tiene routers.ver (501 hasta que A1 lo implemente)', async ({ client }) => {
+    test('admin tiene routers.ver', async ({ client }) => {
         const { token } = await usuarioConRoles(['admin'])
-        await estado(client.get('/api/v1/routers').bearerToken(token), 501)
+        await estado(client.get('/api/v1/routers').bearerToken(token), 200)
     })
 
     test('se valida antes del 501: cuerpo inválido → 422', async ({ client, assert }) => {
