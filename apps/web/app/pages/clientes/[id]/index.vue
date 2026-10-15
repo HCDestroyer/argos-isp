@@ -62,11 +62,11 @@ const mapa = computed(() => {
 const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos_personalizados ?? {})
     .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) })))
 
-/** La bitácora todavía no filtra por cliente (pedido a A1): se piden el cliente y cada servicio. */
-const entidadesLinea = computed<EntidadAuditada[]>(() => [
-    { tipo: 'cliente', id: clienteId.value },
-    ...servicios.value.map(s => ({ tipo: 'servicio', id: s.id })),
-])
+/**
+ * La API junta el cliente y sus servicios, facturas, pagos y promesas (`cliente_id`); las
+ * lecturas del portal (cada visita a la página de corte) no cuentan la historia del cliente.
+ */
+const filtrosLinea = computed<FiltrosAcciones>(() => ({ cliente_id: clienteId.value, excluir_canal: 'portal' }))
 
 const consumidorFinal = computed(() => cliente.value?.nit_cui?.toUpperCase() === 'CF')
 
@@ -326,7 +326,7 @@ onMounted(cargar)
 
             <LineaTiempoBitacora
                 v-else-if="pestana === 'linea'"
-                :entidades="entidadesLinea"
+                :filtros="filtrosLinea"
                 etiqueta="Línea de tiempo del cliente"
             />
         </div>

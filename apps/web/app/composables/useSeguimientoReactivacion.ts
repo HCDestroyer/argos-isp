@@ -1,4 +1,6 @@
-import type { Problem } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
+
+export type ServicioEvaluado = Schema<'ServicioEvaluado'>
 
 export interface OpcionesSeguimiento {
     /** Cada cuánto se vuelve a leer el estado (3 s). */
@@ -8,13 +10,18 @@ export interface OpcionesSeguimiento {
 }
 
 /**
- * Después de un pago, la API reactiva el servicio por evento (`pago.registrado` →
- * `evaluarEstadoServicio`), no en la misma respuesta. Este seguimiento relee los servicios del
- * cliente cada 3 s hasta 30 s y dice cuáles pasaron a `activo`.
+ * Qué pasó con los servicios del cliente después de un pago.
+ *
+ * `POST /pagos` evalúa cada servicio afectado en la misma transacción y lo devuelve en
+ * `Pago.servicios[]`: con eso se muestra "Servicio reactivado" de inmediato y no se sondea nada.
+ * Solo si la respuesta no trae `servicios` (versión vieja de la API) se relee
+ * `GET /servicios?cliente_id=` cada 3 s hasta 30 s, como respaldo.
+ *
+ * Un servicio suspendido a mano (`suspension_manual`) no se espera: el pago no lo reactiva.
  *
  * ```ts
  * const seguimiento = useSeguimientoReactivacion()
- * seguimiento.iniciar(cliente.id, serviciosAntesDelPago)
+ * seguimiento.iniciar(cliente.id, serviciosAntesDelPago, pago.servicios)
  * seguimiento.reactivados.value // servicios que estaban limitados o suspendidos y ya están activos
  * ```
  */
@@ -25,8 +32,10 @@ export function useSeguimientoReactivacion(opciones: OpcionesSeguimiento = {}) {
     const servicios = shallowRef<Servicio[]>([])
     /** Estado de cada servicio al registrar el pago. */
     const antes = shallowRef(new Map<number, EstadoServicio>())
+    /** Motivo de la evaluación de cada servicio (`Pago.servicios[].motivo`). */
+    const motivos = shallowRef(new Map<number, string>())
     const siguiendo = ref(false)
-    /** Pasaron los 30 s y algún servicio sigue sin reactivarse. */
+    /** Pasaron los 30 s del sondeo de respaldo y algún servicio sigue sin reactivarse. */
     const agotado = ref(false)
     const problema = ref<Problem | null>(null)
 
@@ -35,14 +44,16 @@ export function useSeguimientoReactivacion(opciones: OpcionesSeguimiento = {}) {
     let clienteId = 0
     let ronda = 0
 
-    /** Servicios que esperaban reactivación (limitados o suspendidos al pagar). */
+    /** Servicios que esperaban reactivación (limitados o suspendidos al pagar, sin suspensión manual). */
     const esperados = computed(() => servicios.value.filter((s) => {
         const previo = antes.value.get(s.id)
-        return previo === 'limitado' || previo === 'suspendido'
+        return (previo === 'limitado' || previo === 'suspendido') && !s.suspension_manual
     }))
 
     const reactivados = computed(() => esperados.value.filter(s => s.estado === 'activo'))
     const pendientes = computed(() => esperados.value.filter(s => s.estado === 'limitado' || s.estado === 'suspendido'))
+    /** Suspendidos a mano: siguen cortados aunque el cliente pague. */
+    const suspendidosManual = computed(() => servicios.value.filter(s => s.suspension_manual && s.estado === 'suspendido'))
 
     function detener() {
         clearTimeout(temporizador)
@@ -74,16 +85,33 @@ export function useSeguimientoReactivacion(opciones: OpcionesSeguimiento = {}) {
         temporizador = setTimeout(() => leer(actual), intervaloMs)
     }
 
-    /** Empieza a seguir los servicios del cliente; `previos` es cómo estaban antes del pago. */
-    function iniciar(cliente: number, previos: Servicio[]) {
+    /** Aplica a los servicios el estado que devolvió `POST /pagos`. */
+    function aplicarEvaluacion(previos: Servicio[], evaluados: ServicioEvaluado[]): Servicio[] {
+        const porId = new Map(evaluados.map(e => [e.servicio_id, e]))
+        return previos.map((s) => {
+            const evaluado = porId.get(s.id)
+            return evaluado ? { ...s, estado: evaluado.estado } : s
+        })
+    }
+
+    /**
+     * Empieza el seguimiento. `previos` es cómo estaban los servicios antes del pago y
+     * `evaluados`, `Pago.servicios[]` de la respuesta; sin `evaluados`, sondea como respaldo.
+     */
+    function iniciar(cliente: number, previos: Servicio[], evaluados?: ServicioEvaluado[]) {
         detener()
         ronda++
         clienteId = cliente
         inicio = Date.now()
-        servicios.value = previos
         antes.value = new Map(previos.map(s => [s.id, s.estado]))
+        motivos.value = new Map((evaluados ?? []).map(e => [e.servicio_id, e.motivo]))
         agotado.value = false
         problema.value = null
+        if (evaluados) {
+            servicios.value = aplicarEvaluacion(previos, evaluados)
+            return
+        }
+        servicios.value = previos
         if (pendientes.value.length === 0) {
             return
         }
@@ -97,11 +125,24 @@ export function useSeguimientoReactivacion(opciones: OpcionesSeguimiento = {}) {
         ronda++
         servicios.value = []
         antes.value = new Map()
+        motivos.value = new Map()
         agotado.value = false
         problema.value = null
     }
 
     onScopeDispose(detener)
 
-    return { servicios, siguiendo, agotado, problema, reactivados, pendientes, iniciar, detener, reiniciar }
+    return {
+        servicios,
+        motivos,
+        siguiendo,
+        agotado,
+        problema,
+        reactivados,
+        pendientes,
+        suspendidosManual,
+        iniciar,
+        detener,
+        reiniciar,
+    }
 }

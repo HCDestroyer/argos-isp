@@ -32,18 +32,17 @@ const estado = ref<EstadoServicio | typeof TODOS>(estadoQuery(route.query.estado
 const routerId = ref(textoQuery(route.query.router) || TODOS)
 const planId = ref(textoQuery(route.query.plan) || TODOS)
 const clienteId = ref(idQuery(route.query.cliente))
+const zonaId = ref(textoQuery(route.query.zona) || TODOS)
+const conDeuda = ref(['1', 'true'].includes(textoQuery(route.query.deuda)))
 const clienteElegido = shallowRef<Cliente | null>(null)
 
 const verRouters = computed(() => puede('routers.ver'))
 const verPlanes = computed(() => puede('planes.ver'))
+const verZonas = computed(() => puede('zonas.ver'))
 
 const routers = shallowRef<RouterNas[]>([])
 const planes = shallowRef<Plan[]>([])
-/** Nombres de los clientes de la página. `Servicio` no trae `cliente_nombre` (pedido a A1). */
-const clientes = ref(new Map<number, Cliente>())
-
-const nombresRouter = computed(() => new Map(routers.value.map(r => [r.id, r.nombre])))
-const nombresPlan = computed(() => new Map(planes.value.map(p => [p.id, p])))
+const zonas = shallowRef<Zona[]>([])
 
 const itemsEstado: SelectItem[] = [
     { label: 'Todos los estados', value: TODOS },
@@ -58,6 +57,11 @@ const itemsRouter = computed<SelectItem[]>(() => [
 const itemsPlan = computed<SelectItem[]>(() => [
     { label: 'Todos los planes', value: TODOS },
     ...planes.value.map(p => ({ label: p.nombre, value: String(p.id) })),
+])
+
+const itemsZona = computed<SelectItem[]>(() => [
+    { label: 'Todas las zonas', value: TODOS },
+    ...zonas.value.map(z => ({ label: z.nombre, value: String(z.id) })),
 ])
 
 function filtros(): FiltrosServicios {
@@ -78,57 +82,61 @@ function filtros(): FiltrosServicios {
     if (clienteId.value) {
         resultado.cliente_id = clienteId.value
     }
+    if (zonaId.value !== TODOS) {
+        resultado.zona_id = Number(zonaId.value)
+    }
+    // `false` en la API es "sin deuda"; apagado no se manda.
+    if (conDeuda.value) {
+        resultado.con_deuda_vencida = true
+    }
     return resultado
 }
 
-async function cargarClientes(filas: Servicio[]) {
-    const faltan = [...new Set(filas.map(s => s.cliente_id))].filter(id => !clientes.value.has(id))
-    const resultados = await Promise.all(faltan.map(id => useClientes().ver(id)))
-    const mapa = new Map(clientes.value)
-    for (const resultado of resultados) {
-        if (resultado.ok) {
-            mapa.set(resultado.data.id, resultado.data)
-        }
-    }
-    clientes.value = mapa
-}
-
-const lista = usePaginacionCursor(async (cursor) => {
-    const resultado = await serviciosApi.listar(filtros(), cursor)
-    if (resultado.ok) {
-        void cargarClientes(resultado.data.data)
-    }
-    return resultado
-})
+const lista = usePaginacionCursor(cursor => serviciosApi.listar(filtros(), cursor))
 
 const columnas = computed<TableColumn<Servicio>[]>(() => {
-    const base: TableColumn<Servicio>[] = [
+    // El plan va dentro de la celda "Servicio" para que el estado quepa a 1280 px. Los nombres
+    // vienen en `Servicio` (`cliente_nombre`, `router_nombre`…): no hace falta `routers.ver`.
+    return [
         { accessorKey: 'user_ppp', header: 'Servicio' },
-        // El plan va dentro de la celda "Servicio" para que el estado quepa a 1280 px.
         { accessorKey: 'cliente_id', header: 'Cliente', meta: SOLO_ANCHO },
-    ]
-    if (verRouters.value) {
-        base.push({ accessorKey: 'router_id', header: 'Router', meta: SOLO_ESCRITORIO })
-    }
-    base.push(
+        { accessorKey: 'router_id', header: 'Router', meta: SOLO_ESCRITORIO },
         { accessorKey: 'ipv4', header: 'Direcciones', meta: SOLO_ANCHO },
         { accessorKey: 'estado', header: 'Estado' },
-    )
-    return base
+    ]
 })
 
 const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || estado.value !== TODOS
     || routerId.value !== TODOS
     || planId.value !== TODOS
-    || clienteId.value !== 0)
+    || clienteId.value !== 0
+    || zonaId.value !== TODOS
+    || conDeuda.value)
 
-/** Accesos rápidos: "Todos", "Cortados" (suspendido) y "Limitados". */
-const accesos: { etiqueta: string, estado: EstadoServicio | typeof TODOS, color: 'neutral' | 'error' | 'warning' }[] = [
-    { etiqueta: 'Todos', estado: TODOS, color: 'neutral' },
-    { etiqueta: 'Cortados', estado: 'suspendido', color: 'error' },
-    { etiqueta: 'Limitados', estado: 'limitado', color: 'warning' },
+/** Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados" y "Con deuda" vencida. */
+interface AccesoServicios {
+    etiqueta: string
+    estado: EstadoServicio | typeof TODOS
+    deuda: boolean
+    color: 'neutral' | 'error' | 'warning'
+}
+
+const accesos: AccesoServicios[] = [
+    { etiqueta: 'Todos', estado: TODOS, deuda: false, color: 'neutral' },
+    { etiqueta: 'Cortados', estado: 'suspendido', deuda: false, color: 'error' },
+    { etiqueta: 'Limitados', estado: 'limitado', deuda: false, color: 'warning' },
+    { etiqueta: 'Con deuda', estado: TODOS, deuda: true, color: 'warning' },
 ]
+
+function accesoActivo(acceso: AccesoServicios): boolean {
+    return estado.value === acceso.estado && conDeuda.value === acceso.deuda
+}
+
+function elegirAcceso(acceso: AccesoServicios) {
+    estado.value = acceso.estado
+    conDeuda.value = acceso.deuda
+}
 
 async function aplicarFiltros() {
     const query: Record<string, string> = {}
@@ -148,6 +156,12 @@ async function aplicarFiltros() {
     if (clienteId.value) {
         query.cliente = String(clienteId.value)
     }
+    if (zonaId.value !== TODOS) {
+        query.zona = zonaId.value
+    }
+    if (conDeuda.value) {
+        query.deuda = '1'
+    }
     await router.replace({ query })
     await lista.recargar()
 }
@@ -159,6 +173,8 @@ function limpiarFiltros() {
     planId.value = TODOS
     clienteId.value = 0
     clienteElegido.value = null
+    zonaId.value = TODOS
+    conDeuda.value = false
 }
 
 let temporizador: ReturnType<typeof setTimeout> | undefined
@@ -166,24 +182,20 @@ watch(busqueda, () => {
     clearTimeout(temporizador)
     temporizador = setTimeout(aplicarFiltros, 300)
 })
-watch([estado, routerId, planId, clienteId], aplicarFiltros)
+watch([estado, routerId, planId, clienteId, zonaId, conDeuda], aplicarFiltros)
 onBeforeUnmount(() => clearTimeout(temporizador))
-
-function nombreCliente(servicio: Servicio): string {
-    return clientes.value.get(servicio.cliente_id)?.nombre ?? `Cliente #${servicio.cliente_id}`
-}
-
-function nombrePlan(servicio: Servicio): string {
-    return nombresPlan.value.get(servicio.plan_id)?.nombre ?? `Plan #${servicio.plan_id}`
-}
 
 onMounted(async () => {
     void lista.recargar()
-    const [resultadoRouters, resultadoPlanes, resultadoCliente] = await Promise.all([
+    const [resultadoRouters, resultadoPlanes, resultadoZonas, resultadoCliente] = await Promise.all([
         verRouters.value ? useRouters().listar() : null,
         verPlanes.value ? usePlanes().listar() : null,
+        verZonas.value ? useZonas().listar() : null,
         clienteId.value ? useClientes().ver(clienteId.value) : null,
     ])
+    if (resultadoZonas?.ok) {
+        zonas.value = resultadoZonas.data
+    }
     if (resultadoRouters?.ok) {
         routers.value = resultadoRouters.data.data
     }
@@ -224,11 +236,11 @@ onMounted(async () => {
                     :key="acceso.etiqueta"
                     :label="acceso.etiqueta"
                     :color="acceso.color"
-                    :variant="estado === acceso.estado ? 'solid' : 'outline'"
-                    :aria-pressed="estado === acceso.estado"
+                    :variant="accesoActivo(acceso) ? 'solid' : 'outline'"
+                    :aria-pressed="accesoActivo(acceso)"
                     size="sm"
                     class="rounded-full"
-                    @click="estado = acceso.estado"
+                    @click="elegirAcceso(acceso)"
                 />
             </div>
 
@@ -292,6 +304,19 @@ onMounted(async () => {
                     class="w-full sm:max-w-md"
                     @elegido="clienteElegido = $event"
                 />
+                <USelect
+                    v-if="verZonas"
+                    v-model="zonaId"
+                    :items="itemsZona"
+                    icon="i-lucide-map-pin"
+                    aria-label="Filtrar por zona"
+                    class="w-full sm:w-52"
+                />
+                <USwitch
+                    v-model="conDeuda"
+                    label="Con deuda vencida"
+                    class="shrink-0"
+                />
                 <UButton
                     v-if="hayFiltros"
                     label="Limpiar filtros"
@@ -342,16 +367,22 @@ onMounted(async () => {
                     </template>
 
                     <template #cliente_id-cell="{ row }">
-                        <ULink
-                            :to="`/clientes/${row.original.cliente_id}`"
-                            class="text-sm text-default hover:text-primary"
-                        >
-                            {{ nombreCliente(row.original) }}
-                        </ULink>
+                        <div class="flex min-w-32 flex-col">
+                            <ULink
+                                :to="`/clientes/${row.original.cliente_id}`"
+                                class="text-sm text-default hover:text-primary"
+                            >
+                                {{ nombreCliente(row.original) }}
+                            </ULink>
+                            <span
+                                v-if="nombreZona(row.original)"
+                                class="text-xs text-muted"
+                            >{{ nombreZona(row.original) }}</span>
+                        </div>
                     </template>
 
                     <template #router_id-cell="{ row }">
-                        <span class="text-sm">{{ nombresRouter.get(row.original.router_id) ?? `Router #${row.original.router_id}` }}</span>
+                        <span class="text-sm">{{ nombreRouter(row.original) }}</span>
                     </template>
 
                     <template #ipv4-cell="{ row }">
@@ -378,6 +409,11 @@ onMounted(async () => {
                                 variant="outline"
                                 size="sm"
                             />
+                            <SuspensionManualBadge
+                                :servicio="row.original"
+                                size="sm"
+                                con-motivo
+                            />
                         </div>
                     </template>
 
@@ -385,7 +421,7 @@ onMounted(async () => {
                         <UEmpty
                             icon="i-lucide-search-x"
                             :title="hayFiltros ? 'Ningún servicio coincide' : 'Todavía no hay servicios'"
-                            :description="hayFiltros ? 'Prueba con otro estado, router, plan o búsqueda.' : undefined"
+                            :description="hayFiltros ? 'Prueba con otro estado, router, plan, zona o búsqueda.' : undefined"
                             variant="naked"
                         />
                     </template>

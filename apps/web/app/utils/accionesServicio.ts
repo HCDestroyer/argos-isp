@@ -90,6 +90,26 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
     },
 ]
 
+/**
+ * Acciones que la API rechaza sobre un servicio suspendido a mano (422 `suspension_manual`):
+ * solo "Reactivar" quita la marca, para que no se salte por otro camino.
+ */
+export const BLOQUEADAS_POR_SUSPENSION_MANUAL: readonly AccionServicio[] = ['limitar', 'quitar_limite']
+
+/**
+ * Si el botón de la acción se muestra para este servicio: aplica a su estado y no la bloquea
+ * una suspensión manual. Los permisos se revisan aparte (`usePermisos`).
+ */
+export function accionDisponible(
+    accion: PresentacionAccionServicio,
+    servicio: Pick<Servicio, 'estado' | 'suspension_manual'>,
+): boolean {
+    if (!accion.desde.includes(servicio.estado)) {
+        return false
+    }
+    return !(servicio.suspension_manual && BLOQUEADAS_POR_SUSPENSION_MANUAL.includes(accion.accion))
+}
+
 /** Espejo del cuerpo de `POST /servicios/:id/<acción>`: `motivo` de 3 a 500 caracteres. */
 export const esquemaMotivo = z.object({
     motivo: z.string().trim().min(3, 'Escribe el motivo (al menos 3 caracteres)').max(500, 'Máximo 500 caracteres'),

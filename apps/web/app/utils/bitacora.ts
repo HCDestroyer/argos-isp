@@ -23,6 +23,23 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.retirar': 'Servicio retirado',
     'servicios.desconectar': 'Sesión PPPoE desconectada',
     'servicios.ver_credenciales': 'Credenciales PPPoE consultadas',
+    'servicios.evaluar_estado': 'Estado del servicio evaluado',
+    'servicios.corte': 'Corte automático ejecutado',
+    'sesiones.iniciar': 'Sesión PPPoE iniciada',
+    'sesiones.actualizar': 'Sesión PPPoE actualizada',
+    'sesiones.terminar': 'Sesión PPPoE terminada',
+    'sesiones.cerrar_nas': 'Sesiones del router cerradas',
+    'facturas.emitir': 'Aviso de cobro emitido',
+    'facturas.vencer': 'Aviso de cobro vencido',
+    'facturas.vencer_pendientes': 'Avisos de cobro vencidos',
+    'libro.registrar_asiento': 'Asiento contable registrado',
+    'libro.revertir_asiento': 'Asiento contable revertido',
+    'usuarios.crear': 'Usuario creado',
+    'usuarios.editar': 'Usuario editado',
+    'roles.crear': 'Rol creado',
+    'roles.editar': 'Rol editado',
+    'tokens.crear': 'Token de API creado',
+    'tokens.revocar': 'Token de API revocado',
     'routers.crear': 'Router creado',
     'routers.editar': 'Router editado',
     'redes.crear': 'Red IPv4 creada',
@@ -43,6 +60,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'notificaciones.recordatorios': 'Recordatorios de pago programados',
     'notificaciones.editar': 'Plantilla de notificación editada',
     'portal.quien_soy': 'Consulta desde la página de corte',
+    'portal.estado': 'Consulta del estado desde el portal',
 }
 
 /**
@@ -50,7 +68,19 @@ const ETIQUETAS_ACCION: Record<string, string> = {
  * página de corte (`/corte`) registra un `portal.quien_soy`. La línea de tiempo las oculta;
  * la bitácora completa las sigue mostrando.
  */
-const LECTURAS_OCULTAS = new Set(['portal.quien_soy'])
+const LECTURAS_OCULTAS = new Set(['portal.quien_soy', 'portal.estado'])
+
+/**
+ * Acciones manuales que ejecutan `servicios.cambiar_estado` anidada (misma transacción, mismo
+ * `request_id`): la bitácora guarda las dos y la línea de tiempo mostraba el cambio dos veces.
+ */
+const TRANSICIONES_MANUALES = new Set([
+    'servicios.suspender',
+    'servicios.reactivar',
+    'servicios.limitar',
+    'servicios.quitar_limite',
+    'servicios.retirar',
+])
 
 /** Canales de `ContextoAccion` (`apps/api/app/shared/contexto.ts`). */
 const CANALES: Record<string, string> = {
@@ -78,6 +108,10 @@ const ICONOS_ACCION: Record<string, string> = {
     anular: 'i-lucide-ban',
     aprobar: 'i-lucide-check',
     ver_credenciales: 'i-lucide-key-round',
+    evaluar_estado: 'i-lucide-scale',
+    emitir: 'i-lucide-receipt',
+    vencer: 'i-lucide-calendar-x',
+    vencer_pendientes: 'i-lucide-calendar-x',
     abrir: 'i-lucide-lock-open',
     cerrar: 'i-lucide-lock',
 }
@@ -122,6 +156,18 @@ export function visibleEnLineaTiempo(accion: Accion): boolean {
     return !LECTURAS_OCULTAS.has(accion.accion)
 }
 
+/**
+ * Quita el `servicios.cambiar_estado` anidado de una acción manual del mismo `request_id` y
+ * entidad: "Servicio suspendido" (con su motivo) ya lo cuenta.
+ */
+export function sinCambiosAnidados(acciones: Accion[]): Accion[] {
+    const manuales = new Set(acciones
+        .filter(a => a.request_id && TRANSICIONES_MANUALES.has(a.accion))
+        .map(a => `${a.request_id}|${a.entidad_tipo}|${a.entidad_id}`))
+    return acciones.filter(a => a.accion !== 'servicios.cambiar_estado'
+        || !manuales.has(`${a.request_id}|${a.entidad_tipo}|${a.entidad_id}`))
+}
+
 /** `cron` → `Automático`; canales desconocidos, tal cual. */
 export function etiquetaCanal(canal: string): string {
     return CANALES[canal] ?? canal
@@ -139,10 +185,25 @@ export function iconoAccion(accion: Accion): string {
     return ICONOS_ACCION[verbo] ?? 'i-lucide-dot'
 }
 
-/** `Usuario #1`, `Sistema`. La API todavía no manda el nombre del actor (pedido a A1). */
+/**
+ * Quién hizo la acción: el nombre (`actor_nombre`) para usuarios, tokens y agentes; "Sistema"
+ * para el corte automático y los consumidores de eventos. Sin nombre, el tipo y el id.
+ */
 export function etiquetaActor(accion: Accion): string {
+    if (accion.actor_nombre) {
+        return accion.actor_tipo === 'usuario' ? accion.actor_nombre : `${accion.actor_nombre} (${ACTORES[accion.actor_tipo]})`
+    }
     const base = ACTORES[accion.actor_tipo]
     return accion.actor_id === null ? base : `${base} #${accion.actor_id}`
+}
+
+/** `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. */
+export function motivoAccion(accion: Accion): string | null {
+    const { entrada } = accion
+    if (typeof entrada !== 'object' || entrada === null || !('motivo' in entrada)) {
+        return null
+    }
+    return typeof entrada.motivo === 'string' && entrada.motivo.trim() ? entrada.motivo.trim() : null
 }
 
 /** `servicio 12`, o `null` si la acción no tiene entidad. */

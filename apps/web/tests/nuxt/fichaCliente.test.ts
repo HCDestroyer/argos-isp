@@ -47,25 +47,55 @@ describe('ficha del cliente · composables', () => {
         expect((await useClientes().estadoCuenta(12)).ok).toBe(true)
     })
 
-    it('useBitacora.deEntidades une cliente y servicios del más reciente al más viejo', async () => {
-        const resultado = await useBitacora().deEntidades([
-            { tipo: 'cliente', id: 12 },
-            { tipo: 'servicio', id: 14 },
-        ])
+    it('la bitácora por cliente_id junta el cliente y sus servicios, del más reciente al más viejo', async () => {
+        const resultado = await useBitacora().acciones({ cliente_id: 12, excluir_canal: 'portal', limit: 200 })
         expect(resultado.ok).toBe(true)
         if (resultado.ok) {
-            const tipos = new Set(resultado.data.map(accion => accion.entidad_tipo))
+            const filas = resultado.data.data
+            const tipos = new Set(filas.map(accion => accion.entidad_tipo))
             expect(tipos).toEqual(new Set(['cliente', 'servicio']))
-            const fechas = resultado.data.map(accion => accion.created_at)
+            const servicios = new Set(filas.filter(a => a.entidad_tipo === 'servicio').map(a => a.entidad_id))
+            const delCliente = await useServicios().listar({ cliente_id: 12 })
+            expect([...servicios].every(id => delCliente.ok && delCliente.data.data.some(s => s.id === id))).toBe(true)
+            const fechas = filas.map(accion => accion.created_at)
             expect(fechas).toEqual([...fechas].sort().reverse())
-            expect(resultado.data.some(accion => accion.resultado === 'error')).toBe(true)
+            expect(filas.some(accion => accion.resultado === 'error')).toBe(true)
+            expect(filas.some(accion => accion.canal === 'portal')).toBe(false)
         }
     })
 
-    it('useBitacora.deEntidades devuelve el primer problema (cajero sin bitacora.ver)', async () => {
+    it('la bitácora exige bitacora.ver (cajero)', async () => {
         useNuxtApp().$tokenSesion.value = 'fixture-cajero'
-        const resultado = await useBitacora().deEntidades([{ tipo: 'cliente', id: 1 }])
+        const resultado = await useBitacora().acciones({ cliente_id: 1 })
         expect(!resultado.ok && resultado.problema.status).toBe(403)
+    })
+
+    it('las acciones del panel quedan con canal panel (header X-Canal)', async () => {
+        const creado = await useClientes().crear({ nombre: 'Canal Panel' }, nuevaClaveIdempotencia())
+        expect(creado.ok).toBe(true)
+        const linea = await useBitacora().acciones({ cliente_id: creado.ok ? creado.data.id : 0 })
+        expect(linea.ok && linea.data.data[0]?.canal).toBe('panel')
+    })
+
+    it('el cambiar_estado anidado de una suspensión manual no se repite', () => {
+        const comun = {
+            actor_tipo: 'usuario' as const,
+            actor_id: 1,
+            canal: 'panel',
+            entidad_tipo: 'servicio',
+            entidad_id: 4,
+            resultado: 'ok' as const,
+            error: null,
+            created_at: '2026-10-15T16:06:00Z',
+        }
+        const acciones = [
+            { ...comun, id: 3, accion: 'servicios.cambiar_estado', entrada: { nuevo: 'suspendido' }, request_id: 'r1' },
+            { ...comun, id: 2, accion: 'servicios.suspender', entrada: { motivo: 'Equipo retenido' }, request_id: 'r1' },
+            { ...comun, id: 1, accion: 'servicios.cambiar_estado', entrada: { nuevo: 'suspendido' }, request_id: 'r0' },
+        ]
+        expect(sinCambiosAnidados(acciones).map(a => a.id)).toEqual([2, 1])
+        expect(etiquetaAccion('servicios.evaluar_estado')).toBe('Estado del servicio evaluado')
+        expect(visibleEnLineaTiempo({ ...comun, id: 9, accion: 'portal.estado', entrada: {}, request_id: null })).toBe(false)
     })
 
     it('etiquetas de la línea de tiempo', () => {
@@ -85,6 +115,10 @@ describe('ficha del cliente · composables', () => {
         }
         expect(etiquetaActor({ ...base, actor_tipo: 'sistema', actor_id: null })).toBe('Sistema')
         expect(etiquetaActor({ ...base, actor_tipo: 'usuario', actor_id: 7 })).toBe('Usuario #7')
+        expect(etiquetaActor({ ...base, actor_tipo: 'usuario', actor_id: 1, actor_nombre: 'Ana Administradora' })).toBe('Ana Administradora')
+        expect(etiquetaActor({ ...base, actor_tipo: 'agente', actor_id: 9, actor_nombre: 'Bot de cobro' })).toBe('Bot de cobro (Agente de IA)')
+        expect(motivoAccion({ ...base, actor_tipo: 'usuario', actor_id: 1, entrada: { motivo: ' viaje ' } })).toBe('viaje')
+        expect(motivoAccion({ ...base, actor_tipo: 'usuario', actor_id: 1 })).toBeNull()
         expect(etiquetaEntidad({ ...base, actor_tipo: 'sistema', actor_id: null })).toBe('servicio 4')
         expect(iconoAccion({ ...base, actor_tipo: 'sistema', actor_id: null, resultado: 'error' })).toBe('i-lucide-triangle-alert')
     })

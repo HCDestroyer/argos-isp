@@ -38,11 +38,24 @@ const servicios = shallowRef<Servicio[]>([])
 const cargandoServicios = ref(false)
 const problemaServicios = ref<Problem | null>(null)
 
-// Cajas con turno abierto (método "caja")
+// Cajas (método "caja"). Elegir caja es opcional: sin `caja_id`, la API usa la caja principal.
+const CAJA_PRINCIPAL = 'principal'
 const cajas = shallowRef<Caja[]>([])
 const problemaCajas = ref<Problem | null>(null)
-const cajasAbiertas = computed(() => cajas.value.filter(c => c.activa && c.turno_abierto_id !== null))
-const itemsCaja = computed<SelectItem[]>(() => cajasAbiertas.value.map(c => ({ label: c.nombre, value: c.id })))
+const cajasActivas = computed(() => cajas.value.filter(c => c.activa))
+const itemsCaja = computed<SelectItem[]>(() => [
+    { label: 'Caja principal (automática)', value: CAJA_PRINCIPAL },
+    ...cajasActivas.value.map(c => ({
+        label: c.turno_abierto_id === null ? `${c.nombre} · sin turno abierto` : c.nombre,
+        value: String(c.id),
+    })),
+])
+const cajaElegida = computed({
+    get: () => (estado.caja_id === null ? CAJA_PRINCIPAL : String(estado.caja_id)),
+    set: (valor: string) => {
+        estado.caja_id = valor === CAJA_PRINCIPAL ? null : Number(valor)
+    },
+})
 
 // Formulario
 const formulario = useTemplateRef('formulario')
@@ -62,18 +75,29 @@ const montoValido = computed(() => /^\d{1,12}(\.\d{1,2})?$/.test(estado.monto.tr
 /** Cuánto quedaría debiendo con el monto escrito, o el saldo a favor si paga de más. */
 const restante = computed(() => (resumen.value && montoValido.value ? resumen.value.pendiente.minus(new Decimal(estado.monto.trim())) : null))
 
-const nombreCaja = computed(() => cajas.value.find(c => c.id === pago.value?.caja_id)?.nombre ?? null)
+/** Caja del recibo: la elegida, o "Caja principal" si el cobro en efectivo no eligió ninguna. */
+const nombreCaja = computed(() => {
+    if (!pago.value || pago.value.metodo !== 'caja') {
+        return null
+    }
+    const caja = cajas.value.find(c => c.id === pago.value?.caja_id)
+    return caja?.nombre ?? (cajaPedida.value === null ? 'Caja principal' : null)
+})
+/** `caja_id` que se mandó en el último pago (`null` = la principal). */
+const cajaPedida = ref<number | null>(null)
+const saldoAFavor = computed(() => (cuenta.value?.saldo_a_favor ? new Decimal(cuenta.value.saldo_a_favor) : null))
 
 /** Servicios a mostrar: los que sigue el seguimiento tras el pago, o los cargados. */
 const serviciosVista = computed(() => (pago.value && seguimiento.servicios.value.length ? seguimiento.servicios.value : servicios.value))
 const reactivados = computed(() => new Set(seguimiento.reactivados.value.map(s => s.id)))
 
+/** La caja con turno abierto del cajero; si no tiene, la principal (`null`). */
 function cajaPorDefecto() {
-    if (estado.caja_id !== null && cajasAbiertas.value.some(c => c.id === estado.caja_id)) {
+    if (estado.caja_id !== null && cajasActivas.value.some(c => c.id === estado.caja_id)) {
         return
     }
-    const mia = cajasAbiertas.value.find(c => c.cajero_id === usuario.value?.id)
-    estado.caja_id = mia?.id ?? (cajasAbiertas.value.length === 1 ? (cajasAbiertas.value[0]?.id ?? null) : null)
+    const mia = cajasActivas.value.find(c => c.cajero_id === usuario.value?.id && c.turno_abierto_id !== null)
+    estado.caja_id = mia?.id ?? null
 }
 
 async function cargarCajas() {
@@ -174,9 +198,17 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
     }
 
     facturasAntes.value = cuenta.value?.facturas_pendientes ?? []
+    cajaPedida.value = datos.metodo === 'caja' ? datos.caja_id : null
     pago.value = resultado.data
-    toast.add({ title: 'Pago registrado', description: `${formatearQuetzales(resultado.data.monto)} · ${cliente.value.nombre}`, icon: 'i-lucide-badge-check', color: 'success' })
-    seguimiento.iniciar(cliente.value.id, servicios.value)
+    // `Pago.servicios[]` trae cómo quedó cada servicio: la reactivación se ve ya. Sin él, se sondea.
+    seguimiento.iniciar(cliente.value.id, servicios.value, resultado.data.servicios)
+    const reactivadosAhora = seguimiento.reactivados.value.length
+    toast.add({
+        title: 'Pago registrado',
+        description: `${formatearQuetzales(resultado.data.monto)} · ${cliente.value.nombre}${reactivadosAhora ? ` · ${reactivadosAhora === 1 ? 'servicio reactivado' : `${reactivadosAhora} servicios reactivados`}` : ''}`,
+        icon: 'i-lucide-badge-check',
+        color: 'success',
+    })
     void cargarCuenta()
 }
 
@@ -336,6 +368,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                 </UPageCard>
                             </div>
 
+                            <p
+                                v-if="saldoAFavor && saldoAFavor.gt(0)"
+                                class="flex items-center gap-2 text-sm text-info"
+                                data-prueba="saldo-a-favor"
+                            >
+                                <UIcon
+                                    name="i-lucide-piggy-bank"
+                                    class="size-4"
+                                />
+                                Saldo a favor {{ formatearQuetzales(saldoAFavor) }}: se aplica solo a los próximos avisos.
+                            </p>
+
                             <ul
                                 v-if="resumen.facturas.length"
                                 class="flex flex-col divide-y divide-default rounded-md border border-default"
@@ -440,7 +484,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                         :estado="servicio.estado"
                                         size="sm"
                                     />
+                                    <SuspensionManualBadge
+                                        :servicio="servicio"
+                                        size="sm"
+                                    />
                                 </div>
+                                <p
+                                    v-if="pago && servicio.estado !== 'activo' && servicio.estado !== 'retirado' && seguimiento.motivos.value.get(servicio.id)"
+                                    class="w-full text-xs text-muted"
+                                    data-prueba="motivo-evaluacion"
+                                >
+                                    Sigue {{ ESTADOS_SERVICIO[servicio.estado].etiqueta.toLowerCase() }}: {{ seguimiento.motivos.value.get(servicio.id) }}
+                                </p>
                             </li>
                         </ul>
                         <UAlert
@@ -469,6 +524,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     :facturas="facturasAntes"
                     :caja="nombreCaja"
                     :cajero="usuario?.nombre ?? null"
+                    :reactivados="seguimiento.reactivados.value"
+                    :suspendidos-manual="seguimiento.suspendidosManual.value"
                 />
                 <div class="flex flex-wrap gap-2">
                     <UButton
@@ -550,29 +607,44 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         v-if="estado.metodo === 'caja'"
                         label="Caja"
                         name="caja_id"
-                        required
+                        hint="Opcional"
+                        :help="estado.caja_id === null ? 'Sin elegir, el efectivo entra a la caja principal.' : undefined"
                     >
-                        <ProblemaAlerta
-                            v-if="problemaCajas"
-                            :problema="problemaCajas"
-                            :reintentar="cargarCajas"
-                        />
-                        <UAlert
-                            v-else-if="!cajasAbiertas.length"
-                            color="warning"
-                            variant="subtle"
-                            icon="i-lucide-lock"
-                            title="No hay turnos de caja abiertos"
-                            description="Abre tu turno en Caja para cobrar en efectivo, o usa otro método."
-                            :actions="puede('cajas.ver') ? [{ label: 'Ir a Caja', to: '/caja', color: 'warning', variant: 'outline' }] : undefined"
-                        />
                         <USelect
-                            v-else
-                            v-model="estado.caja_id"
+                            v-if="cajasActivas.length"
+                            v-model="cajaElegida"
                             :items="itemsCaja"
-                            placeholder="Elige la caja"
+                            icon="i-lucide-archive"
                             class="w-full"
                         />
+                        <p
+                            v-else-if="!problemaCajas"
+                            class="text-sm text-muted"
+                        >
+                            Caja principal
+                        </p>
+                        <!-- Sin la lista de cajas igual se cobra (va a la principal): aviso breve, no bloqueo. -->
+                        <div
+                            v-if="problemaCajas"
+                            class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+                            data-prueba="cajas-sin-lista"
+                        >
+                            <span class="flex items-center gap-1.5 text-muted">
+                                <UIcon
+                                    name="i-lucide-triangle-alert"
+                                    class="size-4 shrink-0 text-warning"
+                                />
+                                Caja principal · no se pudo leer la lista de cajas ({{ problemaCajas.status }})
+                            </span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarCajas"
+                            />
+                        </div>
                     </UFormField>
 
                     <UFormField

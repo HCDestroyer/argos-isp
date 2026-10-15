@@ -1,5 +1,8 @@
 import type { Schema } from '@argosisp/contracts'
 import { clientes } from '../clientes/datos'
+import { planes } from '../planes/datos'
+import { routers } from '../routers/datos'
+import { zonas } from '../zonas/datos'
 
 type Servicio = Schema<'Servicio'>
 type EstadoServicio = Servicio['estado']
@@ -12,6 +15,11 @@ const estados: Record<number, EstadoServicio> = {
     12: 'suspendido',
     17: 'limitado',
     22: 'suspendido',
+}
+
+/** Suspendidos a mano por un operador (decisión del PM): el corte y los pagos no los reactivan. */
+const suspensionManual: Record<number, string> = {
+    22: 'Solicitud del cliente: viaja dos meses',
 }
 
 /** Clientes sin servicio todavía (recién dados de alta). */
@@ -57,6 +65,13 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         prefijo_delegado_v6: v6 && estado !== 'retirado' ? `2803:d100:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/56` : null,
         ipv6_modo: v6 ? 'radius_servicio' : 'ninguno',
         ipv6_duid: null,
+        suspension_manual: !sucursal && cliente.id in suspensionManual,
+        suspension_manual_motivo: sucursal ? null : (suspensionManual[cliente.id] ?? null),
+        // Como la API (día 3): nombres para pantallas sin permiso de ver routers, planes o zonas.
+        cliente_nombre: cliente.nombre,
+        plan_nombre: planes.find(p => p.id === plan)?.nombre ?? '',
+        router_nombre: routers.find(r => r.id === router)?.nombre ?? '',
+        zona_nombre: zonas.find(z => z.id === cliente.zona_id)?.nombre ?? null,
         version: 1,
         created_at: instalado.toISOString(),
         updated_at: instalado.toISOString(),

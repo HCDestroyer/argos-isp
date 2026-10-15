@@ -41,6 +41,22 @@ function ipLibre(routerId: number): string | null {
     return null
 }
 
+/** Nombres que la vista `Servicio` de la API trae con subconsultas (día 3). */
+export function nombresDe(clienteId: number, planId: number, routerId: number): Pick<Servicio, 'cliente_nombre' | 'plan_nombre' | 'router_nombre' | 'zona_nombre'> {
+    const cliente = bd.clientes.find(c => c.id === clienteId)
+    return {
+        cliente_nombre: cliente?.nombre ?? '',
+        plan_nombre: bd.planes.find(p => p.id === planId)?.nombre ?? '',
+        router_nombre: bd.routers.find(r => r.id === routerId)?.nombre ?? '',
+        zona_nombre: bd.zonas.find(z => z.id === cliente?.zona_id)?.nombre ?? null,
+    }
+}
+
+/** El servicio como lo devuelve la API: con los nombres al día (un cliente renombrado, por ejemplo). */
+function vista(servicio: Servicio): Servicio {
+    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id) }
+}
+
 function texto(valor: unknown): string | null {
     return typeof valor === 'string' && valor.trim() ? valor.trim() : null
 }
@@ -110,6 +126,9 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
             : conV6 ? `2803:d100:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/${plan?.tamano_prefijo_delegado ?? 56}` : null,
         ipv6_modo: plan?.dual_stack === 'v4' ? 'ninguno' : modo,
         ipv6_duid: texto(cuerpo.ipv6_duid),
+        suspension_manual: false,
+        suspension_manual_motivo: null,
+        ...nombresDe(Number(cuerpo.cliente_id), Number(cuerpo.plan_id), routerId),
         version: 1,
         created_at: momento,
         updated_at: momento,
@@ -207,6 +226,15 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
         if (!motivo || motivo.length < 3) {
             return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener al menos 3 caracteres', rule: 'minLength' }])
         }
+        if (actual.suspension_manual && (ruta === 'limitar' || ruta === 'quitar-limite')) {
+            const rechazo: Problem = {
+                type: 'urn:argosisp:problema:suspension_manual',
+                title: 'Regla de negocio',
+                status: 422,
+                detail: 'El servicio está suspendido manualmente: reactívalo antes de cambiar su estado',
+            }
+            return { status: 422, cuerpo: rechazo }
+        }
         if (!regla.desde.includes(actual.estado)) {
             const rechazo: Problem = { type: 'urn:argosisp:problema:regla_negocio', title: 'Regla de negocio', status: 422, detail: regla.rechazo(actual.estado) }
             return { status: 422, cuerpo: rechazo }
@@ -219,6 +247,9 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
                     version: actual.version + 1,
                     updated_at: ahora(),
                     ...(regla.a === 'retirado' ? { ipv4: null, prefijo_enlace_v6: null, prefijo_delegado_v6: null } : {}),
+                    // `suspender` pone la marca de suspensión manual; solo `reactivar` la quita.
+                    ...(ruta === 'suspender' ? { suspension_manual: true, suspension_manual_motivo: motivo } : {}),
+                    ...(ruta === 'reactivar' ? { suspension_manual: false, suspension_manual_motivo: null } : {}),
                 }
         bd.servicios[indice] = despues
         // Suspender y limitar van por CoA (la sesión sigue); reactivar va por Disconnect-Request
@@ -231,7 +262,7 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
             bd.sesiones.push(nuevaSesion(siguienteId(bd.sesiones), despues, ahora()))
         }
         registrarAccion(solicitud, regla.permiso, { tipo: 'servicio', id: actual.id }, { id: actual.id, motivo })
-        return { status: 200, cuerpo: despues }
+        return { status: 200, cuerpo: vista(despues) }
     })),
 ]))
 
@@ -242,7 +273,11 @@ export const rutasServicios: RutasFixture = {
         const router = numeroQuery(solicitud, 'router_id')
         const plan = numeroQuery(solicitud, 'plan_id')
         const estado = solicitud.query.get('estado')
+        const zona = numeroQuery(solicitud, 'zona_id')
+        const deuda = solicitud.query.get('con_deuda_vencida')
         const filas = bd.servicios
+            .filter(s => zona === undefined || bd.clientes.find(c => c.id === s.cliente_id)?.zona_id === zona)
+            .filter(s => deuda === null || bd.facturas.some(f => f.servicio_id === s.id && f.estado === 'vencida') === (deuda === 'true'))
             .filter(s => cliente === undefined || s.cliente_id === cliente)
             .filter(s => router === undefined || s.router_id === router)
             .filter(s => plan === undefined || s.plan_id === plan)
@@ -255,12 +290,12 @@ export const rutasServicios: RutasFixture = {
                 return normalizar(s.user_ppp).includes(q) || s.ipv4 === q || normalizar(nombre).includes(q)
             })
             .sort((a, b) => b.id - a.id)
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        return { status: 200, cuerpo: paginar(filas.map(vista), solicitud) }
     }),
 
     'GET /api/v1/servicios/:id': conPermiso('servicios.ver', (solicitud) => {
         const servicio = bd.servicios.find(s => s.id === idDe(solicitud))
-        return servicio ? { status: 200, cuerpo: servicio } : noEncontrado('el servicio')
+        return servicio ? { status: 200, cuerpo: vista(servicio) } : noEncontrado('el servicio')
     }),
 
     'POST /api/v1/servicios': conPermiso('servicios.crear', conIdempotencia((solicitud) => {

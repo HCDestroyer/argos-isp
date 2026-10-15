@@ -1,6 +1,8 @@
 import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import ReciboPago from '~/components/ReciboPago.vue'
 
 describe('cobro rápido · composables y reglas', () => {
     beforeEach(() => {
@@ -65,7 +67,8 @@ describe('cobro rápido · composables y reglas', () => {
         expect(esquemaCobro.safeParse({ ...base, monto: '12,50' }).success).toBe(false)
         expect(esquemaCobro.safeParse({ ...base, monto: '0.00' }).success).toBe(false)
         expect(esquemaCobro.safeParse({ ...base, monto: '10.555' }).success).toBe(false)
-        expect(esquemaCobro.safeParse({ ...base, caja_id: null }).success).toBe(false)
+        // Sin caja elegida, la API usa la caja principal.
+        expect(esquemaCobro.safeParse({ ...base, caja_id: null }).success).toBe(true)
         expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null }).success).toBe(false)
         expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null, referencia: 'BI-1234' }).success).toBe(true)
         expect(METODOS_COBRO.map(m => m.metodo)).not.toContain('pasarela')
@@ -102,12 +105,13 @@ describe('cobro rápido · composables y reglas', () => {
         expect((await cuenta(2)).movimientos.filter(m => m.tipo === 'pago' && m.referencia_id === pago.data.id)).toHaveLength(1)
     })
 
-    it('usePagos.registrar: 422 sin caja con método caja, 403 sin permiso y 501 visible', async () => {
+    it('usePagos.registrar: caja sin caja_id va a la principal, caja inexistente 422, 401 y 501 visibles', async () => {
         const sinCaja = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '10.00' }, nuevaClaveIdempotencia())
-        expect(!sinCaja.ok && sinCaja.problema.errors?.[0]?.field).toBe('caja_id')
+        expect(sinCaja.ok && sinCaja.data.caja_id).toBe(1)
 
-        const cerrada = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '10.00', caja_id: 3 }, nuevaClaveIdempotencia())
-        expect(!cerrada.ok && cerrada.problema.status).toBe(422)
+        const inexistente = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '10.00', caja_id: 99 }, nuevaClaveIdempotencia())
+        expect(!inexistente.ok && inexistente.problema.status).toBe(422)
+        expect(!inexistente.ok && inexistente.problema.errors?.[0]?.field).toBe('caja_id')
 
         useNuxtApp().$tokenSesion.value = 'fixture-desconocido'
         const sinSesion = await usePagos().registrar({ cliente_id: 2, metodo: 'deposito', monto: '10.00' }, nuevaClaveIdempotencia())
@@ -119,7 +123,39 @@ describe('cobro rápido · composables y reglas', () => {
         expect(!noImplementado.ok && noImplementado.problema.title).toBe('No implementado')
     })
 
-    it('useSeguimientoReactivacion ve el servicio pasar a activo tras el pago', async () => {
+    it('Pago.servicios[] muestra la reactivación de inmediato, sin sondeo', async () => {
+        const antes = await servicioDe(2)
+        expect(antes[0]?.estado).toBe('suspendido')
+
+        const pago = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '300.00' }, nuevaClaveIdempotencia())
+        expect(pago.ok).toBe(true)
+        if (!pago.ok) {
+            return
+        }
+        expect(pago.data.servicios).toEqual([{ servicio_id: 2, de: 'suspendido', estado: 'activo', cambiado: true, motivo: 'sin facturas vencidas' }])
+
+        const seguimiento = useSeguimientoReactivacion()
+        seguimiento.iniciar(2, antes, pago.data.servicios)
+        expect(seguimiento.siguiendo.value).toBe(false)
+        expect(seguimiento.reactivados.value.map(s => s.id)).toEqual([2])
+        expect(seguimiento.pendientes.value).toHaveLength(0)
+    })
+
+    it('un pago parcial deja el servicio cortado y dice por qué', async () => {
+        const antes = await servicioDe(2)
+        const pago = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '100.00' }, nuevaClaveIdempotencia())
+        expect(pago.ok).toBe(true)
+        if (!pago.ok) {
+            return
+        }
+        const seguimiento = useSeguimientoReactivacion()
+        seguimiento.iniciar(2, antes, pago.data.servicios)
+        expect(seguimiento.siguiendo.value).toBe(false)
+        expect(seguimiento.reactivados.value).toHaveLength(0)
+        expect(seguimiento.motivos.value.get(2)).toMatch(/vencida/)
+    })
+
+    it('sondeo de respaldo: sin Pago.servicios[] relee hasta ver el servicio activo', async () => {
         const antes = await servicioDe(2)
         expect(antes[0]?.estado).toBe('suspendido')
 
@@ -148,6 +184,50 @@ describe('cobro rápido · composables y reglas', () => {
         await vi.waitFor(() => expect(seguimiento.siguiendo.value).toBe(false))
         expect(seguimiento.agotado.value).toBe(true)
         expect(seguimiento.reactivados.value).toHaveLength(0)
+    })
+
+    it('un pago no reactiva un servicio suspendido a mano', async () => {
+        const [servicio] = await servicioDe(22)
+        if (!servicio) {
+            throw new Error('sin servicio')
+        }
+        expect(servicio.estado).toBe('suspendido')
+        expect(servicio.suspension_manual).toBe(true)
+
+        const cuenta = await useClientes().estadoCuenta(22)
+        const pendiente = cuenta.ok ? resumenPendiente(cuenta.data.facturas_pendientes, hoyGuatemala()).pendiente : new Decimal(0)
+        expect(pendiente.gt(0)).toBe(true)
+        const pago = await usePagos().registrar({ cliente_id: 22, metodo: 'deposito', monto: pendiente.toFixed(2), referencia: 'B-1' }, nuevaClaveIdempotencia())
+        expect(pago.ok).toBe(true)
+        if (pago.ok) {
+            const evaluado = pago.data.servicios?.find(s => s.servicio_id === servicio.id)
+            expect(evaluado?.cambiado).toBe(false)
+            expect(evaluado?.estado).toBe('suspendido')
+        }
+        const despues = await useServicios().ver(servicio.id)
+        expect(despues.ok && despues.data.estado).toBe('suspendido')
+
+        const seguimiento = useSeguimientoReactivacion()
+        seguimiento.iniciar(22, [servicio], pago.ok ? pago.data.servicios : undefined)
+        expect(seguimiento.pendientes.value).toHaveLength(0)
+        expect(seguimiento.suspendidosManual.value.map(s => s.id)).toEqual([servicio.id])
+    })
+
+    it('el recibo dice qué servicio se reactivó y que la suspensión manual sigue', async () => {
+        const [reactivable] = await servicioDe(2)
+        const [manual] = await servicioDe(22)
+        const cliente = await useClientes().ver(2)
+        const pago = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '300.00' }, nuevaClaveIdempotencia())
+        if (!reactivable || !manual || !cliente.ok || !pago.ok) {
+            throw new Error('datos de prueba')
+        }
+        const wrapper = await mountSuspended(ReciboPago, {
+            props: { pago: pago.data, cliente: cliente.data, caja: 'Caja principal', reactivados: [reactivable], suspendidosManual: [manual] },
+        })
+        const texto = wrapper.text()
+        expect(texto).toContain(`Servicio ${reactivable.user_ppp} reactivado`)
+        expect(texto).toContain('suspendido manualmente: este pago no lo')
+        expect(texto).toContain('Caja principal')
     })
 
     it('useSeguimientoReactivacion no sigue nada si ningún servicio estaba cortado', async () => {
