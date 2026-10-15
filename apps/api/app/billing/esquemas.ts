@@ -100,25 +100,34 @@ export const FacturaLinea = definirEsquema(
 
 export const Factura = definirEsquema(
     'Factura',
-    objeto({
-        id,
-        cliente_id: id,
-        servicio_id: nulable(id),
-        periodo: fecha,
-        clave_unica: texto,
-        emitida_en: instante,
-        vence_en: fecha,
-        estado: EstadoFactura,
-        subtotal: Dinero,
-        iva: Dinero,
-        total: Dinero,
-        pagado: Dinero,
-        fel_uuid: nulable(texto),
-        fel_serie: nulable(texto),
-        fel_numero: nulable(texto),
-        fel_estado: nulable(texto),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            servicio_id: nulable(id),
+            periodo: fecha,
+            clave_unica: texto,
+            emitida_en: instante,
+            vence_en: fecha,
+            estado: EstadoFactura,
+            subtotal: Dinero,
+            iva: Dinero,
+            total: Dinero,
+            pagado: Dinero,
+            fel_uuid: nulable(texto),
+            fel_serie: nulable(texto),
+            fel_numero: nulable(texto),
+            fel_estado: nulable(texto),
+            tipo: {
+                ...enumerado(['servicio', 'mora']),
+                description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
+            },
+            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
+            vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
+            ...auditable,
+        },
+        ['tipo', 'factura_origen_id', 'vencida_en'],
+    ),
 )
 
 export const FacturaDetalle = definirEsquema('FacturaDetalle', {
@@ -127,32 +136,76 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
 
 export const ResultadoGeneracion = definirEsquema(
     'ResultadoGeneracion',
+    objeto(
+        {
+            generadas: entero,
+            omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
+            facturas: lista(id),
+            errores: { type: 'integer', description: 'Servicios que no se pudieron facturar (ver log)' },
+        },
+        ['errores'],
+    ),
+)
+
+export const ResultadoVencimiento = definirEsquema(
+    'ResultadoVencimiento',
     objeto({
-        generadas: entero,
-        omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
-        facturas: lista(id),
+        vencidas: { type: 'integer', description: 'Facturas que pasaron a vencida' },
+        moras: { type: 'integer', description: 'Recargos de mora creados' },
+        errores: { type: 'integer', description: 'Facturas que no se pudieron procesar (ver log)' },
+    }),
+)
+
+export const ResultadoCorte = definirEsquema(
+    'ResultadoCorte',
+    objeto({
+        horas: { ...lista(texto), description: 'Horas de corte procesadas (HH:MM; * = corte manual)' },
+        evaluados: { type: 'integer', description: 'Servicios evaluados' },
+        cambiados: { type: 'integer', description: 'Servicios que cambiaron de estado' },
+        errores: { type: 'integer', description: 'Servicios que no se pudieron evaluar (ver log)' },
+        vencimiento: nulable(ResultadoVencimiento),
     }),
 )
 
 export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
 
+export const ServicioEvaluado = definirEsquema(
+    'ServicioEvaluado',
+    objeto({
+        servicio_id: id,
+        de: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        cambiado: booleano,
+        motivo: texto,
+    }),
+)
+
 export const Pago = definirEsquema(
     'Pago',
-    objeto({
-        id,
-        cliente_id: id,
-        metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
-        monto: Dinero,
-        comision: Dinero,
-        referencia: nulable(texto),
-        caja_id: nulable(id),
-        pasarela: nulable(texto),
-        estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
-        nota: nulable(texto),
-        registrado_por: nulable(id),
-        aplicaciones: lista(AplicacionPago),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+            monto: Dinero,
+            comision: Dinero,
+            referencia: nulable(texto),
+            caja_id: nulable(id),
+            pasarela: nulable(texto),
+            estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
+            nota: nulable(texto),
+            registrado_por: nulable(id),
+            aplicaciones: lista(AplicacionPago),
+            anulado_en: { ...nulable(instante), description: 'Cuándo se anuló' },
+            motivo_anulacion: nulable(texto),
+            servicios: {
+                ...lista(ServicioEvaluado),
+                description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
+            },
+            ...auditable,
+        },
+        ['anulado_en', 'motivo_anulacion', 'servicios'],
+    ),
 )
 
 export const Promesa = definirEsquema(
@@ -193,10 +246,20 @@ export const MovimientoEstadoCuenta = definirEsquema(
 
 export const EstadoCuenta = definirEsquema(
     'EstadoCuenta',
-    objeto({
-        cliente_id: id,
-        saldo: { ...Dinero, description: 'Suma del auxiliar CxC del cliente (positivo = debe)' },
-        facturas_pendientes: lista(Factura),
-        movimientos: lista(MovimientoEstadoCuenta),
-    }),
+    objeto(
+        {
+            cliente_id: id,
+            saldo: { ...Dinero, description: 'Suma del auxiliar CxC del cliente (positivo = debe)' },
+            saldo_a_favor: {
+                ...Dinero,
+                description: 'Anticipos del cliente sin aplicar (se aplican a las próximas facturas)',
+            },
+            facturas_pendientes: lista(Factura),
+            movimientos: {
+                ...lista(MovimientoEstadoCuenta),
+                description: 'Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`',
+            },
+        },
+        ['saldo_a_favor'],
+    ),
 )

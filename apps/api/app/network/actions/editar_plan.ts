@@ -3,6 +3,7 @@ import { Conflicto } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { columnasPlan, type DatosPlan } from '#network/actions/crear_plan'
 import { verPlan, type PlanVista } from '#network/consultas/planes'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaEditarPlan extends DatosPlan {
     id: number
@@ -12,7 +13,8 @@ export interface EntradaEditarPlan extends DatosPlan {
 /**
  * Edita un plan (control optimista por `version`). El precio nuevo aplica a las facturas que se
  * generen después (A3 toma `precio` al facturar). Los servicios del plan toman la velocidad nueva
- * en su próxima autorización RADIUS (la invalidación de `aaa:user:*` llega con la tarea 9).
+ * en su próxima autorización RADIUS: después del COMMIT se reescribe `aaa:user:*` de cada
+ * servicio no retirado del plan.
  */
 export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanVista> {
     readonly nombre = 'planes.editar'
@@ -32,6 +34,7 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanVist
         await actualizarConVersion(t.trx, 'network.planes', id, version, columnasPlan(datos))
         const despues = await verPlan(id, t.trx)
         await t.registrarCambios({ tipo: 'plan', id }, antes, despues)
+        refrescarAaaAlConfirmar(t, { planId: id })
         return despues
     }
 }

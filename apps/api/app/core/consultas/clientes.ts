@@ -4,6 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
+import type { EstadoServicio } from '#shared/eventos'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
 
 /**
@@ -41,6 +42,14 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
 export interface FiltrosClientes extends OpcionesPaginacion {
     q?: string
     zona_id?: number
+    /** cliente con al menos un servicio que cumpla a la vez estado, router y plan */
+    estado_servicio?: EstadoServicio
+    router_id?: number
+    plan_id?: number
+    /** alguna `billing.facturas` en estado `vencida` (true) o ninguna (false) */
+    con_deuda_vencida?: boolean
+    /** alguna `billing.promesas` en estado `activa` (true) o ninguna (false) */
+    con_promesa_activa?: boolean
 }
 
 /** Cómo se filtra `core.clientes as c` por alcance. */
@@ -114,6 +123,33 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string)
     })
 }
 
+/**
+ * Filtros del listado (pedido del PM): estado, router y plan se exigen sobre el MISMO servicio;
+ * deuda vencida y promesa activa son solo lectura sobre `billing` (A3 es dueño de esas tablas).
+ */
+function aplicarFiltrosAvanzados(consulta: DatabaseQueryBuilderContract<any>, filtros: FiltrosClientes) {
+    if (filtros.estado_servicio || filtros.router_id || filtros.plan_id) {
+        consulta.whereExists((s) => {
+            s.from('core.servicios as s_f').whereRaw('s_f.cliente_id = c.id')
+            if (filtros.estado_servicio) s.where('s_f.estado', filtros.estado_servicio)
+            if (filtros.router_id) s.where('s_f.router_id', filtros.router_id)
+            if (filtros.plan_id) s.where('s_f.plan_id', filtros.plan_id)
+        })
+    }
+    if (filtros.con_deuda_vencida !== undefined) {
+        const deuda = (s: DatabaseQueryBuilderContract<any>) =>
+            s.from('billing.facturas as f_v').whereRaw('f_v.cliente_id = c.id').where('f_v.estado', 'vencida')
+        if (filtros.con_deuda_vencida) consulta.whereExists(deuda)
+        else consulta.whereNotExists(deuda)
+    }
+    if (filtros.con_promesa_activa !== undefined) {
+        const promesa = (s: DatabaseQueryBuilderContract<any>) =>
+            s.from('billing.promesas as p_a').whereRaw('p_a.cliente_id = c.id').where('p_a.estado', 'activa')
+        if (filtros.con_promesa_activa) consulta.whereExists(promesa)
+        else consulta.whereNotExists(promesa)
+    }
+}
+
 export async function buscarClientes(
     filtros: FiltrosClientes,
     alcance?: Alcance,
@@ -121,6 +157,7 @@ export async function buscarClientes(
     const consulta = db.from('core.clientes as c').select(COLUMNAS_CLIENTE.map((col) => `c.${col}`))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
     if (filtros.q) aplicarBusqueda(consulta, filtros.q)
+    aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)
     return paginar<ClienteVista>(consulta, filtros, { columna: 'c.id' })
 }

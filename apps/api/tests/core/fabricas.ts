@@ -77,3 +77,28 @@ export async function crearServicioFila(datos: {
         ...datos,
     })
 }
+
+/**
+ * Router con una red IPv4 /24 (gateway .1) y un bloque IPv6 /40 con pools de enlace (/48 → /64)
+ * y de delegación (/44 → /56 y /44 → /48). Devuelve la base IPv4 (`100.64.x`) y la raíz IPv6.
+ */
+export async function crearEscenarioRouter() {
+    const routerId = await crearRouterFila()
+    const cidr = redUnica()
+    const base = cidr.replace('.0/24', '')
+    await db
+        .table('network.redes_ipv4')
+        .insert({ router_id: routerId, cidr, gateway: `${base}.1`, tipo: 'estatico' })
+    const bloque = bloqueV6Unico()
+    const raiz = bloque.replace('00::/40', '')
+    const [b] = (await db
+        .table('network.ipv6_bloques')
+        .insert({ router_id: routerId, prefijo: bloque })
+        .returning('id')) as Array<{ id: number }>
+    await db.table('network.ipv6_pools').multiInsert([
+        { bloque_id: b!.id, prefijo: `${raiz}00::/48`, tipo: 'enlace', tamano_entrega: 64 },
+        { bloque_id: b!.id, prefijo: `${raiz}10::/44`, tipo: 'delegacion', tamano_entrega: 56 },
+        { bloque_id: b!.id, prefijo: `${raiz}20::/44`, tipo: 'delegacion', tamano_entrega: 48 },
+    ])
+    return { routerId, base, raiz }
+}

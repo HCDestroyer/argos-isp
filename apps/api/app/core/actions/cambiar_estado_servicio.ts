@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import type { EstadoServicio } from '#shared/eventos'
 import { verServicio } from '#core/consultas/servicios'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 /** Estados entre los que se mueve un servicio vivo. `retirado` solo se alcanza con `RetirarServicio`. */
 export type EstadoOperativo = Exclude<EstadoServicio, 'retirado'>
@@ -32,6 +33,7 @@ export interface ResultadoCambiarEstado {
  * - Mismo estado: no hace nada (`cambiado: false`), para que los llamadores sean idempotentes.
  * - Bloquea la fila (`FOR UPDATE`) para que dos evaluaciones concurrentes no se pisen.
  * - Emite `servicio.estado_cambiado` por outbox y registra el diff en `audit.cambios`.
+ * - Después del COMMIT reescribe `aaa:user:<user_ppp>` en Redis (tarea 9).
  */
 export default class CambiarEstadoServicio extends DomainAction<
     EntradaCambiarEstado,
@@ -75,6 +77,7 @@ export default class CambiarEstadoServicio extends DomainAction<
             a: input.nuevo,
             motivo: input.motivo,
         })
+        refrescarAaaAlConfirmar(t, { servicioId: input.servicioId })
         return { servicioId: input.servicioId, de: fila.estado, a: input.nuevo, cambiado: true }
     }
 }
