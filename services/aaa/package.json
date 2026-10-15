@@ -13,17 +13,20 @@
     "start": "node dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test \"test/**/*.test.ts\"",
+    "clients": "node src/clientes/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
+    "@types/pg": "8.23.1",
     "eslint": "^10.12.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.71.2"
   },
   "dependencies": {
     "fastify": "5.12.5",
-    "ioredis": "5.11.1"
+    "ioredis": "5.11.1",
+    "pg": "8.23.1"
   }
 }

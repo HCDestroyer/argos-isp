@@ -67,6 +67,20 @@ Se monta sobre la imagen oficial `freeradius/freeradius-server:3.2.10` (ver `inf
 
 - El diccionario MikroTik (`Mikrotik-Rate-Limit`, `Mikrotik-Group`, `Mikrotik-Address-List`, `Mikrotik-Delegated-IPv6-Pool`, vendor 14988) viene incluido en la imagen (`/usr/share/freeradius/dictionary.mikrotik`); no se reemplaza. `Filter-Id` y `Framed-Pool` son de RFC 2865/2869; `Framed-IPv6-Prefix`, `Framed-IPv6-Pool` y `Delegated-IPv6-Prefix` de RFC 3162/4818.
 - El cuerpo que recibe `/aaa/authorize` incluye `User-Password` en claro (PAP): nunca se registra (Fastify no registra cuerpos y el logger lo redacta).
+- Secrets por entorno: `RADIUS_LOCAL_SECRET` (cliente `localhost`, healthcheck y `radtest`), `RADIUS_LAB_NAS_IP` y `RADIUS_LAB_SECRET` (cliente fijo `mikrotik-lab`).
+
+### Clientes desde `network.routers` (`pnpm aaa:clients`)
+
+```
+DB_HOST=127.0.0.1 DB_USER=argosisp DB_PASSWORD=... DB_DATABASE=argosisp \
+AAA_PPP_KEY=... RADIUS_LAB_NAS_IP=10.255.255.2 pnpm aaa:clients
+docker compose -f infra/docker-compose.yml restart freeradius   # FreeRADIUS lee los clientes al arrancar
+```
+
+- Lee `network.routers` con `activo` y `modo_seguridad = 'radius'`, descifra `radius_secret` (formato `v1`, `AAA_PPP_KEY`) y escribe `freeradius/clients.d/router-<id>.conf` (`ipaddr = nas_ip`, `require_message_authenticator = yes`, permisos 0640). `AAA_CLIENTS_DIR` cambia el directorio.
+- Borra los `router-*.conf` de routers que ya no aplican (inactivos, en modo `api`, sin secret). Si un router tiene IP o secret inválidos, conserva su archivo anterior, lo informa y sale con 1.
+- Omite el router cuya `nas_ip` es `RADIUS_LAB_NAS_IP`: ya tiene el cliente fijo `mikrotik-lab` en `clients.conf` y FreeRADIUS no arranca con dos clientes en la misma IP.
+- Los `.conf` generados llevan el secret en claro: están en `services/aaa/.gitignore`.
 
 ## Dependencias
 
@@ -74,3 +88,4 @@ Se monta sobre la imagen oficial `freeradius/freeradius-server:3.2.10` (ver `inf
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fastify` 5.12.5 | El brief pide Fastify o Hono. Fastify: logger pino incluido (JSON), `inject` para pruebas sin puerto, buen rendimiento para el p95 < 100 ms de la semana 2 |
 | `ioredis` 5.11.1 | Cliente Redis; misma versión que ya usa BullMQ en el workspace                                                                                             |
+| `pg` 8.23.1      | `pnpm aaa:clients` lee `network.routers`; misma versión que ya usa Lucid en `apps/api`                                                                     |
