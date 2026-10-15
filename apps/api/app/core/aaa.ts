@@ -1,0 +1,308 @@
+import db from '@adonisjs/lucid/services/db'
+import logger from '@adonisjs/core/services/logger'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import env from '#start/env'
+import type { EstadoServicio } from '#shared/eventos'
+import { prefijoColas, redis } from '#shared/redis'
+import type { Transaccion } from '#shared/domain_action'
+import type { ModoIpv6 } from '#core/consultas/servicios'
+
+/**
+ * Registro de autorización RADIUS de un `user_ppp` (tarea 9). Contrato con A2 en
+ * `.claude/integration/contratos/aaa.md`; validador del lado de `aaa` en `services/aaa/src/servicio.ts`.
+ *
+ * - `construirRegistroAaa` arma el JSON desde Postgres (lo devuelve `GET /internal/aaa/servicio`).
+ * - `publicarAaa(servicioIds)` lo escribe en Redis `aaa:user:<user_ppp>` (write-through, SIN TTL).
+ *   Un servicio retirado se escribe como lápida. La escritura compara `version`: nunca pisa un
+ *   registro del mismo servicio con `version` mayor (un gancho atrasado no deja datos viejos).
+ * - `refrescarAaaAlConfirmar(t, ...)` agenda la publicación después del COMMIT de la acción.
+ */
+
+export interface PlanAaa {
+    id: number
+    subida_kbps: number
+    bajada_kbps: number
+    subida_limitada_kbps: number
+    bajada_limitada_kbps: number
+    rate_limit_override: string | null
+    profile_ppp: string | null
+}
+
+export type Ipv4Aaa = { modo: 'estatico'; ip: string } | { modo: 'pool'; pool: string } | null
+
+export type Ipv6Aaa =
+    | { modo: 'radius_servicio'; prefijo_enlace: string | null; prefijo_delegado: string | null }
+    | { modo: 'radius_pool'; pool_enlace: string | null; pool_delegacion: string | null }
+    | { modo: 'duid' | 'estatico' | 'ninguno' }
+
+export interface RegistroAaa {
+    servicio_id: number
+    version: number
+    user_ppp: string
+    /** cifrada v1 tal como está en `core.servicios.pass_ppp`; nunca en claro */
+    pass_ppp: string
+    estado: EstadoServicio
+    router_id: number
+    plan: PlanAaa
+    ipv4: Ipv4Aaa
+    ipv6: Ipv6Aaa
+}
+
+/**
+ * Lápida del contrato (`eliminado`, `user_ppp`). Lleva además `servicio_id` y `version` para
+ * que una escritura atrasada no la reemplace; `aaa` ignora esos dos campos.
+ */
+export interface LapidaAaa {
+    eliminado: true
+    user_ppp: string
+    servicio_id: number
+    version: number
+}
+
+/** Prefijo de las claves. Producción: `aaa:user:` (contrato). Pruebas: con el prefijo de colas. */
+export function prefijoAaa(): string {
+    const configurado = env.get('AAA_REDIS_PREFIJO')
+    if (configurado) return configurado
+    return env.get('NODE_ENV') === 'test' ? `${prefijoColas()}:aaa:user:` : 'aaa:user:'
+}
+
+export function claveAaa(userPpp: string): string {
+    return `${prefijoAaa()}${userPpp}`
+}
+
+interface FilaAaa {
+    servicio_id: number
+    version: number
+    user_ppp: string
+    pass_ppp: string
+    estado: EstadoServicio
+    router_id: number
+    ipv6_modo: ModoIpv6 | null
+    plan_id: number
+    subida_kbps: number
+    bajada_kbps: number
+    subida_limitada_kbps: number
+    bajada_limitada_kbps: number
+    rate_limit_override: string | null
+    profile_ppp: string | null
+    pool_ipv4: string | null
+    pool_ipv6_enlace: string | null
+    pool_ipv6_delegacion: string | null
+    ipv4: string | null
+    prefijo_enlace: string | null
+    prefijo_delegado: string | null
+}
+
+function consultaBase(cliente: QueryClientContract) {
+    return cliente
+        .from('core.servicios as s')
+        .join('network.planes as p', 'p.id', 's.plan_id')
+        .leftJoin('network.planes_routers as pr', (j) =>
+            j.on('pr.plan_id', '=', 's.plan_id').andOn('pr.router_id', '=', 's.router_id'),
+        )
+        .select(
+            's.id as servicio_id',
+            's.version',
+            's.user_ppp',
+            's.pass_ppp',
+            's.estado',
+            's.router_id',
+            's.ipv6_modo',
+            'p.id as plan_id',
+            'p.subida_kbps',
+            'p.bajada_kbps',
+            'p.subida_limitada_kbps',
+            'p.bajada_limitada_kbps',
+            'pr.rate_limit_override',
+            'pr.profile_ppp',
+            'pr.pool_ipv4',
+            'pr.pool_ipv6_enlace',
+            'pr.pool_ipv6_delegacion',
+            cliente.raw(
+                `(SELECT host(a.ip) FROM network.ipv4_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
+            ),
+            cliente.raw(
+                `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'enlace' LIMIT 1) AS prefijo_enlace`,
+            ),
+            cliente.raw(
+                `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'delegacion' LIMIT 1) AS prefijo_delegado`,
+            ),
+        )
+}
+
+const nulo = (v: string | null | undefined) => (v === null || v === undefined || v === '' ? null : v)
+
+function aRegistro(f: FilaAaa): RegistroAaa {
+    let ipv4: Ipv4Aaa = null
+    if (f.ipv4) ipv4 = { modo: 'estatico', ip: f.ipv4 }
+    else if (nulo(f.pool_ipv4)) ipv4 = { modo: 'pool', pool: f.pool_ipv4! }
+
+    const modo: ModoIpv6 = f.ipv6_modo ?? 'ninguno'
+    let ipv6: Ipv6Aaa
+    if (modo === 'radius_servicio') {
+        ipv6 = {
+            modo,
+            prefijo_enlace: nulo(f.prefijo_enlace),
+            prefijo_delegado: nulo(f.prefijo_delegado),
+        }
+    } else if (modo === 'radius_pool') {
+        ipv6 = {
+            modo,
+            pool_enlace: nulo(f.pool_ipv6_enlace),
+            pool_delegacion: nulo(f.pool_ipv6_delegacion),
+        }
+    } else {
+        ipv6 = { modo }
+    }
+
+    return {
+        servicio_id: Number(f.servicio_id),
+        version: Number(f.version),
+        user_ppp: f.user_ppp,
+        pass_ppp: f.pass_ppp,
+        estado: f.estado,
+        router_id: Number(f.router_id),
+        plan: {
+            id: Number(f.plan_id),
+            subida_kbps: f.subida_kbps,
+            bajada_kbps: f.bajada_kbps,
+            subida_limitada_kbps: f.subida_limitada_kbps,
+            bajada_limitada_kbps: f.bajada_limitada_kbps,
+            rate_limit_override: nulo(f.rate_limit_override),
+            profile_ppp: nulo(f.profile_ppp),
+        },
+        ipv4,
+        ipv6,
+    }
+}
+
+/** Registro de un `user_ppp` (null si no existe). Un retirado se devuelve con `estado: retirado`. */
+export async function construirRegistroAaa(
+    userPpp: string,
+    cliente: QueryClientContract = db.connection(),
+): Promise<RegistroAaa | null> {
+    const fila = (await consultaBase(cliente).where('s.user_ppp', userPpp).first()) as FilaAaa | null
+    return fila ? aRegistro(fila) : null
+}
+
+export async function registrosAaaPorServicio(
+    servicioIds: number[],
+    cliente: QueryClientContract = db.connection(),
+): Promise<RegistroAaa[]> {
+    if (servicioIds.length === 0) return []
+    const filas = (await consultaBase(cliente).whereIn('s.id', servicioIds)) as FilaAaa[]
+    return filas.map(aRegistro)
+}
+
+/**
+ * SET condicionado: no reemplaza un registro (o lápida) del MISMO servicio con `version` mayor.
+ * KEYS[1] = clave; ARGV = json, servicio_id, version.
+ */
+const SCRIPT_SET = `
+local actual = redis.call('GET', KEYS[1])
+if actual then
+    local ok, previo = pcall(cjson.decode, actual)
+    if ok and type(previo) == 'table' and tonumber(previo['servicio_id']) == tonumber(ARGV[2])
+        and tonumber(previo['version']) ~= nil and tonumber(previo['version']) > tonumber(ARGV[3]) then
+        return 0
+    end
+end
+redis.call('SET', KEYS[1], ARGV[1])
+return 1
+`
+
+/** Lo que se guarda en Redis para el registro: el JSON del contrato o la lápida si está retirado. */
+export function valorRedis(registro: RegistroAaa): RegistroAaa | LapidaAaa {
+    if (registro.estado === 'retirado') {
+        return {
+            eliminado: true,
+            user_ppp: registro.user_ppp,
+            servicio_id: registro.servicio_id,
+            version: registro.version,
+        }
+    }
+    return registro
+}
+
+/** SET condicionado por `version` de cada valor (ver `SCRIPT_SET`). */
+export async function escribirRegistrosAaa(valores: Array<RegistroAaa | LapidaAaa>): Promise<void> {
+    if (valores.length === 0) return
+    const conexion = redis()
+    const tuberia = conexion.pipeline()
+    for (const valor of valores) {
+        tuberia.eval(
+            SCRIPT_SET,
+            1,
+            claveAaa(valor.user_ppp),
+            JSON.stringify(valor),
+            String(valor.servicio_id),
+            String(valor.version),
+        )
+    }
+    const resultados = (await tuberia.exec()) ?? []
+    const error = resultados.find(([e]) => e)?.[0]
+    if (error) throw error
+}
+
+/** Lee de Postgres y escribe en Redis los registros de esos servicios (write-through). */
+export async function publicarAaa(servicioIds: Iterable<number>): Promise<void> {
+    const ids = [...new Set(servicioIds)]
+    const LOTE = 500
+    for (let i = 0; i < ids.length; i += LOTE) {
+        const registros = await registrosAaaPorServicio(ids.slice(i, i + LOTE))
+        await escribirRegistrosAaa(registros.map(valorRedis))
+    }
+}
+
+/** Lápida en la clave de un `user_ppp` que dejó de existir (borrado o renombrado). */
+export async function escribirLapidaAaa(userPpp: string, servicioId: number, version: number) {
+    await escribirRegistrosAaa([{ eliminado: true, user_ppp: userPpp, servicio_id: servicioId, version }])
+}
+
+export type ObjetivoAaa =
+    | { servicioId: number }
+    | { planId: number; routerId?: number }
+    | { lapida: { userPpp: string; servicioId: number; version: number } }
+
+async function idsDeObjetivo(objetivo: ObjetivoAaa): Promise<number[]> {
+    if ('servicioId' in objetivo) return [objetivo.servicioId]
+    if ('planId' in objetivo) {
+        const filas = (await db
+            .from('core.servicios')
+            .where('plan_id', objetivo.planId)
+            .if(objetivo.routerId !== undefined, (q) => q.where('router_id', objetivo.routerId!))
+            .whereNot('estado', 'retirado')
+            .select('id')) as Array<{ id: number }>
+        return filas.map((f) => Number(f.id))
+    }
+    return []
+}
+
+/** Publica en Redis lo que afecta el objetivo. Los errores se registran: el cambio ya se confirmó. */
+export async function refrescarAaa(objetivos: ObjetivoAaa[]): Promise<void> {
+    const ids = new Set<number>()
+    for (const objetivo of objetivos) {
+        if ('lapida' in objetivo) {
+            const { userPpp, servicioId, version } = objetivo.lapida
+            await escribirLapidaAaa(userPpp, servicioId, version)
+            continue
+        }
+        for (const id of await idsDeObjetivo(objetivo)) ids.add(id)
+    }
+    await publicarAaa(ids)
+}
+
+/**
+ * Agenda `refrescarAaa` para después del COMMIT. Si Redis falla, el consumidor del grupo
+ * `aaa-cache` (eventos `servicio.*` y `asignacion.cambiada`) vuelve a escribir la clave.
+ */
+export function refrescarAaaAlConfirmar(t: Transaccion, ...objetivos: ObjetivoAaa[]): void {
+    t.alConfirmar(async () => {
+        try {
+            await refrescarAaa(objetivos)
+        } catch (error) {
+            logger.warn({ err: error, objetivos }, 'No se pudo escribir aaa:user:* en Redis')
+            throw error
+        }
+    })
+}

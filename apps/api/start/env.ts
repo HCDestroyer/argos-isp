@@ -39,6 +39,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** Prefijo de las claves de BullMQ en Redis (por defecto `argosisp`; las pruebas usan uno propio). */
     COLAS_PREFIJO: Env.schema.string.optional(),
 
+    /** Prefijo de `aaa:user:<user_ppp>` (contrato con A2). Por defecto `aaa:user:`. */
+    AAA_REDIS_PREFIJO: Env.schema.string.optional(),
+    /** Stream de Redis del bus de eventos (contrato). Por defecto `argos:eventos`. */
+    EVENTOS_STREAM: Env.schema.string.optional(),
+
     /*
     |----------------------------------------------------------
     | Notificaciones (A6): correo SMTP, Telegram y datos de la empresa en plantillas

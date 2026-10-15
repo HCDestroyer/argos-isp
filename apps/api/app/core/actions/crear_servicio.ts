@@ -10,6 +10,7 @@ import {
     reconciliarAsignaciones,
     validarModoIpv6,
 } from '#core/asignaciones_servicio'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaCrearServicio {
     cliente_id: number
@@ -138,6 +139,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             inicio: new Date().toISOString(),
             fin: null,
         })
+        refrescarAaaAlConfirmar(t, { servicioId: id })
         return servicio
     }
 }
