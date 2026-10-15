@@ -70,6 +70,7 @@ export default class SuspenderServicio extends DomainAction<Entrada, Salida> {
 ```
 
 - `audit.acciones` se escribe en la misma transacción; si la acción falla se revierte todo y el error se audita en una transacción aparte. La `entrada` se guarda con campos sensibles enmascarados.
+- `t.alConfirmar(fn)`: trabajo que solo corre si el COMMIT se confirmó (invalidar Redis, avisar a workers). En acciones anidadas espera a la transacción externa; si algo se revierte, se descarta.
 - Eventos: catálogo tipado en `app/shared/eventos.ts` (payload en snake_case, dinero como string). Agrega ahí cualquier evento nuevo.
 - Ediciones con `version`: `actualizarConVersion(trx, tabla, id, version, cambios)` → 409 si cambió.
 
