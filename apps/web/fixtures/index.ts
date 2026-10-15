@@ -16,6 +16,7 @@ import { rutasBitacora } from './bitacora/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
+import { rutasPlantillas } from './plantillas/rutas'
 import { rutasRouters } from './routers/rutas'
 import { rutasServicios } from './servicios/rutas'
 import { rutasZonas } from './zonas/rutas'
@@ -54,5 +55,6 @@ export const rutasFixture: RutasFixture = {
     ...rutasServicios,
     ...rutasRouters,
     ...rutasPlanes,
+    ...rutasPlantillas,
     ...rutasBitacora,
 }

@@ -168,6 +168,12 @@ onMounted(cargar)
 
                 <div class="flex gap-2">
                     <UButton
+                        v-if="puede('servicios.crear')"
+                        :to="`/servicios/nuevo?cliente=${cliente.id}`"
+                        icon="i-lucide-plus"
+                        label="Nuevo servicio"
+                    />
+                    <UButton
                         v-if="puede('clientes.editar')"
                         :to="`/clientes/${cliente.id}/editar`"
                         icon="i-lucide-pencil"

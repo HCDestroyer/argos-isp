@@ -4,6 +4,7 @@ definePageMeta({ permiso: 'clientes.crear' })
 useHead({ title: 'Nuevo cliente · ArgosIsp' })
 
 const toast = useToast()
+const { puede } = usePermisos()
 
 async function alGuardar(cliente: Cliente) {
     toast.add({
@@ -11,6 +12,9 @@ async function alGuardar(cliente: Cliente) {
         description: cliente.nombre,
         color: 'success',
         icon: 'i-lucide-circle-check',
+        actions: puede('servicios.crear')
+            ? [{ label: 'Agregar servicio', to: `/servicios/nuevo?cliente=${cliente.id}`, color: 'neutral', variant: 'outline' }]
+            : undefined,
     })
     await navigateTo(`/clientes/${cliente.id}`)
 }
