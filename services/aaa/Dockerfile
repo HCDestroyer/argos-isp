@@ -24,6 +24,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out/package.json ./package.json
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/services/aaa/dist ./dist
+# Solo se usan con AAA_RESPALDO=fixtures (mientras A1 no publique GET /internal/aaa/servicio).
+COPY --from=build --chown=node:node /repo/services/aaa/fixtures ./fixtures
 USER node
 EXPOSE 3100
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

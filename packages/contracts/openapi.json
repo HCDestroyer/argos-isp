@@ -39,6 +39,9 @@
       "name": "libro"
     },
     {
+      "name": "notificaciones"
+    },
+    {
       "name": "pagos"
     },
     {
@@ -2751,6 +2754,503 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/envios": {
+      "get": {
+        "operationId": "notificacionesEnviosListar",
+        "summary": "Registro de envíos (por cliente, evento, canal o estado)",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "correo",
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "encolado",
+                "enviado",
+                "fallido"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioNotificacion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/plantillas": {
+      "get": {
+        "operationId": "notificacionesPlantillasListar",
+        "summary": "Listar plantillas de notificación (por evento y canal)",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantillas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlantillaNotificacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/plantillas/{id}": {
+      "put": {
+        "operationId": "notificacionesPlantillasEditar",
+        "summary": "Editar asunto, cuerpo o activación de una plantilla de notificación",
+        "description": "Valida la sintaxis Mustache (422). Variables en apps/api/app/notify/README.md.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "asunto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Asunto Mustache (solo correo; en Telegram va como primera línea)"
+                  },
+                  "cuerpo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "description": "Cuerpo Mustache en texto plano"
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaNotificacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/recordatorios": {
+      "get": {
+        "operationId": "notificacionesRecordatoriosListar",
+        "summary": "Recordatorios de pago configurados (hasta tres)",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recordatorios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordatorioPago"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/recordatorios/{id}": {
+      "put": {
+        "operationId": "notificacionesRecordatoriosEditar",
+        "summary": "Configurar un recordatorio de pago: días respecto al vencimiento, hora y activo",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "dias": {
+                    "type": "integer",
+                    "minimum": -60,
+                    "maximum": 60,
+                    "description": "Días respecto al vencimiento: negativo antes, 0 el día, positivo después"
+                  },
+                  "hora": {
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "description": "HH:MM, hora de Guatemala"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recordatorio actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordatorioPago"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.editar",
         "x-implementado": true
       }
     },
@@ -5521,6 +6021,8 @@
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "notificaciones.editar",
+                        "notificaciones.ver",
                         "pagos.anular",
                         "pagos.registrar",
                         "pagos.ver",
@@ -5685,6 +6187,8 @@
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "notificaciones.editar",
+                        "notificaciones.ver",
                         "pagos.anular",
                         "pagos.registrar",
                         "pagos.ver",
@@ -8572,6 +9076,8 @@
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
+                            "notificaciones.editar",
+                            "notificaciones.ver",
                             "pagos.anular",
                             "pagos.registrar",
                             "pagos.ver",
@@ -10226,6 +10732,115 @@
           "150.00"
         ]
       },
+      "EnvioNotificacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "cliente_id",
+          "origen",
+          "evento",
+          "canal",
+          "destino",
+          "asunto",
+          "cuerpo",
+          "estado",
+          "error",
+          "intentos",
+          "proveedor_id",
+          "fallback_de",
+          "enviado_en",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen": {
+            "type": "string",
+            "description": "`outbox:<id>`, `recordatorio:<n>:factura:<id>`…"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "destino": {
+            "type": "string"
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuerpo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "encolado",
+              "enviado",
+              "fallido"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proveedor_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fallback_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EstadoCuenta": {
         "type": "object",
         "required": [
@@ -11311,6 +11926,64 @@
           }
         }
       },
+      "PlantillaNotificacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "evento",
+          "canal",
+          "asunto",
+          "cuerpo",
+          "activa",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento": {
+            "type": "string",
+            "description": "Evento del catálogo o `recordatorio.N`"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuerpo": {
+            "type": "string",
+            "description": "Mustache, texto plano"
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "required": [
@@ -11503,6 +12176,55 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "RecordatorioPago": {
+        "type": "object",
+        "required": [
+          "id",
+          "orden",
+          "dias",
+          "hora",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "orden": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "Plantilla `recordatorio.<orden>`"
+          },
+          "dias": {
+            "type": "integer",
+            "description": "Días respecto al vencimiento (negativo = antes)"
+          },
+          "hora": {
+            "type": "string",
+            "description": "HH:MM:SS hora de Guatemala"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -58,6 +58,9 @@ export const PERMISOS = {
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
 
+    'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
+    'notificaciones.editar': 'Editar plantillas de notificaciones',
+
     'bitacora.ver': 'Ver bitácora de acciones y cambios',
     'usuarios.ver': 'Ver usuarios',
     'usuarios.crear': 'Crear usuarios',
@@ -135,6 +138,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'sesiones.desconectar',
             'ip.resolver',
             'bitacora.ver',
+            'notificaciones.ver',
         ],
     },
     tecnico: {

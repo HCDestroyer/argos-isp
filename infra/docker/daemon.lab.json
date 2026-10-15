@@ -1,0 +1,6 @@
+{
+    "userland-proxy": false,
+    "ipv6": true,
+    "fixed-cidr-v6": "fd00:a6:0:ffff::/64",
+    "ip6tables": true
+}

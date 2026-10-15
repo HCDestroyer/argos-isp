@@ -1,0 +1,105 @@
+[
+  {
+    "servicio_id": 9001,
+    "version": 1,
+    "user_ppp": "prueba-activo",
+    "pass_ppp_claro": "clave-activo",
+    "estado": "activo",
+    "router_id": 1,
+    "plan": {
+      "id": 1,
+      "subida_kbps": 5120,
+      "bajada_kbps": 20480,
+      "subida_limitada_kbps": 1024,
+      "bajada_limitada_kbps": 2048,
+      "rate_limit_override": null,
+      "profile_ppp": null
+    },
+    "ipv4": { "modo": "estatico", "ip": "10.10.1.10" },
+    "ipv6": {
+      "modo": "radius_servicio",
+      "prefijo_enlace": "2001:db8:101:1::/64",
+      "prefijo_delegado": "2001:db8:300:100::/56"
+    }
+  },
+  {
+    "servicio_id": 9002,
+    "version": 4,
+    "user_ppp": "prueba-limitado",
+    "pass_ppp_claro": "clave-limitado",
+    "estado": "limitado",
+    "router_id": 1,
+    "plan": {
+      "id": 1,
+      "subida_kbps": 5120,
+      "bajada_kbps": 20480,
+      "subida_limitada_kbps": 1024,
+      "bajada_limitada_kbps": 2048,
+      "rate_limit_override": null,
+      "profile_ppp": null
+    },
+    "ipv4": { "modo": "pool", "pool": "argos-v4-pppoe" },
+    "ipv6": { "modo": "radius_pool", "pool_enlace": "argos-v6-enlace", "pool_delegacion": "argos-v6-pd" }
+  },
+  {
+    "servicio_id": 9003,
+    "version": 7,
+    "user_ppp": "prueba-suspendido",
+    "pass_ppp_claro": "clave-suspendido",
+    "estado": "suspendido",
+    "router_id": 1,
+    "plan": {
+      "id": 2,
+      "subida_kbps": 10240,
+      "bajada_kbps": 51200,
+      "subida_limitada_kbps": 2048,
+      "bajada_limitada_kbps": 4096,
+      "rate_limit_override": null,
+      "profile_ppp": null
+    },
+    "ipv4": { "modo": "estatico", "ip": "10.10.1.11" },
+    "ipv6": {
+      "modo": "radius_servicio",
+      "prefijo_enlace": "2001:db8:101:2::/64",
+      "prefijo_delegado": "2001:db8:300:200::/56"
+    }
+  },
+  {
+    "servicio_id": 9004,
+    "version": 9,
+    "user_ppp": "prueba-retirado",
+    "pass_ppp_claro": "clave-retirado",
+    "estado": "retirado",
+    "router_id": 1,
+    "plan": {
+      "id": 1,
+      "subida_kbps": 5120,
+      "bajada_kbps": 20480,
+      "subida_limitada_kbps": 1024,
+      "bajada_limitada_kbps": 2048,
+      "rate_limit_override": null,
+      "profile_ppp": null
+    },
+    "ipv4": null,
+    "ipv6": { "modo": "ninguno" }
+  },
+  {
+    "servicio_id": 9005,
+    "version": 2,
+    "user_ppp": "prueba-burst",
+    "pass_ppp_claro": "clave-burst",
+    "estado": "activo",
+    "router_id": 1,
+    "plan": {
+      "id": 3,
+      "subida_kbps": 5120,
+      "bajada_kbps": 20480,
+      "subida_limitada_kbps": 1024,
+      "bajada_limitada_kbps": 2048,
+      "rate_limit_override": "5M/20M 10M/40M 4M/16M 16/16 8 1M/4M",
+      "profile_ppp": "plan-20m"
+    },
+    "ipv4": { "modo": "pool", "pool": "argos-v4-pppoe" },
+    "ipv6": { "modo": "ninguno" }
+  }
+]

@@ -64,8 +64,10 @@
 :local portalCortePuerto 80
 :local portalV6 "2001:db8:ffff::20"
 :local portalFqdn "portal.argosisp.example"
-# Walled garden: dominios que un suspendido puede alcanzar (pasarela de pago, etc.). A5 los define.
-:local walledGarden {"pagos.argosisp.example";"pasarela.example"}
+# Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.).
+# A5 los define. Vacío hasta la semana 2: el portal no carga nada externo. Ejemplo con dominios:
+#   :local walledGarden {"pagos.argosisp.example";"pasarela.example"}
+:local walledGarden [:toarray ""]
 
 # --- DNS ---
 # Resolutores que el router usa y que los suspendidos pueden consultar

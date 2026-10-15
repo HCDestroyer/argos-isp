@@ -11,6 +11,7 @@
         "test": "pnpm -r --if-present test",
         "build": "pnpm -r --if-present build",
         "format": "prettier --write .",
+        "aaa:clients": "pnpm --filter @argosisp/aaa clients",
         "contracts:build": "pnpm --filter @argosisp/api openapi:generate && pnpm --filter @argosisp/contracts build"
     },
     "devDependencies": {

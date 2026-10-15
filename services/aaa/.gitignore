@@ -1,0 +1,3 @@
+# Generados por `pnpm aaa:clients`: llevan el secret RADIUS en claro.
+freeradius/clients.d/*.conf
+freeradius/clients.d/.*.tmp
