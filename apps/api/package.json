@@ -20,7 +20,8 @@
     "test": "node ace test",
     "migrate": "node ace migration:run",
     "seed": "node ace db:seed",
-    "openapi:generate": "node ace openapi:generate"
+    "openapi:generate": "node ace openapi:generate",
+    "importar": "node ace importar:mikrowisp"
   },
   "imports": {
     "#shared/*": "./app/shared/*.js",
@@ -30,6 +31,7 @@
     "#ledger/*": "./app/ledger/*.js",
     "#portal/*": "./app/portal/*.js",
     "#notify/*": "./app/notify/*.js",
+    "#importacion/*": "./app/importacion/*.js",
     "#exceptions/*": "./app/exceptions/*.js",
     "#middleware/*": "./app/middleware/*.js",
     "#commands/*": "./commands/*.js",

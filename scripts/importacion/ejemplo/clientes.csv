@@ -1,0 +1,7 @@
+id,nombre,tipo,nit,nombre_fiscal,direccion_fiscal,email,telefono,movil,direccion,coordenadas,zona
+101,Ana López,persona,1234567-9,,,ana@ejemplo.test,22223333,55554444,"3a calle 4-50, zona 1","14.6349,-90.5069",MW Zona Centro
+102,Bodega El Sol,empresa,CF,Bodega El Sol S.A.,Ciudad,bodega@ejemplo.test,,,Km 15 carretera al norte,,MW Zona Norte
+103,Carlos Pérez,persona,,,,carlos@ejemplo.test,,55551111,,,MW Zona Centro
+104,Distribuidora Norte,empresa,12345678-0,,,ventas@ejemplo.test,,,,,MW Zona Norte
+105,"Morales, Eva",persona,4455667-5,,,eva@,,,"Colonia ""El Mirador""",no-son-coordenadas,
+106,,persona,,,,,,,,,

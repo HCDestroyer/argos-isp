@@ -1,0 +1,4 @@
+id,nombre,precio,bajada,subida,bajada_limitada,subida_limitada,perfil_ppp,pool_ipv4,equivale_a
+1,MW Ejemplo 10M,150.00,10M,5M,,,plan-10m,,
+2,MW Ejemplo 20M,"Q 1,250.50",20M,10M,1M,1M,plan-20m,,
+3,MW Ejemplo Empresarial,900,50M,50M,,,,,Plan que no existe en ArgosIsp

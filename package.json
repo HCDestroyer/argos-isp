@@ -14,7 +14,8 @@
         "aaa:clients": "pnpm --filter @argosisp/aaa clients",
         "contracts:build": "pnpm --filter @argosisp/api openapi:generate && pnpm --filter @argosisp/contracts build",
         "verificar:permisos": "node scripts/verificar-permisos.mjs",
-        "demo:datos": "node scripts/demo/datos.mjs"
+        "demo:datos": "node scripts/demo/datos.mjs",
+        "importar": "pnpm --filter @argosisp/api importar"
     },
     "devDependencies": {
         "prettier": "^3.6.2",

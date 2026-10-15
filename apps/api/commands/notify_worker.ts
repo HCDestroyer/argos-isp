@@ -2,14 +2,15 @@ import { BaseCommand, flags } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 
 /**
- * `node ace notify:worker`: procesa la cola de envíos de notificaciones (BullMQ) y el cron de
- * recordatorios de pago, y consume el grupo `notify` del bus de eventos. Corre como proceso aparte (servicio `worker` del docker-compose).
+ * `node ace notify:worker`: procesa la cola de envíos de notificaciones (BullMQ), el cron de
+ * recordatorios de pago y el cron mensual de particiones de `audit`, y consume el grupo `notify`
+ * del bus de eventos. Corre como proceso aparte (servicio `worker` del docker-compose).
  * Lógica en `app/notify`.
  */
 export default class NotifyWorker extends BaseCommand {
     static commandName = 'notify:worker'
     static description =
-        'Worker de notificaciones: entrega envíos (correo, Telegram) y corre los recordatorios'
+        'Worker de notificaciones: entrega envíos (correo, Telegram), recordatorios y particiones de audit'
 
     static options: CommandOptions = {
         startApp: true,
@@ -19,7 +20,10 @@ export default class NotifyWorker extends BaseCommand {
     @flags.number({ description: 'Envíos en paralelo', default: 5 })
     declare concurrencia: number
 
-    @flags.boolean({ description: 'No correr el cron de recordatorios en este proceso', default: false })
+    @flags.boolean({
+        description: 'No correr los crons (recordatorios, particiones) en este proceso',
+        default: false,
+    })
     declare sinCron: boolean
 
     @flags.boolean({ description: 'No consumir el grupo notify del bus de eventos', default: false })
@@ -28,6 +32,7 @@ export default class NotifyWorker extends BaseCommand {
     async run() {
         const { ColaEnviosBullmq, crearWorkerEnvios } = await import('#notify/cola')
         const { crearWorkerCron, programarCronRecordatorios } = await import('#notify/recordatorios')
+        const { programarCronParticiones } = await import('#notify/particiones')
 
         const cola = new ColaEnviosBullmq()
         const workers = [crearWorkerEnvios(cola, { concurrencia: this.concurrencia })]
@@ -35,8 +40,9 @@ export default class NotifyWorker extends BaseCommand {
 
         const colaCron = this.sinCron ? null : await programarCronRecordatorios()
         if (colaCron) {
+            await programarCronParticiones(colaCron)
             workers.push(crearWorkerCron(cola))
-            this.logger.info(`notify:worker con cron de recordatorios (${colaCron.name})`)
+            this.logger.info(`notify:worker con crons de recordatorios y particiones (${colaCron.name})`)
         }
 
         // Grupo `notify` del bus de eventos (contrato en .claude/integration/contratos/eventos.md, A1)
