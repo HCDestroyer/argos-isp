@@ -12,8 +12,12 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
+import { rutasBitacora } from './bitacora/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
+import { rutasPlanes } from './planes/rutas'
+import { rutasRouters } from './routers/rutas'
+import { rutasServicios } from './servicios/rutas'
 import { rutasZonas } from './zonas/rutas'
 
 export { reiniciarFixtures } from './bd'
@@ -47,4 +51,8 @@ export const rutasFixture: RutasFixture = {
 
     ...rutasZonas,
     ...rutasClientes,
+    ...rutasServicios,
+    ...rutasRouters,
+    ...rutasPlanes,
+    ...rutasBitacora,
 }

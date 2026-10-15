@@ -3,6 +3,7 @@
  * viven aquí hasta recargar la página; las pruebas llaman `reiniciarFixtures()`.
  */
 import type { Schema } from '@argosisp/contracts'
+import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
@@ -34,7 +35,7 @@ function inicial(): BaseFixtures {
         planes,
         planesPorRouter,
         plantillas,
-        acciones: [],
+        acciones,
     })
 }
 

@@ -42,10 +42,11 @@ Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `caje
 - Llamadas a la API desde composables con `resolver(api.GET(...))` → `Resultado<T>` (`ok` + `data`
   o `problema`). Listas con cursor: `usePaginacionCursor` + `<PaginacionCursor>`; errores con
   `<ProblemaAlerta>`; 422 al formulario con `erroresDeFormulario(problema)`.
+- ESLint prohíbe `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>` crudos y `any`; indentación de 4.
 
 ## Pantallas
 
 | Pantalla | Ruta | Composables |
 | --- | --- | --- |
 | 1 · Lista de clientes (búsqueda, zona) | `/clientes` | `useClientes`, `useZonas`, `usePaginacionCursor` |
-- ESLint prohíbe `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>` crudos y `any`; indentación de 4.
+| 2 · Ficha de cliente (datos, fiscales, servicios, estado de cuenta, línea de tiempo) | `/clientes/:id?tab=` | `useClientes`, `useServicios`, `usePlanes`, `useRouters`, `useBitacora` |

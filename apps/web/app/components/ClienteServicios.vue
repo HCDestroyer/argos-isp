@@ -1,0 +1,128 @@
+<script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
+
+/** Pestaña "Servicios" de la ficha del cliente. Recibe los servicios ya cargados por la página. */
+const props = withDefaults(defineProps<{
+    servicios: Servicio[]
+    cargando?: boolean
+}>(), {
+    cargando: false,
+})
+
+const { puede } = usePermisos()
+
+const planes = ref(new Map<number, Plan>())
+const routers = ref(new Map<number, RouterNas>())
+
+const columnas: TableColumn<Servicio>[] = [
+    { accessorKey: 'user_ppp', header: 'Servicio' },
+    { accessorKey: 'plan_id', header: 'Plan' },
+    { accessorKey: 'ipv4', header: 'Direcciones', meta: SOLO_ANCHO },
+    { accessorKey: 'estado', header: 'Estado', meta: SOLO_ANCHO },
+    { accessorKey: 'fecha_instalacion', header: 'Instalación', meta: SOLO_ESCRITORIO },
+]
+
+function nombrePlan(servicio: Servicio): string {
+    return planes.value.get(servicio.plan_id)?.nombre ?? `Plan #${servicio.plan_id}`
+}
+
+function nombreRouter(servicio: Servicio): string {
+    return routers.value.get(servicio.router_id)?.nombre ?? `Router #${servicio.router_id}`
+}
+
+/** Precio efectivo: `costo_override` del servicio o el precio del plan. */
+function precio(servicio: Servicio): string | null {
+    return servicio.costo_override ?? planes.value.get(servicio.plan_id)?.precio ?? null
+}
+
+onMounted(async () => {
+    const [resultadoPlanes, resultadoRouters] = await Promise.all([
+        puede('planes.ver') ? usePlanes().listar() : null,
+        puede('routers.ver') ? useRouters().listar() : null,
+    ])
+    if (resultadoPlanes?.ok) {
+        planes.value = new Map(resultadoPlanes.data.data.map(plan => [plan.id, plan]))
+    }
+    if (resultadoRouters?.ok) {
+        routers.value = new Map(resultadoRouters.data.data.map(router => [router.id, router]))
+    }
+})
+</script>
+
+<template>
+    <UTable
+        :data="props.servicios"
+        :columns="columnas"
+        :loading="cargando"
+    >
+        <template #user_ppp-cell="{ row }">
+            <div class="flex min-w-36 flex-col">
+                <span class="font-mono text-sm text-highlighted">{{ row.original.user_ppp }}</span>
+                <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
+                <span
+                    v-if="row.original.ipv4"
+                    class="font-mono text-xs text-muted sm:hidden"
+                >{{ row.original.ipv4 }}</span>
+                <EstadoServicioBadge
+                    :estado="row.original.estado"
+                    size="sm"
+                    class="mt-1 self-start sm:hidden"
+                />
+            </div>
+        </template>
+
+        <template #plan_id-cell="{ row }">
+            <div class="flex flex-col">
+                <span class="text-sm">{{ nombrePlan(row.original) }}</span>
+                <span class="text-xs text-muted">
+                    {{ formatearQuetzales(precio(row.original)) }}
+                    <template v-if="row.original.costo_override"> · precio especial</template>
+                </span>
+            </div>
+        </template>
+
+        <template #ipv4-cell="{ row }">
+            <div class="flex flex-col font-mono text-xs">
+                <span class="text-sm">{{ row.original.ipv4 ?? 'Sin IPv4' }}</span>
+                <span
+                    v-if="row.original.prefijo_delegado_v6"
+                    class="text-muted"
+                >{{ row.original.prefijo_delegado_v6 }}</span>
+                <span
+                    v-else
+                    class="text-muted"
+                >IPv6: {{ row.original.ipv6_modo === 'ninguno' ? 'no' : row.original.ipv6_modo }}</span>
+            </div>
+        </template>
+
+        <template #estado-cell="{ row }">
+            <div class="flex flex-wrap items-center gap-1">
+                <EstadoServicioBadge
+                    :estado="row.original.estado"
+                    size="sm"
+                />
+                <UBadge
+                    v-if="row.original.promesa_activa"
+                    label="Promesa"
+                    icon="i-lucide-calendar-clock"
+                    color="info"
+                    variant="outline"
+                    size="sm"
+                />
+            </div>
+        </template>
+
+        <template #fecha_instalacion-cell="{ row }">
+            <span class="text-sm text-muted">{{ formatearFecha(row.original.fecha_instalacion) }}</span>
+        </template>
+
+        <template #empty>
+            <UEmpty
+                icon="i-lucide-wifi-off"
+                title="Sin servicios"
+                description="Este cliente todavía no tiene servicios de internet."
+                variant="naked"
+            />
+        </template>
+    </UTable>
+</template>

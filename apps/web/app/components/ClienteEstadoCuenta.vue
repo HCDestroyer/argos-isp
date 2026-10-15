@@ -1,0 +1,197 @@
+<script setup lang="ts">
+import type { Problem, Schema } from '@argosisp/contracts'
+import type { TableColumn } from '@nuxt/ui'
+import Decimal from 'decimal.js'
+
+/** Pestaña "Estado de cuenta": saldo del auxiliar CxC, avisos pendientes y movimientos. */
+const props = defineProps<{
+    clienteId: number
+}>()
+
+type Factura = Schema<'Factura'>
+type Movimiento = Schema<'MovimientoEstadoCuenta'>
+
+const estado = shallowRef<EstadoCuenta | null>(null)
+const cargando = ref(true)
+const problema = ref<Problem | null>(null)
+
+const saldo = computed(() => new Decimal(estado.value?.saldo ?? '0'))
+
+const columnasFacturas: TableColumn<Factura>[] = [
+    { accessorKey: 'periodo', header: 'Periodo' },
+    { accessorKey: 'vence_en', header: 'Vence', meta: SOLO_ANCHO },
+    { accessorKey: 'total', header: 'Total', meta: SOLO_ANCHO },
+    { id: 'pendiente', header: 'Pendiente' },
+    { accessorKey: 'estado', header: 'Estado' },
+]
+
+const columnasMovimientos: TableColumn<Movimiento>[] = [
+    { accessorKey: 'fecha', header: 'Fecha', meta: SOLO_ANCHO },
+    { accessorKey: 'descripcion', header: 'Concepto', meta: { class: { td: 'whitespace-normal' } } },
+    { accessorKey: 'cargo', header: 'Cargo', meta: SOLO_ANCHO },
+    { accessorKey: 'abono', header: 'Abono', meta: SOLO_ANCHO },
+    { accessorKey: 'saldo', header: 'Saldo' },
+]
+
+function pendiente(factura: Factura): Decimal {
+    return new Decimal(factura.total).minus(factura.pagado)
+}
+
+function esCero(monto: string): boolean {
+    return new Decimal(monto).isZero()
+}
+
+async function cargar() {
+    cargando.value = true
+    const resultado = await useClientes().estadoCuenta(props.clienteId)
+    cargando.value = false
+    if (resultado.ok) {
+        estado.value = resultado.data
+        problema.value = null
+    }
+    else {
+        problema.value = resultado.problema
+    }
+}
+
+onMounted(cargar)
+</script>
+
+<template>
+    <div class="flex flex-col gap-6">
+        <ProblemaAlerta
+            v-if="problema"
+            :problema="problema"
+            :reintentar="cargar"
+        />
+
+        <div class="grid gap-4 sm:grid-cols-3">
+            <UPageCard
+                variant="subtle"
+                :ui="{ container: 'gap-1 sm:p-4' }"
+            >
+                <p class="text-xs font-medium text-muted">
+                    Saldo
+                </p>
+                <USkeleton
+                    v-if="cargando"
+                    class="h-8 w-32"
+                />
+                <p
+                    v-else
+                    class="text-2xl font-semibold tabular-nums"
+                    :class="saldo.gt(0) ? 'text-error' : 'text-success'"
+                >
+                    {{ formatearQuetzales(saldo) }}
+                </p>
+                <p class="text-xs text-muted">
+                    {{ saldo.gt(0) ? 'El cliente debe este monto' : saldo.lt(0) ? 'Saldo a favor del cliente' : 'Al día' }}
+                </p>
+            </UPageCard>
+
+            <UPageCard
+                variant="subtle"
+                :ui="{ container: 'gap-1 sm:p-4' }"
+            >
+                <p class="text-xs font-medium text-muted">
+                    Avisos pendientes
+                </p>
+                <USkeleton
+                    v-if="cargando"
+                    class="h-8 w-12"
+                />
+                <p
+                    v-else
+                    class="text-2xl font-semibold tabular-nums text-highlighted"
+                >
+                    {{ estado?.facturas_pendientes.length ?? 0 }}
+                </p>
+                <p class="text-xs text-muted">
+                    {{ estado?.facturas_pendientes.filter(f => f.estado === 'vencida').length ?? 0 }} vencidos
+                </p>
+            </UPageCard>
+        </div>
+
+        <section class="flex flex-col gap-2">
+            <h3 class="text-sm font-semibold text-highlighted">
+                Avisos de cobro pendientes
+            </h3>
+            <UTable
+                :data="estado?.facturas_pendientes ?? []"
+                :columns="columnasFacturas"
+                :loading="cargando"
+            >
+                <template #periodo-cell="{ row }">
+                    <div class="flex flex-col">
+                        <span class="text-sm">{{ formatearFecha(row.original.periodo) }}</span>
+                        <span class="text-xs text-muted">Aviso #{{ row.original.id }}<template v-if="row.original.servicio_id"> · servicio {{ row.original.servicio_id }}</template></span>
+                    </div>
+                </template>
+                <template #vence_en-cell="{ row }">
+                    {{ formatearFecha(row.original.vence_en) }}
+                </template>
+                <template #total-cell="{ row }">
+                    <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                </template>
+                <template #pendiente-cell="{ row }">
+                    <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(pendiente(row.original)) }}</span>
+                </template>
+                <template #estado-cell="{ row }">
+                    <UBadge
+                        :label="ESTADOS_FACTURA[row.original.estado].etiqueta"
+                        :color="ESTADOS_FACTURA[row.original.estado].color"
+                        variant="subtle"
+                        size="sm"
+                    />
+                </template>
+                <template #empty>
+                    <UEmpty
+                        icon="i-lucide-badge-check"
+                        title="Sin avisos pendientes"
+                        variant="naked"
+                    />
+                </template>
+            </UTable>
+        </section>
+
+        <section class="flex flex-col gap-2">
+            <h3 class="text-sm font-semibold text-highlighted">
+                Movimientos
+            </h3>
+            <UTable
+                :data="estado?.movimientos ?? []"
+                :columns="columnasMovimientos"
+                :loading="cargando"
+            >
+                <template #fecha-cell="{ row }">
+                    <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
+                </template>
+                <template #descripcion-cell="{ row }">
+                    <div class="flex flex-col">
+                        <span class="text-sm">{{ row.original.descripcion }}</span>
+                        <span class="text-xs tabular-nums text-muted sm:hidden">
+                            {{ formatearFecha(row.original.fecha) }} ·
+                            {{ esCero(row.original.cargo) ? `abono ${formatearQuetzales(row.original.abono)}` : `cargo ${formatearQuetzales(row.original.cargo)}` }}
+                        </span>
+                    </div>
+                </template>
+                <template #cargo-cell="{ row }">
+                    <span class="tabular-nums">{{ esCero(row.original.cargo) ? '' : formatearQuetzales(row.original.cargo) }}</span>
+                </template>
+                <template #abono-cell="{ row }">
+                    <span class="tabular-nums text-success">{{ esCero(row.original.abono) ? '' : formatearQuetzales(row.original.abono) }}</span>
+                </template>
+                <template #saldo-cell="{ row }">
+                    <span class="font-medium tabular-nums">{{ formatearQuetzales(row.original.saldo) }}</span>
+                </template>
+                <template #empty>
+                    <UEmpty
+                        icon="i-lucide-list"
+                        title="Sin movimientos"
+                        variant="naked"
+                    />
+                </template>
+            </UTable>
+        </section>
+    </div>
+</template>
