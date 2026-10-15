@@ -1513,6 +1513,14 @@ export interface components {
             nota: string | null;
             registrado_por: number | null;
             aplicaciones: components["schemas"]["AplicacionPago"][];
+            /**
+             * Format: date-time
+             * @description Cuándo se anuló
+             */
+            anulado_en?: string | null;
+            motivo_anulacion?: string | null;
+            /** @description Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata) */
+            servicios?: components["schemas"]["ServicioEvaluado"][];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1865,6 +1873,15 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ServicioEvaluado: {
+            servicio_id: number;
+            /** @enum {string} */
+            de: "activo" | "limitado" | "suspendido" | "retirado";
+            /** @enum {string} */
+            estado: "activo" | "limitado" | "suspendido" | "retirado";
+            cambiado: boolean;
+            motivo: string;
         };
         Sesion: {
             id: number;
@@ -3933,15 +3950,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     pagosRegistrar: {
@@ -4020,15 +4028,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     pagosVer: {
@@ -4071,15 +4070,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4156,15 +4146,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

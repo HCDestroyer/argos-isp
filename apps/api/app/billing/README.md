@@ -81,6 +81,20 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 `actions/ejecutar_corte.ts` (`servicios.corte`): procesa cada hora de corte del día que ya llegó (de la plantilla, o la excepción `hora_corte` del servicio) y no está en `billing.cortes_ejecutados`; primero vence lo pendiente y luego evalúa cada servicio con `evaluarEstadoServicio`. `POST /facturas/corte { servicio_id?, ignorar_hora? }` es el corte manual del laboratorio (no registra `cortes_ejecutados`).
 
+## Pagos (tarea 8, versión de cobro rápido)
+
+| Acción | Archivo | Permiso |
+| --- | --- | --- |
+| `pagos.registrar` | `actions/registrar_pago.ts` | `POST /pagos` con `Idempotency-Key` |
+| `pagos.anular` | `actions/anular_pago.ts` | `POST /pagos/:id/anular` con `motivo` |
+
+- `referencia` única por método (409 `referencia_duplicada`). Misma `Idempotency-Key` → misma respuesta (middleware).
+- Aplicación: primero las `facturas` pedidas, luego la más antigua (vencimiento, periodo, id). Lo que sobra va a **Anticipos** (auxiliar por cliente) y se aplica a las facturas que se emitan después (`aplicarAnticipos` en `cobros.ts`, asiento `Anticipos / CxC` con origen en el pago).
+- Asiento: `Caja (o Banco principal) / CxC + Anticipos`. `caja` sin `caja_id` usa la caja principal (turnos: tarea 9); `deposito`, `pasarela`, `agente`, `debito` van al banco principal (comisión de pasarela: semana 2).
+- `pago.registrado` y, en la misma transacción, `evaluarEstadoServicio` de cada servicio afectado: la reactivación (`servicio.estado_cambiado`) sale con el pago. La respuesta trae `servicios[]` con cómo quedó cada uno.
+- Anular: estado `anulado` con quién/cuándo/motivo, `RevertirAsiento` de cada asiento del pago (cobro y aplicaciones de su anticipo), descuenta lo aplicado (las facturas que ya habían vencido vuelven a `vencida`), `pago.anulado` y re-evaluación.
+- Concurrencia: advisory lock por cliente (`bloquearCliente`) en toda acción que aplica dinero.
+
 ## Endpoints
 
 | Método | Ruta                                 | Permiso             |
@@ -92,4 +106,4 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`. Próximas tareas: `factura.anulada`, `pago.registrado`, `pago.anulado`, `promesa.*`. Consume (A1): `servicio.creado`, `servicio.estado_cambiado`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`. Próximas tareas: `factura.anulada`, `promesa.*`. Consume (A1): `servicio.creado`, `servicio.estado_cambiado`.

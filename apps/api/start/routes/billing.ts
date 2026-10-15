@@ -12,6 +12,11 @@ import EditarPlantilla from '#billing/actions/editar_plantilla'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
+import RegistrarPago from '#billing/actions/registrar_pago'
+import AnularPago from '#billing/actions/anular_pago'
+import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { dimensionesDeCliente } from '#core/consultas/clientes'
+import { ValidacionFallida } from '#shared/errores'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { exigirAlcance } from '#core/acl'
 import {
@@ -158,6 +163,7 @@ const pagos: Ruta[] = [
         permiso: 'pagos.ver',
         query: v.listarPagosValidator,
         respuesta: { status: 200, descripcion: 'Página de pagos', esquema: pagina(Pago) },
+        handler: (ctx, { query }) => listarPagos(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'get',
@@ -167,6 +173,11 @@ const pagos: Ruta[] = [
         etiqueta: 'pagos',
         permiso: 'pagos.ver',
         respuesta: { status: 200, descripcion: 'Pago', esquema: Pago },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePago(id))
+            return verPago(id)
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -178,6 +189,21 @@ const pagos: Ruta[] = [
         cuerpo: v.registrarPagoValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Pago registrado', esquema: Pago },
+        handler: async (ctx, { cuerpo }) => {
+            // Efectivo sin caja: la principal (los turnos de caja llegan con la tarea 9).
+            const cajaId = cuerpo.metodo === 'caja' ? (cuerpo.caja_id ?? (await cajaPrincipalId())) : null
+            const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
+                throw new ValidacionFallida([
+                    {
+                        field: 'cliente_id',
+                        message: `El cliente ${cuerpo.cliente_id} no existe`,
+                        rule: 'exists',
+                    },
+                ])
+            })
+            exigirAlcance(ctx.alcance, { ...dimensiones, ...(cajaId ? { caja: [cajaId] } : {}) })
+            return new RegistrarPago().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -189,6 +215,11 @@ const pagos: Ruta[] = [
         cuerpo: v.anularPagoValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Pago anulado', esquema: Pago },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePago(id))
+            return new AnularPago().execute({ pago_id: id, motivo: cuerpo.motivo }, ctx.contextoAccion())
+        },
     }),
 ]
 

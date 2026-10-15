@@ -169,23 +169,43 @@ export const ResultadoCorte = definirEsquema(
 
 export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
 
+export const ServicioEvaluado = definirEsquema(
+    'ServicioEvaluado',
+    objeto({
+        servicio_id: id,
+        de: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        cambiado: booleano,
+        motivo: texto,
+    }),
+)
+
 export const Pago = definirEsquema(
     'Pago',
-    objeto({
-        id,
-        cliente_id: id,
-        metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
-        monto: Dinero,
-        comision: Dinero,
-        referencia: nulable(texto),
-        caja_id: nulable(id),
-        pasarela: nulable(texto),
-        estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
-        nota: nulable(texto),
-        registrado_por: nulable(id),
-        aplicaciones: lista(AplicacionPago),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+            monto: Dinero,
+            comision: Dinero,
+            referencia: nulable(texto),
+            caja_id: nulable(id),
+            pasarela: nulable(texto),
+            estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
+            nota: nulable(texto),
+            registrado_por: nulable(id),
+            aplicaciones: lista(AplicacionPago),
+            anulado_en: { ...nulable(instante), description: 'Cuándo se anuló' },
+            motivo_anulacion: nulable(texto),
+            servicios: {
+                ...lista(ServicioEvaluado),
+                description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
+            },
+            ...auditable,
+        },
+        ['anulado_en', 'motivo_anulacion', 'servicios'],
+    ),
 )
 
 export const Promesa = definirEsquema(

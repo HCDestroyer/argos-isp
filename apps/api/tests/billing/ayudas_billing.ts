@@ -111,3 +111,9 @@ export async function asientoDe(origenTipo: string, origenId: number) {
         .orderBy('m.id', 'asc')
         .select('a.id as asiento_id', 'c.codigo', 'm.debe', 'm.haber', 'm.cliente_id')
 }
+
+/** Movimientos del asiento como tuplas `[codigo, debe, haber, cliente_id]`. */
+export async function lineasAsiento(origenTipo: string, origenId: number) {
+    const movimientos = await asientoDe(origenTipo, origenId)
+    return movimientos.map((m) => [m.codigo, m.debe, m.haber, m.cliente_id] as const)
+}

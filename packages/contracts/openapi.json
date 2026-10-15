@@ -3591,20 +3591,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "pagosRegistrar",
@@ -3750,20 +3740,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.registrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}": {
@@ -3829,20 +3809,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}/anular": {
@@ -3960,20 +3930,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/permisos": {
@@ -11680,6 +11640,27 @@
               "$ref": "#/components/schemas/AplicacionPago"
             }
           },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioEvaluado"
+            },
+            "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -13107,6 +13088,46 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ServicioEvaluado": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "de",
+          "estado",
+          "cambiado",
+          "motivo"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "cambiado": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": "string"
           }
         }
       },

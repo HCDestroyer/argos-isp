@@ -1,0 +1,187 @@
+import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import type { MetodoPago } from '#shared/eventos'
+import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
+import { CUENTAS } from '#ledger/plan_cuentas'
+import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
+import {
+    aplicarAFacturas,
+    aplicarAnticipos,
+    bloquearCliente,
+    facturasPendientes,
+    serviciosDe,
+} from '#billing/cobros'
+import { cajaPrincipalId, verPago, type PagoVista } from '#billing/pagos'
+import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
+
+/**
+ * `pagos.registrar` (`POST /pagos`, cobro rápido del panel): registra un pago y lo aplica.
+ *
+ * - `Idempotency-Key` lo resuelve el middleware de la ruta (misma clave → misma respuesta). Además
+ *   la `referencia` (boleta, transacción) es única por método: repetirla responde 409.
+ * - Aplica a las facturas pendientes del cliente: primero las `facturas` pedidas (en ese orden),
+ *   luego la más antigua (vencimiento, periodo, id). El excedente queda en Anticipos y se aplica
+ *   solo a las facturas que se emitan después.
+ * - Asiento: `Caja (o Bancos) / CxC (aplicado) + Anticipos (excedente)`. `caja` sin `caja_id` va a
+ *   la caja principal (los turnos de caja llegan con la tarea 9); los demás métodos, al banco
+ *   principal.
+ * - Evento `pago.registrado` y, **en la misma transacción**, `evaluarEstadoServicio` de cada
+ *   servicio cuyas facturas tocó: la reactivación sale con el pago (evento
+ *   `servicio.estado_cambiado`), sin esperar al cron.
+ */
+
+export interface EntradaRegistrarPago {
+    cliente_id: number
+    metodo: MetodoPago
+    monto: string
+    referencia?: string | null
+    caja_id?: number | null
+    nota?: string | null
+    facturas?: number[]
+}
+
+export interface ResultadoRegistrarPago extends PagoVista {
+    /** cómo quedó cada servicio afectado (para el recibo y la pantalla de cobro) */
+    servicios: Array<Pick<ResultadoEvaluarEstado, 'servicio_id' | 'estado' | 'de' | 'cambiado' | 'motivo'>>
+}
+
+export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, ResultadoRegistrarPago> {
+    readonly nombre = 'pagos.registrar'
+
+    protected async handle(input: EntradaRegistrarPago, t: Transaccion): Promise<ResultadoRegistrarPago> {
+        const monto = dec(input.monto)
+        if (monto.lte(0) || !tieneCentavosExactos(monto)) {
+            throw new ValidacionFallida([
+                {
+                    field: 'monto',
+                    message: 'El monto debe ser mayor que 0 con hasta 2 decimales',
+                    rule: 'monto',
+                },
+            ])
+        }
+        const cliente = await t.trx.from('core.clientes').where('id', input.cliente_id).select('id').first()
+        if (!cliente) {
+            throw new ValidacionFallida([
+                { field: 'cliente_id', message: `El cliente ${input.cliente_id} no existe`, rule: 'exists' },
+            ])
+        }
+        await bloquearCliente(t.trx, input.cliente_id)
+
+        const referencia = input.referencia?.trim() || null
+        if (referencia) {
+            const repetido = await t.trx
+                .from('billing.pagos')
+                .where('metodo', input.metodo)
+                .where('referencia', referencia)
+                .select('id')
+                .first()
+            if (repetido) {
+                throw new Conflicto(
+                    `La referencia ${referencia} ya está registrada en el pago ${repetido.id} (${input.metodo})`,
+                    'referencia_duplicada',
+                    'Referencia duplicada',
+                )
+            }
+        }
+        const { cajaId, cuentaDebe } = await this.destino(t, input)
+
+        // Anticipos previos primero: no puede quedar saldo a favor mientras haya deuda.
+        const previas = await aplicarAnticipos(t, input.cliente_id)
+
+        const [pago] = (await t.trx
+            .insertQuery()
+            .table('billing.pagos')
+            .insert({
+                cliente_id: input.cliente_id,
+                metodo: input.metodo,
+                monto: aTexto(monto),
+                referencia,
+                caja_id: cajaId,
+                estado: 'registrado',
+                nota: input.nota?.trim() || null,
+                registrado_por: t.ctx.actor.id,
+            })
+            .returning('id')) as Array<{ id: number }>
+        const pagoId = pago!.id
+        t.fijarEntidad('pago', pagoId)
+
+        const facturas = await facturasPendientes(t.trx, input.cliente_id, input.facturas ?? [])
+        const { aplicaciones, aplicado, restante } = await aplicarAFacturas(t.trx, pagoId, monto, facturas)
+
+        const movimientos: LineaAsiento[] = [{ cuenta: cuentaDebe, debe: aTexto(monto) }]
+        if (aplicado.gt(0)) {
+            movimientos.push({
+                cuenta: CUENTAS.CXC_CLIENTES,
+                haber: aTexto(aplicado),
+                cliente_id: input.cliente_id,
+            })
+        }
+        if (restante.gt(0)) {
+            movimientos.push({
+                cuenta: CUENTAS.ANTICIPOS_CLIENTES,
+                haber: aTexto(restante),
+                cliente_id: input.cliente_id,
+            })
+        }
+        await new RegistrarAsiento().execute(
+            {
+                descripcion:
+                    `Pago ${pagoId} · ${input.metodo}` +
+                    (referencia ? ` · ref. ${referencia}` : '') +
+                    (aplicaciones.length > 0
+                        ? ` · facturas ${aplicaciones.map((a) => a.factura_id).join(', ')}`
+                        : ' · anticipo'),
+                origen_tipo: 'pago',
+                origen_id: pagoId,
+                movimientos,
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+
+        await t.emit('pago.registrado', {
+            pago_id: pagoId,
+            cliente_id: input.cliente_id,
+            monto: aTexto(monto),
+            metodo: input.metodo,
+            facturas: aplicaciones.map((a) => a.factura_id),
+        })
+
+        const servicios = []
+        for (const servicioId of serviciosDe([...previas, ...aplicaciones])) {
+            const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, {
+                trx: t.trx,
+            })
+            servicios.push({
+                servicio_id: r.servicio_id,
+                estado: r.estado,
+                de: r.de,
+                cambiado: r.cambiado,
+                motivo: r.motivo,
+            })
+        }
+
+        return { ...(await verPago(pagoId, t.trx)), servicios }
+    }
+
+    /** Caja y cuenta del debe según el método. */
+    private async destino(
+        t: Transaccion,
+        input: EntradaRegistrarPago,
+    ): Promise<{ cajaId: number | null; cuentaDebe: string | number }> {
+        if (input.metodo !== 'caja') return { cajaId: null, cuentaDebe: CUENTAS.BANCO_PRINCIPAL }
+        const cajaId = input.caja_id ?? (await cajaPrincipalId(t.trx))
+        if (!cajaId) throw new ReglaNegocio('No hay caja principal activa para pagos en efectivo', 'sin_caja')
+        const caja = await t.trx
+            .from('ledger.cajas')
+            .where('id', cajaId)
+            .select('id', 'cuenta_id', 'activa')
+            .first()
+        if (!caja || !caja.activa) {
+            throw new ValidacionFallida([
+                { field: 'caja_id', message: `La caja ${cajaId} no existe o está inactiva`, rule: 'caja' },
+            ])
+        }
+        return { cajaId, cuentaDebe: caja.cuenta_id as number }
+    }
+}
