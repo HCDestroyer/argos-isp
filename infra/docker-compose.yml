@@ -18,6 +18,66 @@ x-node-healthcheck: &node-healthcheck
   retries: 5
   start_period: 20s
 
+# Healthcheck de los procesos de fondo (cada servicio agrega su `test`).
+x-proceso-vivo: &proceso-vivo
+  interval: 30s
+  timeout: 3s
+  retries: 3
+  start_period: 30s
+
+# Entorno común de la imagen de api (migrate, api y procesos de fondo).
+x-api-env: &api-env
+  # La imagen de api es un build de producción (sin devDependencies como pino-pretty).
+  NODE_ENV: production
+  TZ: UTC
+  HOST: 0.0.0.0
+  PORT: '3333'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  APP_KEY: ${APP_KEY:-}
+  APP_URL: ${API_PUBLIC_URL:-http://localhost:3333}
+  DB_HOST: postgres
+  DB_PORT: '5432'
+  DB_USER: argosisp
+  DB_PASSWORD: ${DB_PASSWORD:-argosisp}
+  DB_DATABASE: argosisp
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'
+  SMTP_HOST: mailpit
+  SMTP_PORT: '1025'
+  MAIL_FROM: ${MAIL_FROM:-ArgosIsp <no-responder@argosisp.example>}
+  # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
+  # y los clientes con esa preferencia reciben correo.
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
+  NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
+  NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
+  # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
+  INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+  AAA_PPP_KEY: ${AAA_PPP_KEY:-}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+  # /portal/quien-soy: confiar en X-Forwarded-For solo si la conexión viene de la red de compose
+  # (el portal reenvía /api/v1/portal/** y agrega la IP del cliente al final de la cadena).
+  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
+  PORTAL_CABECERA_IP: x-forwarded-for
+  SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+
+# Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, worker).
+x-proceso-fondo: &proceso-fondo
+  image: argosisp/api:${IMAGE_TAG:-dev}
+  build:
+    context: ..
+    dockerfile: apps/api/Dockerfile
+  restart: unless-stopped
+  environment: *api-env
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: postgres:16.15-alpine
@@ -88,41 +148,7 @@ services:
       dockerfile: apps/api/Dockerfile
     # Migraciones y seed idempotente del ACL (roles, permisos y admin de laboratorio).
     command: [sh, -c, 'node ace.js migration:run --force && node ace.js db:seed']
-    environment: &api-env
-      # La imagen de api es un build de producción (sin devDependencies como pino-pretty).
-      NODE_ENV: production
-      TZ: UTC
-      HOST: 0.0.0.0
-      PORT: '3333'
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      APP_KEY: ${APP_KEY:-}
-      APP_URL: ${API_PUBLIC_URL:-http://localhost:3333}
-      DB_HOST: postgres
-      DB_PORT: '5432'
-      DB_USER: argosisp
-      DB_PASSWORD: ${DB_PASSWORD:-argosisp}
-      DB_DATABASE: argosisp
-      REDIS_HOST: redis
-      REDIS_PORT: '6379'
-      SMTP_HOST: mailpit
-      SMTP_PORT: '1025'
-      MAIL_FROM: ${MAIL_FROM:-ArgosIsp <no-responder@argosisp.example>}
-      # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
-      # y los clientes con esa preferencia reciben correo.
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
-      NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
-      NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
-      # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
-      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
-      AAA_PPP_KEY: ${AAA_PPP_KEY:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
-      # /portal/quien-soy: confiar en X-Forwarded-For solo si la conexión viene de la red de compose
-      # (el portal reenvía /api/v1/portal/** y agrega la IP del cliente al final de la cadena).
-      PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
-      PORTAL_CABECERA_IP: x-forwarded-for
-      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    environment: *api-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,15 +180,39 @@ services:
         - -e
         - fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
 
-  # Workers de BullMQ (notificaciones; luego crons). Misma imagen que api, sin puerto HTTP.
+  # Procesos de fondo: misma imagen que api, sin puerto HTTP, un proceso de ace por contenedor
+  # (detalle en infra/README.md, "Procesos de fondo"). Todos esperan a migrate y a Postgres y Redis
+  # sanos. Healthcheck por proceso vivo: el PID 1 del contenedor sigue siendo su comando de ace (la
+  # imagen trae un HEALTHCHECK HTTP de la API que en estos procesos no aplica).
+
+  # Relay del outbox (A1): audit.outbox → stream de Redis argos:eventos (contratos/eventos.md).
+  relay:
+    <<: *proceso-fondo
+    command: [node, ace.js, eventos:relay]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js eventos:relay'"]
+
+  # Facturación (A3): consumidor del grupo billing y crons de facturas, vencimientos y corte.
+  billing-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, billing:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js billing:worker'"]
+
+  # Sesiones (A2): cola de accounting de aaa → network.sesiones y eventos sesion.*.
+  sesiones-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, sesiones:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js sesiones:worker'"]
+
+  # Notificaciones (A6): cola de envíos, cron de recordatorios y cron mensual de particiones.
   worker:
-    image: argosisp/api:${IMAGE_TAG:-dev}
-    build:
-      context: ..
-      dockerfile: apps/api/Dockerfile
+    <<: *proceso-fondo
     command: [node, ace.js, notify:worker]
-    restart: unless-stopped
-    environment: *api-env
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -172,9 +222,9 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_healthy
-    # La imagen trae un HEALTHCHECK HTTP de la API; el worker no expone HTTP (tarea 10: métricas).
     healthcheck:
-      disable: true
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js notify:worker'"]
 
   web:
     image: argosisp/web:${IMAGE_TAG:-dev}

@@ -2,7 +2,7 @@
 
 | Ruta | Qué es |
 | --- | --- |
-| `docker-compose.yml` | Stack completo: postgres, redis, mailpit, migrate, api, worker, web, portal y, con el perfil `lab`, freeradius, aaa y coa |
+| `docker-compose.yml` | Stack completo: postgres, redis, mailpit, migrate, api, procesos de fondo (relay, billing-worker, sesiones-worker, worker), web, portal y, con el perfil `lab`, freeradius, aaa y coa |
 | `.env.example` | Variables del compose; cópialo a `infra/.env` |
 | `mikrotik/` | `lab.rsc` y su README: RouterOS del laboratorio (PPPoE, RADIUS, corte IPv4/IPv6, WireGuard) |
 | `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6) |
@@ -13,6 +13,22 @@
 cp infra/.env.example infra/.env        # completa los secretos
 docker compose -f infra/docker-compose.yml up -d
 ```
+
+## Procesos de fondo
+
+Cuatro servicios corren con la imagen de api (`argosisp/api`), sin puerto HTTP, cada uno con un solo comando de ace. Comparten el entorno de la API (`x-api-env`) y arrancan después de `migrate` (migraciones terminadas) con Postgres y Redis sanos.
+
+| Servicio | Comando | Dueño | Qué hace |
+| --- | --- | --- | --- |
+| `relay` | `node ace eventos:relay` | A1 | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md` |
+| `billing-worker` | `node ace billing:worker` | A3 | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte |
+| `sesiones-worker` | `node ace sesiones:worker` | A2 | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada` |
+| `worker` | `node ace notify:worker` | A6 | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago y cron mensual de particiones de `audit` (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
+
+- **Healthcheck por proceso vivo.** El contenedor ejecuta el comando con `exec`, así que el PID 1 es el propio proceso de ace; el healthcheck comprueba que `/proc/1/cmdline` sigue siendo ese comando. La imagen trae un `HEALTHCHECK` HTTP de la API que en estos procesos no aplica y se reemplaza.
+- **Varias réplicas.** Los crons de BullMQ y el relay toman lock, así que escalar (`docker compose up -d --scale billing-worker=2`) no duplica trabajo; los consumidores de streams reparten mensajes dentro de su grupo.
+- **Reinicio.** `docker compose restart relay billing-worker sesiones-worker worker`. Un evento que se estaba procesando sin `XACK` se reintenta (entrega al menos una vez; los consumidores son idempotentes).
+- **Logs.** `docker compose logs -f relay` (JSON de pino).
 
 ## Portal: IP real del cliente
 
