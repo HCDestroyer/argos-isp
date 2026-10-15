@@ -1,0 +1,18 @@
+{
+  "id": 2,
+  "nombre": "Carlos Cajero",
+  "email": "cajero@argos.test",
+  "roles": ["cajero"],
+  "permisos": [
+    "clientes.ver",
+    "servicios.ver",
+    "facturas.ver",
+    "pagos.ver",
+    "pagos.registrar",
+    "caja.ver",
+    "caja.abrir",
+    "caja.cerrar",
+    "promesas.ver",
+    "promesas.crear"
+  ]
+}

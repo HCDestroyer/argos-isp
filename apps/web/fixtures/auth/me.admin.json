@@ -1,0 +1,32 @@
+{
+  "id": 1,
+  "nombre": "Ana Administradora",
+  "email": "admin@argos.test",
+  "roles": ["admin"],
+  "permisos": [
+    "clientes.ver",
+    "clientes.crear",
+    "clientes.editar",
+    "servicios.ver",
+    "servicios.crear",
+    "servicios.suspender",
+    "servicios.reactivar",
+    "servicios.limitar",
+    "servicios.retirar",
+    "routers.ver",
+    "planes.ver",
+    "plantillas.ver",
+    "facturas.ver",
+    "facturas.crear",
+    "facturas.anular",
+    "pagos.ver",
+    "pagos.registrar",
+    "pagos.anular",
+    "caja.ver",
+    "promesas.ver",
+    "promesas.crear",
+    "bitacora.ver",
+    "libro.ver",
+    "usuarios.ver"
+  ]
+}

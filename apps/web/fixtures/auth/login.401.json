@@ -1,0 +1,6 @@
+{
+  "type": "https://argosisp.dev/problemas/credenciales-invalidas",
+  "title": "Credenciales inválidas",
+  "status": 401,
+  "detail": "El correo o la contraseña no son correctos."
+}

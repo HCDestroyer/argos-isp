@@ -1,0 +1,12 @@
+# BuildKit usa este archivo para apps/portal/Dockerfile (contexto = raíz del monorepo).
+**/node_modules
+**/.nuxt
+**/.output
+**/.nitro
+**/.data
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.claude
