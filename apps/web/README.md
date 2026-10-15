@@ -12,7 +12,12 @@ docker build -f apps/web/Dockerfile -t argosisp/web .           # desde la raíz
 ```
 
 Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `cajero@argos.test`
-(sin routers, planes, plantillas, bitácora, libro ni usuarios), cualquier contraseña.
+(los permisos de `ROLES_BASE.cajero` de `apps/api/app/core/permisos.ts`: sin routers, plantillas,
+bitácora, libro ni usuarios), cualquier contraseña.
+
+Fallas simuladas en modo fixtures (para ver que una pantalla muestra el error y no datos inventados):
+`simularFalla('GET /api/v1/pagos', 501)` en pruebas, o en el navegador
+`localStorage.setItem('argos_fixtures_fallas', '{"GET /api/v1/pagos": 501}')`.
 
 ## Lo que deja el día 1
 
@@ -52,3 +57,4 @@ Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `caje
 | 2 · Ficha de cliente (datos, fiscales, servicios, estado de cuenta, línea de tiempo) | `/clientes/:id?tab=` | `useClientes`, `useServicios`, `usePlanes`, `useRouters`, `useBitacora` |
 | 3 · Alta y edición de cliente (zod espejo de `crearClienteValidator`, Idempotency-Key, 409 por versión) | `/clientes/nuevo`, `/clientes/:id/editar` | `useClientes`, `useZonas` |
 | 4 · Alta de servicio (cliente → router → plan del router → IPv4 → IPv6 → credenciales PPP → plantilla y excepciones) | `/servicios/nuevo?cliente=` | `useServicios`, `useRouters`, `usePlantillas`, `useClientes` |
+| Lista de servicios (búsqueda, estado con "Cortados"/"Limitados", router, plan, cliente; filtros en la URL) | `/servicios?q=&estado=&router=&plan=&cliente=` | `useServicios`, `useRouters`, `usePlanes`, `useClientes`, `usePaginacionCursor` |

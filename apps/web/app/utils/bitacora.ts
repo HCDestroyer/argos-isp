@@ -100,7 +100,7 @@ function estadoDestino(entrada: unknown): EstadoServicio | null {
         return null
     }
     const { nuevo } = entrada
-    return typeof nuevo === 'string' && Object.hasOwn(ESTADOS_SERVICIO, nuevo) ? nuevo as EstadoServicio : null
+    return typeof nuevo === 'string' && esEstadoServicio(nuevo) ? nuevo : null
 }
 
 /**
