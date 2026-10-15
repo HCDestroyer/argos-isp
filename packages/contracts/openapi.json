@@ -251,6 +251,55 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "description": "Acciones del cliente y de sus servicios, facturas, pagos y promesas",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "panel",
+                "portal",
+                "api",
+                "ia",
+                "cron",
+                "worker",
+                "webhook",
+                "interno",
+                "consola"
+              ]
+            }
+          },
+          {
+            "name": "excluir_canal",
+            "in": "query",
+            "required": false,
+            "description": "Oculta las acciones de este canal (p. ej. portal)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "panel",
+                "portal",
+                "api",
+                "ia",
+                "cron",
+                "worker",
+                "webhook",
+                "interno",
+                "consola"
+              ]
+            }
           }
         ],
         "responses": {
@@ -961,6 +1010,59 @@
             "schema": {
               "type": "integer",
               "minimum": 1
+            }
+          },
+          {
+            "name": "estado_servicio",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este estado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activo",
+                "limitado",
+                "suspendido",
+                "retirado"
+              ]
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este router",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este plan",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "con_deuda_vencida",
+            "in": "query",
+            "required": false,
+            "description": "true: con alguna factura vencida; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "con_promesa_activa",
+            "in": "query",
+            "required": false,
+            "description": "true: con alguna promesa de pago activa; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -2075,6 +2177,7 @@
       "get": {
         "operationId": "internoAaaServicio",
         "summary": "Datos de autorización RADIUS de un user_ppp (servicio aaa)",
+        "description": "Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.",
         "tags": [
           "interno"
         ],
@@ -2125,25 +2228,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ip/{ip}": {
       "get": {
         "operationId": "ipResolver",
         "summary": "Resolver IPv4 o IPv6 a su servicio (prefijo más largo)",
+        "description": "Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.",
         "tags": [
           "red"
         ],
@@ -2203,20 +2297,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ip.resolver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ipv6-bloques/{id}/pools": {
@@ -7284,6 +7368,25 @@
                 "retirado"
               ]
             }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "description": "Zona del cliente",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "con_deuda_vencida",
+            "in": "query",
+            "required": false,
+            "description": "true: el servicio tiene alguna factura vencida; false: ninguna",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -8018,7 +8121,7 @@
     "/api/v1/servicios/{id}/limitar": {
       "post": {
         "operationId": "serviciosLimitar",
-        "summary": "Limitar velocidad del servicio",
+        "summary": "Limitar velocidad del servicio (desde activo o suspendido)",
         "tags": [
           "servicios"
         ],
@@ -8130,26 +8233,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.limitar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/quitar-limite": {
       "post": {
         "operationId": "serviciosQuitarLimite",
-        "summary": "Quitar límite de velocidad",
+        "summary": "Quitar límite de velocidad (desde limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8261,26 +8354,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.quitar_limite",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/reactivar": {
       "post": {
         "operationId": "serviciosReactivar",
-        "summary": "Reactivar servicio",
+        "summary": "Reactivar servicio (desde suspendido o limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8392,20 +8475,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.reactivar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/retirar": {
@@ -8532,7 +8605,7 @@
     "/api/v1/servicios/{id}/suspender": {
       "post": {
         "operationId": "serviciosSuspender",
-        "summary": "Suspender servicio",
+        "summary": "Suspender servicio (desde activo o limitado)",
         "tags": [
           "servicios"
         ],
@@ -8644,20 +8717,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.suspender",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/sesiones": {
@@ -9997,102 +10060,199 @@
         "type": "object",
         "required": [
           "servicio_id",
+          "version",
           "user_ppp",
           "pass_ppp",
           "estado",
-          "rate_limit",
-          "ipv4",
-          "pool_ipv4",
-          "ipv6_modo",
-          "prefijo_enlace_v6",
-          "prefijo_delegado_v6",
-          "pool_ipv6_enlace",
-          "pool_ipv6_delegacion",
-          "address_list",
           "router_id",
-          "nas_ip",
-          "acct_interim_interval"
+          "plan",
+          "ipv4",
+          "ipv6"
         ],
         "properties": {
           "servicio_id": {
             "type": "integer",
             "minimum": 1
           },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "core.servicios.version (diagnóstico)"
+          },
           "user_ppp": {
             "type": "string"
           },
           "pass_ppp": {
             "type": "string",
-            "description": "Cifrada; el servicio aaa la descifra"
+            "description": "Cifrada (formato v1); el servicio aaa la descifra"
           },
           "estado": {
             "$ref": "#/components/schemas/EstadoServicio"
-          },
-          "rate_limit": {
-            "type": "string",
-            "description": "\"<subida>k/<bajada>k\" efectivo (normal o limitado)"
-          },
-          "ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "ipv6_modo": {
-            "type": "string",
-            "enum": [
-              "radius_servicio",
-              "radius_pool",
-              "duid",
-              "estatico",
-              "ninguno"
-            ]
-          },
-          "prefijo_enlace_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "prefijo_delegado_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_enlace": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_delegacion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "address_list": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "router_id": {
             "type": "integer",
             "minimum": 1
           },
-          "nas_ip": {
-            "type": "string"
+          "plan": {
+            "type": "object",
+            "required": [
+              "id",
+              "subida_kbps",
+              "bajada_kbps",
+              "subida_limitada_kbps",
+              "bajada_limitada_kbps",
+              "rate_limit_override",
+              "profile_ppp"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "subida_kbps": {
+                "type": "integer"
+              },
+              "bajada_kbps": {
+                "type": "integer"
+              },
+              "subida_limitada_kbps": {
+                "type": "integer"
+              },
+              "bajada_limitada_kbps": {
+                "type": "integer"
+              },
+              "rate_limit_override": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile_ppp": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           },
-          "acct_interim_interval": {
-            "type": "integer"
+          "ipv4": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "ip"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "estatico"
+                    ]
+                  },
+                  "ip": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "pool"
+                    ]
+                  },
+                  "pool": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ipv6": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "prefijo_enlace",
+                  "prefijo_delegado"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_servicio"
+                    ]
+                  },
+                  "prefijo_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "prefijo_delegado": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool_enlace",
+                  "pool_delegacion"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_pool"
+                    ]
+                  },
+                  "pool_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "pool_delegacion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "duid",
+                      "estatico",
+                      "ninguno"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       },
@@ -10132,6 +10292,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "actor_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del usuario (null para el sistema)"
           },
           "canal": {
             "type": "string"
@@ -12819,6 +12986,21 @@
             ]
           },
           "ipv6_duid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "plan_nombre": {
+            "type": "string"
+          },
+          "router_nombre": {
+            "type": "string"
+          },
+          "zona_nombre": {
             "type": [
               "string",
               "null"

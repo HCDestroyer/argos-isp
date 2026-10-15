@@ -271,7 +271,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Datos de autorización RADIUS de un user_ppp (servicio aaa) */
+        /**
+         * Datos de autorización RADIUS de un user_ppp (servicio aaa)
+         * @description Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.
+         */
         get: operations["internoAaaServicio"];
         put?: never;
         post?: never;
@@ -288,7 +291,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolver IPv4 o IPv6 a su servicio (prefijo más largo) */
+        /**
+         * Resolver IPv4 o IPv6 a su servicio (prefijo más largo)
+         * @description Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.
+         */
         get: operations["ipResolver"];
         put?: never;
         post?: never;
@@ -905,7 +911,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Limitar velocidad del servicio */
+        /** Limitar velocidad del servicio (desde activo o suspendido) */
         post: operations["serviciosLimitar"];
         delete?: never;
         options?: never;
@@ -922,7 +928,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Quitar límite de velocidad */
+        /** Quitar límite de velocidad (desde limitado, queda activo) */
         post: operations["serviciosQuitarLimite"];
         delete?: never;
         options?: never;
@@ -939,7 +945,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reactivar servicio */
+        /** Reactivar servicio (desde suspendido o limitado, queda activo) */
         post: operations["serviciosReactivar"];
         delete?: never;
         options?: never;
@@ -973,7 +979,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Suspender servicio */
+        /** Suspender servicio (desde activo o limitado) */
         post: operations["serviciosSuspender"];
         delete?: never;
         options?: never;
@@ -1127,30 +1133,53 @@ export interface components {
     schemas: {
         AaaServicio: {
             servicio_id: number;
+            /** @description core.servicios.version (diagnóstico) */
+            version: number;
             user_ppp: string;
-            /** @description Cifrada; el servicio aaa la descifra */
+            /** @description Cifrada (formato v1); el servicio aaa la descifra */
             pass_ppp: string;
             estado: components["schemas"]["EstadoServicio"];
-            /** @description "<subida>k/<bajada>k" efectivo (normal o limitado) */
-            rate_limit: string;
-            ipv4: string | null;
-            pool_ipv4: string | null;
-            /** @enum {string} */
-            ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
-            prefijo_enlace_v6: string | null;
-            prefijo_delegado_v6: string | null;
-            pool_ipv6_enlace: string | null;
-            pool_ipv6_delegacion: string | null;
-            address_list: string | null;
             router_id: number;
-            nas_ip: string;
-            acct_interim_interval: number;
+            plan: {
+                id: number;
+                subida_kbps: number;
+                bajada_kbps: number;
+                subida_limitada_kbps: number;
+                bajada_limitada_kbps: number;
+                rate_limit_override: string | null;
+                profile_ppp: string | null;
+            };
+            ipv4: {
+                /** @enum {string} */
+                modo: "estatico";
+                ip: string;
+            } | {
+                /** @enum {string} */
+                modo: "pool";
+                pool: string;
+            } | null;
+            ipv6: {
+                /** @enum {string} */
+                modo: "radius_servicio";
+                prefijo_enlace: string | null;
+                prefijo_delegado: string | null;
+            } | {
+                /** @enum {string} */
+                modo: "radius_pool";
+                pool_enlace: string | null;
+                pool_delegacion: string | null;
+            } | {
+                /** @enum {string} */
+                modo: "duid" | "estatico" | "ninguno";
+            };
         };
         AccionAuditoria: {
             id: number;
             /** @enum {string} */
             actor_tipo: "usuario" | "token" | "agente" | "sistema";
             actor_id: number | null;
+            /** @description Nombre del usuario (null para el sistema) */
+            actor_nombre?: string | null;
             canal: string;
             accion: string;
             entidad_tipo: string | null;
@@ -1792,6 +1821,10 @@ export interface components {
             /** @enum {string} */
             ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
             ipv6_duid: string | null;
+            cliente_nombre?: string;
+            plan_nombre?: string;
+            router_nombre?: string;
+            zona_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1952,6 +1985,11 @@ export interface operations {
                 request_id?: string;
                 desde?: string;
                 hasta?: string;
+                /** @description Acciones del cliente y de sus servicios, facturas, pagos y promesas */
+                cliente_id?: number;
+                canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
+                /** @description Oculta las acciones de este canal (p. ej. portal) */
+                excluir_canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
             };
             header?: never;
             path?: never;
@@ -2370,6 +2408,16 @@ export interface operations {
                 /** @description Busca por nombre, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
                 zona_id?: number;
+                /** @description Clientes con al menos un servicio en este estado */
+                estado_servicio?: "activo" | "limitado" | "suspendido" | "retirado";
+                /** @description Clientes con al menos un servicio en este router */
+                router_id?: number;
+                /** @description Clientes con al menos un servicio en este plan */
+                plan_id?: number;
+                /** @description true: con alguna factura vencida; false: sin ninguna */
+                con_deuda_vencida?: boolean;
+                /** @description true: con alguna promesa de pago activa; false: sin ninguna */
+                con_promesa_activa?: boolean;
             };
             header?: never;
             path?: never;
@@ -3032,15 +3080,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     ipResolver: {
@@ -3083,15 +3122,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5789,6 +5819,10 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                /** @description Zona del cliente */
+                zona_id?: number;
+                /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
+                con_deuda_vencida?: boolean;
             };
             header?: never;
             path?: never;
@@ -6285,15 +6319,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     serviciosQuitarLimite: {
@@ -6370,15 +6395,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     serviciosReactivar: {
@@ -6448,15 +6464,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6609,15 +6616,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
