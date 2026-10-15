@@ -67,14 +67,15 @@ describe('fallos de las capturas 06 y 07', () => {
         const ids = servicio.ok ? servicio.data.data.map(s => s.id) : []
         expect(ids.length).toBeGreaterThan(0)
 
-        const todas = await useBitacora().deEntidades(ids.map(id => ({ tipo: 'servicio', id })), 200)
-        expect(todas.ok && todas.data.some(a => a.accion === 'portal.quien_soy')).toBe(true)
+        const todas = await useBitacora().acciones({ cliente_id: 2, limit: 200 })
+        expect(todas.ok && todas.data.data.some(a => a.accion === 'portal.quien_soy')).toBe(true)
 
-        const entidades = [{ tipo: 'cliente', id: 2 }, ...ids.map(id => ({ tipo: 'servicio', id }))]
-        const wrapper = await mountSuspended(LineaTiempoBitacora, { props: { entidades } })
+        const wrapper = await mountSuspended(LineaTiempoBitacora, { props: { filtros: { cliente_id: 2, excluir_canal: 'portal' } } })
         await vi.waitFor(() => expect(wrapper.text()).toContain('Servicio creado'))
 
         const texto = wrapper.text()
+        expect(texto).toContain('Ana Administradora')
+        expect(texto).not.toContain('Usuario #1')
         expect(texto).not.toContain('quien_soy')
         expect(texto).not.toContain('Consulta desde la página de corte')
         expect(texto).toContain('Servicio suspendido')

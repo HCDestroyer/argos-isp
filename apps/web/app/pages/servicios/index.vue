@@ -43,11 +43,6 @@ const verZonas = computed(() => puede('zonas.ver'))
 const routers = shallowRef<RouterNas[]>([])
 const planes = shallowRef<Plan[]>([])
 const zonas = shallowRef<Zona[]>([])
-/** Nombres de los clientes de la página. `Servicio` no trae `cliente_nombre` (pedido a A1). */
-const clientes = ref(new Map<number, Cliente>())
-
-const nombresRouter = computed(() => new Map(routers.value.map(r => [r.id, r.nombre])))
-const nombresPlan = computed(() => new Map(planes.value.map(p => [p.id, p])))
 
 const itemsEstado: SelectItem[] = [
     { label: 'Todos los estados', value: TODOS },
@@ -97,40 +92,18 @@ function filtros(): FiltrosServicios {
     return resultado
 }
 
-async function cargarClientes(filas: Servicio[]) {
-    const faltan = [...new Set(filas.map(s => s.cliente_id))].filter(id => !clientes.value.has(id))
-    const resultados = await Promise.all(faltan.map(id => useClientes().ver(id)))
-    const mapa = new Map(clientes.value)
-    for (const resultado of resultados) {
-        if (resultado.ok) {
-            mapa.set(resultado.data.id, resultado.data)
-        }
-    }
-    clientes.value = mapa
-}
-
-const lista = usePaginacionCursor(async (cursor) => {
-    const resultado = await serviciosApi.listar(filtros(), cursor)
-    if (resultado.ok) {
-        void cargarClientes(resultado.data.data)
-    }
-    return resultado
-})
+const lista = usePaginacionCursor(cursor => serviciosApi.listar(filtros(), cursor))
 
 const columnas = computed<TableColumn<Servicio>[]>(() => {
-    const base: TableColumn<Servicio>[] = [
+    // El plan va dentro de la celda "Servicio" para que el estado quepa a 1280 px. Los nombres
+    // vienen en `Servicio` (`cliente_nombre`, `router_nombre`…): no hace falta `routers.ver`.
+    return [
         { accessorKey: 'user_ppp', header: 'Servicio' },
-        // El plan va dentro de la celda "Servicio" para que el estado quepa a 1280 px.
         { accessorKey: 'cliente_id', header: 'Cliente', meta: SOLO_ANCHO },
-    ]
-    if (verRouters.value) {
-        base.push({ accessorKey: 'router_id', header: 'Router', meta: SOLO_ESCRITORIO })
-    }
-    base.push(
+        { accessorKey: 'router_id', header: 'Router', meta: SOLO_ESCRITORIO },
         { accessorKey: 'ipv4', header: 'Direcciones', meta: SOLO_ANCHO },
         { accessorKey: 'estado', header: 'Estado' },
-    )
-    return base
+    ]
 })
 
 const hayFiltros = computed(() => busqueda.value.trim() !== ''
@@ -211,14 +184,6 @@ watch(busqueda, () => {
 })
 watch([estado, routerId, planId, clienteId, zonaId, conDeuda], aplicarFiltros)
 onBeforeUnmount(() => clearTimeout(temporizador))
-
-function nombreCliente(servicio: Servicio): string {
-    return clientes.value.get(servicio.cliente_id)?.nombre ?? `Cliente #${servicio.cliente_id}`
-}
-
-function nombrePlan(servicio: Servicio): string {
-    return nombresPlan.value.get(servicio.plan_id)?.nombre ?? `Plan #${servicio.plan_id}`
-}
 
 onMounted(async () => {
     void lista.recargar()
@@ -402,16 +367,22 @@ onMounted(async () => {
                     </template>
 
                     <template #cliente_id-cell="{ row }">
-                        <ULink
-                            :to="`/clientes/${row.original.cliente_id}`"
-                            class="text-sm text-default hover:text-primary"
-                        >
-                            {{ nombreCliente(row.original) }}
-                        </ULink>
+                        <div class="flex min-w-32 flex-col">
+                            <ULink
+                                :to="`/clientes/${row.original.cliente_id}`"
+                                class="text-sm text-default hover:text-primary"
+                            >
+                                {{ nombreCliente(row.original) }}
+                            </ULink>
+                            <span
+                                v-if="nombreZona(row.original)"
+                                class="text-xs text-muted"
+                            >{{ nombreZona(row.original) }}</span>
+                        </div>
                     </template>
 
                     <template #router_id-cell="{ row }">
-                        <span class="text-sm">{{ nombresRouter.get(row.original.router_id) ?? `Router #${row.original.router_id}` }}</span>
+                        <span class="text-sm">{{ nombreRouter(row.original) }}</span>
                     </template>
 
                     <template #ipv4-cell="{ row }">

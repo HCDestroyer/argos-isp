@@ -44,6 +44,29 @@ describe('lista de servicios · filtros del contrato', () => {
         expect(porIp.map(s => s.id)).toEqual([primero?.id])
     })
 
+    it('cada servicio trae los nombres de cliente, plan, router y zona', async () => {
+        const todos = await filas({})
+        expect(todos.length).toBeGreaterThan(0)
+        for (const servicio of todos) {
+            expect(nombreCliente(servicio)).not.toMatch(/^Cliente #/)
+            expect(nombrePlan(servicio)).not.toMatch(/^Plan #/)
+            expect(nombreRouter(servicio)).not.toMatch(/^Router #/)
+        }
+        expect(todos.some(s => nombreZona(s) !== null)).toBe(true)
+        // El cajero no tiene routers.ver, pero ve el nombre del router en el servicio.
+        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        const delCajero = await filas({})
+        expect(delCajero.every(s => s.router_nombre)).toBe(true)
+    })
+
+    it('sin nombres en la respuesta, muestra el id', () => {
+        const servicio = { cliente_id: 4, plan_id: 2, router_id: 1 }
+        expect(nombreCliente(servicio)).toBe('Cliente #4')
+        expect(nombrePlan(servicio)).toBe('Plan #2')
+        expect(nombreRouter(servicio)).toBe('Router #1')
+        expect(nombreZona(servicio)).toBeNull()
+    })
+
     it('una búsqueda vacía no manda q', async () => {
         const conVacio = await filas({ q: '' })
         const sinQ = await filas({})

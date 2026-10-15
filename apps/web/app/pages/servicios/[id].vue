@@ -13,9 +13,8 @@ const servicio = shallowRef<Servicio | null>(null)
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
-const cliente = shallowRef<Cliente | null>(null)
+/** Velocidades y precio del plan (`planes.ver`); el nombre viene en `Servicio.plan_nombre`. */
 const plan = shallowRef<Plan | null>(null)
-const routerNas = shallowRef<RouterNas | null>(null)
 const plantilla = shallowRef<PlantillaFacturacion | null>(null)
 
 const sesion = shallowRef<Sesion | null>(null)
@@ -34,7 +33,7 @@ useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` 
  */
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
 
-const entidadesLinea = computed<EntidadAuditada[]>(() => [{ tipo: 'servicio', id: servicioId.value }])
+const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value }))
 
 const MODOS_IPV6: Record<ModoIpv6, string> = {
     radius_servicio: 'RADIUS (prefijos del servicio)',
@@ -65,15 +64,11 @@ async function cargarSesion() {
 }
 
 async function cargarRelacionados(actual: Servicio) {
-    const [resultadoCliente, resultadoPlanes, resultadoRouters, resultadoPlantillas] = await Promise.all([
-        puede('clientes.ver') ? useClientes().ver(actual.cliente_id) : null,
+    const [resultadoPlanes, resultadoPlantillas] = await Promise.all([
         puede('planes.ver') ? usePlanes().listar() : null,
-        puede('routers.ver') ? useRouters().listar() : null,
         puede('plantillas.ver') && actual.plantilla_facturacion_id ? usePlantillas().listar() : null,
     ])
-    cliente.value = resultadoCliente?.ok ? resultadoCliente.data : null
     plan.value = resultadoPlanes?.ok ? (resultadoPlanes.data.data.find(p => p.id === actual.plan_id) ?? null) : null
-    routerNas.value = resultadoRouters?.ok ? (resultadoRouters.data.data.find(r => r.id === actual.router_id) ?? null) : null
     plantilla.value = resultadoPlantillas?.ok ? (resultadoPlantillas.data.find(p => p.id === actual.plantilla_facturacion_id) ?? null) : null
 }
 
@@ -175,8 +170,11 @@ onMounted(cargar)
                         :to="`/clientes/${servicio.cliente_id}`"
                         class="text-default hover:text-primary"
                     >
-                        {{ cliente?.nombre ?? `Cliente #${servicio.cliente_id}` }}
+                        {{ nombreCliente(servicio) }}
                     </ULink>
+                    <template v-if="nombreZona(servicio)">
+                        · {{ nombreZona(servicio) }}
+                    </template>
                     · versión {{ servicio.version }}
                 </p>
             </div>
@@ -213,7 +211,7 @@ onMounted(cargar)
                     <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <DatoFicha
                             etiqueta="Plan"
-                            :valor="plan?.nombre ?? `Plan #${servicio.plan_id}`"
+                            :valor="nombrePlan(servicio)"
                         />
                         <DatoFicha
                             etiqueta="Precio mensual"
@@ -248,7 +246,7 @@ onMounted(cargar)
                     <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <DatoFicha
                             etiqueta="Router"
-                            :valor="routerNas?.nombre ?? `Router #${servicio.router_id}`"
+                            :valor="nombreRouter(servicio)"
                         />
                         <DatoFicha
                             etiqueta="IPv4"
@@ -390,7 +388,7 @@ onMounted(cargar)
                 </h3>
                 <LineaTiempoBitacora
                     ref="linea"
-                    :entidades="entidadesLinea"
+                    :filtros="filtrosLinea"
                     etiqueta="Historial del servicio"
                 />
             </section>

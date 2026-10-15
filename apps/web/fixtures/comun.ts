@@ -118,6 +118,7 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         id,
         actor_tipo: 'usuario',
         actor_id: usuario?.id ?? null,
+        actor_nombre: usuario?.nombre ?? null,
         canal: 'panel',
         accion,
         entidad_tipo: entidad.tipo,

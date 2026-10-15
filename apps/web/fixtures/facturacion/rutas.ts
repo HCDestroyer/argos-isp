@@ -123,6 +123,7 @@ function evaluarServicios(clienteId: number): void {
             id,
             actor_tipo: 'sistema',
             actor_id: null,
+            actor_nombre: null,
             canal: 'worker',
             accion: 'servicios.cambiar_estado',
             entidad_tipo: 'servicio',

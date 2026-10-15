@@ -17,6 +17,8 @@ function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id'>
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
+        // Como la API: nombre del usuario; `null` para el sistema.
+        actor_nombre: datos.actor_id === 1 ? 'Ana Administradora' : null,
         ...datos,
     }
 }

@@ -11,8 +11,8 @@ const props = withDefaults(defineProps<{
 
 const { puede } = usePermisos()
 
+/** Solo para el precio del plan; los nombres vienen en cada `Servicio`. */
 const planes = ref(new Map<number, Plan>())
-const routers = ref(new Map<number, RouterNas>())
 
 const columnas: TableColumn<Servicio>[] = [
     { accessorKey: 'user_ppp', header: 'Servicio' },
@@ -22,29 +22,18 @@ const columnas: TableColumn<Servicio>[] = [
     { accessorKey: 'fecha_instalacion', header: 'Instalación', meta: SOLO_ESCRITORIO },
 ]
 
-function nombrePlan(servicio: Servicio): string {
-    return planes.value.get(servicio.plan_id)?.nombre ?? `Plan #${servicio.plan_id}`
-}
-
-function nombreRouter(servicio: Servicio): string {
-    return routers.value.get(servicio.router_id)?.nombre ?? `Router #${servicio.router_id}`
-}
-
 /** Precio efectivo: `costo_override` del servicio o el precio del plan. */
 function precio(servicio: Servicio): string | null {
     return servicio.costo_override ?? planes.value.get(servicio.plan_id)?.precio ?? null
 }
 
 onMounted(async () => {
-    const [resultadoPlanes, resultadoRouters] = await Promise.all([
-        puede('planes.ver') ? usePlanes().listar() : null,
-        puede('routers.ver') ? useRouters().listar() : null,
-    ])
-    if (resultadoPlanes?.ok) {
-        planes.value = new Map(resultadoPlanes.data.data.map(plan => [plan.id, plan]))
+    if (!puede('planes.ver')) {
+        return
     }
-    if (resultadoRouters?.ok) {
-        routers.value = new Map(resultadoRouters.data.data.map(router => [router.id, router]))
+    const resultado = await usePlanes().listar()
+    if (resultado.ok) {
+        planes.value = new Map(resultado.data.data.map(plan => [plan.id, plan]))
     }
 })
 </script>

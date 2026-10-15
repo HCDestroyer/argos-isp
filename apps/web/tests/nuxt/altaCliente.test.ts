@@ -98,8 +98,9 @@ describe('useClientes · alta y edición', () => {
         const creado = await useClientes().crear({ nombre: 'Con Bitácora' }, nuevaClaveIdempotencia())
         expect(creado.ok).toBe(true)
         if (creado.ok) {
-            const linea = await useBitacora().deEntidades([{ tipo: 'cliente', id: creado.data.id }])
-            expect(linea.ok && linea.data.map(accion => accion.accion)).toEqual(['clientes.crear'])
+            const linea = await useBitacora().acciones({ cliente_id: creado.data.id, excluir_canal: 'portal' })
+            expect(linea.ok && linea.data.data.map(accion => accion.accion)).toEqual(['clientes.crear'])
+            expect(linea.ok && linea.data.data[0]?.actor_nombre).toBe('Ana Administradora')
         }
     })
 

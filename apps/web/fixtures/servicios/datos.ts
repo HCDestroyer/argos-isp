@@ -1,5 +1,8 @@
 import type { Schema } from '@argosisp/contracts'
 import { clientes } from '../clientes/datos'
+import { planes } from '../planes/datos'
+import { routers } from '../routers/datos'
+import { zonas } from '../zonas/datos'
 
 type Servicio = Schema<'Servicio'>
 type EstadoServicio = Servicio['estado']
@@ -57,6 +60,13 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         prefijo_delegado_v6: v6 && estado !== 'retirado' ? `2803:d100:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/56` : null,
         ipv6_modo: v6 ? 'radius_servicio' : 'ninguno',
         ipv6_duid: null,
+        suspension_manual: false,
+        suspension_manual_motivo: null,
+        // Como la API (día 3): nombres para pantallas sin permiso de ver routers, planes o zonas.
+        cliente_nombre: cliente.nombre,
+        plan_nombre: planes.find(p => p.id === plan)?.nombre ?? '',
+        router_nombre: routers.find(r => r.id === router)?.nombre ?? '',
+        zona_nombre: zonas.find(z => z.id === cliente.zona_id)?.nombre ?? null,
         version: 1,
         created_at: instalado.toISOString(),
         updated_at: instalado.toISOString(),

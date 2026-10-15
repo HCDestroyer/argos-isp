@@ -139,10 +139,25 @@ export function iconoAccion(accion: Accion): string {
     return ICONOS_ACCION[verbo] ?? 'i-lucide-dot'
 }
 
-/** `Usuario #1`, `Sistema`. La API todavía no manda el nombre del actor (pedido a A1). */
+/**
+ * Quién hizo la acción: el nombre (`actor_nombre`) para usuarios, tokens y agentes; "Sistema"
+ * para el corte automático y los consumidores de eventos. Sin nombre, el tipo y el id.
+ */
 export function etiquetaActor(accion: Accion): string {
+    if (accion.actor_nombre) {
+        return accion.actor_tipo === 'usuario' ? accion.actor_nombre : `${accion.actor_nombre} (${ACTORES[accion.actor_tipo]})`
+    }
     const base = ACTORES[accion.actor_tipo]
     return accion.actor_id === null ? base : `${base} #${accion.actor_id}`
+}
+
+/** `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. */
+export function motivoAccion(accion: Accion): string | null {
+    const { entrada } = accion
+    if (typeof entrada !== 'object' || entrada === null || !('motivo' in entrada)) {
+        return null
+    }
+    return typeof entrada.motivo === 'string' && entrada.motivo.trim() ? entrada.motivo.trim() : null
 }
 
 /** `servicio 12`, o `null` si la acción no tiene entidad. */
