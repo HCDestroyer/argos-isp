@@ -128,6 +128,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 - **Fixtures fieles a la API.** Se tipan con `Schema<'X'>` de `packages/contracts` y llevan los mismos valores por defecto que devuelve la API. Nunca `{}` para un objeto tipado.
 - **Errores visibles, nunca datos inventados.** Si un endpoint falla o responde 501, la pantalla muestra el error con "Reintentar" y no muestra totales, saldos ni estados calculados sobre datos vacíos (nada de "Q 0.00 · Al día" cuando no se pudo leer la cuenta).
 - **Permisos con su nombre exacto.** El frontend usa los nombres de `apps/api/app/core/permisos.ts`. `pnpm verificar:permisos` (también en CI) falla si una ruta o menú pide un permiso que no existe.
+- **Migraciones con `node ace make:migration`.** El nombre lleva la marca de tiempo real; nunca la inventes a mano (el día 3, A1, A3 y A6 crearon tres migraciones `1761100000001_*` distintas y su orden dependía del nombre).
 - **Contratos entre módulos por escrito.** Formatos, nombres de claves y payloads compartidos viven en `.claude/integration/contratos/`. Se cambian en la misma PR que el código que los cumple.
 - **Datos de demostración por la API.** `pnpm demo:datos` carga clientes, routers, planes y servicios pasando por las acciones (auditoría y eventos incluidos). Úsalo para probar pantallas contra el backend real antes de entregar.
 
