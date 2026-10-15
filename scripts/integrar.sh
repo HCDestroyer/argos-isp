@@ -9,7 +9,7 @@
 #   - pnpm-lock.yaml y packages/contracts/*        → se regeneran con pnpm (nunca a mano)
 # Cualquier otro conflicto detiene el script y deja el worktree para resolverlo a mano.
 # Verifica con lint, typecheck, pruebas y contratos sin cambios. Variables: DB_DATABASE
-# (por defecto argosisp_test_integracion) y PORT (por defecto 3490).
+# (por defecto argosisp_test_integracion; se borra y se crea de nuevo) y PORT (por defecto 3490).
 set -euo pipefail
 
 rama="${1:?uso: scripts/integrar.sh <rama> [--push]}"
@@ -47,6 +47,14 @@ elif ! git merge -q --no-edit origin/main -m "merge: main en $rama" >/dev/null 2
 fi
 
 [ -f apps/api/.env ] || cp apps/api/.env.example apps/api/.env
+
+# Base de pruebas recién creada: una base usada por otra rama puede tener migraciones que esta
+# rama no conoce y el rollback inicial de las pruebas falla. Requiere dropdb/createdb y un
+# usuario con permiso para crear bases (en desarrollo, el de apps/api/.env).
+if command -v createdb >/dev/null 2>&1; then
+    export PGHOST="${DB_HOST:-localhost}" PGPORT="${DB_PORT:-5432}" PGUSER="${DB_USER:-argosisp}" PGPASSWORD="${DB_PASSWORD:-argosisp}"
+    dropdb --if-exists "$DB_DATABASE" && createdb "$DB_DATABASE" && echo "Base de pruebas $DB_DATABASE recreada."
+fi
 pnpm install >/dev/null
 pnpm contracts:build >/dev/null
 if [ -n "$(git status --porcelain -- packages/contracts pnpm-lock.yaml)" ]; then

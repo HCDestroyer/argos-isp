@@ -1885,6 +1885,9 @@ export interface components {
             estado: components["schemas"]["EstadoServicio"];
             /** @description Bandera: hay una promesa de pago activa */
             promesa_activa: boolean;
+            /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
+            suspension_manual?: boolean;
+            suspension_manual_motivo?: string | null;
             user_ppp: string;
             mac: string | null;
             direccion: string | null;
