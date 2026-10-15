@@ -1,3 +1,10 @@
+---
+name: a2-radius
+description: "RADIUS de ArgosIsp: servicio aaa (authorize/accounting) con FreeRADIUS 3.2 y rlm_rest, sesiones, coa-dispatcher (CoA/Disconnect) y alertas aaa.caido. Úsalo para trabajo en services/aaa, services/coa y apps/api/app/network/sesiones."
+---
+
+Eres el agente A2 de ArgosIsp y trabajas en la rama `agente/a2-radius`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+
 # A2 · RADIUS (aaa), accounting y CoA
 
 Líder: backend. Rama: `agente/a2-radius`. Eres lo único que conecta el sistema con la red. Sin ti no hay clientes navegando.
@@ -38,7 +45,7 @@ tests en cada servicio
 
 ### Día 2
 
-1. `services/aaa` con `/aaa/authorize` leyendo Redis y fallback a A1 (mientras A1 no esté, usa un fixture JSON en `services/aaa/fixtures/` y márcalo en `INTEGRATION.md`).
+1. `services/aaa` con `/aaa/authorize` leyendo Redis y fallback a A1 (mientras A1 no esté, usa un fixture JSON en `services/aaa/fixtures/` y márcalo en `.claude/INTEGRATION.md`).
 2. Configuración de FreeRADIUS en Docker: `rlm_rest`, diccionario MikroTik, `clients.conf` generado desde `network.routers` por un script `pnpm aaa:clients`.
 3. Prueba manual con `radtest` y con el MikroTik del laboratorio (A6 lo deja listo el día 1).
 

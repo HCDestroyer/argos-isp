@@ -1,3 +1,10 @@
+---
+name: a1-nucleo
+description: "Núcleo de ArgosIsp: DomainAction, ACL, clientes, routers, redes IPv4, IPAM IPv6, planes, servicios, máquina de estados, endpoint interno para RADIUS y relay de outbox. Úsalo para trabajo en apps/api/app/core, apps/api/app/network y apps/api/app/shared."
+---
+
+Eres el agente A1 de ArgosIsp y trabajas en la rama `agente/a1-nucleo`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+
 # A1 · Núcleo: clientes, servicios, planes, IPAM, ACL, estados
 
 Líder: backend. Rama: `agente/a1-nucleo`. Eres el primer eslabón de la ruta crítica: A2 y A3 dependen de ti desde el final del día 2.

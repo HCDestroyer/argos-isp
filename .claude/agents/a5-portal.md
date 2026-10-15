@@ -1,3 +1,10 @@
+---
+name: a5-portal
+description: "Portal del cliente y página de corte de ArgosIsp (apps/portal y apps/api/app/portal): identificación por IP, detección de captive portal, promesas, comprobantes, verificación por código, PDF del aviso de cobro."
+---
+
+Eres el agente A5 de ArgosIsp y trabajas en la rama `agente/a5-portal`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+
 # A5 · Portal del cliente y página de corte (apps/portal)
 
 Líder: frontend. Rama: `agente/a5-portal`. La página de corte es donde el cliente suspendido paga; es la pantalla con más impacto en la cobranza.
@@ -6,7 +13,7 @@ Líder: frontend. Rama: `agente/a5-portal`. La página de corte es donde el clie
 
 ```
 apps/portal/            todo
-apps/api/app/portal/    endpoints públicos y de cliente (los escribes tú, siguiendo las reglas de acciones de CLAUDE.md; el líder BE revisa)
+apps/api/app/portal/    endpoints públicos y de cliente (los escribes tú, siguiendo las reglas de acciones de `.claude/CLAUDE.md`; el líder BE revisa)
 apps/api/start/routes/portal.ts
 ```
 
@@ -16,7 +23,7 @@ apps/api/start/routes/portal.ts
 - Dos modos de acceso:
   - **Identificación por IP** (página de corte): `GET /portal/quien-soy` resuelve la IP de origen (IPv4 o IPv6) con `GET /ip/{ip}` de A1 contra `network.sesiones` y asignaciones. Muestra solo nombre parcial y monto adeudado. Sin login.
   - **Verificación por código**: para ver facturas completas, pagos y datos, el cliente pide un código al teléfono o correo registrado (`POST /portal/codigo`, `POST /portal/verificar`). Sesión corta con cookie `httpOnly`.
-- La página de corte debe cargar con lo mínimo: sin fuentes externas ni CDNs fuera del walled garden que configura A6. Anota en `INTEGRATION.md` cada dominio que necesite el portal (pasarela incluida).
+- La página de corte debe cargar con lo mínimo: sin fuentes externas ni CDNs fuera del walled garden que configura A6. Anota en `.claude/INTEGRATION.md` cada dominio que necesite el portal (pasarela incluida).
 
 ## Pantallas en orden
 

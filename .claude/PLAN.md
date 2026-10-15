@@ -10,13 +10,13 @@ Primera versión operable con clientes reales el **13 de noviembre de 2026**; fa
 | Líder frontend | — | 2 | A4 panel de administración · A5 portal del cliente, página de corte, plantillas |
 | PM (perfil de red) | — | 1 | A6 infra, MikroTik, notificaciones, importación; contrato del día 1; integración; credenciales INFILE y pasarela |
 
-Cada agente corre en una sesión de Claude Code propia, en una rama `agente/aN-<frente>`, y solo toca las carpetas que indica su brief en `agents/`. Los líderes revisan cada PR; el agente no hace merge.
+Cada agente corre en una sesión de Claude Code propia, en una rama `agente/aN-<frente>`, y solo toca las carpetas que indica su agente en `.claude/agents/`. Los líderes revisan cada PR; el agente no hace merge.
 
 Reglas para los líderes:
 
 - Un líder supervisa como máximo 3 agentes. Si no te da tiempo de leer lo que apruebas, pausa un agente.
-- Los agentes no toman tareas de la ruta crítica de otro agente. Si A2 necesita algo de A1, lo pide en `INTEGRATION.md` y el líder decide.
-- Al final de cada día, cada líder deja en `STATUS.md` tres líneas por agente: hecho, bloqueado, siguiente.
+- Los agentes no toman tareas de la ruta crítica de otro agente. Si A2 necesita algo de A1, lo pide en `.claude/INTEGRATION.md` y el líder decide.
+- Al final de cada día, cada líder deja en `.claude/STATUS.md` tres líneas por agente: hecho, bloqueado, siguiente.
 
 ## Calendario
 
@@ -36,9 +36,9 @@ FEL va al final a propósito: la factura interna mueve cobro, corte y libro; FEL
 
 Nada de código de negocio hoy. El día 1 decide si los seis agentes producen un sistema o seis.
 
-- [ ] PM: monorepo con pnpm workspaces, `CLAUDE.md`, `PLAN.md`, `agents/`, `INTEGRATION.md` vacío, `STATUS.md`
+- [ ] PM: monorepo con pnpm workspaces y `.claude/` con `CLAUDE.md`, `PLAN.md`, `agents/`, `INTEGRATION.md` vacío y `STATUS.md`
 - [ ] PM: `infra/docker-compose.yml` con Postgres 16, Redis 7, FreeRADIUS 3.2, api, web, portal, aaa, coa; CI que corre lint, typecheck y pruebas
-- [ ] Líder BE: migraciones del modelo de datos base (`agents/00-modelo-datos.md`) y clase `DomainAction` con auditoría y outbox
+- [ ] Líder BE: migraciones del modelo de datos base (`.claude/modelo-datos.md`) y clase `DomainAction` con auditoría y outbox
 - [ ] Líder BE: OpenAPI base con los recursos y acciones de la semana, aunque devuelvan 501; `packages/contracts` generado
 - [ ] Líder FE: esqueleto de `apps/web` y `apps/portal` con Nuxt 4 + Nuxt UI, layout, login contra el ACL, cliente HTTP desde contracts, fixtures de prueba
 - [ ] PM: MikroTik del laboratorio con PPPoE server, VPN al servidor, `radius incoming`, perfil `suspendido`, DHCPv6-PD; documentado en `infra/mikrotik/README.md`
@@ -72,7 +72,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 - [ ] Crear promesa desde la página de corte; reactiva; forzar vencimiento; vuelve a cortar
 - [ ] Notificación por correo de factura emitida y de corte
 - [ ] Bitácora muestra todas las acciones con actor y canal
-- [ ] Lista de todo lo que falló en `INTEGRATION.md` con dueño y prioridad
+- [ ] Lista de todo lo que falló en `.claude/INTEGRATION.md` con dueño y prioridad
 
 ## Semana 2 · Validación
 
@@ -98,7 +98,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 | Corregir datos de origen y repetir en seco | PM | Reporte sin diferencias en saldos pendientes |
 | Importación real a producción | PM + líder BE | Suma de saldos importados = suma de saldos en Mikrowisp |
 | Migrar 20 a 50 clientes al nuevo RADIUS (su router apunta al nuevo `aaa`) | PM | Todos con sesión activa dual-stack en una hora |
-| Operar el piloto: caja, cortes, pagos, promesas, notificaciones | ISP | Bitácora de incidencias diaria en `STATUS.md` |
+| Operar el piloto: caja, cortes, pagos, promesas, notificaciones | ISP | Bitácora de incidencias diaria en `.claude/STATUS.md` |
 | Monitoreo: logs con request_id, métricas de `aaa`, colas y crons, alertas por Telegram | A6 | Alerta de prueba llega en menos de un minuto |
 
 ## Semana 4 · Piloto y cierre
@@ -137,7 +137,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 
 | Riesgo | Mitigación |
 | --- | --- |
-| Seis agentes producen código inconsistente | Día 1 completo antes de arrancar; `CLAUDE.md` como ley; pruebas de integración como condición de merge; líderes leen cada PR |
+| Seis agentes producen código inconsistente | Día 1 completo antes de arrancar; `.claude/CLAUDE.md` como ley; pruebas de integración como condición de merge; líderes leen cada PR |
 | RADIUS inestable en producción | Laboratorio desde el día 1; carga en semana 2; dos nodos `aaa` desde el piloto; runbook de failover a secrets locales del MikroTik |
 | Credenciales de INFILE o pasarela tarde | Pedirlas el día 1; FEL ya está al final; la pasarela puede pasar a fase 2 sin tocar la fecha del 13 |
 | Datos de Mikrowisp inconsistentes | Dos importaciones en seco con reporte de diferencias antes de la real |

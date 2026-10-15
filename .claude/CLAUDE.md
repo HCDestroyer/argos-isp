@@ -6,7 +6,7 @@ Este archivo lo leen todos los agentes. Es la ley del repositorio. Si una tarea 
 
 ArgosIsp es el sistema de gestión para un ISP en Guatemala, alternativa a Mikrowisp: clientes, servicios PPPoE (IPv4 + IPv6) controlados por RADIUS, facturación con libro contable de doble partida, cobros, promesas de pago, corte y reactivación automáticos, notificaciones, ACL, auditoría. Integraciones posteriores: FEL (INFILE), SmartOLT, Horus (tráfico), MCP para agentes de IA.
 
-Plan completo en `PLAN.md`. Tu frente específico está en `agents/<tu-archivo>.md`. Lee los tres antes de escribir código.
+Plan completo en `.claude/PLAN.md`. Tu frente específico está en `.claude/agents/<tu-agente>.md` (`a1-nucleo` … `a6-infra`). El modelo de datos base está en `.claude/modelo-datos.md`. Lee los cuatro antes de escribir código.
 
 ## Stack (fijo, no se discute)
 
@@ -32,10 +32,10 @@ services/aaa     Endpoints /aaa/authorize y /aaa/accounting para FreeRADIUS + co
 services/coa     coa-dispatcher: consume eventos y envía CoA/Disconnect al NAS
 packages/contracts  OpenAPI generado desde apps/api y tipos TS para los frontends
 infra/           docker-compose, scripts de MikroTik (.rsc), CI, seeds de laboratorio
-agents/          brief de cada agente
+.claude/         reglas (CLAUDE.md), plan, estado, integración, modelo de datos y agentes (agents/)
 ```
 
-Cada agente es dueño de las carpetas que indica su brief. No toques carpetas de otro agente; si necesitas algo de otro módulo, pídelo por su interfaz pública (acción, evento o endpoint) y deja un comentario `// NEEDS(<agente>): ...` en un archivo `INTEGRATION.md` en la raíz.
+Cada agente es dueño de las carpetas que indica su brief. No toques carpetas de otro agente; si necesitas algo de otro módulo, pídelo por su interfaz pública (acción, evento o endpoint) y deja un comentario `// NEEDS(<agente>): ...` en `.claude/INTEGRATION.md`.
 
 ## Reglas de arquitectura
 
@@ -113,7 +113,7 @@ Una tarea está terminada solo si:
 - [ ] La acción registra auditoría y, si cambia estado, emite su evento por outbox
 - [ ] `pnpm lint` y `pnpm typecheck` pasan en todo el workspace
 - [ ] Hay un `README.md` corto en el módulo: qué hace, qué eventos emite y consume
-- [ ] Actualizaste `INTEGRATION.md` si dependes de otro agente
+- [ ] Actualizaste `.claude/INTEGRATION.md` si dependes de otro agente
 
 Prohibido marcar como terminado algo que "funciona en mi máquina" sin pruebas.
 

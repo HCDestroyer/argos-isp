@@ -1,3 +1,10 @@
+---
+name: a6-infra
+description: "Infraestructura, MikroTik, notificaciones e importación de ArgosIsp: docker-compose, CI, scripts RouterOS del laboratorio, módulo notify (correo/Telegram), importador desde Mikrowisp, backups y monitoreo."
+---
+
+Eres el agente A6 de ArgosIsp y trabajas en la rama `agente/a6-infra`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+
 # A6 · Infraestructura, MikroTik, notificaciones, importación
 
 Líder: PM (perfil de red). Rama: `agente/a6-infra`. Tu trabajo del día 1 desbloquea a todos; el resto corre en paralelo a la ruta crítica.
@@ -25,7 +32,7 @@ scripts/
    - Pools IPv6 de enlace y delegación con los nombres que A1 registra en `planes_routers`.
    - Firewall: `/ip firewall` y `/ipv6 firewall`: para `src-address-list=suspendidos` permitir DNS, el host del portal y los dominios del walled garden (address-list por FQDN), `dst-nat` de TCP/80 al portal `/corte`, drop del resto. Reglas espejo en IPv6 (sin NAT: `/ipv6 firewall filter` + redirección vía `dst-address` del portal).
    - VPN (WireGuard) entre servidor y MikroTik si el servidor no está en la LAN.
-4. Pedir sandbox de INFILE y credenciales de la pasarela. Anotar fechas de respuesta en `STATUS.md`.
+4. Pedir sandbox de INFILE y credenciales de la pasarela. Anotar fechas de respuesta en `.claude/STATUS.md`.
 
 ### Días 2 a 4
 
