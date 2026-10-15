@@ -1,0 +1,83 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "ArgosIsp API", "version": "0.0.0", "description": "Semilla del día 1. apps/api la reemplaza con el OpenAPI generado." },
+  "servers": [{ "url": "/" }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "required": ["type", "title", "status"],
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["field", "message"],
+              "properties": { "field": { "type": "string" }, "message": { "type": "string" }, "rule": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "required": ["id", "nombre", "email", "permisos", "roles"],
+        "properties": {
+          "id": { "type": "integer" },
+          "nombre": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "roles": { "type": "array", "items": { "type": "string" } },
+          "permisos": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "authLogin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión iniciada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["token", "usuario"],
+                  "properties": { "token": { "type": "string" }, "usuario": { "$ref": "#/components/schemas/Me" } }
+                }
+              }
+            }
+          },
+          "401": { "description": "Credenciales inválidas", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "me",
+        "security": [{ "bearer": [] }],
+        "responses": {
+          "200": { "description": "Usuario actual con permisos", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Me" } } } },
+          "401": { "description": "Sin sesión", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+        }
+      }
+    }
+  }
+}
