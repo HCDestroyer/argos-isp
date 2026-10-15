@@ -35,6 +35,20 @@ Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `caje
 - Datos: un composable por recurso (`useClientes`) que llama `useApi()`. Tipos desde
   `@argosisp/contracts` (`Schema<'Cliente'>`), nunca interfaces a mano.
 - Dinero: siempre strings decimales de la API; si hay que sumar, `decimal.js`. Mostrar con `formatearQuetzales`.
-- Si un endpoint aún devuelve 501, agrega su ruta en `fixtures/index.ts` (`'GET /api/v1/clientes/:id'`),
-  con el JSON en `fixtures/<recurso>/` tipado contra el contrato.
+- Si un endpoint aún devuelve 501, agrega sus datos en `fixtures/<recurso>/datos.ts` (tipados con
+  `Schema<'X'>`) y sus rutas en `fixtures/<recurso>/rutas.ts` (`'GET /api/v1/clientes/:id'`, con
+  `conPermiso('clientes.ver', ...)`), y regístralas en `fixtures/index.ts`. Las altas y ediciones
+  viven en memoria en `fixtures/bd.ts`; las pruebas llaman `reiniciarFixtures()`.
+- Llamadas a la API desde composables con `resolver(api.GET(...))` → `Resultado<T>` (`ok` + `data`
+  o `problema`). Listas con cursor: `usePaginacionCursor` + `<PaginacionCursor>`; errores con
+  `<ProblemaAlerta>`; 422 al formulario con `erroresDeFormulario(problema)`.
 - ESLint prohíbe `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>` crudos y `any`; indentación de 4.
+
+## Pantallas
+
+| Pantalla | Ruta | Composables |
+| --- | --- | --- |
+| 1 · Lista de clientes (búsqueda, zona) | `/clientes` | `useClientes`, `useZonas`, `usePaginacionCursor` |
+| 2 · Ficha de cliente (datos, fiscales, servicios, estado de cuenta, línea de tiempo) | `/clientes/:id?tab=` | `useClientes`, `useServicios`, `usePlanes`, `useRouters`, `useBitacora` |
+| 3 · Alta y edición de cliente (zod espejo de `crearClienteValidator`, Idempotency-Key, 409 por versión) | `/clientes/nuevo`, `/clientes/:id/editar` | `useClientes`, `useZonas` |
+| 4 · Alta de servicio (cliente → router → plan del router → IPv4 → IPv6 → credenciales PPP → plantilla y excepciones) | `/servicios/nuevo?cliente=` | `useServicios`, `useRouters`, `usePlantillas`, `useClientes` |

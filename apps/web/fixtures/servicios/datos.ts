@@ -1,0 +1,69 @@
+import type { Schema } from '@argosisp/contracts'
+import { clientes } from '../clientes/datos'
+
+type Servicio = Schema<'Servicio'>
+type EstadoServicio = Servicio['estado']
+
+/** Estado por cliente; los que no aparecen están activos. */
+const estados: Record<number, EstadoServicio> = {
+    2: 'suspendido',
+    5: 'limitado',
+    9: 'retirado',
+    12: 'suspendido',
+    17: 'limitado',
+    22: 'suspendido',
+}
+
+/** Clientes sin servicio todavía (recién dados de alta). */
+const sinServicio = new Set([14, 28])
+
+/** Clientes con un segundo servicio (empresas con sucursal). */
+const conSegundo = new Set([3, 11])
+
+function usuarioPpp(nombre: string, id: number): string {
+    const partes = nombre
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z ]/g, '')
+        .split(' ')
+        .filter(Boolean)
+    return `${partes[0] ?? 'cliente'}.${partes[1] ?? ''}${id}`.replace(/\.$/, '')
+}
+
+function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean): Servicio {
+    const router = cliente.zona_id === 3 ? 2 : 1
+    const plan = cliente.tipo === 'empresa' ? (router === 1 ? 3 : 4) : ((cliente.id % 2) + 1)
+    const estado = sucursal ? 'activo' : (estados[cliente.id] ?? 'activo')
+    const instalado = new Date(Date.UTC(2026, 8, 2 + (cliente.id % 27), 18))
+    const v6 = router === 1 && plan !== 4
+    return {
+        id,
+        cliente_id: cliente.id,
+        router_id: router,
+        plan_id: plan,
+        plantilla_facturacion_id: cliente.tipo === 'empresa' ? 2 : 1,
+        estado,
+        promesa_activa: cliente.id === 12,
+        user_ppp: sucursal ? `${usuarioPpp(cliente.nombre, cliente.id)}-b` : usuarioPpp(cliente.nombre, cliente.id),
+        mac: `4C:5E:0C:${String(10 + id).padStart(2, '0')}:A${id % 10}:${String(id).padStart(2, '0')}`,
+        direccion: sucursal ? 'Sucursal 2, local 4' : cliente.direccion,
+        coordenadas: cliente.coordenadas,
+        fecha_instalacion: instalado.toISOString().slice(0, 10),
+        costo_override: cliente.id === 11 && sucursal ? '299.00' : null,
+        excluir_firewall: false,
+        ipv4: estado === 'retirado' ? null : (router === 1 ? `100.64.10.${10 + id}` : `100.64.20.${10 + id}`),
+        prefijo_enlace_v6: v6 && estado !== 'retirado' ? `2803:d100:1000:${(id * 16).toString(16)}::/64` : null,
+        prefijo_delegado_v6: v6 && estado !== 'retirado' ? `2803:d100:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/56` : null,
+        ipv6_modo: v6 ? 'radius_servicio' : 'ninguno',
+        ipv6_duid: null,
+        version: 1,
+        created_at: instalado.toISOString(),
+        updated_at: instalado.toISOString(),
+    }
+}
+
+export const servicios: Servicio[] = clientes
+    .filter(cliente => !sinServicio.has(cliente.id))
+    .flatMap(cliente => (conSegundo.has(cliente.id) ? [cliente, { ...cliente, sucursal: true }] : [cliente]))
+    .map((cliente, indice) => crearServicio(indice + 1, cliente, 'sucursal' in cliente))

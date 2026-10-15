@@ -19,9 +19,9 @@ describe('usePermisos', () => {
         expect(puede('pagos.registrar')).toBe(true)
         expect(puede('routers.ver')).toBe(false)
         expect(puede('servicios.suspender')).toBe(false)
-        expect(puedeAlguno(['routers.ver', 'caja.ver'])).toBe(true)
-        expect(puedeTodos(['caja.abrir', 'caja.cerrar'])).toBe(true)
-        expect(puedeTodos(['caja.abrir', 'usuarios.ver'])).toBe(false)
+        expect(puedeAlguno(['routers.ver', 'cajas.ver'])).toBe(true)
+        expect(puedeTodos(['cajas.abrir', 'cajas.cerrar'])).toBe(true)
+        expect(puedeTodos(['cajas.abrir', 'usuarios.ver'])).toBe(false)
     })
 
     it('reacciona al cambiar de usuario', () => {

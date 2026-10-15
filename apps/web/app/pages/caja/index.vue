@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ permiso: 'caja.ver' })
+definePageMeta({ permiso: 'cajas.ver' })
 </script>
 
 <template>

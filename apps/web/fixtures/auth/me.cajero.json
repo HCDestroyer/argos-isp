@@ -5,13 +5,14 @@
   "roles": ["cajero"],
   "permisos": [
     "clientes.ver",
+    "clientes.estado_cuenta",
     "servicios.ver",
     "facturas.ver",
     "pagos.ver",
     "pagos.registrar",
-    "caja.ver",
-    "caja.abrir",
-    "caja.cerrar",
+    "cajas.ver",
+    "cajas.abrir",
+    "cajas.cerrar",
     "promesas.ver",
     "promesas.crear"
   ]
