@@ -37,8 +37,10 @@ x-api-env: &api-env
   APP_URL: ${API_PUBLIC_URL:-http://localhost:3333}
   DB_HOST: postgres
   DB_PORT: '5432'
-  DB_USER: argosisp
-  DB_PASSWORD: ${DB_PASSWORD:-argosisp}
+  # Usuario de la aplicación: miembro de argosisp_app, sin DDL ni UPDATE/DELETE en ledger y audit
+  # (infra/postgres/usuarios.sh). migrate lo reemplaza por el dueño.
+  DB_USER: ${DB_APP_USER:-argosisp_api}
+  DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
   DB_DATABASE: argosisp
   REDIS_HOST: redis
   REDIS_PORT: '6379'
@@ -84,12 +86,19 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: argosisp
+      # Superusuario: solo administración y la base de pruebas argosisp_test. Ninguna app lo usa.
       POSTGRES_USER: argosisp
       POSTGRES_PASSWORD: ${DB_PASSWORD:-argosisp}
       TZ: UTC
+      # Usuarios que crea usuarios.sh: dueño (migrate) y aplicación (api, workers, coa)
+      DB_OWNER_USER: ${DB_OWNER_USER:-argosisp_owner}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-argosisp_owner}
+      DB_APP_USER: ${DB_APP_USER:-argosisp_api}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./postgres/usuarios.sh:/docker-entrypoint-initdb.d/20-usuarios.sh:ro
     ports:
       - 127.0.0.1:${DB_PORT_HOST:-5432}:5432
     healthcheck:
@@ -148,7 +157,11 @@ services:
       dockerfile: apps/api/Dockerfile
     # Migraciones y seed idempotente del ACL (roles, permisos y admin de laboratorio).
     command: [sh, -c, 'node ace.js migration:run --force && node ace.js db:seed']
-    environment: *api-env
+    # Con el dueño de la base: crea schemas y tablas y da los permisos a argosisp_app.
+    environment:
+      <<: *api-env
+      DB_USER: ${DB_OWNER_USER:-argosisp_owner}
+      DB_PASSWORD: ${DB_OWNER_PASSWORD:-argosisp_owner}
     depends_on:
       postgres:
         condition: service_healthy
@@ -348,8 +361,8 @@ services:
       REDIS_PORT: '6379'
       DB_HOST: postgres
       DB_PORT: '5432'
-      DB_USER: argosisp
-      DB_PASSWORD: ${DB_PASSWORD:-argosisp}
+      DB_USER: ${DB_APP_USER:-argosisp_api}
+      DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
       DB_DATABASE: argosisp
       COA_NAS_PORT: '3799'
     ports:

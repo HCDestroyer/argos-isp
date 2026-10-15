@@ -7,12 +7,31 @@
 | `mikrotik/`              | `lab.rsc` y su README: RouterOS del laboratorio (PPPoE, RADIUS, corte IPv4/IPv6, WireGuard)                                                                                           |
 | `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6)                                                                                    |
 | `ci/`                    | Verificaciones de CI de infraestructura (FreeRADIUS)                                                                                                                                  |
-| `postgres/`              | Inicialización de Postgres                                                                                                                                                            |
+| `postgres/`              | Inicialización de Postgres: base de pruebas (`init.sql`) y usuarios dueño y aplicación (`usuarios.sh`)                                                                                |
 
 ```sh
 cp infra/.env.example infra/.env        # completa los secretos
 docker compose -f infra/docker-compose.yml up -d
 ```
+
+## Postgres: usuarios
+
+| Usuario                                                | Lo usa                                                               | Permisos                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `argosisp` (`POSTGRES_USER`, contraseña `DB_PASSWORD`) | Administración y base de pruebas `argosisp_test`                     | Superusuario. Ninguna app del compose lo usa                                                                                                                                                                                                                                        |
+| `DB_OWNER_USER` (`argosisp_owner`)                     | `migrate` (migraciones y seed)                                       | Dueño de la base `argosisp` y de schemas, tablas, funciones y secuencias. Sin superusuario ni `CREATEROLE`                                                                                                                                                                          |
+| `DB_APP_USER` (`argosisp_api`)                         | `api`, `relay`, `billing-worker`, `sesiones-worker`, `worker`, `coa` | Solo los del rol `argosisp_app` (migración `crear_rol_app`): DML en `core`, `network`, `billing`, `ledger` y `notify`; en `ledger.asientos`, `ledger.movimientos` y `audit.*` solo `SELECT` e `INSERT` (en `audit.outbox`, además `UPDATE` de `publicado_en` e `intentos`); sin DDL |
+
+- `postgres/usuarios.sh` los crea al iniciar un volumen nuevo (después de `init.sql`), junto con el rol `argosisp_app`, y deja la base a nombre del dueño. Es idempotente: vuelve a correrlo para cambiar contraseñas.
+
+    ```sh
+    docker compose -f infra/docker-compose.yml exec postgres /docker-entrypoint-initdb.d/20-usuarios.sh
+    ```
+
+- Las migraciones dan los permisos a `argosisp_app` sobre lo que crean (`ALTER DEFAULT PRIVILEGES` del dueño). Como `audit.crear_particiones` es `SECURITY DEFINER`, el cron de particiones funciona con el usuario de la aplicación.
+- **Volumen anterior a este cambio.** Las tablas son del superusuario y los usuarios nuevos no existen. Recrea el volumen (`docker compose -f infra/docker-compose.yml down -v` y `up -d`) y vuelve a cargar los datos de prueba con `pnpm demo:datos`. Todavía no hay servidores con datos reales; la importación de semana 3 ya parte de un volumen con estos usuarios.
+- En producción cambia las tres contraseñas en `infra/.env` (`openssl rand -hex 24`).
+- Verificado con el compose (`postgres` en un volumen nuevo): `usuarios.sh` crea los usuarios, `migrate` corre como dueño, y la API como `argosisp_api` carga `pnpm demo:datos` y el cron de particiones; `argosisp_api` recibe `permission denied` en `UPDATE audit.acciones` y en `CREATE TABLE`.
 
 ## Procesos de fondo
 
