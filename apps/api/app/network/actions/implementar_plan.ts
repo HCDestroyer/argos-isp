@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { verImplementacion, verPlan, type PlanRouterVista } from '#network/consultas/planes'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaImplementarPlan {
     plan_id: number
@@ -20,7 +21,8 @@ export interface EntradaImplementarPlan {
 /**
  * Crea o edita la implementación de un plan en un router (`network.planes_routers`): perfil PPP,
  * pools, local-address y rate-limit propio del router. Para un plan no global, es lo que lo hace
- * disponible en ese router.
+ * disponible en ese router. Después del COMMIT reescribe `aaa:user:*` de los servicios del plan
+ * en ese router (perfil, pools y rate-limit van en el registro de RADIUS).
  */
 export default class ImplementarPlan extends DomainAction<EntradaImplementarPlan, PlanRouterVista> {
     readonly nombre = 'planes.editar'
@@ -57,6 +59,7 @@ export default class ImplementarPlan extends DomainAction<EntradaImplementarPlan
         t.fijarEntidad('plan_router', id)
         const despues = (await verImplementacion(planId, routerId, t.trx))!
         await t.registrarCambios({ tipo: 'plan_router', id }, antes, despues)
+        refrescarAaaAlConfirmar(t, { planId, routerId })
         return despues
     }
 }

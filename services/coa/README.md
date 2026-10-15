@@ -1,13 +1,57 @@
 # @argosisp/coa
 
-coa-dispatcher: consumirá `servicio.estado_cambiado` y `servicio.config_cambiada` (Redis Streams) y enviará CoA o Disconnect-Request al `nas_ip` de la sesión activa (UDP 3799, `/radius incoming` del MikroTik), registrando cada respuesta en `audit.red` y emitiendo `coa.fallido` tras 3 reintentos. Dueño: A2 (`.claude/agents/a2-radius.md`).
+coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configuración de un servicio, manda CoA-Request o Disconnect-Request (RFC 5176) a cada sesión abierta del servicio, en el `nas_ip` de la sesión (UDP 3799, `/radius incoming` del MikroTik) y con el secret del router. Registra cada envío y su respuesta en `audit.red`. Dueño: A2 (`.claude/agents/a2-radius.md`).
 
-Hoy es el esqueleto del día 1: solo `GET /health` → 200 en el puerto 3200.
+## Eventos
+
+| Consume (grupo `coa` sobre `argos:eventos`) | Emite (por `audit.outbox`)                                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `servicio.estado_cambiado`                  | `coa.fallido` `{servicio_id, nas_ip, tipo: coa\|disconnect, error}` cuando una sesión no recibe ACK |
+| `servicio.config_cambiada`                  |                                                                                                     |
+
+Consumo según `.claude/integration/contratos/eventos.md`: `XREADGROUP` + `XACK`; si el proceso cae relee sus pendientes al arrancar; lo que lleva 60 s sin confirmar se reclama con `XAUTOCLAIM`. Un evento que falla por Postgres no se confirma y se reintenta; los siguientes del mismo servicio esperan detrás de él. Un payload ilegible o fuera del catálogo se confirma y se descarta.
+
+## Qué manda en cada caso
+
+Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Código en `src/decision.ts`.
+
+| Cambio                                           | Paquete    | Atributos además de `User-Name` y `Acct-Session-Id` de la sesión                                       |
+| ------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `activo` o `limitado` → `suspendido`             | CoA        | `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
+| `activo` → `limitado`                            | CoA        | `Mikrotik-Rate-Limit` = velocidad limitada del plan                                                    |
+| `limitado` → `activo`                            | CoA        | `Mikrotik-Rate-Limit` del plan (o `rate_limit_override` del router)                                    |
+| `suspendido` → `activo` o `limitado` (reactivar) | Disconnect | — (un CoA deja el IPv6 cortado; al reconectar `aaa` entrega el perfil normal)                          |
+| → `retirado`                                     | Disconnect | — (al reconectar `aaa` lo rechaza)                                                                     |
+| config con `ips`, `prefijo_v6` o `router`        | Disconnect | — (al reconectar trae la IP, el prefijo o el NAS nuevos)                                               |
+| config solo con `plan`                           | CoA        | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido (se aplica al reactivar)              |
+
+- `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
+- Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).
+- Velocidades: mismas reglas que `services/aaa/src/perfil.ts` (velocidad limitada en 0 → la del plan).
+
+## Envío, reintentos y auditoría
+
+- Todo paquete lleva `Message-Authenticator`. Las firmas (Request Authenticator y Message-Authenticator) se calculan en `src/firma.ts` como FreeRADIUS: el paquete `radius` 1.1.4 codifica los atributos pero firma mal las peticiones con Message-Authenticator (ni él mismo las acepta). `test/nas.test.ts` valida `firma.ts` contra `radclient` de FreeRADIUS 3.2 en Docker.
+- Respuesta verificada con el secret (Response Authenticator y Message-Authenticator); las que no cuadran se ignoran.
+- Timeout por envío `COA_TIMEOUT_MS` (2 s). Ante timeout o error de red, hasta `COA_REINTENTOS` (3) reintentos con backoff 0,5 s · 1 s · 2 s. Un NAK es respuesta definitiva y no se reintenta.
+- `audit.red`: una fila por intento. `comando` = `{evento_id, evento, razon, sesion_id, nas_ip, puerto, atributos, intento}`; `respuesta` = `{resultado: ack|nak|timeout|error|sin_secret, codigo, atributos (p. ej. Error-Cause), error, rtt_ms, final}`; `ok` = ACK.
+- Sin ACK al final (NAK, reintentos agotados, router sin secret) → `coa.fallido` en `audit.outbox` en la misma transacción que la última fila de `audit.red`.
+- Idempotente por `id` del evento: si una sesión ya tiene una fila final para ese evento no se vuelve a enviar (un evento duplicado no desconecta dos veces).
+
+## Comandos
 
 ```
 pnpm --filter @argosisp/coa dev
-pnpm --filter @argosisp/coa test
+pnpm --filter @argosisp/coa test     # Redis local (base 2, stream propio); Docker opcional para radclient
 docker build -f services/coa/Dockerfile .   # contexto = raíz del repo
 ```
 
-Variables en `.env.example`. Qué atributos acepta el MikroTik por CoA y cómo probarlo con `radclient`: `infra/mikrotik/README.md`.
+Variables en `.env.example`. La prueba de punta a punta (`CambiarEstadoServicio` → evento → CoA/Disconnect contra un NAS simulado, con Postgres real) está en `apps/api/tests/network/coa.spec.ts`.
+
+## Dependencias
+
+| Paquete          | Motivo                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `radius` 1.1.4   | Codificar y decodificar paquetes RADIUS (lo pide el stack de `CLAUDE.md`)              |
+| `ioredis` 5.11.1 | Consumidor de Redis Streams; misma versión que `services/aaa`                          |
+| `pg` 8.23.1      | Lee sesiones, servicio y router; escribe `audit.red` y `audit.outbox`. Igual que `aaa` |

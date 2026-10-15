@@ -7,6 +7,8 @@ export interface Config {
     host: string
     logLevel: string
     redis: { host: string; port: number; db: number; prefijo: string }
+    /** Prefijo de BullMQ: el mismo `COLAS_PREFIJO` que el worker de `apps/api`. */
+    colasPrefijo: string
     respaldo: 'api' | 'fixtures'
     api: { url: string; token: string; timeoutMs: number }
     fixturesRuta: string
@@ -35,9 +37,10 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             db: numero(env.REDIS_DB, 0),
             prefijo: env.AAA_REDIS_PREFIJO ?? 'aaa:user:',
         },
+        colasPrefijo: env.COLAS_PREFIJO || 'argosisp',
         respaldo,
         api: {
-            url: env.API_INTERNAL_URL ?? 'http://localhost:3333',
+            url: env.API_INTERNAL_URL ?? 'http://localhost:3333/api/v1/',
             token: env.AAA_INTERNAL_TOKEN ?? '',
             timeoutMs: numero(env.AAA_API_TIMEOUT_MS, 300),
         },

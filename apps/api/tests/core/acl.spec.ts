@@ -32,13 +32,13 @@ test.group('ACL y endpoints sin implementar', () => {
     }) => {
         const { token } = await usuarioConRoles(['cajero'])
 
-        const respuesta = await estado(client.get('/api/v1/facturas').bearerToken(token), 501)
+        const respuesta = await estado(client.get('/api/v1/promesas').bearerToken(token), 501)
         assert.equal(respuesta.header('content-type'), PROBLEM_JSON)
         assert.deepEqual(respuesta.body(), {
             type: 'urn:argosisp:problema:no_implementado',
             title: 'No implementado',
             status: 501,
-            detail: 'La operación facturasListar aún no está implementada',
+            detail: 'La operación promesasListar aún no está implementada',
         })
     })
 
@@ -66,7 +66,7 @@ test.group('ACL y endpoints sin implementar', () => {
         const { token } = await usuarioConRoles(['admin'])
         const ruta = '/api/v1/internal/aaa/servicio'
         await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(token), 401)
-        await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(env.get('INTERNAL_TOKEN')), 501)
+        await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(env.get('INTERNAL_TOKEN')), 404)
     })
 
     test('GET /health responde 200', async ({ client }) => {

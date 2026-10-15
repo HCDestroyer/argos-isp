@@ -8,7 +8,12 @@ import { join, relative } from 'node:path'
 const raiz = new URL('..', import.meta.url).pathname
 const catalogo = readFileSync(join(raiz, 'apps/api/app/core/permisos.ts'), 'utf8')
 const bloque = catalogo.slice(catalogo.indexOf('export const PERMISOS'))
-const existentes = new Set([...bloque.matchAll(/^\s+'([a-z_]+\.[a-z_.]+)':/gm)].map((m) => m[1]))
+const existentes = new Set([...bloque.matchAll(/^\s+'([a-z0-9_]+\.[a-z0-9_.]+)':/gm)].map((m) => m[1]))
+const declaradas = (bloque.slice(0, bloque.indexOf('\n}')).match(/^\s+'[^']+':/gm) ?? []).length
+if (declaradas !== existentes.size) {
+    console.error(`El catálogo declara ${declaradas} permisos pero se leyeron ${existentes.size}: revisa el patrón`)
+    process.exit(2)
+}
 if (existentes.size === 0) {
     console.error('No se pudo leer el catálogo de permisos de apps/api/app/core/permisos.ts')
     process.exit(2)
@@ -25,8 +30,8 @@ function* archivos(dir) {
 
 // Literales de permiso: `permiso: 'x.y'`, `puede('x.y')`, `puedeAlguno(['x.y', ...])`, `conPermiso('x.y')`.
 const patrones = [
-    /permiso:\s*'([a-z_]+\.[a-z_.]+)'/g,
-    /(?:puede|conPermiso)\(\s*'([a-z_]+\.[a-z_.]+)'/g,
+    /permiso:\s*'([a-z0-9_]+\.[a-z0-9_.]+)'/g,
+    /(?:puede|conPermiso)\(\s*'([a-z0-9_]+\.[a-z0-9_.]+)'/g,
     /(?:puedeAlguno|puedeTodos)\(\s*\[([^\]]*)\]/g,
 ]
 const errores = []
