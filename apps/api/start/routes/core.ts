@@ -36,7 +36,8 @@ import EditarCliente from '#core/actions/editar_cliente'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
 import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
-import { Problema } from '#shared/errores'
+import { NoEncontrado, Problema } from '#shared/errores'
+import { construirRegistroAaa } from '#core/aaa'
 import * as v from '#core/validators'
 import {
     AaaServicio,
@@ -529,8 +530,16 @@ const interno: Ruta[] = [
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
+        descripcion:
+            'Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado ' +
+            'responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.',
         query: v.aaaServicioValidator,
         respuesta: { status: 200, descripcion: 'Configuración efectiva para RADIUS', esquema: AaaServicio },
+        handler: async (_ctx, { query }) => {
+            const registro = await construirRegistroAaa(query.user_ppp)
+            if (!registro) throw new NoEncontrado(`El user_ppp ${query.user_ppp} no existe`)
+            return registro
+        },
     }),
 ]
 

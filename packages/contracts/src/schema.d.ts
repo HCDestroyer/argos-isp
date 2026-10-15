@@ -271,7 +271,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Datos de autorización RADIUS de un user_ppp (servicio aaa) */
+        /**
+         * Datos de autorización RADIUS de un user_ppp (servicio aaa)
+         * @description Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.
+         */
         get: operations["internoAaaServicio"];
         put?: never;
         post?: never;
@@ -1127,24 +1130,45 @@ export interface components {
     schemas: {
         AaaServicio: {
             servicio_id: number;
+            /** @description core.servicios.version (diagnóstico) */
+            version: number;
             user_ppp: string;
-            /** @description Cifrada; el servicio aaa la descifra */
+            /** @description Cifrada (formato v1); el servicio aaa la descifra */
             pass_ppp: string;
             estado: components["schemas"]["EstadoServicio"];
-            /** @description "<subida>k/<bajada>k" efectivo (normal o limitado) */
-            rate_limit: string;
-            ipv4: string | null;
-            pool_ipv4: string | null;
-            /** @enum {string} */
-            ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
-            prefijo_enlace_v6: string | null;
-            prefijo_delegado_v6: string | null;
-            pool_ipv6_enlace: string | null;
-            pool_ipv6_delegacion: string | null;
-            address_list: string | null;
             router_id: number;
-            nas_ip: string;
-            acct_interim_interval: number;
+            plan: {
+                id: number;
+                subida_kbps: number;
+                bajada_kbps: number;
+                subida_limitada_kbps: number;
+                bajada_limitada_kbps: number;
+                rate_limit_override: string | null;
+                profile_ppp: string | null;
+            };
+            ipv4: {
+                /** @enum {string} */
+                modo: "estatico";
+                ip: string;
+            } | {
+                /** @enum {string} */
+                modo: "pool";
+                pool: string;
+            } | null;
+            ipv6: {
+                /** @enum {string} */
+                modo: "radius_servicio";
+                prefijo_enlace: string | null;
+                prefijo_delegado: string | null;
+            } | {
+                /** @enum {string} */
+                modo: "radius_pool";
+                pool_enlace: string | null;
+                pool_delegacion: string | null;
+            } | {
+                /** @enum {string} */
+                modo: "duid" | "estatico" | "ninguno";
+            };
         };
         AccionAuditoria: {
             id: number;
@@ -3025,15 +3049,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

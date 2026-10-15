@@ -192,25 +192,49 @@ export const ResolucionIp = definirEsquema(
     }),
 )
 
-/** Todo lo que necesita RADIUS para autorizar un user_ppp (lo arma A1, lo consume A2). */
+/**
+ * Todo lo que necesita RADIUS para autorizar un user_ppp (lo arma A1, lo consume A2). Mismo JSON
+ * que `aaa:user:<user_ppp>` en Redis; contrato en `.claude/integration/contratos/aaa.md`.
+ */
 export const AaaServicio = definirEsquema(
     'AaaServicio',
     objeto({
         servicio_id: id,
+        version: { type: 'integer', minimum: 1, description: 'core.servicios.version (diagnóstico)' },
         user_ppp: texto,
-        pass_ppp: { type: 'string', description: 'Cifrada; el servicio aaa la descifra' },
+        pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
         estado: EstadoServicio,
-        rate_limit: { type: 'string', description: '"<subida>k/<bajada>k" efectivo (normal o limitado)' },
-        ipv4: nulable(texto),
-        pool_ipv4: nulable(texto),
-        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-        prefijo_enlace_v6: nulable(texto),
-        prefijo_delegado_v6: nulable(texto),
-        pool_ipv6_enlace: nulable(texto),
-        pool_ipv6_delegacion: nulable(texto),
-        address_list: nulable(texto),
         router_id: id,
-        nas_ip: texto,
-        acct_interim_interval: entero,
+        plan: objeto({
+            id,
+            subida_kbps: entero,
+            bajada_kbps: entero,
+            subida_limitada_kbps: entero,
+            bajada_limitada_kbps: entero,
+            rate_limit_override: nulable(texto),
+            profile_ppp: nulable(texto),
+        }),
+        ipv4: {
+            anyOf: [
+                objeto({ modo: enumerado(['estatico']), ip: texto }),
+                objeto({ modo: enumerado(['pool']), pool: texto }),
+                { type: 'null' },
+            ],
+        },
+        ipv6: {
+            anyOf: [
+                objeto({
+                    modo: enumerado(['radius_servicio']),
+                    prefijo_enlace: nulable(texto),
+                    prefijo_delegado: nulable(texto),
+                }),
+                objeto({
+                    modo: enumerado(['radius_pool']),
+                    pool_enlace: nulable(texto),
+                    pool_delegacion: nulable(texto),
+                }),
+                objeto({ modo: enumerado(['duid', 'estatico', 'ninguno']) }),
+            ],
+        },
     }),
 )

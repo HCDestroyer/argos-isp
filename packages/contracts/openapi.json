@@ -2075,6 +2075,7 @@
       "get": {
         "operationId": "internoAaaServicio",
         "summary": "Datos de autorización RADIUS de un user_ppp (servicio aaa)",
+        "description": "Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.",
         "tags": [
           "interno"
         ],
@@ -2125,19 +2126,9 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ip/{ip}": {
@@ -9957,102 +9948,199 @@
         "type": "object",
         "required": [
           "servicio_id",
+          "version",
           "user_ppp",
           "pass_ppp",
           "estado",
-          "rate_limit",
-          "ipv4",
-          "pool_ipv4",
-          "ipv6_modo",
-          "prefijo_enlace_v6",
-          "prefijo_delegado_v6",
-          "pool_ipv6_enlace",
-          "pool_ipv6_delegacion",
-          "address_list",
           "router_id",
-          "nas_ip",
-          "acct_interim_interval"
+          "plan",
+          "ipv4",
+          "ipv6"
         ],
         "properties": {
           "servicio_id": {
             "type": "integer",
             "minimum": 1
           },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "core.servicios.version (diagnóstico)"
+          },
           "user_ppp": {
             "type": "string"
           },
           "pass_ppp": {
             "type": "string",
-            "description": "Cifrada; el servicio aaa la descifra"
+            "description": "Cifrada (formato v1); el servicio aaa la descifra"
           },
           "estado": {
             "$ref": "#/components/schemas/EstadoServicio"
-          },
-          "rate_limit": {
-            "type": "string",
-            "description": "\"<subida>k/<bajada>k\" efectivo (normal o limitado)"
-          },
-          "ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "ipv6_modo": {
-            "type": "string",
-            "enum": [
-              "radius_servicio",
-              "radius_pool",
-              "duid",
-              "estatico",
-              "ninguno"
-            ]
-          },
-          "prefijo_enlace_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "prefijo_delegado_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_enlace": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_delegacion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "address_list": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "router_id": {
             "type": "integer",
             "minimum": 1
           },
-          "nas_ip": {
-            "type": "string"
+          "plan": {
+            "type": "object",
+            "required": [
+              "id",
+              "subida_kbps",
+              "bajada_kbps",
+              "subida_limitada_kbps",
+              "bajada_limitada_kbps",
+              "rate_limit_override",
+              "profile_ppp"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "subida_kbps": {
+                "type": "integer"
+              },
+              "bajada_kbps": {
+                "type": "integer"
+              },
+              "subida_limitada_kbps": {
+                "type": "integer"
+              },
+              "bajada_limitada_kbps": {
+                "type": "integer"
+              },
+              "rate_limit_override": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile_ppp": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           },
-          "acct_interim_interval": {
-            "type": "integer"
+          "ipv4": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "ip"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "estatico"
+                    ]
+                  },
+                  "ip": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "pool"
+                    ]
+                  },
+                  "pool": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ipv6": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "prefijo_enlace",
+                  "prefijo_delegado"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_servicio"
+                    ]
+                  },
+                  "prefijo_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "prefijo_delegado": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool_enlace",
+                  "pool_delegacion"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_pool"
+                    ]
+                  },
+                  "pool_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "pool_delegacion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "duid",
+                      "estatico",
+                      "ninguno"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       },

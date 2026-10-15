@@ -49,3 +49,10 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 
 - `core.servicios`: `id`, `cliente_id`, `plan_id`, `plantilla_facturacion_id`, `costo_override` (numeric(14,2), null = precio del plan), `fecha_instalacion` (date), `estado` (`activo`/`limitado`/`suspendido`/`retirado`).
 - `network.planes`: `precio` (numeric(14,2)), `bajada_limitada_kbps`, `subida_limitada_kbps` (> 0).
+
+## Autorización RADIUS (`aaa.ts`, tarea 9)
+
+- Contrato con A2: `.claude/integration/contratos/aaa.md`. `GET /api/v1/internal/aaa/servicio?user_ppp=` (Bearer `INTERNAL_TOKEN`) arma el JSON desde Postgres: 404 si no existe; retirado → 200 con `estado: retirado`.
+- Redis `aaa:user:<user_ppp>` (prefijo `AAA_REDIS_PREFIJO`; en pruebas `<COLAS_PREFIJO>:aaa:user:`), **sin TTL**, write-through después del COMMIT con `refrescarAaaAlConfirmar(t, objetivo)`: `CrearServicio`, `EditarServicio`, `RetirarServicio` (lápida), `CambiarEstadoServicio` (y las acciones manuales que la anidan), `EditarPlan` (todos los servicios no retirados del plan) e `ImplementarPlan` (los del plan en ese router).
+- SET condicionado por `version` (Lua): un registro del mismo servicio con `version` mayor no se pisa. Tras restaurar un respaldo de la base, borrar `aaa:user:*`.
+- Si Redis falla en el gancho, el cambio queda confirmado y se registra en el log; el consumidor `aaa-cache` del bus de eventos vuelve a escribir la clave.
