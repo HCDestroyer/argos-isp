@@ -5622,20 +5622,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "routersCrear",
@@ -5761,20 +5751,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}": {
@@ -5840,20 +5820,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "routersEditar",
@@ -6010,20 +5980,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/ipv6-bloques": {
@@ -6364,20 +6324,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "redes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "redesIpv4Crear",
@@ -6487,20 +6437,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "redes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios": {

@@ -190,8 +190,8 @@ export class Transaccion {
      */
     async registrarCambios(
         entidad: EntidadRef,
-        antes: Registro | null | undefined,
-        despues: Registro | null | undefined,
+        antes: object | null | undefined,
+        despues: object | null | undefined,
     ): Promise<string[]> {
         this.#entidad ??= entidad
         const a = normalizar(antes)
@@ -225,8 +225,9 @@ export class Transaccion {
     }
 }
 
-function normalizar(valor: Registro | null | undefined): Registro {
-    if (!valor) return {}
+function normalizar(entrada: object | null | undefined): Registro {
+    if (!entrada) return {}
+    const valor = entrada as Registro
     const origen =
         '$attributes' in valor && typeof valor.$attributes === 'object' && valor.$attributes !== null
             ? (valor.$attributes as Registro)

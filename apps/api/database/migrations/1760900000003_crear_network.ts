@@ -12,9 +12,9 @@ export default class extends BaseSchema {
                 nombre text NOT NULL UNIQUE,
                 host text NOT NULL,
                 api_usuario text,
-                -- cifrado por la app (encryption de AdonisJS)
+                -- cifrado v1 (AES-256-GCM, AAA_PPP_KEY; app/shared/cifrado.ts)
                 api_password text,
-                -- cifrado por la app
+                -- cifrado v1 (AES-256-GCM, AAA_PPP_KEY): aaa y coa lo descifran
                 radius_secret text,
                 nas_ip inet NOT NULL UNIQUE,
                 modo_seguridad text NOT NULL DEFAULT 'radius' CHECK (modo_seguridad IN ('radius', 'api')),
