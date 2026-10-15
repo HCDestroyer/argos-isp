@@ -37,13 +37,35 @@ saltando proxies confiables. El portal (Nitro) agrega la IP de su socket al fina
 | `PORTAL_PROXIES_CONFIABLES` | `172.16.0.0/12,fd00::/8` | IPs/CIDR del contenedor del portal y de cualquier proxy inverso delante. Vacía = la cabecera se ignora |
 | `PORTAL_CABECERA_IP` | `x-forwarded-for` (defecto) | Cabecera con la IP del cliente |
 
-Se leen de `process.env` en cada petición; pendientes de agregar a `start/env.ts` y `.env.example` (líder BE).
+Se leen de `process.env` en cada petición; declaradas en `start/env.ts` y `.env.example`.
+
+### Límite de peticiones
+
+`limite_peticiones.ts`, aplicado en la ruta después de resolver la IP y antes de la acción.
+Ventana fija en Redis (`INCR` + `PEXPIRE` atómicos en un script Lua) por endpoint e IP: la IPv4 tal
+cual y la IPv6 por su /64 (un cliente puede rotar direcciones dentro del prefijo). La expiración es la
+del contador de la ventana, no una caché de datos, así que no choca con la regla 5.
+
+- Respuestas con `RateLimit-Limit` y `RateLimit-Remaining`.
+- Al pasarse: 429 `application/problem+json` (`urn:argosisp:problema:demasiadas_peticiones`) con
+  `Retry-After` en segundos. La acción no corre (no identifica ni audita).
+- Si Redis no responde (500 ms), la petición pasa y se registra un aviso: la página de corte no se cae
+  por el limitador.
+
+| Variable | Defecto | Qué es |
+| --- | --- | --- |
+| `PORTAL_LIMITE_PETICIONES` | `30` | Peticiones por ventana y por IP; `0` lo apaga |
+| `PORTAL_LIMITE_VENTANA_S` | `60` | Largo de la ventana en segundos |
+| `PORTAL_LIMITE_PREFIJO` | `COLAS_PREFIJO` o `argosisp` | Prefijo de las claves `<prefijo>:portal:limite:<endpoint>:<ip>` |
 
 ## Eventos
 
 No emite ni consume eventos todavía.
 
 ## Pruebas
+
+`tests/portal/limite_peticiones.spec.ts` (Redis real): 429 con `Retry-After` y sin auditoría, contadores
+por IPv4 y por /64, fin de la ventana, `0` lo apaga, Redis caído deja pasar, configuración y claves.
 
 `tests/portal/quien_soy.spec.ts`: IPv4, IPv6 en /56 delegado y /64 de enlace, asignaciones sin sesión,
 sesión cerrada, X-Forwarded-For falso, sin proxies confiables, cabecera configurable, auditoría y que
