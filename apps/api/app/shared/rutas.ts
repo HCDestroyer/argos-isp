@@ -66,6 +66,8 @@ export interface DefinicionRuta<
     idempotente?: boolean
     /** la edición exige `version` y puede responder 409 */
     versionada?: boolean
+    /** tiene límite de peticiones y puede responder 429 con `Retry-After` */
+    limitada?: boolean
     handler?: (ctx: HttpContext, entrada: EntradaHandler<Salida<VC>, Salida<VQ>>) => Promise<unknown>
 }
 

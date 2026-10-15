@@ -35,6 +35,7 @@ const portal: Ruta[] = [
         descripcion: `Sin login. Solo devuelve nombre parcial, estado y montos. ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
+        limitada: true,
         permiso: null,
         respuesta: { status: 200, descripcion: 'Identificación mínima', esquema: QuienSoy },
         handler: async (ctx) => {
@@ -52,6 +53,7 @@ const portal: Ruta[] = [
             `\`activo\`. Solo devuelve estado y monto adeudado, sin datos personales. ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
+        limitada: true,
         permiso: null,
         respuesta: { status: 200, descripcion: 'Estado y monto', esquema: EstadoPortal },
         handler: async (ctx) => {

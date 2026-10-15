@@ -10,7 +10,8 @@ export default class HttpExceptionHandler extends ExceptionHandler {
     protected debug = !app.inProduction
 
     /** No se registran en el log como error. */
-    protected ignoreStatuses = [400, 401, 403, 404, 409, 413, 415, 422, 501]
+    // 429: límite de peticiones del portal, esperado bajo carga; no es un error del servidor.
+    protected ignoreStatuses = [400, 401, 403, 404, 409, 413, 415, 422, 429, 501]
 
     async handle(error: unknown, ctx: HttpContext) {
         const cuerpo = aProblema(error, this.debug)
