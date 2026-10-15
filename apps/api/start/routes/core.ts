@@ -26,6 +26,10 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import SuspenderServicio from '#core/actions/suspender_servicio'
+import ReactivarServicio from '#core/actions/reactivar_servicio'
+import LimitarServicio from '#core/actions/limitar_servicio'
+import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
@@ -421,14 +425,33 @@ const servicios: Ruta[] = [
             return new EditarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
-    accionServicio('suspender', 'serviciosSuspender', 'servicios.suspender', 'Suspender servicio'),
-    accionServicio('reactivar', 'serviciosReactivar', 'servicios.reactivar', 'Reactivar servicio'),
-    accionServicio('limitar', 'serviciosLimitar', 'servicios.limitar', 'Limitar velocidad del servicio'),
+    accionServicio(
+        'suspender',
+        'serviciosSuspender',
+        'servicios.suspender',
+        'Suspender servicio (desde activo o limitado)',
+        (entrada, ctx) => new SuspenderServicio().execute(entrada, ctx.contextoAccion()),
+    ),
+    accionServicio(
+        'reactivar',
+        'serviciosReactivar',
+        'servicios.reactivar',
+        'Reactivar servicio (desde suspendido o limitado, queda activo)',
+        (entrada, ctx) => new ReactivarServicio().execute(entrada, ctx.contextoAccion()),
+    ),
+    accionServicio(
+        'limitar',
+        'serviciosLimitar',
+        'servicios.limitar',
+        'Limitar velocidad del servicio (desde activo o suspendido)',
+        (entrada, ctx) => new LimitarServicio().execute(entrada, ctx.contextoAccion()),
+    ),
     accionServicio(
         'quitar-limite',
         'serviciosQuitarLimite',
         'servicios.quitar_limite',
-        'Quitar límite de velocidad',
+        'Quitar límite de velocidad (desde limitado, queda activo)',
+        (entrada, ctx) => new QuitarLimiteServicio().execute(entrada, ctx.contextoAccion()),
     ),
     accionServicio(
         'retirar',

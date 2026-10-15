@@ -905,7 +905,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Limitar velocidad del servicio */
+        /** Limitar velocidad del servicio (desde activo o suspendido) */
         post: operations["serviciosLimitar"];
         delete?: never;
         options?: never;
@@ -922,7 +922,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Quitar límite de velocidad */
+        /** Quitar límite de velocidad (desde limitado, queda activo) */
         post: operations["serviciosQuitarLimite"];
         delete?: never;
         options?: never;
@@ -939,7 +939,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reactivar servicio */
+        /** Reactivar servicio (desde suspendido o limitado, queda activo) */
         post: operations["serviciosReactivar"];
         delete?: never;
         options?: never;
@@ -973,7 +973,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Suspender servicio */
+        /** Suspender servicio (desde activo o limitado) */
         post: operations["serviciosSuspender"];
         delete?: never;
         options?: never;
@@ -6285,15 +6285,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     serviciosQuitarLimite: {
@@ -6370,15 +6361,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     serviciosReactivar: {
@@ -6448,15 +6430,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6609,15 +6582,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

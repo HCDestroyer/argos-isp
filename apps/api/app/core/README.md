@@ -28,10 +28,16 @@ Lecturas en `consultas/acl.ts`.
 | `CrearServicio` | `servicios.crear` | `servicio.creado`, `asignacion.cambiada` |
 | `EditarServicio` (con `version`) | `servicios.editar` | `servicio.config_cambiada` (campos `plan`, `router`, `ips`, `prefijo_v6`) y `asignacion.cambiada` si cambian IPs o prefijos |
 | `RetirarServicio` | `servicios.retirar` | `servicio.estado_cambiado` (`a: retirado`), `asignacion.cambiada` (vacía, con `fin`) |
+| `CambiarEstadoServicio` (interfaz pública, la llama `evaluarEstadoServicio` de A3 con `{ trx }`) | `servicios.cambiar_estado` (no se asigna a roles) | `servicio.estado_cambiado` |
+| `SuspenderServicio` (desde activo o limitado) | `servicios.suspender` | `servicio.estado_cambiado` |
+| `ReactivarServicio` (desde suspendido o limitado → activo) | `servicios.reactivar` | `servicio.estado_cambiado` |
+| `LimitarServicio` (desde activo o suspendido) | `servicios.limitar` | `servicio.estado_cambiado` |
+| `QuitarLimiteServicio` (desde limitado → activo) | `servicios.quitar_limite` | `servicio.estado_cambiado` |
 | `VerCredencialesServicio` | `servicios.ver_credenciales` | — (cada consulta queda auditada) |
 | `CrearCliente`, `EditarCliente` | `clientes.crear`, `clientes.editar` | — |
 | `CrearZona`, `EditarZona` | `zonas.crear`, `zonas.editar` | — |
 
+- Estados: las acciones manuales (`POST /servicios/:id/suspender|reactivar|limitar|quitar-limite`, `motivo` obligatorio, `Idempotency-Key` opcional) validan el estado de origen (422 `transicion_invalida`), ejecutan `CambiarEstadoServicio` anidada y devuelven el servicio. Si ya está en el destino responden 200 sin evento. Retirado: 422 `servicio_retirado`. La decisión automática por facturas es solo de `evaluarEstadoServicio` (A3).
 - Alta: `user_ppp` `<nombre>.<cliente_id>` (y `-2`, `-3`… si se repite) y `pass_ppp` de 12 caracteres si no vienen. `pass_ppp` se guarda cifrada (formato `v1`, `AAA_PPP_KEY`) y nunca sale en la vista del servicio.
 - IPv4: la pedida o la primera libre del router; sin redes en el router se acepta si el plan define `pool_ipv4` en ese router. Plan `v6` no lleva IPv4.
 - IPv6 según `ipv6_modo` (por defecto `radius_servicio`, o `ninguno` con plan `v4`): `radius_servicio` reserva /64 de enlace y delegado del tamaño del plan; `duid` solo delegado (exige `ipv6_duid`); `estatico` exige `prefijo_delegado_v6`; `radius_pool` y `ninguno` no reservan. Ver `asignaciones_servicio.ts`.

@@ -8018,7 +8018,7 @@
     "/api/v1/servicios/{id}/limitar": {
       "post": {
         "operationId": "serviciosLimitar",
-        "summary": "Limitar velocidad del servicio",
+        "summary": "Limitar velocidad del servicio (desde activo o suspendido)",
         "tags": [
           "servicios"
         ],
@@ -8130,26 +8130,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.limitar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/quitar-limite": {
       "post": {
         "operationId": "serviciosQuitarLimite",
-        "summary": "Quitar límite de velocidad",
+        "summary": "Quitar límite de velocidad (desde limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8261,26 +8251,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.quitar_limite",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/reactivar": {
       "post": {
         "operationId": "serviciosReactivar",
-        "summary": "Reactivar servicio",
+        "summary": "Reactivar servicio (desde suspendido o limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8392,20 +8372,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.reactivar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/retirar": {
@@ -8532,7 +8502,7 @@
     "/api/v1/servicios/{id}/suspender": {
       "post": {
         "operationId": "serviciosSuspender",
-        "summary": "Suspender servicio",
+        "summary": "Suspender servicio (desde activo o limitado)",
         "tags": [
           "servicios"
         ],
@@ -8644,20 +8614,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.suspender",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/sesiones": {
