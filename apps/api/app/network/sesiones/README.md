@@ -1,0 +1,25 @@
+# network/sesiones (A2)
+
+Sesiones PPPoE a partir del accounting RADIUS. `services/aaa` recibe el accounting de FreeRADIUS y lo encola en BullMQ (`aaa-accounting`, contrato en `.claude/integration/contratos/accounting.md`); el proceso `node ace sesiones:worker` (`commands/sesiones_worker.ts`, `cola.ts`) llama a la acción que corresponde.
+
+| Paquete                            | Acción              | Permiso (nombre)      | Efecto en `network.sesiones`                                                                              | Evento                                                       |
+| ---------------------------------- | ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `Start`                            | `IniciarSesion`     | `sesiones.iniciar`    | abre la fila; cierra otras abiertas más viejas del mismo `user_ppp` (`Sesion-Reemplazada`)                | `sesion.iniciada` (y `sesion.terminada` de las reemplazadas) |
+| `Interim-Update`                   | `ActualizarSesion`  | `sesiones.actualizar` | contadores (`GREATEST`), IPv4 y prefijos si llegan; sin Start previo abre la fila                         | `sesion.iniciada` solo si la abre                            |
+| `Stop`                             | `TerminarSesion`    | `sesiones.terminar`   | `fin`, contadores finales, `causa_fin` = `Acct-Terminate-Cause`; sin Start previo crea la fila ya cerrada | `sesion.terminada`                                           |
+| `Accounting-On` / `Accounting-Off` | `CerrarSesionesNas` | `sesiones.cerrar_nas` | cierra todas las abiertas de ese `nas_ip` (`NAS-Reboot`)                                                  | `sesion.terminada` por cada una                              |
+
+Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_ip`, `acct_session_id`, `ipv4`, `prefijos_v6` (`[enlace, delegado]` sin nulos).
+
+## Reglas
+
+- Identidad: `(nas_ip, acct_session_id)`. Los paquetes pueden llegar repetidos o desordenados (el NAS reintenta; el worker corre con concurrencia 4): cada evento se emite una sola vez, un Start o Interim tardío no reabre una sesión cerrada y un Stop repetido no hace nada.
+- Si el NAS reutiliza un `acct_session_id` (Start posterior al fin de la sesión vieja con el mismo id), la vieja se archiva como `<id>~<fila>` y se abre otra.
+- `servicio_id` sale de `core.servicios.user_ppp` y `router_id` de `network.routers.nas_ip`; si no existen quedan en null y la sesión se registra igual.
+- Prefijos: `prefijo_enlace_v6` = `Framed-IPv6-Prefix` del NAS; `prefijo_delegado_v6` = `Delegated-IPv6-Prefix` del NAS. **RouterOS 7.24.5 no manda `Delegated-IPv6-Prefix` en accounting** (verificado por el PM): en modo `radius_servicio` se toma el de la asignación vigente (`network.ipv6_asignaciones`, el mismo que `aaa` entregó en el Access-Accept); igual con el /64 si el NAS no lo reporta. En `radius_pool` solo vale lo que reporte el NAS, así que el /56 queda en null (pendiente de la semana 2).
+- Un job inválido (contrato roto) falla sin reintentos; un error de Postgres se reintenta con el backoff que fija `aaa` (8 intentos desde 1 s).
+- Cada paquete pasa por una `DomainAction`: un registro en `audit.acciones` por paquete, incluidos los Interim-Update (uno cada 5 min por sesión).
+
+## Pruebas
+
+`tests/network/sesiones.spec.ts` (Postgres real y BullMQ real con prefijo propio).
