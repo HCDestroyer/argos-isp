@@ -273,6 +273,16 @@ importers:
         version: 8.71.2(eslint@10.12.0(jiti@2.7.0))(typescript@5.9.3)
 
   services/coa:
+    dependencies:
+      ioredis:
+        specifier: 5.11.1
+        version: 5.11.1
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+      radius:
+        specifier: 1.1.4
+        version: 1.1.4
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -280,6 +290,12 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      '@types/radius':
+        specifier: 0.0.33
+        version: 0.0.33
       eslint:
         specifier: ^10.12.0
         version: 10.12.0(jiti@2.7.0)
@@ -2563,6 +2579,9 @@ packages:
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
+
+  '@types/radius@0.0.33':
+    resolution: {integrity: sha512-qcEAj3jQAs8AQum3mddLa5FyLVtOh2tr5V9bRVfojwErDOC8IpCCO4hrINgZty6sZ29tVTbEQyP7B+tSWVJXBg==}
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
@@ -6003,6 +6022,10 @@ packages:
   quote-js-string@0.1.0:
     resolution: {integrity: sha512-Y3NoRtprEEZQD8RfxMCfS0ZTqc4e+i18OrXEXAvpM6TfC/3y+0L5rNbZiSnbBBEkDfFzbpd8o+cE8q3/anjMGA==}
     engines: {node: '>=22'}
+
+  radius@1.1.4:
+    resolution: {integrity: sha512-UWuzdF6xf3NpsXFZZmUEkxtEalDXj8hdmMXgbGzn7vOk6zXNsiIY2I6SJ1euHt7PTQuMoz2qDEJB+AfJDJgQYw==}
+    engines: {node: '>=0.8.0'}
 
   radix3@1.1.2:
     resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
@@ -10062,6 +10085,10 @@ snapshots:
 
   '@types/qs@6.15.1': {}
 
+  '@types/radius@0.0.33':
+    dependencies:
+      '@types/node': 22.20.5
+
   '@types/resolve@1.20.2': {}
 
   '@types/superagent@8.1.11':
@@ -13840,6 +13867,8 @@ snapshots:
   quick-format-unescaped@4.0.4: {}
 
   quote-js-string@0.1.0: {}
+
+  radius@1.1.4: {}
 
   radix3@1.1.2: {}
 

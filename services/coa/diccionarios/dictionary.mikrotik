@@ -1,0 +1,12 @@
+# Atributos MikroTik (vendor 14988) que usa coa. Mismos números que el diccionario de FreeRADIUS
+# (/usr/share/freeradius/dictionary.mikrotik) y que RouterOS 7.
+VENDOR		Mikrotik			14988
+
+BEGIN-VENDOR	Mikrotik
+ATTRIBUTE	Mikrotik-Recv-Limit			1	integer
+ATTRIBUTE	Mikrotik-Xmit-Limit			2	integer
+ATTRIBUTE	Mikrotik-Group				3	string
+ATTRIBUTE	Mikrotik-Rate-Limit			8	string
+ATTRIBUTE	Mikrotik-Address-List			19	string
+ATTRIBUTE	Mikrotik-Delegated-IPv6-Pool		22	string
+END-VENDOR	Mikrotik

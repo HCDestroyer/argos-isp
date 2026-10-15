@@ -131,4 +131,4 @@ Pendiente con el MikroTik del laboratorio (A6/PM): PPPoE real con estos atributo
 | `fastify` 5.12.5 | El brief pide Fastify o Hono. Fastify: logger pino incluido (JSON), `inject` para pruebas sin puerto, buen rendimiento para el p95 < 100 ms de la semana 2 |
 | `ioredis` 5.11.1 | Cliente Redis; misma versión que ya usa BullMQ en el workspace                                                                                             |
 | `pg` 8.23.1      | `pnpm aaa:clients` lee `network.routers`; misma versión que ya usa Lucid en `apps/api`                                                                     |
-| `bullmq` 6.3.15  | Tarea 4: `/aaa/accounting` encola en la cola que consume `sesiones:worker` (el brief pide BullMQ); misma versión que `apps/api`                             |
+| `bullmq` 6.3.15  | Tarea 4: `/aaa/accounting` encola en la cola que consume `sesiones:worker` (el brief pide BullMQ); misma versión que `apps/api`                            |
