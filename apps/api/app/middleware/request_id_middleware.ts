@@ -8,7 +8,7 @@ const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
 /**
  * Toma `X-Request-Id` (o genera un UUID), lo devuelve en la respuesta y deja en el ctx
  * `requestId` y `contextoAccion()`, que arma el `ContextoAccion` para las acciones de dominio:
- * actor = usuario autenticado (o sistema anónimo), canal = header `X-Canal` (por defecto `api`).
+ * actor = usuario autenticado (`token` si entró con un token de API; sistema si es anónimo), canal = header `X-Canal` (por defecto `api`).
  */
 export default class RequestIdMiddleware {
     handle(ctx: HttpContext, next: NextFn) {
@@ -22,8 +22,11 @@ export default class RequestIdMiddleware {
         ctx.logger = ctx.logger.child({ requestId })
         ctx.contextoAccion = (canalForzado?: Canal): ContextoAccion => {
             const usuario = 'auth' in ctx ? ctx.auth.user : undefined
+            const viaToken = usuario !== undefined && ctx.auth.authenticatedViaGuard === 'tokens'
             return {
-                actor: usuario ? { tipo: 'usuario', id: usuario.id } : { tipo: 'sistema', id: null },
+                actor: usuario
+                    ? { tipo: viaToken ? 'token' : 'usuario', id: usuario.id }
+                    : { tipo: 'sistema', id: null },
                 canal: canalForzado ?? canal,
                 requestId,
             }

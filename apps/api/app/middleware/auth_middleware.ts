@@ -4,12 +4,13 @@ import type { Authenticators } from '@adonisjs/auth/types'
 import { NoAutenticado } from '#shared/errores'
 
 /**
- * Exige `Authorization: Bearer <token>` válido y usuario activo.
+ * Exige `Authorization: Bearer <token>` válido y usuario activo. Por defecto acepta el token de
+ * sesión del login (guard `api`) y los tokens de API con alcances (guard `tokens`, `atk_...`).
  */
 export default class AuthMiddleware {
     async handle(ctx: HttpContext, next: NextFn, options: { guards?: (keyof Authenticators)[] } = {}) {
         try {
-            await ctx.auth.authenticateUsing(options.guards)
+            await ctx.auth.authenticateUsing(options.guards ?? ['api', 'tokens'])
         } catch {
             throw new NoAutenticado()
         }

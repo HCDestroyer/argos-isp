@@ -4,6 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { ContextoAccion } from '#shared/contexto'
 import { MASCARA, enmascarar, esCampoSensible } from '#shared/enmascarar'
+import { insertarEvento } from '#shared/outbox'
 import type { NombreEvento, PayloadEvento } from '#shared/eventos'
 
 /**
@@ -30,6 +31,9 @@ import type { NombreEvento, PayloadEvento } from '#shared/eventos'
  * - Si falla, la transacción se revierte y la auditoría del error se escribe en una transacción
  *   aparte; el error se relanza.
  * - `nombre` es el mismo nombre del permiso del ACL (`servicios.suspender`).
+ * - `t.alConfirmar(fn)` registra trabajo que solo debe correr si el COMMIT se confirmó (invalidar
+ *   cachés de Redis, despertar workers). En acciones anidadas se acumula en la transacción externa
+ *   y se descarta si el savepoint o la transacción externa se revierten.
  */
 export abstract class DomainAction<Entrada, Salida> {
     /** Nombre de la acción = nombre del permiso (`modulo.verbo`). */
@@ -48,6 +52,7 @@ export abstract class DomainAction<Entrada, Salida> {
         const anidada = Boolean(opciones.trx)
         const ejecutar = async (trx: TransactionClientContract) => {
             t = new Transaccion(trx, ctx)
+            transacciones.set(trx, t)
             const salida = await this.handle(input, t)
             await registrarAccion(trx, ctx, this.nombre, entrada, t.entidadActual, null)
             // Las acciones anidadas dejan la verificación a la transacción externa.
@@ -55,15 +60,26 @@ export abstract class DomainAction<Entrada, Salida> {
             return salida
         }
 
+        let salida: Salida
         try {
-            if (opciones.trx) {
-                return await opciones.trx.transaction(ejecutar)
-            }
-            return await db.transaction(ejecutar)
+            salida = opciones.trx ? await opciones.trx.transaction(ejecutar) : await db.transaction(ejecutar)
         } catch (error) {
             await this.auditarError(ctx, entrada, t?.entidadActual, error)
             throw error
         }
+
+        const pendientes = t?.extraerGanchos() ?? []
+        if (opciones.trx) {
+            // El savepoint se liberó, pero la transacción externa aún puede revertirse.
+            const externa = transacciones.get(opciones.trx)
+            if (externa) externa.agregarGanchos(pendientes)
+            else {
+                for (const gancho of pendientes) opciones.trx.after('commit', () => correrGancho(gancho, ctx))
+            }
+        } else {
+            for (const gancho of pendientes) await correrGancho(gancho, ctx)
+        }
+        return salida
     }
 
     private async auditarError(
@@ -102,6 +118,21 @@ export interface EntidadRef {
 
 type Registro = Record<string, unknown>
 
+/** Trabajo posterior al COMMIT (invalidar cachés, avisar a workers). */
+export type GanchoConfirmacion = () => Promise<void> | void
+
+/** Transacción Lucid → unidad de trabajo de la acción que la abrió (para acciones anidadas). */
+const transacciones = new WeakMap<TransactionClientContract, Transaccion>()
+
+async function correrGancho(gancho: GanchoConfirmacion, ctx: ContextoAccion) {
+    try {
+        await gancho()
+    } catch (error) {
+        // El cambio ya está confirmado: un gancho que falla se registra pero no revierte nada.
+        logger.error({ err: error, requestId: ctx.requestId }, 'Falló un gancho posterior al COMMIT')
+    }
+}
+
 /** Campos que no se auditan como cambio. */
 const CAMPOS_IGNORADOS = new Set(['created_at', 'updated_at', 'version'])
 
@@ -110,6 +141,7 @@ const CAMPOS_IGNORADOS = new Set(['created_at', 'updated_at', 'version'])
  */
 export class Transaccion {
     #entidad?: EntidadRef
+    #ganchos: GanchoConfirmacion[] = []
 
     constructor(
         readonly trx: TransactionClientContract,
@@ -127,14 +159,28 @@ export class Transaccion {
 
     /** Inserta el evento en `audit.outbox` dentro de la transacción de la acción. */
     async emit<E extends NombreEvento>(evento: E, payload: PayloadEvento<E>): Promise<void> {
-        await this.trx
-            .insertQuery()
-            .table('audit.outbox')
-            .insert({
-                evento,
-                payload: JSON.stringify(payload),
-                request_id: this.ctx.requestId,
-            })
+        await insertarEvento(this.trx, evento, payload, this.ctx.requestId)
+    }
+
+    /**
+     * Ejecuta `gancho` solo después de que la transacción más externa confirme el COMMIT.
+     * Si la acción (o la que la envuelve) falla, el gancho se descarta. Errores del gancho se
+     * registran en el log y no afectan la respuesta.
+     */
+    alConfirmar(gancho: GanchoConfirmacion): void {
+        this.#ganchos.push(gancho)
+    }
+
+    /** @internal */
+    extraerGanchos(): GanchoConfirmacion[] {
+        const ganchos = this.#ganchos
+        this.#ganchos = []
+        return ganchos
+    }
+
+    /** @internal ganchos de una acción anidada que terminó bien */
+    agregarGanchos(ganchos: GanchoConfirmacion[]): void {
+        this.#ganchos.push(...ganchos)
     }
 
     /**
@@ -144,8 +190,8 @@ export class Transaccion {
      */
     async registrarCambios(
         entidad: EntidadRef,
-        antes: Registro | null | undefined,
-        despues: Registro | null | undefined,
+        antes: object | null | undefined,
+        despues: object | null | undefined,
     ): Promise<string[]> {
         this.#entidad ??= entidad
         const a = normalizar(antes)
@@ -179,8 +225,9 @@ export class Transaccion {
     }
 }
 
-function normalizar(valor: Registro | null | undefined): Registro {
-    if (!valor) return {}
+function normalizar(entrada: object | null | undefined): Registro {
+    if (!entrada) return {}
+    const valor = entrada as Registro
     const origen =
         '$attributes' in valor && typeof valor.$attributes === 'object' && valor.$attributes !== null
             ? (valor.$attributes as Registro)

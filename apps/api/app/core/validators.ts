@@ -240,9 +240,17 @@ export const crearTokenValidator = vine.compile(
         usuario_id: idEntidad(),
         nombre: vine.string().trim().minLength(2).maxLength(100),
         alcances: vine
-            .record(vine.any())
+            .object({
+                permisos: vine
+                    .array(vine.enum(NOMBRES_PERMISOS))
+                    .optional()
+                    .meta({ description: 'Recorta los permisos del usuario a esta lista' }),
+                routers: vine.array(idEntidad()).optional(),
+                zonas: vine.array(idEntidad()).optional(),
+                cajas: vine.array(idEntidad()).optional(),
+            })
             .optional()
-            .meta({ description: 'Alcances (routers, zonas, cajas, permisos)' }),
+            .meta({ description: 'Alcances: permisos permitidos y routers, zonas o cajas' }),
     }),
 )
 
