@@ -2458,20 +2458,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/diario": {
@@ -2604,20 +2594,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/mayor": {
@@ -2734,20 +2714,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/me": {
@@ -4646,20 +4616,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "plantillas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "plantillasCrear",
@@ -4751,26 +4711,243 @@
                   },
                   "reglas_promesa": {
                     "type": "object",
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
+                    "properties": {
+                      "habilitadas": {
+                        "type": "boolean"
+                      },
+                      "max_por_periodo": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "max_por_periodo_buen_historial": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "buen_historial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "historial_ventana": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "plazo_max_dias": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60
+                      },
+                      "no_exceder_siguiente_facturacion": {
+                        "type": "boolean"
+                      },
+                      "deuda_maxima": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Monto con hasta 2 decimales, como string",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "abono_inicial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "antiguedad_minima_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3650
+                      },
+                      "cumplimiento_minimo_pct": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "bloqueo_tras_incumplida_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
+                      "canales": {
+                        "type": "object",
+                        "properties": {
+                          "portal": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "ia": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "operador": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "supervisor": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
                         },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "array"
-                        },
-                        {
-                          "type": "object"
-                        }
-                      ]
+                        "required": [],
+                        "additionalProperties": false
+                      }
                     },
-                    "description": "Reglas de promesas (las define A3)"
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Reglas de promesas; las claves que falten toman su valor por defecto"
                   }
                 },
                 "required": [
@@ -4822,20 +4999,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "plantillas.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/plantillas-facturacion/{id}": {
@@ -4901,20 +5068,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "plantillas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "plantillasEditar",
@@ -5021,25 +5178,243 @@
                   },
                   "reglas_promesa": {
                     "type": "object",
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
+                    "properties": {
+                      "habilitadas": {
+                        "type": "boolean"
+                      },
+                      "max_por_periodo": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "max_por_periodo_buen_historial": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "buen_historial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "historial_ventana": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "plazo_max_dias": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60
+                      },
+                      "no_exceder_siguiente_facturacion": {
+                        "type": "boolean"
+                      },
+                      "deuda_maxima": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Monto con hasta 2 decimales, como string",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "abono_inicial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "antiguedad_minima_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3650
+                      },
+                      "cumplimiento_minimo_pct": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "bloqueo_tras_incumplida_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
+                      "canales": {
+                        "type": "object",
+                        "properties": {
+                          "portal": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "ia": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "operador": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "supervisor": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
                         },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "array"
-                        },
-                        {
-                          "type": "object"
-                        }
-                      ]
-                    }
+                        "required": [],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto)"
                   }
                 },
                 "required": [
@@ -5110,27 +5485,17 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "plantillas.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
         "summary": "Identifica al cliente por la IP de origen (página de corte)",
-        "description": "Sin login. Solo devuelve nombre parcial, estado y monto adeudado.",
+        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`.",
         "tags": [
           "portal"
         ],
@@ -5144,19 +5509,9 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/promesas": {
@@ -9847,6 +10202,7 @@
           "descripcion",
           "origen_tipo",
           "origen_id",
+          "reversa_de",
           "created_by",
           "created_at",
           "movimientos"
@@ -9881,6 +10237,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "reversa_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento que este revierte (correcciones por reverso)"
           },
           "created_by": {
             "type": [
@@ -10300,6 +10664,8 @@
           "nombre",
           "tipo",
           "padre_id",
+          "imputable",
+          "auxiliar_cliente",
           "activa",
           "version",
           "created_at",
@@ -10331,6 +10697,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "imputable": {
+            "type": "boolean",
+            "description": "Recibe movimientos (false = cuenta de agrupación)"
+          },
+          "auxiliar_cliente": {
+            "type": "boolean",
+            "description": "Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id"
           },
           "activa": {
             "type": "boolean"
@@ -10695,6 +11069,24 @@
           },
           "total": {
             "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "FacturasVencidasResumen": {
+        "type": "object",
+        "required": [
+          "cantidad",
+          "total"
+        ],
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Número de facturas vencidas con saldo"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo pendiente de las facturas vencidas"
           }
         }
       },
@@ -11505,7 +11897,8 @@
           },
           "hora_corte": {
             "type": "string",
-            "description": "HH:MM:SS hora de Guatemala"
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM hora de Guatemala"
           },
           "certificar_al": {
             "type": "string",
@@ -11516,8 +11909,7 @@
             ]
           },
           "reglas_promesa": {
-            "type": "object",
-            "additionalProperties": true
+            "$ref": "#/components/schemas/ReglasPromesa"
           },
           "version": {
             "type": "integer",
@@ -11724,8 +12116,10 @@
         "type": "object",
         "required": [
           "identificado",
+          "ip",
           "nombre_parcial",
           "estado",
+          "promesa_activa",
           "monto_adeudado",
           "facturas_vencidas"
         ],
@@ -11733,6 +12127,10 @@
           "identificado": {
             "type": "boolean",
             "description": "false si la IP de origen no pertenece a ningún servicio"
+          },
+          "ip": {
+            "type": "string",
+            "description": "IP de origen con la que la API identificó la petición"
           },
           "nombre_parcial": {
             "type": [
@@ -11751,6 +12149,13 @@
               }
             ]
           },
+          "promesa_activa": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Hay una promesa de pago activa"
+          },
           "monto_adeudado": {
             "anyOf": [
               {
@@ -11759,12 +12164,17 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)"
           },
           "facturas_vencidas": {
-            "type": [
-              "integer",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FacturasVencidasResumen"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }
@@ -11867,6 +12277,251 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReglasPromesa": {
+        "type": "object",
+        "required": [
+          "habilitadas",
+          "max_por_periodo",
+          "max_por_periodo_buen_historial",
+          "buen_historial_pct",
+          "historial_ventana",
+          "plazo_max_dias",
+          "no_exceder_siguiente_facturacion",
+          "deuda_maxima",
+          "abono_inicial_pct",
+          "antiguedad_minima_dias",
+          "cumplimiento_minimo_pct",
+          "bloqueo_tras_incumplida_dias",
+          "canales"
+        ],
+        "properties": {
+          "habilitadas": {
+            "type": "boolean"
+          },
+          "max_por_periodo": {
+            "type": "integer",
+            "description": "Promesas por periodo de facturación"
+          },
+          "max_por_periodo_buen_historial": {
+            "type": "integer",
+            "description": "Máximo si el cumplimiento reciente es >= buen_historial_pct"
+          },
+          "buen_historial_pct": {
+            "type": "integer"
+          },
+          "historial_ventana": {
+            "type": "integer",
+            "description": "Últimas N promesas para medir el cumplimiento"
+          },
+          "plazo_max_dias": {
+            "type": "integer"
+          },
+          "no_exceder_siguiente_facturacion": {
+            "type": "boolean"
+          },
+          "deuda_maxima": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "abono_inicial_pct": {
+            "type": "integer",
+            "description": "Porcentaje de la deuda a pagar antes de la promesa"
+          },
+          "antiguedad_minima_dias": {
+            "type": "integer"
+          },
+          "cumplimiento_minimo_pct": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bloqueo_tras_incumplida_dias": {
+            "type": "integer"
+          },
+          "canales": {
+            "type": "object",
+            "required": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ],
+            "properties": {
+              "portal": {
+                "type": "object",
+                "required": [
+                  "permitido",
+                  "requiere_aprobacion",
+                  "plazo_max_dias",
+                  "max_por_periodo",
+                  "deuda_maxima"
+                ],
+                "properties": {
+                  "permitido": {
+                    "type": "boolean"
+                  },
+                  "requiere_aprobacion": {
+                    "type": "boolean",
+                    "description": "true → la promesa queda pendiente_aprobacion"
+                  },
+                  "plazo_max_dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_por_periodo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "deuda_maxima": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "ia": {
+                "type": "object",
+                "required": [
+                  "permitido",
+                  "requiere_aprobacion",
+                  "plazo_max_dias",
+                  "max_por_periodo",
+                  "deuda_maxima"
+                ],
+                "properties": {
+                  "permitido": {
+                    "type": "boolean"
+                  },
+                  "requiere_aprobacion": {
+                    "type": "boolean",
+                    "description": "true → la promesa queda pendiente_aprobacion"
+                  },
+                  "plazo_max_dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_por_periodo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "deuda_maxima": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "operador": {
+                "type": "object",
+                "required": [
+                  "permitido",
+                  "requiere_aprobacion",
+                  "plazo_max_dias",
+                  "max_por_periodo",
+                  "deuda_maxima"
+                ],
+                "properties": {
+                  "permitido": {
+                    "type": "boolean"
+                  },
+                  "requiere_aprobacion": {
+                    "type": "boolean",
+                    "description": "true → la promesa queda pendiente_aprobacion"
+                  },
+                  "plazo_max_dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_por_periodo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "deuda_maxima": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "supervisor": {
+                "type": "object",
+                "required": [
+                  "permitido",
+                  "requiere_aprobacion",
+                  "plazo_max_dias",
+                  "max_por_periodo",
+                  "deuda_maxima"
+                ],
+                "properties": {
+                  "permitido": {
+                    "type": "boolean"
+                  },
+                  "requiere_aprobacion": {
+                    "type": "boolean",
+                    "description": "true → la promesa queda pendiente_aprobacion"
+                  },
+                  "plazo_max_dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_por_periodo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "deuda_maxima": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
           }
         }
       },

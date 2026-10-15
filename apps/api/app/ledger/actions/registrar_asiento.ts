@@ -1,0 +1,291 @@
+import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
+import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
+
+/**
+ * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
+ * pagos, mora, cajas, egresos) llama esta acción anidada con `{ trx: t.trx }`.
+ *
+ * Valida antes de escribir (errores 422 legibles) y, además, la base de datos lo vuelve a
+ * verificar: triggers de periodo cerrado, cuenta imputable/activa, auxiliar por cliente y el
+ * constraint trigger de cuadre. El cuadre se fuerza **dentro** de la acción con
+ * `SET CONSTRAINTS ... IMMEDIATE`, así un descuadre nunca se pierde en un COMMIT silencioso.
+ */
+
+export const ORIGENES_ASIENTO = [
+    'factura',
+    'pago',
+    'mora',
+    'nota_credito',
+    'egreso',
+    'cierre_caja',
+    'ajuste',
+] as const
+export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
+
+export interface LineaAsiento {
+    /** código del plan (`'1.1.03'`) o id de la cuenta */
+    cuenta: string | number
+    debe?: Monto | null
+    haber?: Monto | null
+    /** obligatorio en cuentas con auxiliar por cliente (CxC, anticipos) */
+    cliente_id?: number | null
+}
+
+export interface EntradaAsiento {
+    /** fecha contable YYYY-MM-DD; por defecto hoy en Guatemala */
+    fecha?: string
+    descripcion: string
+    origen_tipo: OrigenAsiento
+    /** obligatorio salvo en `ajuste` */
+    origen_id?: number | null
+    /** id del asiento que este revierte (lo usa `RevertirAsiento`) */
+    reversa_de?: number | null
+    movimientos: LineaAsiento[]
+}
+
+export interface MovimientoRegistrado {
+    id: number
+    cuenta_id: number
+    cuenta_codigo: string
+    cuenta_nombre: string
+    debe: string
+    haber: string
+    cliente_id: number | null
+}
+
+export interface AsientoRegistrado {
+    id: number
+    fecha: string
+    descripcion: string
+    origen_tipo: OrigenAsiento
+    origen_id: number | null
+    reversa_de: number | null
+    created_by: number | null
+    total: string
+    movimientos: MovimientoRegistrado[]
+}
+
+interface FilaCuenta {
+    id: number
+    codigo: string
+    nombre: string
+    activa: boolean
+    imputable: boolean
+    auxiliar_cliente: boolean
+}
+
+interface LineaNormalizada {
+    cuenta: FilaCuenta
+    debe: Dec
+    haber: Dec
+    cliente_id: number | null
+}
+
+export default class RegistrarAsiento extends DomainAction<EntradaAsiento, AsientoRegistrado> {
+    readonly nombre = 'libro.registrar_asiento'
+
+    protected async handle(input: EntradaAsiento, t: Transaccion): Promise<AsientoRegistrado> {
+        const fecha = input.fecha ? fechaValida(input.fecha) : hoyGuatemala()
+        const descripcion = input.descripcion?.trim()
+        if (!descripcion) {
+            throw new ValidacionFallida([{ field: 'descripcion', message: 'La descripción es obligatoria' }])
+        }
+        if (!(ORIGENES_ASIENTO as readonly string[]).includes(input.origen_tipo)) {
+            throw new ValidacionFallida([{ field: 'origen_tipo', message: 'Origen inválido' }])
+        }
+        const origenId = input.origen_id ?? null
+        if (input.origen_tipo !== 'ajuste' && origenId === null) {
+            throw new ValidacionFallida([
+                { field: 'origen_id', message: `origen_id es obligatorio para origen ${input.origen_tipo}` },
+            ])
+        }
+
+        const lineas = await this.normalizarLineas(t.trx, input.movimientos ?? [])
+        const total = this.validarCuadre(lineas)
+        await this.verificarPeriodoAbierto(t.trx, fecha)
+
+        // Deferred al insertar (el asiento existe antes que sus movimientos) …
+        await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre DEFERRED')
+
+        const [asiento] = (await t.trx
+            .insertQuery()
+            .table('ledger.asientos')
+            .insert({
+                fecha,
+                descripcion,
+                origen_tipo: input.origen_tipo,
+                origen_id: origenId,
+                reversa_de: input.reversa_de ?? null,
+                created_by: t.ctx.actor.id,
+            })
+            .returning(['id', 'created_by'])) as Array<{ id: number; created_by: number | null }>
+
+        const filas = (await t.trx
+            .insertQuery()
+            .table('ledger.movimientos')
+            .multiInsert(
+                lineas.map((linea) => ({
+                    asiento_id: asiento!.id,
+                    cuenta_id: linea.cuenta.id,
+                    debe: linea.debe.toFixed(2),
+                    haber: linea.haber.toFixed(2),
+                    cliente_id: linea.cliente_id,
+                })),
+            )
+            .returning(['id', 'cuenta_id', 'debe', 'haber', 'cliente_id'])) as Array<{
+            id: number
+            cuenta_id: number
+            debe: string
+            haber: string
+            cliente_id: number | null
+        }>
+
+        // … e inmediato al terminar: el cuadre se verifica aquí y el error sale de esta acción.
+        await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre IMMEDIATE')
+        await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre DEFERRED')
+
+        t.fijarEntidad('asiento', asiento!.id)
+
+        const porId = new Map(lineas.map((l) => [l.cuenta.id, l.cuenta]))
+        return {
+            id: asiento!.id,
+            fecha,
+            descripcion,
+            origen_tipo: input.origen_tipo,
+            origen_id: origenId,
+            reversa_de: input.reversa_de ?? null,
+            created_by: asiento!.created_by,
+            total: aTexto(total),
+            movimientos: filas
+                .sort((a, b) => a.id - b.id)
+                .map((fila) => ({
+                    id: fila.id,
+                    cuenta_id: fila.cuenta_id,
+                    cuenta_codigo: porId.get(fila.cuenta_id)!.codigo,
+                    cuenta_nombre: porId.get(fila.cuenta_id)!.nombre,
+                    debe: fila.debe,
+                    haber: fila.haber,
+                    cliente_id: fila.cliente_id,
+                })),
+        }
+    }
+
+    /**
+     * Debe = Haber, en decimal exacto. Protegido para que las pruebas puedan saltarla y demostrar
+     * que la base de datos también lo rechaza.
+     */
+    protected validarCuadre(lineas: LineaNormalizada[]): Dec {
+        let debe = CERO
+        let haber = CERO
+        for (const linea of lineas) {
+            debe = debe.plus(linea.debe)
+            haber = haber.plus(linea.haber)
+        }
+        if (!debe.equals(haber)) {
+            throw new ReglaNegocio(
+                `Asiento descuadrado: debe ${aTexto(debe)} <> haber ${aTexto(haber)}`,
+                'asiento_descuadrado',
+            )
+        }
+        return debe
+    }
+
+    private async normalizarLineas(
+        trx: TransactionClientContract,
+        movimientos: LineaAsiento[],
+    ): Promise<LineaNormalizada[]> {
+        if (movimientos.length < 2) {
+            throw new ReglaNegocio('Un asiento necesita al menos 2 movimientos', 'asiento_descuadrado')
+        }
+
+        const codigos = movimientos.map((m) => m.cuenta).filter((c): c is string => typeof c === 'string')
+        const ids = movimientos.map((m) => m.cuenta).filter((c): c is number => typeof c === 'number')
+        const cuentas = (await trx
+            .from('ledger.cuentas')
+            .where((q) => {
+                q.whereIn('codigo', codigos.length > 0 ? codigos : [''])
+                q.orWhereIn('id', ids.length > 0 ? ids : [0])
+            })
+            .select('id', 'codigo', 'nombre', 'activa', 'imputable', 'auxiliar_cliente')) as FilaCuenta[]
+        const porCodigo = new Map(cuentas.map((c) => [c.codigo, c]))
+        const porId = new Map(cuentas.map((c) => [c.id, c]))
+
+        const errores: ErrorCampo[] = []
+        const lineas: LineaNormalizada[] = []
+        movimientos.forEach((movimiento, i) => {
+            const campo = `movimientos.${i}`
+            const cuenta =
+                typeof movimiento.cuenta === 'string'
+                    ? porCodigo.get(movimiento.cuenta)
+                    : porId.get(movimiento.cuenta)
+            if (!cuenta) {
+                errores.push({
+                    field: `${campo}.cuenta`,
+                    message: `La cuenta ${movimiento.cuenta} no existe`,
+                })
+                return
+            }
+            if (!cuenta.activa) {
+                errores.push({
+                    field: `${campo}.cuenta`,
+                    message: `La cuenta ${cuenta.codigo} está inactiva`,
+                })
+            }
+            if (!cuenta.imputable) {
+                errores.push({
+                    field: `${campo}.cuenta`,
+                    message: `La cuenta ${cuenta.codigo} es de agrupación y no recibe movimientos`,
+                })
+            }
+            const clienteId = movimiento.cliente_id ?? null
+            if (cuenta.auxiliar_cliente && clienteId === null) {
+                errores.push({
+                    field: `${campo}.cliente_id`,
+                    message: `La cuenta ${cuenta.codigo} lleva auxiliar por cliente: falta cliente_id`,
+                })
+            }
+
+            let debe: Dec
+            let haber: Dec
+            try {
+                debe = dec(movimiento.debe)
+                haber = dec(movimiento.haber)
+            } catch {
+                errores.push({ field: campo, message: 'Monto inválido' })
+                return
+            }
+            if (debe.isNegative() || haber.isNegative()) {
+                errores.push({ field: campo, message: 'Los montos no pueden ser negativos' })
+            } else if (debe.isZero() === haber.isZero()) {
+                errores.push({
+                    field: campo,
+                    message: 'Cada movimiento lleva exactamente uno de debe o haber',
+                })
+            }
+            if (!tieneCentavosExactos(debe) || !tieneCentavosExactos(haber)) {
+                errores.push({
+                    field: campo,
+                    message: 'Los montos se redondean a 2 decimales antes del asiento',
+                })
+            }
+            lineas.push({ cuenta, debe, haber, cliente_id: clienteId })
+        })
+
+        if (errores.length > 0) throw new ValidacionFallida(errores, 'Movimientos inválidos')
+        return lineas
+    }
+
+    private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string) {
+        const periodo = inicioDeMes(fecha)
+        const cierre = await trx.from('ledger.cierres_mensuales').where('periodo', periodo).first()
+        if (cierre) {
+            throw new ReglaNegocio(
+                `Periodo ${periodo.slice(0, 7)} cerrado: no se registran asientos con fecha ${fecha}`,
+                'periodo_cerrado',
+            )
+        }
+    }
+}
