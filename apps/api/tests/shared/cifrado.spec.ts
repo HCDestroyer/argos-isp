@@ -21,7 +21,12 @@ test.group('Cifrado v1 (AES-256-GCM, AAA_PPP_KEY)', () => {
 
     test('rechaza datos alterados, otra clave o formato desconocido', ({ assert }) => {
         const valor = cifrar('secreto')
-        const alterado = valor.slice(0, -2) + (valor.endsWith('A') ? 'BB' : 'AA')
+        // Altera un byte real de los datos cifrados. Cambiar los últimos caracteres del texto en
+        // base64 a veces solo tocaba bits de relleno y el valor descifraba igual (prueba intermitente).
+        const [version, iv, tag, datos] = valor.split('.') as [string, string, string, string]
+        const bytes = Buffer.from(datos, 'base64url')
+        bytes[0] = bytes[0]! ^ 0xff
+        const alterado = [version, iv, tag, bytes.toString('base64url')].join('.')
         assert.throws(() => descifrar(alterado), /no se pudo descifrar/)
         assert.throws(() => descifrar(valor, Buffer.alloc(32, 1)), /no se pudo descifrar/)
         assert.throws(() => descifrar('texto-plano'), /formato/)
