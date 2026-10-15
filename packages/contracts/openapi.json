@@ -2651,20 +2651,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/mayor": {
@@ -2781,20 +2771,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "libro.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/me": {
@@ -9581,6 +9561,7 @@
           "descripcion",
           "origen_tipo",
           "origen_id",
+          "reversa_de",
           "created_by",
           "created_at",
           "movimientos"
@@ -9615,6 +9596,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "reversa_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento que este revierte (correcciones por reverso)"
           },
           "created_by": {
             "type": [

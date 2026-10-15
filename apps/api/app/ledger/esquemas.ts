@@ -64,6 +64,7 @@ export const Asiento = definirEsquema(
             'ajuste',
         ]),
         origen_id: nulable(id),
+        reversa_de: { ...nulable(id), description: 'Asiento que este revierte (correcciones por reverso)' },
         created_by: nulable(id),
         created_at: instante,
         movimientos: lista(Movimiento),

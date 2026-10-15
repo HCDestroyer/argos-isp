@@ -1070,6 +1070,8 @@ export interface components {
             /** @enum {string} */
             origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste";
             origen_id: number | null;
+            /** @description Asiento que este revierte (correcciones por reverso) */
+            reversa_de: number | null;
             created_by: number | null;
             /** Format: date-time */
             created_at: string;
@@ -3103,15 +3105,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     libroMayor: {
@@ -3162,15 +3155,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
