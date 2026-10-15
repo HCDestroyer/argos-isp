@@ -23,11 +23,12 @@ describe('cliente HTTP del portal', () => {
 })
 
 describe('useCorte', () => {
-    it('en modo fixtures devuelve un servicio suspendido con montos en string', async () => {
+    it('consulta quien-soy del contrato y devuelve montos como string decimal', async () => {
         const { data } = await useCorte()
-        expect(data.value?.servicio.estado).toBe('suspendido')
-        expect(data.value?.montoAdeudado).toBe('350.00')
-        expect(formatearQuetzales(data.value?.montoAdeudado)).toBe('Q 350.00')
-        expect(data.value?.facturasVencidas).toHaveLength(2)
+        expect(data.value?.identificado).toBe(true)
+        expect(data.value?.estado).toBe('suspendido')
+        expect(data.value?.monto_adeudado).toBe('525.00')
+        expect(data.value?.facturas_vencidas).toEqual({ cantidad: 2, total: '350.00' })
+        expect(formatearQuetzales(data.value?.monto_adeudado)).toBe('Q 525.00')
     })
 })
