@@ -86,9 +86,11 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    command: [node, ace, migration:run, --force]
+    # Migraciones y seed idempotente del ACL (roles, permisos y admin de laboratorio).
+    command: [sh, -c, 'node ace.js migration:run --force && node ace.js db:seed']
     environment: &api-env
-      NODE_ENV: ${NODE_ENV:-development}
+      # La imagen de api es un build de producción (sin devDependencies como pino-pretty).
+      NODE_ENV: production
       TZ: UTC
       HOST: 0.0.0.0
       PORT: '3333'
@@ -105,8 +107,12 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       MAIL_FROM: ${MAIL_FROM:-ArgosIsp <no-responder@argosisp.example>}
-      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
+      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy

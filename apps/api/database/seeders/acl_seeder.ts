@@ -63,8 +63,8 @@ export default class AclSeeder extends BaseSeeder {
     }
 
     private async crearAdmin() {
-        const email = env.get('SEED_ADMIN_EMAIL') ?? (app.inProduction ? undefined : ADMIN_DEV.email)
-        const password = env.get('SEED_ADMIN_PASSWORD') ?? (app.inProduction ? undefined : ADMIN_DEV.password)
+        const email = env.get('SEED_ADMIN_EMAIL') || (app.inProduction ? undefined : ADMIN_DEV.email)
+        const password = env.get('SEED_ADMIN_PASSWORD') || (app.inProduction ? undefined : ADMIN_DEV.password)
         if (!email || !password) {
             logger.warn('SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD no definidos: no se crea el usuario admin')
             return
