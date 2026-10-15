@@ -1,0 +1,76 @@
+{
+  "name": "@argosisp/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "dev": "node ace serve --hmr",
+    "build": "node ace build",
+    "start": "node build/bin/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "node ace test",
+    "migrate": "node ace migration:run",
+    "seed": "node ace db:seed",
+    "openapi:generate": "node ace openapi:generate"
+  },
+  "imports": {
+    "#shared/*": "./app/shared/*.js",
+    "#core/*": "./app/core/*.js",
+    "#network/*": "./app/network/*.js",
+    "#billing/*": "./app/billing/*.js",
+    "#ledger/*": "./app/ledger/*.js",
+    "#portal/*": "./app/portal/*.js",
+    "#exceptions/*": "./app/exceptions/*.js",
+    "#middleware/*": "./app/middleware/*.js",
+    "#commands/*": "./commands/*.js",
+    "#config/*": "./config/*.js",
+    "#database/*": "./database/*.js",
+    "#start/*": "./start/*.js",
+    "#tests/*": "./tests/*.js"
+  },
+  "hotHook": {
+    "boundaries": [
+      "./app/**/controllers/**/*.ts",
+      "./app/middleware/*.ts"
+    ]
+  },
+  "dependencies": {
+    "@adonisjs/auth": "^9.6.0",
+    "@adonisjs/core": "^6.21.0",
+    "@adonisjs/cors": "^2.2.1",
+    "@adonisjs/lucid": "^21.8.2",
+    "@vinejs/vine": "^4.4.0",
+    "decimal.js": "^10.6.0",
+    "luxon": "^3.7.2",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@adonisjs/assembler": "^7.8.2",
+    "@adonisjs/eslint-config": "^2.1.2",
+    "@adonisjs/tsconfig": "^1.4.1",
+    "@japa/api-client": "^3.2.1",
+    "@japa/assert": "^4.2.0",
+    "@japa/plugin-adonisjs": "^4.0.0",
+    "@japa/runner": "^4.5.0",
+    "@swc/core": "^1.16.18",
+    "@types/luxon": "^3.7.6",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "eslint": "^9.39.5",
+    "hot-hook": "^0.4.0",
+    "pino-pretty": "^13.2.0",
+    "prettier": "^3.9.10",
+    "ts-node-maintained": "^10.9.6",
+    "typescript": "~5.9.3"
+  }
+}
