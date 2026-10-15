@@ -54,14 +54,26 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 ## Vencimiento y mora (tarea 5)
 
-| Acción | Archivo | Qué hace |
-| --- | --- | --- |
-| `facturas.vencer_pendientes` | `actions/vencer_facturas.ts` | Cron y `POST /facturas/vencer`. Todo lo pendiente hasta `hasta` (hoy por defecto), por lotes de 500. |
-| `facturas.vencer` | `actions/vencer_factura.ts` | Una factura de servicio `emitida`/`parcial` con `vence_en < hoy` → `vencida` (`vencida_en`), evento `factura.vencida`, y los recargos de mora pendientes. |
+| Acción                       | Archivo                      | Qué hace                                                                                                                                                  |
+| ---------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `facturas.vencer_pendientes` | `actions/vencer_facturas.ts` | Cron y `POST /facturas/vencer`. Todo lo pendiente hasta `hasta` (hoy por defecto), por lotes de 500.                                                      |
+| `facturas.vencer`            | `actions/vencer_factura.ts`  | Una factura de servicio `emitida`/`parcial` con `vence_en < hoy` → `vencida` (`vencida_en`), evento `factura.vencida`, y los recargos de mora pendientes. |
 
 - Mora (`mora.ts`) según el `reglas_snapshot` de la factura: `fija` (`mora_valor` Q) o `porcentaje` (del total). Es una factura `tipo = 'mora'` con `factura_origen_id`, sin IVA, asiento `CxC / Recargos por mora` (`origen_tipo = 'mora'`). Nace `vencida` (se debe ya) pero no cuenta para el corte.
 - `mora_recurrente`: un recargo más por cada mes cumplido después del vencimiento. Clave `mora-<factura>-<n>`: repetir no duplica.
 - Vencer no cambia el estado del servicio: lo hace el cron de corte a la `hora_corte`.
+
+## evaluarEstadoServicio (tarea 6)
+
+`actions/evaluar_estado_servicio.ts` (`servicios.evaluar_estado`) es la **única** que decide el estado del servicio. Entrada `{ servicio_id, ahora?, ignorarHoraCorte? }`; salida `{ estado, motivo, de, cambiado, deseado, vencidas, promesa_activa }`. Se llama anidada (`{ trx }`) desde el cron de corte, `registrarPago`, `anularPago` y (tarea 10) promesas.
+
+1. Retirado o sin plantilla: no se toca.
+2. Promesa `activa` → `activo`.
+3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`.
+4. Vencidas ≥ `facturas_para_limitar` (> 0) → `limitado` si el plan tiene velocidad limitada > 0 (bajada y subida); si no, `activo`.
+5. Si no → `activo`.
+
+Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera a la `hora_corte` del día (Guatemala); subir es inmediato. Si cambia, llama `CambiarEstadoServicio` de A1 (evento `servicio.estado_cambiado`).
 
 ## Endpoints
 
