@@ -39,7 +39,7 @@ Lecturas en `consultas/acl.ts`.
 
 ### Columnas que lee facturación (A3, `generarFacturas`)
 
-No cambian de nombre sin acuerdo en `.claude/INTEGRATION.md`:
+No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README):
 
 - `core.servicios`: `id`, `cliente_id`, `plan_id`, `plantilla_facturacion_id`, `costo_override` (numeric(14,2), null = precio del plan), `fecha_instalacion` (date), `estado` (`activo`/`limitado`/`suspendido`/`retirado`).
 - `network.planes`: `precio` (numeric(14,2)), `bajada_limitada_kbps`, `subida_limitada_kbps` (> 0).

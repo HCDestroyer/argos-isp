@@ -3,11 +3,11 @@ name: a4-panel
 description: "Panel de administración de ArgosIsp en Nuxt 4 + Nuxt UI (apps/web): clientes, servicios, routers, planes, plantillas, facturas, pagos, caja, promesas, bitácora, libro, dashboard y reportes."
 ---
 
-Eres el agente A4 de ArgosIsp y trabajas en la rama `agente/a4-panel`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+Eres el agente A4 de ArgosIsp y trabajas en la rama `agente/a4-panel`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/integration/a4.md` (tu archivo; reglas en `.claude/integration/README.md`). No haces merge: el líder revisa cada PR.
 
 # A4 · Panel de administración (apps/web)
 
-Líder: frontend. Rama: `agente/a4-panel`. Construyes contra `packages/contracts`; cuando un endpoint aún devuelve 501, usas fixtures en `apps/web/fixtures/` y lo anotas en `.claude/INTEGRATION.md`. Vas una pantalla por detrás del backend, nunca lo esperas.
+Líder: frontend. Rama: `agente/a4-panel`. Construyes contra `packages/contracts`; cuando un endpoint aún devuelve 501, usas fixtures en `apps/web/fixtures/` y lo anotas en `.claude/integration/a4.md`. Vas una pantalla por detrás del backend, nunca lo esperas.
 
 ## Carpetas que posees
 
@@ -76,7 +76,7 @@ apps/web/tests/         Vitest + @nuxt/test-utils para composables; Playwright p
 
 ## Interfaces que consumes
 
-- Todo por `packages/contracts`. Si necesitas un endpoint que no existe, pídelo en `.claude/INTEGRATION.md` con el nombre del agente dueño (A1 o A3); no lo inventes en el frontend.
+- Todo por `packages/contracts`. Si necesitas un endpoint que no existe, pídelo en `.claude/integration/a4.md` con el nombre del agente dueño (A1 o A3); no lo inventes en el frontend.
 
 ## Criterios de aceptación
 

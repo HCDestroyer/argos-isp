@@ -18,7 +18,7 @@ información de un cliente.
    o `prefijo_delegado_v6` (`>>=`). Gana la sesión más reciente.
 2. Asignaciones vigentes: `network.ipv4_asignaciones.ip` o `network.ipv6_asignaciones.prefijo`.
 
-Se reemplaza por `GET /ip/{ip}` de A1 cuando exista (`NEEDS(A1)` en la acción y en `.claude/INTEGRATION.md`).
+Se reemplaza por `GET /ip/{ip}` de A1 cuando exista (`NEEDS(A1)` en la acción y en `.claude/integration/a5.md`).
 
 ### Montos
 

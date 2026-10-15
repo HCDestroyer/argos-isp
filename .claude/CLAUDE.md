@@ -35,7 +35,7 @@ infra/           docker-compose, scripts de MikroTik (.rsc), CI, seeds de labora
 .claude/         reglas (CLAUDE.md), plan, estado, integración, modelo de datos y agentes (agents/)
 ```
 
-Cada agente es dueño de las carpetas que indica su brief. No toques carpetas de otro agente; si necesitas algo de otro módulo, pídelo por su interfaz pública (acción, evento o endpoint) y deja un comentario `// NEEDS(<agente>): ...` en `.claude/INTEGRATION.md`.
+Cada agente es dueño de las carpetas que indica su brief. No toques carpetas de otro agente; si necesitas algo de otro módulo, pídelo por su interfaz pública (acción, evento o endpoint) y anótalo en tu propio archivo `.claude/integration/<tu-agente>.md` (reglas en `.claude/integration/README.md`; nunca edites el archivo de otro agente).
 
 ## Reglas de arquitectura
 
@@ -113,9 +113,23 @@ Una tarea está terminada solo si:
 - [ ] La acción registra auditoría y, si cambia estado, emite su evento por outbox
 - [ ] `pnpm lint` y `pnpm typecheck` pasan en todo el workspace
 - [ ] Hay un `README.md` corto en el módulo: qué hace, qué eventos emite y consume
-- [ ] Actualizaste `.claude/INTEGRATION.md` si dependes de otro agente
+- [ ] Actualizaste `.claude/integration/<tu-agente>.md` si dependes de otro agente
 
 Prohibido marcar como terminado algo que "funciona en mi máquina" sin pruebas.
+
+### 12. Trabajo en paralelo
+
+Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias como las anteriores.
+
+- **Rama correcta antes de tocar nada.** Empieza siempre con `git fetch origin && git checkout -B agente/<tu-agente> origin/agente/<tu-agente>` y comprueba que existen `.claude/CLAUDE.md` y `apps/api`. Un worktree puede nacer en un commit viejo.
+- **Base de datos y puerto propios.** Las pruebas de `apps/api` corren con `DB_DATABASE=argosisp_test_<a1…a6>` y `PORT=34<n>` como variables de entorno (sin commitearlas). Nunca uses `argosisp_test` mientras otros agentes prueban: se borran las tablas entre sí.
+- **Archivos generados nunca a mano.** `packages/contracts/*` y `pnpm-lock.yaml` se regeneran (`pnpm install`, `pnpm contracts:build`). Para traer `main` a una rama usa `scripts/integrar.sh <rama>`: mezcla, regenera, corre lint, typecheck y pruebas, y solo sube con `--push`.
+- **Una PR se mergea solo con CI en verde contra el `main` actual.** Si `main` cambió, se vuelve a integrar antes de mergear. Las PRs se mergean de una en una.
+- **Fixtures fieles a la API.** Se tipan con `Schema<'X'>` de `packages/contracts` y llevan los mismos valores por defecto que devuelve la API. Nunca `{}` para un objeto tipado.
+- **Errores visibles, nunca datos inventados.** Si un endpoint falla o responde 501, la pantalla muestra el error con "Reintentar" y no muestra totales, saldos ni estados calculados sobre datos vacíos (nada de "Q 0.00 · Al día" cuando no se pudo leer la cuenta).
+- **Permisos con su nombre exacto.** El frontend usa los nombres de `apps/api/app/core/permisos.ts`. `pnpm verificar:permisos` (también en CI) falla si una ruta o menú pide un permiso que no existe.
+- **Contratos entre módulos por escrito.** Formatos, nombres de claves y payloads compartidos viven en `.claude/integration/contratos/`. Se cambian en la misma PR que el código que los cumple.
+- **Datos de demostración por la API.** `pnpm demo:datos` carga clientes, routers, planes y servicios pasando por las acciones (auditoría y eventos incluidos). Úsalo para probar pantallas contra el backend real antes de entregar.
 
 ## Catálogo de eventos (nombre, payload mínimo)
 

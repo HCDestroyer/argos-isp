@@ -51,7 +51,7 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 - `ui.fonts: false` (sin `@nuxt/fonts` ni Google Fonts): fuentes del sistema en `app/assets/css/main.css`.
 - Iconos lucide locales (`@iconify-json/lucide`) empaquetados en el cliente; `fallbackToApi: false`,
   nunca `api.iconify.design`. Usa solo iconos `i-lucide-*`.
-- Ningún CDN. Si agregas un dominio externo (pasarela, API), anótalo en `.claude/INTEGRATION.md` para A6.
+- Ningún CDN. Si agregas un dominio externo (pasarela, API), anótalo en `.claude/integration/a5.md` para A6.
 
 ## Página de corte `/corte`
 

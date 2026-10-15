@@ -1,6 +1,6 @@
 # 00 · Modelo de datos base
 
-Lo escribe el líder backend el día 1 como migraciones en `apps/api/database/migrations/`. Los agentes agregan columnas y tablas dentro de su schema; no renombran ni borran lo que está aquí sin acuerdo en `.claude/INTEGRATION.md`.
+Lo escribe el líder backend el día 1 como migraciones en `apps/api/database/migrations/`. Los agentes agregan columnas y tablas dentro de su schema; no renombran ni borran lo que está aquí sin acuerdo en `.claude/integration/`.
 
 Convenciones: `id bigint identity`, `created_at`, `updated_at`, `version int` en entidades editables, `snake_case`, UTC, dinero en `numeric(14,2)`.
 

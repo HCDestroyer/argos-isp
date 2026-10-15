@@ -1,7 +1,7 @@
 /**
  * Forma del servicio que `aaa` necesita para autorizar. Es el contrato con A1: el mismo JSON se
  * guarda en Redis (`aaa:user:<user_ppp>`) y lo devuelve `GET /internal/aaa/servicio?user_ppp=`.
- * Detalle y ejemplos en `.claude/INTEGRATION.md` y `services/aaa/README.md`.
+ * Detalle y ejemplos en `.claude/integration/contratos/aaa.md` y `services/aaa/README.md`.
  */
 
 export const ESTADOS = ['activo', 'limitado', 'suspendido', 'retirado'] as const

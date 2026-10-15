@@ -76,4 +76,12 @@ export default await Env.create(new URL('../', import.meta.url), {
     SEED_ADMIN_EMAIL: Env.schema.string.optional(),
     SEED_ADMIN_PASSWORD: Env.schema.string.optional(),
     SEED_ADMIN_NOMBRE: Env.schema.string.optional(),
+
+    /*
+    |----------------------------------------------------------
+    | Portal: identificación del cliente por IP (GET /portal/quien-soy)
+    |----------------------------------------------------------
+    */
+    PORTAL_PROXIES_CONFIABLES: Env.schema.string.optional(),
+    PORTAL_CABECERA_IP: Env.schema.string.optional(),
 })

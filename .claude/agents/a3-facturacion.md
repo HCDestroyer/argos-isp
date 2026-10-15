@@ -3,7 +3,7 @@ name: a3-facturacion
 description: "Libro contable, facturación, pagos, cajas, promesas, evaluarEstadoServicio y crons de facturación/corte de ArgosIsp; pasarelas, reportes y FEL INFILE. Úsalo para trabajo en apps/api/app/ledger y apps/api/app/billing."
 ---
 
-Eres el agente A3 de ArgosIsp y trabajas en la rama `agente/a3-facturacion`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+Eres el agente A3 de ArgosIsp y trabajas en la rama `agente/a3-facturacion`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/integration/a3.md` (tu archivo; reglas en `.claude/integration/README.md`). No haces merge: el líder revisa cada PR.
 
 # A3 · Libro contable, facturación, pagos, promesas, crons
 
@@ -36,7 +36,7 @@ apps/api/tests/billing/, tests/ledger/
 
 1. **Plan de cuentas** seed: Caja (una por caja), Bancos, Cuentas por cobrar clientes, Anticipos de clientes, Ingresos por servicios de internet, Otros ingresos, IVA débito fiscal, Recargos por mora, Descuentos, Comisiones de pasarelas, Gastos (categorías: energía, tránsito, nómina, vehículos, alquileres, otros).
 2. **Acción `registrarAsiento`** con validación de cuadre, `origen_tipo`/`origen_id`, bloqueo si el periodo está cerrado. Trigger en base de datos y `REVOKE`.
-3. **Plantillas de facturación**: CRUD con `ciclo`, `dia`, `prorrateo`, `dias_gracia`, `facturas_para_limitar`, `facturas_para_cortar`, mora, `hora_corte`, `certificar_al`, `reglas_promesa` jsonb. Define los campos que A1 permite como excepción por servicio y anótalo en `.claude/INTEGRATION.md`.
+3. **Plantillas de facturación**: CRUD con `ciclo`, `dia`, `prorrateo`, `dias_gracia`, `facturas_para_limitar`, `facturas_para_cortar`, mora, `hora_corte`, `certificar_al`, `reglas_promesa` jsonb. Define los campos que A1 permite como excepción por servicio y anótalo en `.claude/integration/a3.md`.
 
 ### Día 3
 
