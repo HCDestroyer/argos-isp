@@ -2135,6 +2135,7 @@
       "get": {
         "operationId": "ipResolver",
         "summary": "Resolver IPv4 o IPv6 a su servicio (prefijo más largo)",
+        "description": "Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.",
         "tags": [
           "red"
         ],
@@ -2194,20 +2195,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ip.resolver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ipv6-bloques/{id}/pools": {

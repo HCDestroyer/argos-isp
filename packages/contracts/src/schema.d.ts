@@ -291,7 +291,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolver IPv4 o IPv6 a su servicio (prefijo más largo) */
+        /**
+         * Resolver IPv4 o IPv6 a su servicio (prefijo más largo)
+         * @description Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.
+         */
         get: operations["ipResolver"];
         put?: never;
         post?: never;
@@ -3098,15 +3101,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

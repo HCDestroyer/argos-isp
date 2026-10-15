@@ -38,6 +38,7 @@ import EditarZona from '#core/actions/editar_zona'
 import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
 import { NoEncontrado, Problema } from '#shared/errores'
 import { construirRegistroAaa } from '#core/aaa'
+import { resolverIp } from '#network/consultas/ip'
 import * as v from '#core/validators'
 import {
     AaaServicio,
@@ -516,8 +517,17 @@ const ip: Ruta[] = [
         resumen: 'Resolver IPv4 o IPv6 a su servicio (prefijo más largo)',
         etiqueta: 'red',
         permiso: 'ip.resolver',
+        descripcion:
+            'Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). ' +
+            'Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.',
         parametros: { ip: { type: 'string', description: 'IPv4 o IPv6' } },
         respuesta: { status: 200, descripcion: 'Servicio dueño de la IP', esquema: ResolucionIp },
+        handler: async (ctx, { params }) => {
+            const resolucion = await resolverIp(decodeURIComponent(String(params.ip)))
+            if (!resolucion) throw new NoEncontrado(`Ningún servicio tiene la IP ${String(params.ip)}`)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(resolucion.servicio_id))
+            return resolucion
+        },
     }),
 ]
 
