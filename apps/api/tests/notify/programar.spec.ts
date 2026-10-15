@@ -115,7 +115,7 @@ test.group('notify · consumidor de eventos', (group) => {
         assert.lengthOf(cola.ids, 2)
     })
 
-    test('preferencia telegram con chat vinculado: envía por telegram', async ({ assert }) => {
+    test('telegram vinculado y correo: envía por los dos canales, telegram primero', async ({ assert }) => {
         const clienteId = await crearCliente({ canal_preferido: 'telegram', telegram_chat_id: '555111' })
         const payload = {
             cliente_id: clienteId,
@@ -132,11 +132,16 @@ test.group('notify · consumidor de eventos', (group) => {
             payload,
         })
 
-        const envio = await db.from('notify.envios').where('origen', `outbox:${outboxId}`).firstOrFail()
-        assert.equal(envio.canal, 'telegram')
-        assert.equal(envio.destino, '555111')
-        assert.isNull(envio.asunto)
-        assert.match(envio.cuerpo, /^Factura \d+ por Q 75\.00\n\n/)
+        const envios = await db.from('notify.envios').where('origen', `outbox:${outboxId}`).orderBy('id')
+        assert.deepEqual(
+            envios.map((e) => e.canal),
+            ['telegram', 'correo'],
+        )
+        const [porTelegram, porCorreo] = envios
+        assert.equal(porTelegram.destino, '555111')
+        assert.isNull(porTelegram.asunto)
+        assert.match(porTelegram.cuerpo, /^Factura \d+ por Q 75\.00\n\n/)
+        assert.match(porCorreo.asunto, /^Factura \d+ por Q 75\.00$/)
     })
 
     test('fallback a correo: telegram sin chat, whatsapp sin adaptador o telegram sin plantilla activa', async ({

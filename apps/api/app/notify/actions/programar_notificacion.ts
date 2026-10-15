@@ -3,7 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import {
     bloquearOrigen,
     crearEnvio,
-    elegirCanal,
+    elegirCanales,
     enviosExistentes,
     plantillasActivas,
     type EnvioCreado,
@@ -33,7 +33,8 @@ export interface ResultadoProgramar {
  *
  * - Idempotente por `origen` + cliente: si el evento llega dos veces no se crea otro envío; se
  *   devuelven los que sigan `encolado` para volver a encolarlos (la cola deduplica por id).
- * - Canal: el preferido del cliente con fallback a correo (`elegirCanal`).
+ * - Canales: todos los que el cliente tiene disponibles (correo y Telegram), el preferido primero
+ *   (`elegirCanales`). Un envío por canal.
  * - Sin plantilla activa para el evento: no hace nada (el evento no se notifica).
  * - Hay plantilla pero el cliente no tiene destino en ningún canal: registra un envío `fallido`
  *   ("sin destino") para que se vea en el panel y emite `notificacion.enviada` con estado fallido.
@@ -70,9 +71,9 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
 
         const ahora = input.ahora ? DateTime.fromISO(input.ahora, { zone: 'utc' }) : DateTime.utc()
         const variables = await construirVariables(t.trx, input.evento, input.payload, destinatario, ahora)
-        const eleccion = elegirCanal(destinatario, plantillas)
+        const elegidos = elegirCanales(destinatario, plantillas)
 
-        if (!eleccion) {
+        if (elegidos.length === 0) {
             const canal = destinatario.canalPreferido
             const plantilla =
                 plantillas.get(canal) ?? plantillas.get('correo') ?? [...plantillas.values()][0]!
@@ -98,16 +99,25 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
             return { clienteId, envios: [envio], encolar: [] }
         }
 
-        const envio = await crearEnvio(t.trx, {
-            origen: input.origen,
-            evento: input.evento,
+        const envios: EnvioCreado[] = []
+        for (const eleccion of elegidos) {
+            envios.push(
+                await crearEnvio(t.trx, {
+                    origen: input.origen,
+                    evento: input.evento,
+                    clienteId,
+                    canal: eleccion.canal,
+                    destino: eleccion.destino,
+                    variables,
+                    plantilla: eleccion.plantilla,
+                    requestId: t.ctx.requestId,
+                }),
+            )
+        }
+        return {
             clienteId,
-            canal: eleccion.canal,
-            destino: eleccion.destino,
-            variables,
-            plantilla: eleccion.plantilla,
-            requestId: t.ctx.requestId,
-        })
-        return { clienteId, envios: [envio], encolar: envio.estado === 'encolado' ? [envio.id] : [] }
+            envios,
+            encolar: envios.filter((e) => e.estado === 'encolado').map((e) => e.id),
+        }
     }
 }

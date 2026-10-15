@@ -22,7 +22,12 @@ async function programar(datos: Parameters<typeof crearCliente>[0] = {}) {
     const outboxId = await eventoOutbox('pago.registrado', payload)
     const cola = new ColaFalsa()
     await new ConsumidorNotify(cola).procesar({ id: outboxId, evento: 'pago.registrado', payload })
-    const envio = await db.from('notify.envios').where('origen', `outbox:${outboxId}`).firstOrFail()
+    // Con varios canales hay un envío por canal; se devuelve el del canal preferido.
+    const envio = await db
+        .from('notify.envios')
+        .where('origen', `outbox:${outboxId}`)
+        .where('canal', datos.canal_preferido ?? 'correo')
+        .firstOrFail()
     return { clienteId, envio, outboxId }
 }
 
@@ -91,7 +96,7 @@ test.group('notify · envío', (group) => {
         assert.containsSubset(fila, { estado: 'fallido', intentos: 3 })
     })
 
-    test('telegram con error permanente: fallido al primer intento y fallback por correo', async ({
+    test('telegram con error permanente: fallido al primer intento; el correo ya programado cubre el aviso sin duplicar', async ({
         assert,
     }) => {
         const { clienteId, envio } = await programar({
@@ -106,14 +111,15 @@ test.group('notify · envío', (group) => {
         assert.equal(resultado.estado, 'fallido')
         assert.isNumber(resultado.fallbackId)
 
-        const respaldo = await db.from('notify.envios').where('id', resultado.fallbackId!).firstOrFail()
+        // El aviso ya salía también por correo: el respaldo es ese mismo envío, no uno nuevo.
+        const correos = await db.from('notify.envios').where({ origen: envio.origen, canal: 'correo' })
+        assert.lengthOf(correos, 1)
+        const respaldo = correos[0]
+        assert.equal(respaldo.id, resultado.fallbackId)
         assert.containsSubset(respaldo, {
             cliente_id: clienteId,
-            origen: envio.origen,
-            canal: 'correo',
             destino: 'respaldo@prueba.local',
             estado: 'encolado',
-            fallback_de: envio.id,
             asunto: 'Pago recibido: Q 25.00',
         })
 

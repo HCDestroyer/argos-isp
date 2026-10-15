@@ -44,21 +44,25 @@ export function destinoDe(canal: CanalNotificacion, destinatario: Destinatario):
 }
 
 /**
- * Canal del cliente con fallback a correo: el preferido si el adaptador está configurado, el
- * cliente tiene destino en ese canal y hay plantilla activa; si no, correo con las mismas
- * condiciones. `null` si ninguno sirve.
+ * Canales por los que se avisa al cliente: todos los que sirven, para que el aviso le llegue por
+ * cualquier medio (decisión del PM, 2026-10-15). Un canal sirve si el adaptador está configurado,
+ * el cliente tiene destino en ese canal y hay plantilla activa. El preferido va primero. Lista
+ * vacía si ninguno sirve.
  */
-export function elegirCanal(
+export function elegirCanales(
     destinatario: Destinatario,
     plantillas: Map<CanalNotificacion, Plantilla>,
-): { canal: CanalNotificacion; destino: string; plantilla: Plantilla } | null {
-    const candidatos = [...new Set<CanalNotificacion>([destinatario.canalPreferido, 'correo'])]
+): Array<{ canal: CanalNotificacion; destino: string; plantilla: Plantilla }> {
+    const candidatos = [
+        ...new Set<CanalNotificacion>([destinatario.canalPreferido, 'correo', 'telegram', 'whatsapp']),
+    ]
+    const elegidos: Array<{ canal: CanalNotificacion; destino: string; plantilla: Plantilla }> = []
     for (const canal of candidatos) {
         const plantilla = plantillas.get(canal)
         const destino = destinoDe(canal, destinatario)
-        if (plantilla && destino && canalDisponible(canal)) return { canal, destino, plantilla }
+        if (plantilla && destino && canalDisponible(canal)) elegidos.push({ canal, destino, plantilla })
     }
-    return null
+    return elegidos
 }
 
 /** Serializa en la transacción el trabajo sobre un mismo origen (dos entregas simultáneas del evento). */

@@ -138,8 +138,10 @@ test.group('notify · Mailpit (criterio de aceptación)', (group) => {
 
         const email = `${randomUUID().slice(0, 8)}@prueba.local`
         const porCorreo = await crearCliente({ nombre: 'Cliente Correo', email })
+        const emailTelegram = `${randomUUID().slice(0, 8)}@prueba.local`
         const porTelegram = await crearCliente({
             nombre: 'Cliente Telegram',
+            email: emailTelegram,
             canal_preferido: 'telegram',
             telegram_chat_id: '31337',
         })
@@ -179,6 +181,16 @@ test.group('notify · Mailpit (criterio de aceptación)', (group) => {
         await esperarHasta(async () => telegramSimulado.llamadas.length > 0, 10_000)
         assert.equal(telegramSimulado.llamadas[0]!.cuerpo.chat_id, '31337')
         assert.match(String(telegramSimulado.llamadas[0]!.cuerpo.text), /^Factura \d+ por Q 199\.00\n\n/)
+
+        // El cliente con Telegram vinculado recibe el mismo aviso también por correo.
+        const correoTelegram = await esperarHasta(async () => {
+            const busqueda = await fetch(
+                `${mailpit}/api/v1/search?query=${encodeURIComponent(`to:"${emailTelegram}"`)}`,
+            )
+            const json = (await busqueda.json()) as { messages: Array<{ Subject: string }> }
+            return json.messages[0]
+        }, 10_000)
+        assert.match(correoTelegram.Subject, /^Factura \d+ por Q 199\.00$/)
         await correo.cerrar()
     })
         .skip(!mailpit || !smtpHost, 'Requiere MAILPIT_API y SMTP_HOST/SMTP_PORT (Mailpit)')

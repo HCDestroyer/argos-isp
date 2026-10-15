@@ -46,8 +46,8 @@ export const VENTANA_DIAS = 7
  * avisar facturas viejas importadas o después de una caída larga).
  *
  * Cada recordatorio es un envío con origen `recordatorio:<orden>:factura:<id>` (único): correr
- * el cron dos veces no duplica. La notificación pasa por `ProgramarNotificacion` (canal
- * preferido con fallback a correo) con el evento de plantilla `recordatorio.<orden>`.
+ * el cron dos veces no duplica. La notificación pasa por `ProgramarNotificacion` (todos
+ * los canales disponibles del cliente) con el evento de plantilla `recordatorio.<orden>`.
  */
 export default class ProgramarRecordatorios extends DomainAction<
     EntradaRecordatorios,
