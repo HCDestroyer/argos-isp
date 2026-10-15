@@ -54,6 +54,8 @@ export const PERMISOS = {
     'promesas.crear': 'Crear promesas de pago',
     'promesas.aprobar': 'Aprobar promesas pendientes',
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
+    'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
+    'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
 
     'bitacora.ver': 'Ver bitácora de acciones y cambios',
     'usuarios.ver': 'Ver usuarios',
@@ -175,6 +177,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'promesas.ver',
             'promesas.aprobar',
             'libro.ver',
+            'libro.registrar_asiento',
+            'libro.revertir_asiento',
             'bitacora.ver',
         ],
     },

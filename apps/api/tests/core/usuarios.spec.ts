@@ -192,6 +192,8 @@ test.group('ACL · roles y permisos', () => {
         }
         const cajero = porNombre.get('cajero') as { permisos: string[] }
         assert.notInclude(cajero.permisos, 'servicios.suspender')
+        const contabilidad = porNombre.get('contabilidad') as { permisos: string[] }
+        assert.includeMembers(contabilidad.permisos, ['libro.registrar_asiento', 'libro.revertir_asiento'])
     })
 
     test('crear y editar un rol propio; los permisos de un rol base no se editan', async ({
