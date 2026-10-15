@@ -41,6 +41,10 @@ export default defineNuxtConfig({
             // NUXT_PUBLIC_API_BASE vacío (recomendado) = mismo origen, a través del proxy de Nitro.
             // Con una URL, el navegador llama a la API directo (requiere CORS y que la API esté en el walled garden).
             apiBase: '',
+            // NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL: a dónde lleva "Seguir navegando" cuando el servicio se
+            // reactiva en /corte. Ya con servicio, no necesita estar en el walled garden. Mejor HTTP:
+            // así el sistema operativo vuelve a probar la conexión y cierra el aviso de portal cautivo.
+            seguirNavegandoUrl: 'http://example.com/',
             // NUXT_PUBLIC_USE_FIXTURES=true responde desde apps/portal/fixtures sin backend.
             useFixtures: false,
             empresa: {

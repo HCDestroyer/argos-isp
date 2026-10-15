@@ -5491,11 +5491,34 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/estado": {
+      "get": {
+        "operationId": "portalEstado",
+        "summary": "Estado del servicio de la IP de origen (estado en vivo de la página de corte)",
+        "description": "Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado y monto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoPortal"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
         "summary": "Identifica al cliente por la IP de origen (página de corte)",
-        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -10881,6 +10904,41 @@
           "vencida",
           "anulada"
         ]
+      },
+      "EstadoPortal": {
+        "type": "object",
+        "required": [
+          "identificado",
+          "estado",
+          "monto_adeudado"
+        ],
+        "properties": {
+          "identificado": {
+            "type": "boolean",
+            "description": "false si la IP de origen no pertenece a ningún servicio"
+          },
+          "estado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstadoServicio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monto_adeudado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)"
+          }
+        }
       },
       "EstadoServicio": {
         "type": "string",

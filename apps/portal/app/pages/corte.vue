@@ -6,8 +6,12 @@
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Comprobante y promesa
  * se activan el día 4; el pago en línea, en la semana 2 (mientras, el botón se ve apagado).
+ *
+ * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
+ * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
+ * 2 min; al ver `activo` muestra "Ya tienes servicio".
  */
-const { empresa } = useRuntimeConfig().public
+const { empresa, seguirNavegandoUrl } = useRuntimeConfig().public
 const { data: corte, status, refresh } = useCorte()
 
 useHead({ title: `Estado del servicio · ${empresa.nombre}` })
@@ -18,6 +22,34 @@ const identificado = computed(() => corte.value?.identificado === true)
 const retirado = computed(() => corte.value?.estado === 'retirado')
 
 const verDeposito = ref(false)
+
+const { activo: servicioActivo, vigilando, agotado, vigilar } = useEstadoServicio()
+/** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
+const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
+const reactivado = computed(() => servicioActivo.value && corte.value?.estado !== 'activo')
+
+/** Toda acción del cliente que pueda reactivar el servicio termina llamando a esta función. */
+function vigilarEstado() {
+    if (puedeVigilar.value) {
+        vigilar()
+    }
+}
+
+function alCambiarVisibilidad() {
+    if (document.visibilityState === 'visible') {
+        vigilarEstado()
+    }
+}
+
+// Con una promesa activa la reactivación ya va en camino: se vigila desde que carga.
+watch(() => corte.value?.promesa_activa, (promesa) => {
+    if (promesa) {
+        vigilarEstado()
+    }
+}, { immediate: true })
+
+onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad))
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', alCambiarVisibilidad))
 
 const contacto = computed(() => {
     if (empresa.telefono) {
@@ -48,6 +80,11 @@ const contacto = computed(() => {
             title="No pudimos consultar tu servicio"
             description="Revisa tu conexión e intenta de nuevo en unos segundos."
             :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => refresh() }]"
+        />
+
+        <CorteServicioReactivado
+            v-else-if="reactivado"
+            :url="seguirNavegandoUrl"
         />
 
         <template v-else>
@@ -133,6 +170,13 @@ const contacto = computed(() => {
                     Subir el comprobante y solicitar la promesa de pago estarán disponibles pronto.
                 </p>
             </div>
+
+            <CorteEstadoEnVivo
+                v-if="puedeVigilar"
+                :vigilando="vigilando"
+                :agotado="agotado"
+                @revisar="vigilarEstado"
+            />
 
             <UButton
                 :label="contacto?.label ?? 'Contacta a soporte'"

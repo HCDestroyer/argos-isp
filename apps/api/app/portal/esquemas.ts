@@ -33,3 +33,18 @@ export const QuienSoy = definirEsquema(
         facturas_vencidas: nulable(FacturasVencidasResumen),
     }),
 )
+
+export const EstadoPortal = definirEsquema(
+    'EstadoPortal',
+    objeto({
+        identificado: {
+            ...booleano,
+            description: 'false si la IP de origen no pertenece a ningún servicio',
+        },
+        estado: nulable(EstadoServicio),
+        monto_adeudado: {
+            ...nulable(Dinero),
+            description: 'Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)',
+        },
+    }),
+)

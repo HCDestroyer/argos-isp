@@ -7,8 +7,9 @@ Endpoints públicos y del cliente para `apps/portal`. Rutas en `start/routes/por
 | Endpoint | Acción | Qué devuelve |
 | --- | --- | --- |
 | `GET /api/v1/portal/quien-soy` (público) | `actions/identificar_por_ip.ts` (`portal.quien_soy`) | `QuienSoy`: identificado, ip, nombre parcial ("Juan P."), estado, promesa activa, monto adeudado y facturas vencidas (cantidad y total) |
+| `GET /api/v1/portal/estado` (público) | `actions/consultar_estado_por_ip.ts` (`portal.estado`) | `EstadoPortal`: identificado, estado y monto adeudado. Sin nombre ni IP: la página de corte lo consulta cada 5 s tras un pago o una promesa |
 
-`portal.quien_soy` es de solo lectura: no cambia estado ni emite eventos. Se audita en
+Las dos acciones resuelven la IP y el saldo con `servicio_por_ip.ts`. `portal.quien_soy` es de solo lectura: no cambia estado ni emite eventos. Se audita en
 `audit.acciones` (canal `portal`, entidad `servicio`, entrada `{ ip }`) porque es público y revela
 información de un cliente.
 
@@ -63,6 +64,10 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 No emite ni consume eventos todavía.
 
 ## Pruebas
+
+`tests/portal/estado.spec.ts`: solo estado y monto (sin datos personales ni IP), IPv6 delegada, IP
+desconocida, refleja la reactivación (`CambiarEstadoServicio`), auditoría y contador de límite propio.
+Datos de prueba compartidos en `tests/portal/ayudas_portal.ts`.
 
 `tests/portal/limite_peticiones.spec.ts` (Redis real): 429 con `Retry-After` y sin auditoría, contadores
 por IPv4 y por /64, fin de la ventana, `0` lo apaga, Redis caído deja pasar, configuración y claves.
