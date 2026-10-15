@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@argosisp/contracts": "workspace:*",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
     "@nuxt/test-utils": "^4.3.3",
+    "@playwright/test": "1.56.1",
     "@vue/test-utils": "^2.5.1",
     "eslint": "^10.12.0",
     "happy-dom": "^21.0.1",

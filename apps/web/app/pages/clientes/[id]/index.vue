@@ -17,6 +17,7 @@ const problema = ref<Problem | null>(null)
 
 const servicios = shallowRef<Servicio[]>([])
 const cargandoServicios = ref(false)
+const problemaServicios = ref<Problem | null>(null)
 
 useHead(() => ({ title: `${cliente.value?.nombre ?? 'Cliente'} · ArgosIsp` }))
 
@@ -61,6 +62,12 @@ const mapa = computed(() => {
 const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos_personalizados ?? {})
     .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) })))
 
+/** La bitácora todavía no filtra por cliente (pedido a A1): se piden el cliente y cada servicio. */
+const entidadesLinea = computed<EntidadAuditada[]>(() => [
+    { tipo: 'cliente', id: clienteId.value },
+    ...servicios.value.map(s => ({ tipo: 'servicio', id: s.id })),
+])
+
 const consumidorFinal = computed(() => cliente.value?.nit_cui?.toUpperCase() === 'CF')
 
 async function cargarServicios() {
@@ -71,6 +78,7 @@ async function cargarServicios() {
     const resultado = await useServicios().listar({ cliente_id: clienteId.value, limit: 200 })
     cargandoServicios.value = false
     servicios.value = resultado.ok ? resultado.data.data : []
+    problemaServicios.value = resultado.ok ? null : resultado.problema
 }
 
 async function cargarZona(id: number | null) {
@@ -166,7 +174,14 @@ onMounted(cargar)
                     </p>
                 </div>
 
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        v-if="puede('pagos.registrar')"
+                        :to="`/cobro?cliente=${cliente.id}`"
+                        icon="i-lucide-hand-coins"
+                        label="Cobrar"
+                        color="success"
+                    />
                     <UButton
                         v-if="puede('servicios.crear')"
                         :to="`/servicios/nuevo?cliente=${cliente.id}`"
@@ -290,21 +305,29 @@ onMounted(cargar)
                 </dl>
             </div>
 
-            <ClienteServicios
-                v-else-if="pestana === 'servicios'"
-                :servicios="servicios"
-                :cargando="cargandoServicios"
-            />
+            <template v-else-if="pestana === 'servicios'">
+                <ProblemaAlerta
+                    v-if="problemaServicios"
+                    :problema="problemaServicios"
+                    :reintentar="cargarServicios"
+                    :reintentando="cargandoServicios"
+                />
+                <ClienteServicios
+                    v-else
+                    :servicios="servicios"
+                    :cargando="cargandoServicios"
+                />
+            </template>
 
             <ClienteEstadoCuenta
                 v-else-if="pestana === 'cuenta'"
                 :cliente-id="cliente.id"
             />
 
-            <ClienteLineaTiempo
+            <LineaTiempoBitacora
                 v-else-if="pestana === 'linea'"
-                :cliente-id="cliente.id"
-                :servicio-ids="servicios.map(s => s.id)"
+                :entidades="entidadesLinea"
+                etiqueta="Línea de tiempo del cliente"
             />
         </div>
     </PanelPagina>

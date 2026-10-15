@@ -4,11 +4,14 @@
     "id": 2,
     "nombre": "Carlos Cajero",
     "email": "cajero@argos.test",
-    "roles": ["cajero"],
+    "roles": [
+      "cajero"
+    ],
     "permisos": [
       "clientes.ver",
       "clientes.estado_cuenta",
       "servicios.ver",
+      "planes.ver",
       "facturas.ver",
       "pagos.ver",
       "pagos.registrar",

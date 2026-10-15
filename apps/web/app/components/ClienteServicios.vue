@@ -57,7 +57,12 @@ onMounted(async () => {
     >
         <template #user_ppp-cell="{ row }">
             <div class="flex min-w-36 flex-col">
-                <span class="font-mono text-sm text-highlighted">{{ row.original.user_ppp }}</span>
+                <ULink
+                    :to="`/servicios/${row.original.id}`"
+                    class="font-mono text-sm font-medium text-highlighted hover:text-primary"
+                >
+                    {{ row.original.user_ppp }}
+                </ULink>
                 <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
                 <span
                     v-if="row.original.ipv4"

@@ -8,8 +8,10 @@ import type { InputMenuItem } from '@nuxt/ui'
 const props = withDefaults(defineProps<{
     /** Cliente ya elegido, para mostrarlo como seleccionado. */
     seleccionado?: Cliente | null
+    placeholder?: string
 }>(), {
     seleccionado: null,
+    placeholder: 'Nombre, NIT, teléfono, usuario PPP o IP',
 })
 
 const modelo = defineModel<number>({ default: 0 })
@@ -29,6 +31,8 @@ const seleccion = computed<number | undefined>({
 const termino = ref('')
 const encontrados = shallowRef<Cliente[]>([])
 const buscando = ref(false)
+/** Título del Problem si la búsqueda falló: se muestra en lugar de "Ningún cliente coincide". */
+const errorBusqueda = ref<string | null>(null)
 
 const items = computed<InputMenuItem[]>(() => {
     const lista = props.seleccionado && !encontrados.value.some(c => c.id === props.seleccionado?.id)
@@ -54,6 +58,7 @@ async function buscar(q: string) {
     }
     buscando.value = false
     encontrados.value = resultado.ok ? resultado.data.data : []
+    errorBusqueda.value = resultado.ok ? null : resultado.problema.title
 }
 
 watch(termino, (q) => {
@@ -73,7 +78,13 @@ onBeforeUnmount(() => clearTimeout(temporizador))
 </script>
 
 <template>
+    <!--
+        La `key` vuelve a montar el campo cuando llega el cliente elegido desde fuera (por ejemplo
+        `?cliente=2` en la URL): el InputMenu solo calcula el texto mostrado al cambiar el valor,
+        y sin esto mostraba el id ("2") en lugar del nombre.
+    -->
     <UInputMenu
+        :key="seleccionado?.id ?? 0"
         v-model="seleccion"
         v-model:search-term="termino"
         :items="items"
@@ -81,11 +92,17 @@ onBeforeUnmount(() => clearTimeout(temporizador))
         ignore-filter
         :loading="buscando"
         icon="i-lucide-search"
-        placeholder="Nombre, NIT, teléfono, usuario PPP o IP"
+        :placeholder="placeholder"
         class="w-full"
     >
         <template #empty>
-            {{ buscando ? 'Buscando…' : 'Ningún cliente coincide' }}
+            <span
+                v-if="!buscando && errorBusqueda"
+                class="text-error"
+            >No se pudo buscar: {{ errorBusqueda }}</span>
+            <template v-else>
+                {{ buscando ? 'Buscando…' : 'Ningún cliente coincide' }}
+            </template>
         </template>
     </UInputMenu>
 </template>

@@ -32,6 +32,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
     {
         etiqueta: 'Cobros',
         secciones: [
+            { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-hand-coins', ruta: '/cobro', permiso: 'pagos.registrar' },
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },

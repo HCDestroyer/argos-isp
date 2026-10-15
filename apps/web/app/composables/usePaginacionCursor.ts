@@ -44,7 +44,8 @@ export function usePaginacionCursor<T>(cargar: CargadorPagina<T>) {
         }
         problema.value = null
         filas.value = resultado.data.data
-        siguienteCursor.value = resultado.data.nextCursor
+        // Un cursor vacío o ausente es "no hay más": "Siguiente" queda deshabilitado.
+        siguienteCursor.value = resultado.data.nextCursor || null
         return true
     }
 

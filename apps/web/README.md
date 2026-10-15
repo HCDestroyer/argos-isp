@@ -11,8 +11,18 @@ pnpm --filter @argosisp/web lint | typecheck | test | build
 docker build -f apps/web/Dockerfile -t argosisp/web .           # desde la raíz
 ```
 
+Pruebas de flujo (Playwright, `tests/e2e/*.spec.ts`; los navegadores salen de
+`PLAYWRIGHT_BROWSERS_PATH`, no se descargan): `pnpm --filter @argosisp/web test:e2e` levanta el
+panel en modo fixtures en el puerto 3150 (`PW_PUERTO`), o usa `PW_BASE_URL` para uno ya levantado.
+Hoy: prueba obligatoria 3, "Registrar pago y ver el servicio reactivarse", a 1280 y 390 px.
+
 Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `cajero@argos.test`
-(sin routers, planes, plantillas, bitácora, libro ni usuarios), cualquier contraseña.
+(los permisos de `ROLES_BASE.cajero` de `apps/api/app/core/permisos.ts`: sin routers, plantillas,
+bitácora, libro ni usuarios), cualquier contraseña.
+
+Fallas simuladas en modo fixtures (para ver que una pantalla muestra el error y no datos inventados):
+`simularFalla('GET /api/v1/pagos', 501)` en pruebas, o en el navegador
+`localStorage.setItem('argos_fixtures_fallas', '{"GET /api/v1/pagos": 501}')`.
 
 ## Lo que deja el día 1
 
@@ -52,3 +62,6 @@ Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `caje
 | 2 · Ficha de cliente (datos, fiscales, servicios, estado de cuenta, línea de tiempo) | `/clientes/:id?tab=` | `useClientes`, `useServicios`, `usePlanes`, `useRouters`, `useBitacora` |
 | 3 · Alta y edición de cliente (zod espejo de `crearClienteValidator`, Idempotency-Key, 409 por versión) | `/clientes/nuevo`, `/clientes/:id/editar` | `useClientes`, `useZonas` |
 | 4 · Alta de servicio (cliente → router → plan del router → IPv4 → IPv6 → credenciales PPP → plantilla y excepciones) | `/servicios/nuevo?cliente=` | `useServicios`, `useRouters`, `usePlantillas`, `useClientes` |
+| 5 · Ficha de servicio: plan, red (IPv4/IPv6), credenciales PPPoE bajo demanda (`servicios.ver_credenciales`), sesión activa, acciones con motivo (suspender, reactivar, limitar, quitar límite, desconectar, retirar) e historial | `/servicios/:id` | `useServicios`, `useSesiones`, `useBitacora`, `usePlanes`, `useRouters`, `usePlantillas` |
+| Cobro rápido (pedido del PM): cliente → pendiente (`GET /clientes/:id/estado-cuenta`) y servicios → monto (vencido por defecto), método del enum del contrato, caja con turno abierto, referencia (obligatoria salvo efectivo), nota → `POST /pagos` con `Idempotency-Key` → recibo imprimible (ticket 80 mm) y seguimiento de la reactivación cada 3 s hasta 30 s. Enter registra, Esc limpia | `/cobro?cliente=` (menú "Cobrar", `pagos.registrar`) | `usePagos`, `useCajas`, `useClientes`, `useServicios`, `useSeguimientoReactivacion` |
+| Lista de servicios (búsqueda, estado con "Cortados"/"Limitados", router, plan, cliente; filtros en la URL) | `/servicios?q=&estado=&router=&plan=&cliente=` | `useServicios`, `useRouters`, `usePlanes`, `useClientes`, `usePaginacionCursor` |

@@ -15,7 +15,8 @@ const estado = shallowRef<EstadoCuenta | null>(null)
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
-const saldo = computed(() => new Decimal(estado.value?.saldo ?? '0'))
+/** `null` mientras no se haya leído la cuenta: nunca se asume saldo cero. */
+const saldo = computed(() => (estado.value ? new Decimal(estado.value.saldo) : null))
 
 const columnasFacturas: TableColumn<Factura>[] = [
     { accessorKey: 'periodo', header: 'Periodo' },
@@ -50,6 +51,7 @@ async function cargar() {
         problema.value = null
     }
     else {
+        estado.value = null
         problema.value = resultado.problema
     }
 }
@@ -58,13 +60,21 @@ onMounted(cargar)
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
-        <ProblemaAlerta
-            v-if="problema"
-            :problema="problema"
-            :reintentar="cargar"
-        />
+    <!--
+        Con error solo se ve el aviso: nada de saldo, contadores ni tablas vacías, porque
+        "Q 0.00 · Al día" sobre una cuenta que no se pudo leer es un dato inventado.
+    -->
+    <ProblemaAlerta
+        v-if="problema"
+        :problema="problema"
+        :reintentar="cargar"
+        :reintentando="cargando"
+    />
 
+    <div
+        v-else
+        class="flex flex-col gap-6"
+    >
         <div class="grid gap-4 sm:grid-cols-3">
             <UPageCard
                 variant="subtle"
@@ -73,20 +83,21 @@ onMounted(cargar)
                 <p class="text-xs font-medium text-muted">
                     Saldo
                 </p>
-                <USkeleton
-                    v-if="cargando"
-                    class="h-8 w-32"
-                />
-                <p
-                    v-else
-                    class="text-2xl font-semibold tabular-nums"
-                    :class="saldo.gt(0) ? 'text-error' : 'text-success'"
-                >
-                    {{ formatearQuetzales(saldo) }}
-                </p>
-                <p class="text-xs text-muted">
-                    {{ saldo.gt(0) ? 'El cliente debe este monto' : saldo.lt(0) ? 'Saldo a favor del cliente' : 'Al día' }}
-                </p>
+                <template v-if="cargando || !saldo">
+                    <USkeleton class="h-8 w-32" />
+                    <USkeleton class="h-4 w-40" />
+                </template>
+                <template v-else>
+                    <p
+                        class="text-2xl font-semibold tabular-nums"
+                        :class="saldo.gt(0) ? 'text-error' : 'text-success'"
+                    >
+                        {{ formatearQuetzales(saldo) }}
+                    </p>
+                    <p class="text-xs text-muted">
+                        {{ saldo.gt(0) ? 'El cliente debe este monto' : saldo.lt(0) ? 'Saldo a favor del cliente' : 'Al día' }}
+                    </p>
+                </template>
             </UPageCard>
 
             <UPageCard
@@ -96,19 +107,18 @@ onMounted(cargar)
                 <p class="text-xs font-medium text-muted">
                     Avisos pendientes
                 </p>
-                <USkeleton
-                    v-if="cargando"
-                    class="h-8 w-12"
-                />
-                <p
-                    v-else
-                    class="text-2xl font-semibold tabular-nums text-highlighted"
-                >
-                    {{ estado?.facturas_pendientes.length ?? 0 }}
-                </p>
-                <p class="text-xs text-muted">
-                    {{ estado?.facturas_pendientes.filter(f => f.estado === 'vencida').length ?? 0 }} vencidos
-                </p>
+                <template v-if="cargando || !estado">
+                    <USkeleton class="h-8 w-12" />
+                    <USkeleton class="h-4 w-24" />
+                </template>
+                <template v-else>
+                    <p class="text-2xl font-semibold tabular-nums text-highlighted">
+                        {{ estado.facturas_pendientes.length }}
+                    </p>
+                    <p class="text-xs text-muted">
+                        {{ estado.facturas_pendientes.filter(f => f.estado === 'vencida').length }} vencidos
+                    </p>
+                </template>
             </UPageCard>
         </div>
 
