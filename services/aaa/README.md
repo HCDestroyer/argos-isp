@@ -82,6 +82,33 @@ docker compose -f infra/docker-compose.yml restart freeradius   # FreeRADIUS lee
 - Omite el router cuya `nas_ip` es `RADIUS_LAB_NAS_IP`: ya tiene el cliente fijo `mikrotik-lab` en `clients.conf` y FreeRADIUS no arranca con dos clientes en la misma IP.
 - Los `.conf` generados llevan el secret en claro: están en `services/aaa/.gitignore`.
 
+## Prueba con `radtest` contra FreeRADIUS en Docker (tarea 3)
+
+El MikroTik físico no estuvo disponible para A2; se probó con FreeRADIUS 3.2.10 real (config de este repo) → `rlm_rest` → `aaa` con fixtures, y `radtest` PAP y CHAP desde dentro del contenedor. Automatizado en `test/freeradius.test.ts` (corre con `pnpm --filter @argosisp/aaa test` si hay Docker; `AAA_PRUEBAS_DOCKER=0` la omite). El contenedor alcanza a `aaa` por `host.docker.internal` (host-gateway), sin `--network host` ni puertos 1812/1813 publicados.
+
+A mano, con el compose (`COMPOSE_PROFILES=lab`, `AAA_RESPALDO=fixtures` en el servicio `aaa`):
+
+```
+docker compose -f infra/docker-compose.yml exec freeradius \
+  radtest -t chap prueba-suspendido clave-suspendido 127.0.0.1 0 "$RADIUS_LOCAL_SECRET"
+```
+
+Resultado (2026-10-20, idéntico en PAP y CHAP; todas las respuestas traen `Message-Authenticator`):
+
+| Usuario              | Respuesta     | Atributos                                                                                                                                                                                                                |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `prueba-activo`      | Access-Accept | `Mikrotik-Rate-Limit = "5120k/20480k"`, `Framed-IP-Address = 10.10.1.10`, `Framed-IPv6-Prefix = 2001:db8:101:1::/64`, `Delegated-IPv6-Prefix = 2001:db8:300:100::/56`, `Acct-Interim-Interval = 300`                     |
+| `prueba-limitado`    | Access-Accept | `Mikrotik-Rate-Limit = "1024k/2048k"`, `Framed-Pool = "argos-v4-pppoe"`, `Framed-IPv6-Pool = "argos-v6-enlace"`, `Mikrotik-Delegated-IPv6-Pool = "argos-v6-pd"`, `Acct-Interim-Interval = 300`                           |
+| `prueba-suspendido`  | Access-Accept | `Mikrotik-Rate-Limit = "256k/256k"`, `Mikrotik-Group = "suspendido"`, `Mikrotik-Address-List = "suspendidos"`, `Filter-Id = "argos-corte.in"`, `Framed-IP-Address = 10.10.1.11`, /64, /56, `Acct-Interim-Interval = 300` |
+| `prueba-burst`       | Access-Accept | `Mikrotik-Rate-Limit = "5M/20M 10M/40M 4M/16M 16/16 8 1M/4M"`, `Mikrotik-Group = "plan-20m"`, `Framed-Pool = "argos-v4-pppoe"`, `Acct-Interim-Interval = 300`                                                            |
+| `prueba-retirado`    | Access-Reject | —                                                                                                                                                                                                                        |
+| `prueba-inexistente` | Access-Reject | —                                                                                                                                                                                                                        |
+| clave errónea        | Access-Reject | —                                                                                                                                                                                                                        |
+
+También se verificó: tras el primer login la clave queda en Redis sin TTL, y un cambio escrito por A1 en Redis (activo → suspendido) se aplica en el siguiente login sin reiniciar nada. Latencia de `aaa` por autorización: 1 a 2 ms (log `ms`).
+
+Pendiente con el MikroTik del laboratorio (A6/PM): PPPoE real con estos atributos (el PM ya verificó en RouterOS 7.24.5 los mismos atributos con un `aaa` simulado, ver `infra/mikrotik/README.md`).
+
 ## Dependencias
 
 | Paquete          | Motivo                                                                                                                                                     |

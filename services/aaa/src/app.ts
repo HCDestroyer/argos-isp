@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
+import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
 import { descifrar } from './cifrado.ts'
 import type { ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
@@ -41,7 +41,7 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
             redact: ['req.body', 'body', '*.User-Password', '*.CHAP-Password', '*.Cleartext-Password'],
         },
         // Una línea propia por autorización en lugar de dos por petición.
-        disableRequestLogging: true,
+        logController: new LogController({ disableRequestLogging: true }),
     })
 
     app.get('/health', async () => ({
