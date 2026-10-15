@@ -1019,20 +1019,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "clientesCrear",
@@ -1231,20 +1221,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes/{id}": {
@@ -1310,20 +1290,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "clientesEditar",
@@ -1535,20 +1505,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes/{id}/estado-cuenta": {
@@ -2322,20 +2282,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "ipv6PoolsCrear",
@@ -2454,20 +2404,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/cuentas": {
@@ -3431,20 +3371,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes": {
@@ -3557,20 +3487,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "planesCrear",
@@ -3605,22 +3525,22 @@
                   },
                   "bajada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "bajada_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "reuso": {
@@ -3655,7 +3575,9 @@
                   "nombre",
                   "precio",
                   "bajada_kbps",
-                  "subida_kbps"
+                  "subida_kbps",
+                  "bajada_limitada_kbps",
+                  "subida_limitada_kbps"
                 ],
                 "additionalProperties": false
               }
@@ -3702,20 +3624,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}": {
@@ -3781,20 +3693,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "planesEditar",
@@ -3845,22 +3747,22 @@
                   },
                   "bajada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "bajada_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "reuso": {
@@ -3959,20 +3861,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}/routers": {
@@ -4041,20 +3933,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}/routers/{routerId}": {
@@ -4213,20 +4095,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/plantillas-facturacion": {
@@ -5238,20 +5110,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "rolesCrear",
@@ -5301,6 +5163,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.registrar_asiento",
+                        "libro.revertir_asiento",
                         "libro.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -5331,6 +5195,7 @@
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "tokens.crear",
@@ -5395,20 +5260,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/roles/{id}": {
@@ -5472,6 +5327,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.registrar_asiento",
+                        "libro.revertir_asiento",
                         "libro.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -5502,6 +5359,7 @@
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "tokens.crear",
@@ -5585,20 +5443,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers": {
@@ -5702,20 +5550,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "routersCrear",
@@ -5841,20 +5679,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}": {
@@ -5920,20 +5748,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "routersEditar",
@@ -6090,20 +5908,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "routers.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/ipv6-bloques": {
@@ -6172,20 +5980,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "ipv6BloquesCrear",
@@ -6280,20 +6078,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/planes": {
@@ -6327,7 +6115,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Plan"
+                    "$ref": "#/components/schemas/PlanEfectivo"
                   }
                 }
               }
@@ -6362,20 +6150,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/redes-ipv4": {
@@ -6444,20 +6222,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "redes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "redesIpv4Crear",
@@ -6567,20 +6335,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "redes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios": {
@@ -6727,20 +6485,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "serviciosCrear",
@@ -6935,20 +6683,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}": {
@@ -7014,20 +6752,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "serviciosEditar",
@@ -7222,9 +6950,68 @@
                 }
               }
             }
+          }
+        },
+        "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/credenciales": {
+      "get": {
+        "operationId": "serviciosCredenciales",
+        "summary": "Ver usuario y contraseña PPPoE (queda auditado)",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credenciales PPPoE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredencialesPpp"
+                }
+              }
+            }
           },
-          "501": {
-            "description": "No implementado todavía",
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver_credenciales",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7234,8 +7021,8 @@
             }
           }
         },
-        "x-permiso": "servicios.editar",
-        "x-implementado": false
+        "x-permiso": "servicios.ver_credenciales",
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/desconectar": {
@@ -7877,20 +7664,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.retirar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/suspender": {
@@ -8383,20 +8160,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "tokensCrear",
@@ -8427,26 +8194,99 @@
                   },
                   "alcances": {
                     "type": "object",
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
+                    "properties": {
+                      "permisos": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "bitacora.ver",
+                            "cajas.abrir",
+                            "cajas.cerrar",
+                            "cajas.ver",
+                            "clientes.crear",
+                            "clientes.editar",
+                            "clientes.estado_cuenta",
+                            "clientes.ver",
+                            "facturas.anular",
+                            "facturas.generar",
+                            "facturas.ver",
+                            "ip.resolver",
+                            "ipv6.crear",
+                            "ipv6.ver",
+                            "libro.registrar_asiento",
+                            "libro.revertir_asiento",
+                            "libro.ver",
+                            "pagos.anular",
+                            "pagos.registrar",
+                            "pagos.ver",
+                            "planes.crear",
+                            "planes.editar",
+                            "planes.ver",
+                            "plantillas.crear",
+                            "plantillas.editar",
+                            "plantillas.ver",
+                            "promesas.aprobar",
+                            "promesas.crear",
+                            "promesas.ver",
+                            "redes.crear",
+                            "redes.ver",
+                            "roles.crear",
+                            "roles.editar",
+                            "roles.ver",
+                            "routers.crear",
+                            "routers.editar",
+                            "routers.ver",
+                            "servicios.crear",
+                            "servicios.desconectar",
+                            "servicios.editar",
+                            "servicios.limitar",
+                            "servicios.quitar_limite",
+                            "servicios.reactivar",
+                            "servicios.retirar",
+                            "servicios.suspender",
+                            "servicios.ver",
+                            "servicios.ver_credenciales",
+                            "sesiones.desconectar",
+                            "sesiones.ver",
+                            "tokens.crear",
+                            "tokens.revocar",
+                            "tokens.ver",
+                            "usuarios.crear",
+                            "usuarios.editar",
+                            "usuarios.ver",
+                            "zonas.crear",
+                            "zonas.editar",
+                            "zonas.ver"
+                          ]
                         },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "array"
-                        },
-                        {
-                          "type": "object"
+                        "description": "Recorta los permisos del usuario a esta lista"
+                      },
+                      "routers": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
                         }
-                      ]
+                      },
+                      "zonas": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "cajas": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
                     },
-                    "description": "Alcances (routers, zonas, cajas, permisos)"
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Alcances: permisos permitidos y routers, zonas o cajas"
                   }
                 },
                 "required": [
@@ -8498,20 +8338,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/tokens/{id}/revocar": {
@@ -8577,20 +8407,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.revocar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/usuarios": {
@@ -8686,20 +8506,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "usuariosCrear",
@@ -8825,20 +8635,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/usuarios/{id}": {
@@ -8904,20 +8704,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "usuariosEditar",
@@ -9077,20 +8867,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/zonas": {
@@ -9138,20 +8918,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "zonasCrear",
@@ -9225,20 +8995,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/zonas/{id}": {
@@ -9351,20 +9111,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     }
   },
@@ -10012,6 +9762,27 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CredencialesPpp": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "user_ppp",
+          "pass_ppp"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "user_ppp": {
+            "type": "string"
+          },
+          "pass_ppp": {
+            "type": "string",
+            "description": "En claro; cada consulta queda auditada"
           }
         }
       },
@@ -10815,6 +10586,153 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PlanEfectivo": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "precio",
+          "bajada_kbps",
+          "subida_kbps",
+          "bajada_limitada_kbps",
+          "subida_limitada_kbps",
+          "reuso",
+          "dual_stack",
+          "tamano_prefijo_delegado",
+          "global",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at",
+          "router_id",
+          "implementacion",
+          "rate_limit",
+          "rate_limit_limitado",
+          "profile_ppp",
+          "pool_ipv4",
+          "pool_ipv6_enlace",
+          "pool_ipv6_delegacion",
+          "local_address",
+          "no_crear_reglas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "precio": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "bajada_kbps": {
+            "type": "integer"
+          },
+          "subida_kbps": {
+            "type": "integer"
+          },
+          "bajada_limitada_kbps": {
+            "type": "integer"
+          },
+          "subida_limitada_kbps": {
+            "type": "integer"
+          },
+          "reuso": {
+            "type": "integer"
+          },
+          "dual_stack": {
+            "type": "string",
+            "enum": [
+              "ambos",
+              "v4",
+              "v6"
+            ]
+          },
+          "tamano_prefijo_delegado": {
+            "type": "integer",
+            "enum": [
+              64,
+              56,
+              48
+            ]
+          },
+          "global": {
+            "type": "boolean"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "implementacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRouter"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rate_limit": {
+            "type": "string",
+            "description": "rate-limit MikroTik subida/bajada: \"5000k/20000k\""
+          },
+          "rate_limit_limitado": {
+            "type": "string",
+            "description": "rate-limit en estado limitado"
+          },
+          "profile_ppp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv4": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv6_enlace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv6_delegacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "local_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "no_crear_reglas": {
+            "type": "boolean"
           }
         }
       },

@@ -15,7 +15,7 @@ export default class extends BaseSchema {
                 estado text NOT NULL DEFAULT 'activo'
                     CHECK (estado IN ('activo', 'limitado', 'suspendido', 'retirado')),
                 user_ppp text NOT NULL,
-                -- cifrado por la app; el servicio aaa lo descifra con la clave del entorno
+                -- cifrado v1 (AES-256-GCM, AAA_PPP_KEY; app/shared/cifrado.ts); aaa lo descifra
                 pass_ppp text NOT NULL,
                 mac macaddr,
                 direccion text,
