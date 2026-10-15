@@ -5,7 +5,7 @@
  * muestra nombre parcial, estado y montos.
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Comprobante y promesa
- * se activan el día 3; el pago en línea, en la semana 2.
+ * se activan el día 4; el pago en línea, en la semana 2 (mientras, el botón se ve apagado).
  */
 const { empresa } = useRuntimeConfig().public
 const { data: corte, status, refresh } = useCorte()
@@ -75,18 +75,37 @@ const contacto = computed(() => {
                 v-if="!retirado"
                 class="flex flex-col gap-2"
             >
+                <!-- Apagado hasta la semana 2: neutro, no el azul primario, y dice que llega pronto. -->
                 <UButton
+                    data-testid="pagar-en-linea"
                     label="Pagar en línea"
                     icon="i-lucide-credit-card"
+                    color="neutral"
+                    variant="soft"
                     size="xl"
                     block
                     disabled
-                />
+                    aria-describedby="pagar-en-linea-pronto"
+                >
+                    <template #trailing>
+                        <UBadge
+                            label="Pronto"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                            class="ms-auto"
+                        />
+                    </template>
+                </UButton>
+                <p
+                    id="pagar-en-linea-pronto"
+                    class="-mt-1 text-center text-xs text-muted"
+                >
+                    El pago en línea llega pronto. Mientras tanto, paga por depósito y sube tu comprobante.
+                </p>
                 <UButton
                     label="Ver datos de depósito"
                     icon="i-lucide-landmark"
-                    color="neutral"
-                    variant="outline"
                     size="xl"
                     block
                     @click="verDeposito = true"
@@ -111,7 +130,7 @@ const contacto = computed(() => {
                     disabled
                 />
                 <p class="text-center text-xs text-muted">
-                    El pago en línea, el comprobante y la promesa de pago estarán disponibles pronto.
+                    Subir el comprobante y solicitar la promesa de pago estarán disponibles pronto.
                 </p>
             </div>
 

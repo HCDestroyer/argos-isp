@@ -61,7 +61,7 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
 | Datos de depósito (`NUXT_PUBLIC_DEPOSITO_*`; pasa al panel en la tarea 9) | `app/components/corte/DatosDeposito.vue` |
-| Acciones: pagar en línea (semana 2), comprobante y promesa (día 3) deshabilitadas; contacto por teléfono o correo | `app/pages/corte.vue` |
+| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante y promesa (día 4) deshabilitadas; contacto por teléfono o correo | `app/pages/corte.vue` |
 | Fixtures tipados contra el contrato | `fixtures/corte.ts` |
 
 Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos personales completos.
