@@ -37,7 +37,7 @@ const siguienteCursor = ref<string | null>(null)
 /** Evita que una respuesta vieja pise a la de otros filtros. */
 let solicitud = 0
 
-const items = computed<EntradaLinea[]>(() => acciones.value.filter(visibleEnLineaTiempo).map(accion => ({
+const items = computed<EntradaLinea[]>(() => sinCambiosAnidados(acciones.value).filter(visibleEnLineaTiempo).map(accion => ({
     date: formatearFechaHora(accion.created_at),
     title: tituloAccion(accion),
     icon: iconoAccion(accion),

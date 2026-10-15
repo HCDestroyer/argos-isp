@@ -70,6 +70,34 @@ describe('ficha del cliente · composables', () => {
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })
 
+    it('las acciones del panel quedan con canal panel (header X-Canal)', async () => {
+        const creado = await useClientes().crear({ nombre: 'Canal Panel' }, nuevaClaveIdempotencia())
+        expect(creado.ok).toBe(true)
+        const linea = await useBitacora().acciones({ cliente_id: creado.ok ? creado.data.id : 0 })
+        expect(linea.ok && linea.data.data[0]?.canal).toBe('panel')
+    })
+
+    it('el cambiar_estado anidado de una suspensión manual no se repite', () => {
+        const comun = {
+            actor_tipo: 'usuario' as const,
+            actor_id: 1,
+            canal: 'panel',
+            entidad_tipo: 'servicio',
+            entidad_id: 4,
+            resultado: 'ok' as const,
+            error: null,
+            created_at: '2026-10-15T16:06:00Z',
+        }
+        const acciones = [
+            { ...comun, id: 3, accion: 'servicios.cambiar_estado', entrada: { nuevo: 'suspendido' }, request_id: 'r1' },
+            { ...comun, id: 2, accion: 'servicios.suspender', entrada: { motivo: 'Equipo retenido' }, request_id: 'r1' },
+            { ...comun, id: 1, accion: 'servicios.cambiar_estado', entrada: { nuevo: 'suspendido' }, request_id: 'r0' },
+        ]
+        expect(sinCambiosAnidados(acciones).map(a => a.id)).toEqual([2, 1])
+        expect(etiquetaAccion('servicios.evaluar_estado')).toBe('Estado del servicio evaluado')
+        expect(visibleEnLineaTiempo({ ...comun, id: 9, accion: 'portal.estado', entrada: {}, request_id: null })).toBe(false)
+    })
+
     it('etiquetas de la línea de tiempo', () => {
         expect(etiquetaAccion('servicios.suspender')).toBe('Servicio suspendido')
         expect(etiquetaAccion('algo.nuevo')).toBe('algo.nuevo')

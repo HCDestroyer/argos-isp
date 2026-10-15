@@ -623,11 +623,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         >
                             Caja principal
                         </p>
-                        <ProblemaAlerta
+                        <!-- Sin la lista de cajas igual se cobra (va a la principal): aviso breve, no bloqueo. -->
+                        <div
                             v-if="problemaCajas"
-                            :problema="problemaCajas"
-                            :reintentar="cargarCajas"
-                        />
+                            class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+                            data-prueba="cajas-sin-lista"
+                        >
+                            <span class="flex items-center gap-1.5 text-muted">
+                                <UIcon
+                                    name="i-lucide-triangle-alert"
+                                    class="size-4 shrink-0 text-warning"
+                                />
+                                Caja principal · no se pudo leer la lista de cajas ({{ problemaCajas.status }})
+                            </span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarCajas"
+                            />
+                        </div>
                     </UFormField>
 
                     <UFormField

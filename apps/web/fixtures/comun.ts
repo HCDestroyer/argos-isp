@@ -119,7 +119,8 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         actor_tipo: 'usuario',
         actor_id: usuario?.id ?? null,
         actor_nombre: usuario?.nombre ?? null,
-        canal: 'panel',
+        // Como `request_id_middleware` de la API: el canal sale del header `X-Canal` (por defecto `api`).
+        canal: solicitud.headers.get('X-Canal') ?? 'api',
         accion,
         entidad_tipo: entidad.tipo,
         entidad_id: entidad.id,
