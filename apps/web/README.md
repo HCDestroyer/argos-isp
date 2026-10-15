@@ -50,3 +50,4 @@ Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `caje
 | --- | --- | --- |
 | 1 · Lista de clientes (búsqueda, zona) | `/clientes` | `useClientes`, `useZonas`, `usePaginacionCursor` |
 | 2 · Ficha de cliente (datos, fiscales, servicios, estado de cuenta, línea de tiempo) | `/clientes/:id?tab=` | `useClientes`, `useServicios`, `usePlanes`, `useRouters`, `useBitacora` |
+| 3 · Alta y edición de cliente (zod espejo de `crearClienteValidator`, Idempotency-Key, 409 por versión) | `/clientes/nuevo`, `/clientes/:id/editar` | `useClientes`, `useZonas` |

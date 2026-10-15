@@ -101,6 +101,17 @@ onMounted(async () => {
         titulo="Clientes"
         icono="i-lucide-users"
     >
+        <template #acciones>
+            <UButton
+                v-if="puede('clientes.crear')"
+                to="/clientes/nuevo"
+                icon="i-lucide-user-plus"
+                label="Nuevo cliente"
+                :ui="{ label: 'hidden sm:inline' }"
+                aria-label="Nuevo cliente"
+            />
+        </template>
+
         <div class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <UInput

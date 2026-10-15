@@ -165,6 +165,17 @@ onMounted(cargar)
                         </template> · alta {{ formatearFecha(cliente.created_at) }}
                     </p>
                 </div>
+
+                <div class="flex gap-2">
+                    <UButton
+                        v-if="puede('clientes.editar')"
+                        :to="`/clientes/${cliente.id}/editar`"
+                        icon="i-lucide-pencil"
+                        label="Editar"
+                        color="neutral"
+                        variant="outline"
+                    />
+                </div>
             </div>
 
             <UTabs

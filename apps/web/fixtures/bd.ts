@@ -3,6 +3,7 @@
  * viven aquí hasta recargar la página; las pruebas llaman `reiniciarFixtures()`.
  */
 import type { Schema } from '@argosisp/contracts'
+import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { planes, planesPorRouter } from './planes/datos'
@@ -22,6 +23,8 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
+    /** Respuestas guardadas por `Idempotency-Key`. */
+    idempotencia: Record<string, RespuestaFixture>
 }
 
 function inicial(): BaseFixtures {
@@ -36,6 +39,7 @@ function inicial(): BaseFixtures {
         planesPorRouter,
         plantillas,
         acciones,
+        idempotencia: {},
     })
 }
 

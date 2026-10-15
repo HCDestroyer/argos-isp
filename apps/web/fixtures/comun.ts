@@ -4,6 +4,7 @@
  */
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { ManejadorFixture, RespuestaFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { bd, siguienteId } from './bd'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import meAdmin from './auth/me.admin.json'
@@ -88,4 +89,49 @@ export function paginar<T>(filas: T[], solicitud: SolicitudFixture, limitePorDef
 
 export function ahora(): string {
     return new Date().toISOString()
+}
+
+/**
+ * Repite la respuesta guardada si el `Idempotency-Key` ya se usó, como `core.idempotency_keys`.
+ * Solo se guardan respuestas exitosas.
+ */
+export function conIdempotencia(manejador: ManejadorFixture): ManejadorFixture {
+    return async (solicitud) => {
+        const clave = solicitud.headers.get('Idempotency-Key')
+        const guardada = clave ? bd.idempotencia[clave] : undefined
+        if (guardada) {
+            return guardada
+        }
+        const respuesta = await manejador(solicitud)
+        if (clave && respuesta.status < 300) {
+            bd.idempotencia[clave] = respuesta
+        }
+        return respuesta
+    }
+}
+
+/** Escribe en la bitácora de fixtures lo que haría `DomainAction`. */
+export function registrarAccion(solicitud: SolicitudFixture, accion: string, entidad: { tipo: string, id: number }, entrada: unknown): void {
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    const id = siguienteId(bd.acciones)
+    bd.acciones.push({
+        id,
+        actor_tipo: 'usuario',
+        actor_id: usuario?.id ?? null,
+        canal: 'panel',
+        accion,
+        entidad_tipo: entidad.tipo,
+        entidad_id: entidad.id,
+        entrada,
+        resultado: 'ok',
+        error: null,
+        request_id: `req-fixture-${id}`,
+        created_at: ahora(),
+    })
+}
+
+export const versionCambiada = (): RespuestaFixture => problema(409, 'Conflicto de versión', 'Otra persona modificó este registro. Vuelve a cargarlo.')
+
+export function datosInvalidos(errors: NonNullable<Problem['errors']>): RespuestaFixture {
+    return problema(422, 'Datos inválidos', 'Revisa los campos marcados.', errors)
 }
