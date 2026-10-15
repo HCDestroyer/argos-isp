@@ -1,0 +1,61 @@
+# -*- text -*-
+#
+#  rlm_rest → servicio aaa (Node). Se monta en /etc/freeradius/mods-enabled/rest.
+#
+#  Cuerpo JSON (body = 'json'): FreeRADIUS envía todos los atributos de la petición como
+#    {"User-Name":{"type":"string","value":["juan"]},"NAS-IP-Address":{...},...}
+#  y espera JSON con Content-Type application/json:
+#    {"control:Cleartext-Password":"secreto","reply:Mikrotik-Rate-Limit":"10240k/10240k",
+#     "reply:Framed-IP-Address":"10.10.0.20","reply:Acct-Interim-Interval":300}
+#
+#  Código HTTP → rcode del módulo:
+#    200/201 con cuerpo → updated   204 → ok   401 → reject   404/410 → notfound
+#    403 → userlock     otros 4xx → invalid   5xx (incluido el 501 del esqueleto) → fail
+#
+#  AAA_URL viene del entorno (docker compose). Cuando haya dos nodos aaa, A2 crea dos instancias
+#  (rest aaa1 { ... } / rest aaa2 { ... }) y las usa con "redundant" en sites-enabled/default.
+#
+rest {
+	tls {
+	}
+
+	connect_uri = "$ENV{AAA_URL}"
+
+	#  El MikroTik espera 1 s por intento (/radius timeout=1s): aaa debe responder bastante antes.
+	connect_timeout = 0.5
+
+	authorize {
+		uri = "${..connect_uri}/aaa/authorize"
+		method = 'post'
+		body = 'json'
+		timeout = 0.8
+		tls = ${..tls}
+	}
+
+	post-auth {
+		uri = "${..connect_uri}/aaa/post-auth"
+		method = 'post'
+		body = 'json'
+		timeout = 0.8
+		tls = ${..tls}
+	}
+
+	accounting {
+		uri = "${..connect_uri}/aaa/accounting"
+		method = 'post'
+		body = 'json'
+		timeout = 2.0
+		tls = ${..tls}
+	}
+
+	pool {
+		start = ${thread[pool].start_servers}
+		min = ${thread[pool].min_spare_servers}
+		max = ${thread[pool].max_servers}
+		spare = ${thread[pool].max_spare_servers}
+		uses = 0
+		retry_delay = 1
+		lifetime = 0
+		idle_timeout = 60
+	}
+}

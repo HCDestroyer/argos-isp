@@ -1,0 +1,5 @@
+# -*- text -*-
+#  PAP contra control:Cleartext-Password que devuelve aaa en /aaa/authorize.
+pap {
+	normalise = yes
+}
