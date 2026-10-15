@@ -29,6 +29,14 @@ export default defineNuxtConfig({
         // El navegador nunca la ve: llama a /api/v1/portal/** en este mismo origen y Nitro reenvía
         // (server/api/v1/portal/[...ruta].ts) con X-Forwarded-For.
         apiBaseInternal: 'http://localhost:3333',
+        // Portal cautivo (server/middleware/portal-cautivo.ts). Peticiones con otro Host (dst-nat del
+        // MikroTik) y las rutas de detección de los sistemas operativos se redirigen a /corte.
+        portal: {
+            // NUXT_PORTAL_URL_PUBLICA, p. ej. http://portal.argosisp.example (vacía = redirección relativa)
+            urlPublica: '',
+            // NUXT_PORTAL_HOSTS: otros nombres o IPs del portal, separados por coma (p. ej. 192.0.2.20)
+            hosts: '',
+        },
         public: {
             // NUXT_PUBLIC_API_BASE vacío (recomendado) = mismo origen, a través del proxy de Nitro.
             // Con una URL, el navegador llama a la API directo (requiere CORS y que la API esté en el walled garden).

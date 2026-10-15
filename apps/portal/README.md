@@ -28,6 +28,22 @@ Nitro lo reenvía a `NUXT_API_BASE_INTERNAL` (`server/api/v1/portal/[...ruta].ts
 
 `NUXT_PUBLIC_API_BASE` vacío es lo recomendado; con una URL el navegador iría directo a la API.
 
+## Portal cautivo: cualquier Host y ruta → `/corte`
+
+El MikroTik hace dst-nat de TCP/80 de los suspendidos al portal (`portalCortePuerto` en
+`infra/mikrotik/lab.rsc`), así que llegan peticiones como `http://example.com/noticias`. La
+middleware `server/middleware/portal-cautivo.ts` (lógica pura en `server/utils/portalCautivo.ts`) responde:
+
+| Petición | Respuesta |
+| --- | --- |
+| Pruebas de conectividad: `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/ncsi.txt`, `/connecttest.txt`, `/redirect` (Windows), `/success.txt`, `/canonical.html` (Firefox), `/check_network_status.txt`, `/connectivity-check.html` (Linux) y otras | 302 a `/corte` con cualquier Host: el teléfono muestra "Iniciar sesión en la red" |
+| Host ajeno, cualquier ruta | 302 a `NUXT_PORTAL_URL_PUBLICA/corte`; sin URL pública, 302 relativo a `/corte` en el mismo Host (se sirve ahí; funciona sin DNS) |
+| Host ajeno, recursos de la página (`/_nuxt/`, `/api/v1/portal/`, iconos) | Se sirven |
+| Host del portal (`NUXT_PORTAL_URL_PUBLICA`, `NUXT_PORTAL_HOSTS`, localhost) | Rutas normales |
+
+Las redirecciones llevan `Cache-Control: no-store` para que el navegador no las recuerde tras la reactivación.
+HTTPS no se puede redirigir (el certificado no coincide): el MikroTik corta 443 y el sistema operativo cae a la prueba HTTP.
+
 ## Walled garden
 
 La página de corte se abre con el servicio suspendido, así que todo sale de este servidor:
