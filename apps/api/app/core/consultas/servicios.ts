@@ -1,0 +1,167 @@
+import { isIP } from 'node:net'
+import db from '@adonisjs/lucid/services/db'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import { NoEncontrado } from '#shared/errores'
+import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
+import type { EstadoServicio } from '#shared/eventos'
+import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
+
+/**
+ * Lecturas de servicios. La vista incluye la IPv4 y los prefijos IPv6 vigentes y la bandera
+ * `promesa_activa`. `pass_ppp` nunca sale (ver `VerCredencialesServicio`).
+ */
+
+export type ModoIpv6 = 'radius_servicio' | 'radius_pool' | 'duid' | 'estatico' | 'ninguno'
+
+export interface ServicioVista {
+    id: number
+    cliente_id: number
+    router_id: number
+    plan_id: number
+    plantilla_facturacion_id: number | null
+    estado: EstadoServicio
+    promesa_activa: boolean
+    user_ppp: string
+    mac: string | null
+    direccion: string | null
+    coordenadas: string | null
+    fecha_instalacion: string | null
+    costo_override: string | null
+    excluir_firewall: boolean
+    ipv4: string | null
+    prefijo_enlace_v6: string | null
+    prefijo_delegado_v6: string | null
+    ipv6_modo: ModoIpv6
+    ipv6_duid: string | null
+    version: number
+    created_at: string
+    updated_at: string
+}
+
+function columnas(cliente: QueryClientContract) {
+    return [
+        's.id',
+        's.cliente_id',
+        's.router_id',
+        's.plan_id',
+        's.plantilla_facturacion_id',
+        's.estado',
+        cliente.raw(
+            `EXISTS (SELECT 1 FROM billing.promesas p WHERE p.servicio_id = s.id AND p.estado = 'activa') AS promesa_activa`,
+        ),
+        's.user_ppp',
+        cliente.raw('s.mac::text AS mac'),
+        's.direccion',
+        's.coordenadas',
+        cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
+        's.costo_override',
+        's.excluir_firewall',
+        cliente.raw(
+            `(SELECT host(a.ip) FROM network.ipv4_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL LIMIT 1) AS ipv4`,
+        ),
+        cliente.raw(
+            `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'enlace' LIMIT 1) AS prefijo_enlace_v6`,
+        ),
+        cliente.raw(
+            `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'delegacion' LIMIT 1) AS prefijo_delegado_v6`,
+        ),
+        's.ipv6_modo',
+        's.ipv6_duid',
+        's.version',
+        's.created_at',
+        's.updated_at',
+    ]
+}
+
+/** Cómo se filtra `core.servicios as s` por alcance. */
+export const dimensionesServicio: FiltrosDimension = {
+    router: (q, ids) => q.whereIn('s.router_id', ids),
+    zona: (q, ids) =>
+        q.whereExists((c) =>
+            c.from('core.clientes as c_al').whereRaw('c_al.id = s.cliente_id').whereIn('c_al.zona_id', ids),
+        ),
+}
+
+export async function verServicio(
+    id: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<ServicioVista> {
+    const fila = (await cliente
+        .from('core.servicios as s')
+        .where('s.id', id)
+        .select(columnas(cliente))
+        .first()) as ServicioVista | null
+    if (!fila) throw new NoEncontrado(`El servicio ${id} no existe`)
+    return fila
+}
+
+export interface FiltrosServicios extends OpcionesPaginacion {
+    q?: string
+    cliente_id?: number
+    router_id?: number
+    plan_id?: number
+    estado?: EstadoServicio
+}
+
+export async function listarServicios(
+    filtros: FiltrosServicios,
+    alcance?: Alcance,
+): Promise<Pagina<ServicioVista>> {
+    const cliente = db.connection()
+    const consulta = cliente.from('core.servicios as s').select(columnas(cliente))
+    if (filtros.cliente_id) consulta.where('s.cliente_id', filtros.cliente_id)
+    if (filtros.router_id) consulta.where('s.router_id', filtros.router_id)
+    if (filtros.plan_id) consulta.where('s.plan_id', filtros.plan_id)
+    if (filtros.estado) consulta.where('s.estado', filtros.estado)
+    if (filtros.q) {
+        const texto = filtros.q.trim()
+        if (isIP(texto)) {
+            consulta.where((w) =>
+                w
+                    .whereExists((a) =>
+                        a
+                            .from('network.ipv4_asignaciones as a4')
+                            .whereRaw('a4.servicio_id = s.id')
+                            .whereNull('a4.fin')
+                            .whereRaw('a4.ip = ?::inet', [texto]),
+                    )
+                    .orWhereExists((a) =>
+                        a
+                            .from('network.ipv6_asignaciones as a6')
+                            .whereRaw('a6.servicio_id = s.id')
+                            .whereNull('a6.fin')
+                            .whereRaw('a6.prefijo >>= ?::inet', [texto]),
+                    ),
+            )
+        } else {
+            const patron = `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+            consulta.where((w) =>
+                w
+                    .whereILike('s.user_ppp', patron)
+                    .orWhereExists((c) =>
+                        c
+                            .from('core.clientes as c_q')
+                            .whereRaw('c_q.id = s.cliente_id')
+                            .whereILike('c_q.nombre', patron),
+                    ),
+            )
+        }
+    }
+    filtrarPorAlcance(consulta, alcance, dimensionesServicio)
+    return paginar<ServicioVista>(consulta, filtros, { columna: 's.id' })
+}
+
+/** Dimensiones de alcance de un servicio: su router y la zona de su cliente. */
+export async function dimensionesDeServicio(
+    id: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<DimensionesRecurso> {
+    const fila = (await cliente
+        .from('core.servicios as s')
+        .join('core.clientes as c', 'c.id', 's.cliente_id')
+        .where('s.id', id)
+        .select('s.router_id', 'c.zona_id')
+        .first()) as { router_id: number; zona_id: number | null } | null
+    if (!fila) throw new NoEncontrado(`El servicio ${id} no existe`)
+    return { router: [fila.router_id], zona: [fila.zona_id] }
+}

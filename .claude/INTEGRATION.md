@@ -4,9 +4,9 @@ Cada agente anota aquí lo que necesita de otro, con fecha. El PM lo revisa dos 
 
 | Fecha | Quién pide | A quién | Qué | Estado |
 | --- | --- | --- | --- | --- |
-| 2026-10-15 | Líder FE | A1 | Confirmar nombres de permisos `<recurso>.ver` del menú (`apps/web/app/utils/navegacion.ts`) contra el seed del ACL (`apps/api/database/seeders/acl_seeder.ts`) | Abierto |
+| 2026-10-15 | Líder FE | A1 | Confirmar nombres de permisos `<recurso>.ver` del menú (`apps/web/app/utils/navegacion.ts`) contra el seed del ACL (`apps/api/database/seeders/acl_seeder.ts`) | A1: coinciden todos salvo `caja.ver` del menú; el permiso es `cajas.ver` → corregir en `navegacion.ts` (Líder FE) |
 | 2026-10-15 | Líder FE | A1 | Panel: llamar `POST /auth/logout` (ya existe) al cerrar sesión; hoy solo borra la cookie | Abierto |
-| 2026-10-15 | Líder FE | A1, A4 | Exponer `Schema<'Servicio'>` con `estado` en el OpenAPI para reemplazar el tipo local `EstadoServicio` del panel | Abierto |
+| 2026-10-15 | Líder FE | A1, A4 | Exponer `Schema<'Servicio'>` con `estado` en el OpenAPI para reemplazar el tipo local `EstadoServicio` del panel | A1: `Servicio` y `EstadoServicio` ya están en el contrato y `GET /servicios`, `/servicios/:id` son reales (tarea 6) |
 | 2026-10-15 | Líder FE | A5 | Reemplazar el tipo local `DatosCorte` de `useCorte.ts` por la respuesta de `GET /portal/quien-soy` del contrato | Abierto |
 | 2026-10-15 | PM | A5, A6 | Decidir cómo llega el portal a la API dentro del walled garden: proxy en el mismo origen o CORS con credenciales | Abierto |
 | 2026-10-15 | PM | A5 | Servir `/corte` para cualquier Host y ruta en el puerto de corte del MikroTik (`portalCortePuerto` en `lab.rsc`) | Abierto |
@@ -14,7 +14,12 @@ Cada agente anota aquí lo que necesita de otro, con fecha. El PM lo revisa dos 
 | 2026-10-15 | PM | A2, A5, A6 | Suspendido por IPv6 queda bloqueado pero no redirigido a `/corte` (TCP recibe reset). Falta definir cómo cumplir "aterriza en `/corte` por IPv6" del día 5 | Abierto |
 | 2026-10-15 | PM | A2 | El accounting del MikroTik no trae `Delegated-IPv6-Prefix`; afecta el modo `radius_pool` de la semana 2 | Abierto |
 | 2026-10-15 | Líder BE | A3 | knex/Lucid no rechaza `commit()` cuando falla una restricción diferida (cuadre del libro): revierte en silencio. `DomainAction` ya hace `SET CONSTRAINTS ALL IMMEDIATE`; fuera de una acción llamar `verificarRestriccionesDiferidas(trx)` | Abierto |
-| 2026-10-15 | Líder BE | A1 | Relay de outbox, CRUD completo del ACL con alcances y tokens de API (tarea 2 y 10 de A1) | Abierto |
+| 2026-10-15 | Líder BE | A1 | Relay de outbox, CRUD completo del ACL con alcances y tokens de API (tarea 2 y 10 de A1) | A1: ACL hecho (tarea 2: usuarios, roles, permisos, tokens `atk_`, alcance router/zona/caja en `ctx.alcance`); relay pendiente (tarea 10) |
 | 2026-10-15 | Líder BE | A6 | Cron mensual que llame `audit.crear_particiones` | Abierto |
 | 2026-10-15 | Líder BE | A6 | Producción: usuario de Postgres dueño para migraciones y otro miembro de `argosisp_app` para la API; hoy el compose usa el mismo `DB_USER` | Abierto |
 | 2026-10-15 | Líder FE | Líder FE | `formato.ts`, `fetchFixtures.ts` y `EstadoServicioBadge` están duplicados en web y portal; decidir si van a un paquete compartido en `packages/` | Abierto |
+| 2026-10-20 | A1 | A3 | Alcance por caja: `autorizar` deja `ctx.alcance`; en rutas de cajas aplicar `exigirAlcance(ctx.alcance, { caja: [cajaId] })` y `filtrarPorAlcance(q, ctx.alcance, { caja: (q, ids) => q.whereIn('c.id', ids) })` de `#core/acl` | Abierto |
+| 2026-10-20 | A1 | A6 | Compose: pasar `AAA_PPP_KEY` (32 bytes base64, la misma que `aaa` y `coa`) al servicio `api`; `apps/api` cifra con ella `pass_ppp`, `radius_secret` y `api_password` (formato `v1`, `app/shared/cifrado.ts`). Sin ella crear routers con credenciales o servicios falla | Abierto |
+| 2026-10-20 | A1 | A3 | Hecho en `agente/a1-nucleo`: permisos `libro.registrar_asiento` y `libro.revertir_asiento` en el catálogo y en `admin` y `contabilidad`. Columnas que lee `generarFacturas` documentadas en `apps/api/app/core/README.md`; no cambian de nombre. `cambiarEstadoServicio` (tarea 8) aceptará `{ trx }` | Abierto |
+| 2026-10-20 | A1 | A2 | Contrato aaa ← A1 leído: `pass_ppp` y `radius_secret` ya se cifran en formato `v1` con `AAA_PPP_KEY` (`apps/api/app/shared/cifrado.ts`, prueba con vector generado por `services/aaa`). `GET /internal/aaa/servicio` y `aaa:user:<user_ppp>` (write-through y lápida) llegan con la tarea 9 (día 3) | Abierto |
+| 2026-10-20 | A1 | Líder FE, A4 | Nuevo `GET /servicios/:id/credenciales` (permiso `servicios.ver_credenciales`, soporte y técnico) para mostrar la contraseña PPPoE generada; cada consulta queda auditada. La vista `Servicio` nunca trae `pass_ppp` | Abierto |

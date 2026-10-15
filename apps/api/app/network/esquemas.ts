@@ -100,6 +100,36 @@ export const PlanRouter = definirEsquema(
     }),
 )
 
+/** Plan con su configuración efectiva en un router (plantilla + `planes_routers`). */
+export const PlanEfectivo = definirEsquema(
+    'PlanEfectivo',
+    objeto({
+        id,
+        nombre: texto,
+        precio: Dinero,
+        bajada_kbps: entero,
+        subida_kbps: entero,
+        bajada_limitada_kbps: entero,
+        subida_limitada_kbps: entero,
+        reuso: entero,
+        dual_stack: enumerado(['ambos', 'v4', 'v6']),
+        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+        global: booleano,
+        activo: booleano,
+        ...auditable,
+        router_id: id,
+        implementacion: nulable(PlanRouter),
+        rate_limit: { type: 'string', description: 'rate-limit MikroTik subida/bajada: "5000k/20000k"' },
+        rate_limit_limitado: { type: 'string', description: 'rate-limit en estado limitado' },
+        profile_ppp: nulable(texto),
+        pool_ipv4: nulable(texto),
+        pool_ipv6_enlace: nulable(texto),
+        pool_ipv6_delegacion: nulable(texto),
+        local_address: nulable(texto),
+        no_crear_reglas: booleano,
+    }),
+)
+
 export const Sesion = definirEsquema(
     'Sesion',
     objeto({
