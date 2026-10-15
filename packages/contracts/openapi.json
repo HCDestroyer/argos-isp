@@ -1019,20 +1019,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "clientesCrear",
@@ -1231,20 +1221,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes/{id}": {
@@ -1310,20 +1290,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "clientesEditar",
@@ -1535,20 +1505,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes/{id}/estado-cuenta": {
@@ -9098,20 +9058,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "zonasCrear",
@@ -9185,20 +9135,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/zonas/{id}": {
@@ -9311,20 +9251,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "zonas.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     }
   },

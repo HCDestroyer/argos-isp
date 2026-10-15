@@ -20,6 +20,12 @@ import CrearTokenApi from '#core/actions/crear_token_api'
 import RevocarTokenApi from '#core/actions/revocar_token_api'
 import { listarPermisos, listarRoles, listarTokens, listarUsuarios, verUsuario } from '#core/consultas/acl'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { exigirAlcance } from '#core/acl'
+import CrearCliente from '#core/actions/crear_cliente'
+import EditarCliente from '#core/actions/editar_cliente'
+import CrearZona from '#core/actions/crear_zona'
+import EditarZona from '#core/actions/editar_zona'
+import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
 import { Problema } from '#shared/errores'
 import * as v from '#core/validators'
 import {
@@ -231,6 +237,7 @@ const clientes: Ruta[] = [
         permiso: 'clientes.ver',
         query: v.listarClientesValidator,
         respuesta: { status: 200, descripcion: 'Página de clientes', esquema: pagina(Cliente) },
+        handler: (ctx, { query }) => buscarClientes(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -242,6 +249,10 @@ const clientes: Ruta[] = [
         cuerpo: v.crearClienteValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Cliente creado', esquema: Cliente },
+        handler: (ctx, { cuerpo }) => {
+            exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
+            return new CrearCliente().execute(cuerpo, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -251,6 +262,11 @@ const clientes: Ruta[] = [
         etiqueta: 'clientes',
         permiso: 'clientes.ver',
         respuesta: { status: 200, descripcion: 'Cliente', esquema: Cliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return verCliente(id)
+        },
     }),
     definirRuta({
         metodo: 'put',
@@ -262,6 +278,12 @@ const clientes: Ruta[] = [
         cuerpo: v.editarClienteValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Cliente actualizado', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            if (cuerpo.zona_id !== undefined) exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
+            return new EditarCliente().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -271,6 +293,7 @@ const clientes: Ruta[] = [
         etiqueta: 'clientes',
         permiso: 'zonas.ver',
         respuesta: { status: 200, descripcion: 'Zonas', esquema: { type: 'array', items: Zona } },
+        handler: () => listarZonas(),
     }),
     definirRuta({
         metodo: 'post',
@@ -281,6 +304,7 @@ const clientes: Ruta[] = [
         permiso: 'zonas.crear',
         cuerpo: v.crearZonaValidator,
         respuesta: { status: 201, descripcion: 'Zona creada', esquema: Zona },
+        handler: (ctx, { cuerpo }) => new CrearZona().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'put',
@@ -292,6 +316,8 @@ const clientes: Ruta[] = [
         cuerpo: v.editarZonaValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Zona actualizada', esquema: Zona },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarZona().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
 ]
 

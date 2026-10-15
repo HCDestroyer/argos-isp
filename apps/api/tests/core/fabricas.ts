@@ -1,0 +1,63 @@
+import db from '@adonisjs/lucid/services/db'
+import { unico } from '#tests/ayudas'
+
+/**
+ * Filas de prueba insertadas directo en la base (sin pasar por acciones) para preparar
+ * escenarios. Los datos llevan sufijos únicos: las pruebas no truncan tablas.
+ */
+
+let contadorIp = 0
+
+/** IPv4 única por corrida para nas_ip (10.200.x.y). */
+export function ipUnica(): string {
+    contadorIp += 1
+    const base = (process.pid % 200) * 300 + contadorIp
+    return `10.${200 + (Math.floor(base / 65536) % 50)}.${Math.floor(base / 256) % 256}.${base % 256}`
+}
+
+async function insertar(tabla: string, fila: Record<string, unknown>): Promise<number> {
+    const [r] = (await db.table(tabla).insert(fila).returning('id')) as Array<{ id: number }>
+    return r!.id
+}
+
+export function crearZonaFila(): Promise<number> {
+    return insertar('core.zonas', { nombre: unico('Zona') })
+}
+
+export function crearClienteFila(datos: Record<string, unknown> = {}): Promise<number> {
+    return insertar('core.clientes', { nombre: unico('Cliente'), ...datos })
+}
+
+export function crearRouterFila(datos: Record<string, unknown> = {}): Promise<number> {
+    return insertar('network.routers', {
+        nombre: unico('Router'),
+        host: '192.0.2.1',
+        nas_ip: ipUnica(),
+        ...datos,
+    })
+}
+
+export function crearPlanFila(datos: Record<string, unknown> = {}): Promise<number> {
+    return insertar('network.planes', {
+        nombre: unico('Plan'),
+        precio: '150.00',
+        bajada_kbps: 20000,
+        subida_kbps: 5000,
+        ...datos,
+    })
+}
+
+export async function crearServicioFila(datos: {
+    cliente_id: number
+    router_id?: number
+    plan_id?: number
+    [k: string]: unknown
+}): Promise<number> {
+    return insertar('core.servicios', {
+        router_id: datos.router_id ?? (await crearRouterFila()),
+        plan_id: datos.plan_id ?? (await crearPlanFila()),
+        user_ppp: unico('ppp'),
+        pass_ppp: 'cifrada',
+        ...datos,
+    })
+}
