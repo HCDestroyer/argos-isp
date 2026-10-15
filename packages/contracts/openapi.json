@@ -10312,6 +10312,24 @@
           }
         }
       },
+      "FacturasVencidasResumen": {
+        "type": "object",
+        "required": [
+          "cantidad",
+          "total"
+        ],
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Número de facturas vencidas con saldo"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo pendiente de las facturas vencidas"
+          }
+        }
+      },
       "Ipv6Bloque": {
         "type": "object",
         "required": [
@@ -11133,8 +11151,10 @@
         "type": "object",
         "required": [
           "identificado",
+          "ip",
           "nombre_parcial",
           "estado",
+          "promesa_activa",
           "monto_adeudado",
           "facturas_vencidas"
         ],
@@ -11142,6 +11162,10 @@
           "identificado": {
             "type": "boolean",
             "description": "false si la IP de origen no pertenece a ningún servicio"
+          },
+          "ip": {
+            "type": "string",
+            "description": "IP de origen con la que la API identificó la petición"
           },
           "nombre_parcial": {
             "type": [
@@ -11160,6 +11184,13 @@
               }
             ]
           },
+          "promesa_activa": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Hay una promesa de pago activa"
+          },
           "monto_adeudado": {
             "anyOf": [
               {
@@ -11168,12 +11199,17 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)"
           },
           "facturas_vencidas": {
-            "type": [
-              "integer",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FacturasVencidasResumen"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }

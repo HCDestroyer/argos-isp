@@ -1232,6 +1232,12 @@ export interface components {
             iva: components["schemas"]["Dinero"];
             total: components["schemas"]["Dinero"];
         };
+        FacturasVencidasResumen: {
+            /** @description Número de facturas vencidas con saldo */
+            cantidad: number;
+            /** @description Saldo pendiente de las facturas vencidas */
+            total: components["schemas"]["Dinero"];
+        };
         Ipv6Bloque: {
             id: number;
             router_id: number;
@@ -1436,11 +1442,16 @@ export interface components {
         QuienSoy: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
             identificado: boolean;
+            /** @description IP de origen con la que la API identificó la petición */
+            ip: string;
             /** @description Nombre recortado, p. ej. "Juan P." */
             nombre_parcial: string | null;
             estado: components["schemas"]["EstadoServicio"] | null;
+            /** @description Hay una promesa de pago activa */
+            promesa_activa: boolean | null;
+            /** @description Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas) */
             monto_adeudado: components["schemas"]["Dinero"] | null;
-            facturas_vencidas: number | null;
+            facturas_vencidas: components["schemas"]["FacturasVencidasResumen"] | null;
         };
         RedIpv4: {
             id: number;
