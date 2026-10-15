@@ -22,4 +22,5 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 
 ## Pruebas
 
-`tests/network/sesiones.spec.ts` (Postgres real y BullMQ real con prefijo propio).
+- `tests/network/sesiones.spec.ts`: acciones de accounting (Postgres real) y worker (BullMQ real con prefijo propio).
+- `tests/network/coa.spec.ts` (tarea 6, de punta a punta): `CambiarEstadoServicio` → `audit.outbox` → XADD a un stream propio (lo que hará el relay de A1) → `services/coa` como proceso → NAS simulado por UDP (`services/coa/test/nas_simulado.ts`, también proceso) → `audit.red` y `coa.fallido`. La sesión la abre `IniciarSesion`. Cubre suspender (CoA, ACK en < 5 s, evento duplicado sin reenvío), reactivar (Disconnect), limitar y volver (CoA de velocidad), cambio de prefijo (Disconnect), NAK y NAS que no responde.
