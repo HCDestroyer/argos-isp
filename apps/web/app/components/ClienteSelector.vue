@@ -78,7 +78,13 @@ onBeforeUnmount(() => clearTimeout(temporizador))
 </script>
 
 <template>
+    <!--
+        La `key` vuelve a montar el campo cuando llega el cliente elegido desde fuera (por ejemplo
+        `?cliente=2` en la URL): el InputMenu solo calcula el texto mostrado al cambiar el valor,
+        y sin esto mostraba el id ("2") en lugar del nombre.
+    -->
     <UInputMenu
+        :key="seleccionado?.id ?? 0"
         v-model="seleccion"
         v-model:search-term="termino"
         :items="items"

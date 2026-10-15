@@ -174,7 +174,14 @@ onMounted(cargar)
                     </p>
                 </div>
 
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        v-if="puede('pagos.registrar')"
+                        :to="`/cobro?cliente=${cliente.id}`"
+                        icon="i-lucide-hand-coins"
+                        label="Cobrar"
+                        color="success"
+                    />
                     <UButton
                         v-if="puede('servicios.crear')"
                         :to="`/servicios/nuevo?cliente=${cliente.id}`"
