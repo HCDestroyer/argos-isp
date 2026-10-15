@@ -247,6 +247,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/facturas/corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios */
+        post: operations["facturasCorte"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/facturas/generar": {
         parameters: {
             query?: never;
@@ -258,6 +275,23 @@ export interface paths {
         put?: never;
         /** Generar facturas pendientes (todo lo pendiente hasta la fecha) */
         post: operations["facturasGenerar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/facturas/vencer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha) */
+        post: operations["facturasVencer"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1350,7 +1384,10 @@ export interface components {
             cliente_id: number;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
             saldo: components["schemas"]["Dinero"];
+            /** @description Anticipos del cliente sin aplicar (se aplican a las próximas facturas) */
+            saldo_a_favor?: components["schemas"]["Dinero"];
             facturas_pendientes: components["schemas"]["Factura"][];
+            /** @description Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo` */
             movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
         };
         /** @enum {string} */
@@ -1377,6 +1414,18 @@ export interface components {
             fel_serie: string | null;
             fel_numero: string | null;
             fel_estado: string | null;
+            /**
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
+             * @enum {string}
+             */
+            tipo?: "servicio" | "mora";
+            /** @description Factura que originó la mora */
+            factura_origen_id?: number | null;
+            /**
+             * Format: date-time
+             * @description Cuándo se marcó vencida
+             */
+            vencida_en?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1496,6 +1545,14 @@ export interface components {
             nota: string | null;
             registrado_por: number | null;
             aplicaciones: components["schemas"]["AplicacionPago"][];
+            /**
+             * Format: date-time
+             * @description Cuándo se anuló
+             */
+            anulado_en?: string | null;
+            motivo_anulacion?: string | null;
+            /** @description Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata) */
+            servicios?: components["schemas"]["ServicioEvaluado"][];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1760,11 +1817,32 @@ export interface components {
             /** @description Asignación que contiene la IP (prefijo más largo) */
             prefijo: string;
         };
+        ResultadoCorte: {
+            /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
+            horas: string[];
+            /** @description Servicios evaluados */
+            evaluados: number;
+            /** @description Servicios que cambiaron de estado */
+            cambiados: number;
+            /** @description Servicios que no se pudieron evaluar (ver log) */
+            errores: number;
+            vencimiento: components["schemas"]["ResultadoVencimiento"] | null;
+        };
         ResultadoGeneracion: {
             generadas: number;
             /** @description Ya tenían factura del periodo */
             omitidas: number;
             facturas: number[];
+            /** @description Servicios que no se pudieron facturar (ver log) */
+            errores?: number;
+        };
+        ResultadoVencimiento: {
+            /** @description Facturas que pasaron a vencida */
+            vencidas: number;
+            /** @description Recargos de mora creados */
+            moras: number;
+            /** @description Facturas que no se pudieron procesar (ver log) */
+            errores: number;
         };
         Rol: {
             id: number;
@@ -1831,6 +1909,15 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ServicioEvaluado: {
+            servicio_id: number;
+            /** @enum {string} */
+            de: "activo" | "limitado" | "suspendido" | "retirado";
+            /** @enum {string} */
+            estado: "activo" | "limitado" | "suspendido" | "retirado";
+            cambiado: boolean;
+            motivo: string;
         };
         Sesion: {
             id: number;
@@ -2740,15 +2827,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     facturasListar: {
@@ -2808,15 +2886,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     facturasVer: {
@@ -2859,15 +2928,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2962,6 +3022,74 @@ export interface operations {
             };
         };
     };
+    facturasCorte: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo este servicio; si falta, las horas de corte pendientes de hoy */
+                    servicio_id?: number;
+                    /** @description Baja de estado aunque no haya llegado la hora de corte (laboratorio) */
+                    ignorar_hora?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del corte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoCorte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     facturasGenerar: {
         parameters: {
             query?: never;
@@ -3031,8 +3159,70 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
+        };
+    };
+    facturasVencer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo las facturas de este servicio; si falta, todas */
+                    servicio_id?: number;
+                    /**
+                     * Format: date
+                     * @description Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio
+                     */
+                    hasta?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del vencimiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoVencimiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3784,15 +3974,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     pagosRegistrar: {
@@ -3871,15 +4052,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     pagosVer: {
@@ -3922,15 +4094,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4007,15 +4170,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

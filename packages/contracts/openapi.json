@@ -1679,20 +1679,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.estado_cuenta",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas": {
@@ -1831,20 +1821,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}": {
@@ -1910,20 +1890,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}/anular": {
@@ -2057,6 +2027,110 @@
         "x-implementado": false
       }
     },
+    "/api/v1/facturas/corte": {
+      "post": {
+        "operationId": "facturasCorte",
+        "summary": "Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo este servicio; si falta, las horas de corte pendientes de hoy"
+                  },
+                  "ignorar_hora": {
+                    "description": "Baja de estado aunque no haya llegado la hora de corte (laboratorio)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del corte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/generar": {
       "post": {
         "operationId": "facturasGenerar",
@@ -2157,9 +2231,105 @@
                 }
               }
             }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/facturas/vencer": {
+      "post": {
+        "operationId": "facturasVencer",
+        "summary": "Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo las facturas de este servicio; si falta, todas"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del vencimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoVencimiento"
+                }
+              }
+            }
           },
-          "501": {
-            "description": "No implementado todavía",
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2170,7 +2340,7 @@
           }
         },
         "x-permiso": "facturas.generar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/internal/aaa/servicio": {
@@ -3495,20 +3665,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "pagosRegistrar",
@@ -3654,20 +3814,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.registrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}": {
@@ -3733,20 +3883,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}/anular": {
@@ -3864,20 +4004,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/permisos": {
@@ -11025,6 +11155,10 @@
             "$ref": "#/components/schemas/Dinero",
             "description": "Suma del auxiliar CxC del cliente (positivo = debe)"
           },
+          "saldo_a_favor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Anticipos del cliente sin aplicar (se aplican a las próximas facturas)"
+          },
           "facturas_pendientes": {
             "type": "array",
             "items": {
@@ -11035,7 +11169,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
-            }
+            },
+            "description": "Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`"
           }
         }
       },
@@ -11150,6 +11285,30 @@
               "string",
               "null"
             ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora"
+            ],
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
+          },
+          "factura_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Factura que originó la mora"
+          },
+          "vencida_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se marcó vencida"
           },
           "version": {
             "type": "integer",
@@ -11642,6 +11801,27 @@
             "items": {
               "$ref": "#/components/schemas/AplicacionPago"
             }
+          },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioEvaluado"
+            },
+            "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
           },
           "version": {
             "type": "integer",
@@ -12714,6 +12894,47 @@
           }
         }
       },
+      "ResultadoCorte": {
+        "type": "object",
+        "required": [
+          "horas",
+          "evaluados",
+          "cambiados",
+          "errores",
+          "vencimiento"
+        ],
+        "properties": {
+          "horas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Horas de corte procesadas (HH:MM; * = corte manual)"
+          },
+          "evaluados": {
+            "type": "integer",
+            "description": "Servicios evaluados"
+          },
+          "cambiados": {
+            "type": "integer",
+            "description": "Servicios que cambiaron de estado"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron evaluar (ver log)"
+          },
+          "vencimiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultadoVencimiento"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ResultadoGeneracion": {
         "type": "object",
         "required": [
@@ -12735,6 +12956,32 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron facturar (ver log)"
+          }
+        }
+      },
+      "ResultadoVencimiento": {
+        "type": "object",
+        "required": [
+          "vencidas",
+          "moras",
+          "errores"
+        ],
+        "properties": {
+          "vencidas": {
+            "type": "integer",
+            "description": "Facturas que pasaron a vencida"
+          },
+          "moras": {
+            "type": "integer",
+            "description": "Recargos de mora creados"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Facturas que no se pudieron procesar (ver log)"
           }
         }
       },
@@ -13018,6 +13265,46 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ServicioEvaluado": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "de",
+          "estado",
+          "cambiado",
+          "motivo"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "cambiado": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": "string"
           }
         }
       },

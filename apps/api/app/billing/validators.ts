@@ -87,6 +87,30 @@ export const generarFacturasValidator = vine.compile(
     }),
 )
 
+export const vencerFacturasValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad()
+            .optional()
+            .meta({ description: 'Solo las facturas de este servicio; si falta, todas' }),
+        hasta: fechaIso().optional().meta({
+            description:
+                'Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio',
+        }),
+    }),
+)
+
+export const corteValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad()
+            .optional()
+            .meta({ description: 'Solo este servicio; si falta, las horas de corte pendientes de hoy' }),
+        ignorar_hora: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Baja de estado aunque no haya llegado la hora de corte (laboratorio)' }),
+    }),
+)
+
 export const anularFacturaValidator = vine.compile(vine.object({ motivo: motivo() }))
 
 /*
