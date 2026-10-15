@@ -40,7 +40,7 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
         colasPrefijo: env.COLAS_PREFIJO || 'argosisp',
         respaldo,
         api: {
-            url: env.API_INTERNAL_URL ?? 'http://localhost:3333',
+            url: env.API_INTERNAL_URL ?? 'http://localhost:3333/api/v1/',
             token: env.AAA_INTERNAL_TOKEN ?? '',
             timeoutMs: numero(env.AAA_API_TIMEOUT_MS, 300),
         },
