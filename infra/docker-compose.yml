@@ -1,0 +1,299 @@
+# ArgosIsp · entorno de desarrollo y laboratorio.
+#
+#   cp infra/.env.example infra/.env      # y completa los valores
+#   docker compose -f infra/docker-compose.yml up -d postgres redis mailpit
+#   docker compose -f infra/docker-compose.yml up -d            # todo (perfil lab si COMPOSE_PROFILES=lab)
+#
+# Perfil "lab": freeradius, aaa y coa. FreeRADIUS publica UDP 1812/1813 en RADIUS_BIND_IP
+# (127.0.0.1 por defecto; en el laboratorio, la IP del servidor en la LAN o en el túnel WireGuard
+# hacia el MikroTik). Detalle en infra/mikrotik/README.md.
+#
+# Los builds usan como contexto la raíz del repo (..), con el Dockerfile de cada app o servicio.
+
+name: argosisp
+
+x-node-healthcheck: &node-healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 5
+  start_period: 20s
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: argosisp
+      POSTGRES_USER: argosisp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-argosisp}
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    ports:
+      - 127.0.0.1:${DB_PORT_HOST:-5432}:5432
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U argosisp -d argosisp]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    # Sin TTL ni expulsión: la caché se invalida por evento (CLAUDE.md, regla 5) y BullMQ exige
+    # noeviction. maxmemory 0 = sin límite. AOF para no perder colas ni streams al reiniciar.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - "0"
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redisdata:/data
+    ports:
+      - 127.0.0.1:${REDIS_PORT_HOST:-6379}:6379
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      TZ: UTC
+    ports:
+      - 127.0.0.1:${SMTP_PORT_HOST:-1025}:1025
+      - 127.0.0.1:${MAILPIT_UI_PORT_HOST:-8025}:8025
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Migraciones de apps/api (AdonisJS) antes de levantar la API. Misma imagen que api.
+  migrate:
+    image: argosisp/api:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: [node, ace, migration:run, --force]
+    environment: &api-env
+      NODE_ENV: ${NODE_ENV:-development}
+      TZ: UTC
+      HOST: 0.0.0.0
+      PORT: "3333"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_KEY: ${APP_KEY:-}
+      APP_URL: ${API_PUBLIC_URL:-http://localhost:3333}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: argosisp
+      DB_PASSWORD: ${DB_PASSWORD:-argosisp}
+      DB_DATABASE: argosisp
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: ${MAIL_FROM:-ArgosIsp <no-responder@argosisp.example>}
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      AAA_PPP_KEY: ${AAA_PPP_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: argosisp/api:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment: *api-env
+    ports:
+      - 127.0.0.1:${API_PORT_HOST:-3333}:3333
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+
+  web:
+    image: argosisp/web:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      # Navegador → API (pública) y servidor Nuxt → API (red interna de compose)
+      NUXT_PUBLIC_API_BASE: ${API_PUBLIC_URL:-http://localhost:3333}
+      NUXT_API_BASE_INTERNAL: http://api:3333
+    ports:
+      - 127.0.0.1:${WEB_PORT_HOST:-3000}:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))
+
+  portal:
+    image: argosisp/portal:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/portal/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      NUXT_PUBLIC_API_BASE: ${API_PUBLIC_URL:-http://localhost:3333}
+      NUXT_API_BASE_INTERNAL: http://api:3333
+    ports:
+      # El MikroTik hace dst-nat de TCP/80 de los suspendidos a PORTAL_CORTE_IP:PORTAL_CORTE_PORT;
+      # en el laboratorio publica el portal en esa IP (o pon un proxy inverso delante).
+      - ${PORTAL_BIND_IP:-127.0.0.1}:${PORTAL_PORT_HOST:-3001}:3001
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))
+
+  aaa:
+    profiles: [lab]
+    image: argosisp/aaa:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: services/aaa/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      TZ: UTC
+      HOST: 0.0.0.0
+      PORT: "3100"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      API_INTERNAL_URL: http://api:3333
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      AAA_PPP_KEY: ${AAA_PPP_KEY:-}
+    ports:
+      - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+
+  coa:
+    profiles: [lab]
+    image: argosisp/coa:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: services/coa/Dockerfile
+    restart: unless-stopped
+    # Envía CoA/Disconnect a NAS:3799 por la red del host (NAT de Docker). El MikroTik solo acepta
+    # peticiones entrantes desde la dirección de un /radius configurado: el tráfico debe salir del
+    # host con la IP que el router tiene como servidor RADIUS (la del túnel WireGuard o de la LAN).
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      TZ: UTC
+      HOST: 0.0.0.0
+      PORT: "3200"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: argosisp
+      DB_PASSWORD: ${DB_PASSWORD:-argosisp}
+      DB_DATABASE: argosisp
+      COA_NAS_PORT: "3799"
+    ports:
+      - 127.0.0.1:${COA_PORT_HOST:-3200}:3200
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3200/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+
+  freeradius:
+    profiles: [lab]
+    image: freeradius/freeradius-server:3.2.10
+    restart: unless-stopped
+    # Log a stdout (docker logs). Para depurar: command: [-X]
+    command: [-l, stdout]
+    environment:
+      TZ: UTC
+      AAA_URL: http://aaa:3100
+      RADIUS_LOCAL_SECRET: ${RADIUS_LOCAL_SECRET:-}
+      RADIUS_LAB_NAS_IP: ${RADIUS_LAB_NAS_IP:-}
+      RADIUS_LAB_SECRET: ${RADIUS_LAB_SECRET:-}
+    volumes:
+      - ../services/aaa/freeradius/mods-enabled:/etc/freeradius/mods-enabled:ro
+      - ../services/aaa/freeradius/sites-enabled:/etc/freeradius/sites-enabled:ro
+      - ../services/aaa/freeradius/clients.conf:/etc/freeradius/clients.conf:ro
+      - ../services/aaa/freeradius/clients.d:/etc/freeradius/clients.d:ro
+    ports:
+      - ${RADIUS_BIND_IP:-127.0.0.1}:1812:1812/udp
+      - ${RADIUS_BIND_IP:-127.0.0.1}:1813:1813/udp
+    depends_on:
+      aaa:
+        condition: service_healthy
+    healthcheck:
+      # Status-Server al puerto de autenticación con el cliente localhost.
+      test:
+        - CMD-SHELL
+        - echo 'Message-Authenticator = 0x00' | radclient -q -c 1 -r 1 -t 2 127.0.0.1:1812 status "$$RADIUS_LOCAL_SECRET"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
+  redisdata:
