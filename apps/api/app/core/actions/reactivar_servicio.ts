@@ -10,4 +10,5 @@ export default class ReactivarServicio extends TransicionManual {
     readonly destino = 'activo'
     readonly origenes: readonly EstadoServicio[] = ['suspendido', 'limitado']
     protected readonly verbo = 'reactivar'
+    protected override readonly marcaManual = 'quitar'
 }

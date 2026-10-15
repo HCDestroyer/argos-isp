@@ -318,8 +318,8 @@ services:
       REDIS_PORT: '6379'
       # Respaldo cuando Redis no tiene el servicio: api (GET /internal/aaa/servicio) o fixtures.
       AAA_RESPALDO: ${AAA_RESPALDO:-api}
-      AAA_API_URL: ${AAA_API_URL:-http://api:3333}
-      API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333}
+      AAA_API_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
+      API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
       AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
       # Misma clave que el servicio api (cifra pass_ppp y radius_secret, formato v1).
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}

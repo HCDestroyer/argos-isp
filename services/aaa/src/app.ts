@@ -1,4 +1,5 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
+import { ErrorAccounting, normalizarAccounting, type ColaAccounting } from './accounting.ts'
 import { descifrar } from './cifrado.ts'
 import type { ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
@@ -23,6 +24,20 @@ export interface DependenciasApp {
     logLevel?: string
     /** Estado de Redis para /health (no bloquea: sin Redis se autoriza por el respaldo). */
     redisListo?: () => boolean
+    /** Cola de accounting (BullMQ `aaa-accounting`). Sin ella `/aaa/accounting` responde 503. */
+    cola?: ColaAccounting
+    /** Tiempo máximo para encolar (rlm_rest espera 2 s en accounting). */
+    encolarTimeoutMs?: number
+}
+
+class TiempoAgotado extends Error {}
+
+function conLimite<T>(promesa: Promise<T>, ms: number): Promise<T> {
+    let temporizador: NodeJS.Timeout | undefined
+    const limite = new Promise<never>((_, rechazar) => {
+        temporizador = setTimeout(() => rechazar(new TiempoAgotado(`sin respuesta en ${ms} ms`)), ms)
+    })
+    return Promise.race([promesa, limite]).finally(() => clearTimeout(temporizador))
 }
 
 function problema(reply: FastifyReply, status: number, title: string, detail?: string): FastifyReply {
@@ -123,9 +138,53 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         return reply.code(204).send()
     })
 
-    app.post('/aaa/accounting', async (_req, reply) => {
-        // Tarea 4 (día 3). 501 → fail: FreeRADIUS no responde Accounting-Response y el NAS reintenta.
-        return problema(reply, 501, 'No implementado', '/aaa/accounting llega en la tarea 4')
+    app.post('/aaa/accounting', async (req, reply) => {
+        // 204 → ok → FreeRADIUS contesta Accounting-Response. 503 → fail → sin respuesta y el NAS
+        // reintenta: solo cuando no se pudo encolar (el paquete no se pierde).
+        const inicio = performance.now()
+        const atributos = leerAtributos(req.body)
+        let registro
+        try {
+            registro = normalizarAccounting(atributos)
+        } catch (e) {
+            if (!(e instanceof ErrorAccounting)) throw e
+            // Paquete inservible: se confirma igual para que el NAS no lo reintente sin fin.
+            req.log.warn(
+                {
+                    usuario: atributos.get('User-Name'),
+                    nas: atributos.get('NAS-IP-Address'),
+                    error: e.message,
+                },
+                'accounting descartado',
+            )
+            return reply.code(204).send()
+        }
+        if (!deps.cola) return problema(reply, 503, 'Cola de accounting no configurada')
+        try {
+            await conLimite(deps.cola.encolar(registro), deps.encolarTimeoutMs ?? 1500)
+        } catch (e) {
+            req.log.error(
+                {
+                    usuario: registro.user_ppp,
+                    nas: registro.nas_ip,
+                    tipo: registro.tipo,
+                    error: (e as Error).message,
+                },
+                'accounting: no se pudo encolar',
+            )
+            return problema(reply, 503, 'Cola de accounting no disponible')
+        }
+        req.log.info(
+            {
+                usuario: registro.user_ppp || undefined,
+                nas: registro.nas_ip,
+                tipo: registro.tipo,
+                sesion: registro.acct_session_id || undefined,
+                ms: Math.round((performance.now() - inicio) * 10) / 10,
+            },
+            'accounting',
+        )
+        return reply.code(204).send()
     })
 
     app.setNotFoundHandler((_req, reply) => problema(reply, 404, 'No encontrado'))

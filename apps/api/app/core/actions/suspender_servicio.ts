@@ -10,4 +10,5 @@ export default class SuspenderServicio extends TransicionManual {
     readonly destino = 'suspendido'
     readonly origenes: readonly EstadoServicio[] = ['activo', 'limitado']
     protected readonly verbo = 'suspender'
+    protected override readonly marcaManual = 'poner'
 }

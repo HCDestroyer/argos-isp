@@ -125,6 +125,11 @@ export const Servicio = definirEsquema(
             plantilla_facturacion_id: nulable(id),
             estado: EstadoServicio,
             promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
+            suspension_manual: {
+                type: 'boolean',
+                description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
+            },
+            suspension_manual_motivo: nulable(texto),
             user_ppp: texto,
             mac: nulable(texto),
             direccion: nulable(texto),
@@ -144,7 +149,14 @@ export const Servicio = definirEsquema(
             zona_nombre: nulable(texto),
             ...auditable,
         },
-        ['cliente_nombre', 'plan_nombre', 'router_nombre', 'zona_nombre'],
+        [
+            'cliente_nombre',
+            'plan_nombre',
+            'router_nombre',
+            'zona_nombre',
+            'suspension_manual',
+            'suspension_manual_motivo',
+        ],
     ),
 )
 

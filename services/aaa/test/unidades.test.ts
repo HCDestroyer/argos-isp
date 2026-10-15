@@ -146,3 +146,26 @@ describe('atributos de rlm_rest', () => {
         assert.equal(leerAtributos(null).size, 0)
     })
 })
+
+describe('FuenteApi: URL del endpoint interno', () => {
+    it('conserva el prefijo /api/v1 de la base, con o sin barra final', async () => {
+        const { ApiFalsa } = await import('./ayudas.ts')
+        const { FuenteApi } = await import('../src/fuentes.ts')
+        const api = new ApiFalsa()
+        await api.iniciar()
+        try {
+            for (const base of [`${api.url}/api/v1`, `${api.url}/api/v1/`]) {
+                await new FuenteApi({ url: base, token: 't', timeoutMs: 500 }).obtener('nadie')
+            }
+            assert.deepEqual(
+                api.llamadas.map((l) => l.url),
+                [
+                    '/api/v1/internal/aaa/servicio?user_ppp=nadie',
+                    '/api/v1/internal/aaa/servicio?user_ppp=nadie',
+                ],
+            )
+        } finally {
+            await api.cerrar()
+        }
+    })
+})

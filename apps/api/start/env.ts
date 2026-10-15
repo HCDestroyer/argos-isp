@@ -89,4 +89,10 @@ export default await Env.create(new URL('../', import.meta.url), {
     */
     PORTAL_PROXIES_CONFIABLES: Env.schema.string.optional(),
     PORTAL_CABECERA_IP: Env.schema.string.optional(),
+    /** Límite por IP de los endpoints públicos del portal (`app/portal/limite_peticiones.ts`) y prefijo en Redis. */
+    PORTAL_LIMITE_PETICIONES: Env.schema.number.optional(),
+    PORTAL_LIMITE_VENTANA_S: Env.schema.number.optional(),
+    PORTAL_REDIS_PREFIJO: Env.schema.string.optional(),
+    /** Ventana de auditoría de quien-soy y estado (`app/portal/auditoria_unica.ts`). */
+    PORTAL_AUDITORIA_VENTANA_S: Env.schema.number.optional(),
 })

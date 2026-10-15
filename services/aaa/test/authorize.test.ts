@@ -217,15 +217,24 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         assert.deepEqual(res.json(), { status: 'ok', servicio: 'aaa', redis: 'ok' })
     })
 
-    it('post-auth → 204; accounting → 501 hasta la tarea 4', async () => {
+    it('post-auth → 204; accounting sin cola configurada → 503', async () => {
         const pa = await app.inject({
             method: 'POST',
             url: '/aaa/post-auth',
             payload: cuerpoRest({ 'User-Name': 'x' }),
         })
         assert.equal(pa.statusCode, 204)
-        const ac = await app.inject({ method: 'POST', url: '/aaa/accounting', payload: {} })
-        assert.equal(ac.statusCode, 501)
+        const ac = await app.inject({
+            method: 'POST',
+            url: '/aaa/accounting',
+            payload: cuerpoRest({
+                'Acct-Status-Type': 'Start',
+                'NAS-IP-Address': '192.0.2.1',
+                'Acct-Session-Id': '81a00001',
+                'User-Name': 'x',
+            }),
+        })
+        assert.equal(ac.statusCode, 503)
         assert.match(ac.headers['content-type'] ?? '', /application\/problem\+json/)
     })
 })

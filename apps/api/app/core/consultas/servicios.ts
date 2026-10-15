@@ -22,6 +22,8 @@ export interface ServicioVista {
     plantilla_facturacion_id: number | null
     estado: EstadoServicio
     promesa_activa: boolean
+    suspension_manual: boolean
+    suspension_manual_motivo: string | null
     user_ppp: string
     mac: string | null
     direccion: string | null
@@ -51,6 +53,8 @@ function columnas(cliente: QueryClientContract) {
         's.plan_id',
         's.plantilla_facturacion_id',
         's.estado',
+        's.suspension_manual',
+        's.suspension_manual_motivo',
         cliente.raw(
             `EXISTS (SELECT 1 FROM billing.promesas p WHERE p.servicio_id = s.id AND p.estado = 'activa') AS promesa_activa`,
         ),
