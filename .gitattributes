@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Pedidos entre agentes y estado diario: cada lado solo agrega filas; al mezclar se unen.
+.claude/integration/*.md merge=union
+.claude/STATUS.md merge=union
+
+# Generados: GitHub los colapsa en las PRs; se regeneran con pnpm contracts:build, nunca a mano.
+packages/contracts/openapi.json linguist-generated=true
+packages/contracts/src/schema.d.ts linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
