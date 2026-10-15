@@ -140,6 +140,15 @@ export const Servicio = definirEsquema(
     }),
 )
 
+export const CredencialesPpp = definirEsquema(
+    'CredencialesPpp',
+    objeto({
+        servicio_id: id,
+        user_ppp: texto,
+        pass_ppp: { type: 'string', description: 'En claro; cada consulta queda auditada' },
+    }),
+)
+
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
     objeto({
