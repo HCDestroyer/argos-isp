@@ -17,6 +17,7 @@ import AnularPago from '#billing/actions/anular_pago'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
+import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { exigirAlcance } from '#core/acl'
 import {
@@ -267,6 +268,11 @@ const estadoCuenta: Ruta[] = [
         etiqueta: 'clientes',
         permiso: 'clientes.estado_cuenta',
         respuesta: { status: 200, descripcion: 'Estado de cuenta', esquema: EstadoCuenta },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return leerEstadoCuenta(id)
+        },
     }),
 ]
 

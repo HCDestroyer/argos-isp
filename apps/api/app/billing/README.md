@@ -83,10 +83,10 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 ## Pagos (tarea 8, versión de cobro rápido)
 
-| Acción | Archivo | Permiso |
-| --- | --- | --- |
-| `pagos.registrar` | `actions/registrar_pago.ts` | `POST /pagos` con `Idempotency-Key` |
-| `pagos.anular` | `actions/anular_pago.ts` | `POST /pagos/:id/anular` con `motivo` |
+| Acción            | Archivo                     | Permiso                               |
+| ----------------- | --------------------------- | ------------------------------------- |
+| `pagos.registrar` | `actions/registrar_pago.ts` | `POST /pagos` con `Idempotency-Key`   |
+| `pagos.anular`    | `actions/anular_pago.ts`    | `POST /pagos/:id/anular` con `motivo` |
 
 - `referencia` única por método (409 `referencia_duplicada`). Misma `Idempotency-Key` → misma respuesta (middleware).
 - Aplicación: primero las `facturas` pedidas, luego la más antigua (vencimiento, periodo, id). Lo que sobra va a **Anticipos** (auxiliar por cliente) y se aplica a las facturas que se emitan después (`aplicarAnticipos` en `cobros.ts`, asiento `Anticipos / CxC` con origen en el pago).
@@ -94,6 +94,15 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 - `pago.registrado` y, en la misma transacción, `evaluarEstadoServicio` de cada servicio afectado: la reactivación (`servicio.estado_cambiado`) sale con el pago. La respuesta trae `servicios[]` con cómo quedó cada uno.
 - Anular: estado `anulado` con quién/cuándo/motivo, `RevertirAsiento` de cada asiento del pago (cobro y aplicaciones de su anticipo), descuenta lo aplicado (las facturas que ya habían vencido vuelven a `vencida`), `pago.anulado` y re-evaluación.
 - Concurrencia: advisory lock por cliente (`bloquearCliente`) en toda acción que aplica dinero.
+
+## Estado de cuenta (tarea 11)
+
+`estado_cuenta.ts`: `GET /clientes/:id/estado-cuenta` (permiso `clientes.estado_cuenta`, alcance por zona/router del cliente). Es el **auxiliar CxC** del libro:
+
+- `saldo`: suma de los movimientos del cliente en CxC (debe − haber); positivo = debe.
+- `saldo_a_favor` (aditivo): anticipos sin aplicar.
+- `facturas_pendientes`: `emitida`/`parcial`/`vencida` (servicio y mora), la más antigua primero.
+- `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
 
 ## Endpoints
 

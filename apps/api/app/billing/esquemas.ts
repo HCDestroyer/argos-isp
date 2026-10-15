@@ -246,10 +246,20 @@ export const MovimientoEstadoCuenta = definirEsquema(
 
 export const EstadoCuenta = definirEsquema(
     'EstadoCuenta',
-    objeto({
-        cliente_id: id,
-        saldo: { ...Dinero, description: 'Suma del auxiliar CxC del cliente (positivo = debe)' },
-        facturas_pendientes: lista(Factura),
-        movimientos: lista(MovimientoEstadoCuenta),
-    }),
+    objeto(
+        {
+            cliente_id: id,
+            saldo: { ...Dinero, description: 'Suma del auxiliar CxC del cliente (positivo = debe)' },
+            saldo_a_favor: {
+                ...Dinero,
+                description: 'Anticipos del cliente sin aplicar (se aplican a las próximas facturas)',
+            },
+            facturas_pendientes: lista(Factura),
+            movimientos: {
+                ...lista(MovimientoEstadoCuenta),
+                description: 'Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`',
+            },
+        },
+        ['saldo_a_favor'],
+    ),
 )

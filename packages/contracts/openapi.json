@@ -1577,20 +1577,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.estado_cuenta",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas": {
@@ -10998,6 +10988,10 @@
             "$ref": "#/components/schemas/Dinero",
             "description": "Suma del auxiliar CxC del cliente (positivo = debe)"
           },
+          "saldo_a_favor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Anticipos del cliente sin aplicar (se aplican a las próximas facturas)"
+          },
           "facturas_pendientes": {
             "type": "array",
             "items": {
@@ -11008,7 +11002,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
-            }
+            },
+            "description": "Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`"
           }
         }
       },

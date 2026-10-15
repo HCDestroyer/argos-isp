@@ -1355,7 +1355,10 @@ export interface components {
             cliente_id: number;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
             saldo: components["schemas"]["Dinero"];
+            /** @description Anticipos del cliente sin aplicar (se aplican a las próximas facturas) */
+            saldo_a_favor?: components["schemas"]["Dinero"];
             facturas_pendientes: components["schemas"]["Factura"][];
+            /** @description Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo` */
             movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
         };
         /** @enum {string} */
@@ -2769,15 +2772,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

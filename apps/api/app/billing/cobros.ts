@@ -1,4 +1,4 @@
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, type Dec } from '#ledger/dinero'
@@ -130,7 +130,7 @@ export async function aplicarAFacturas(
 }
 
 /** Saldo de anticipos del cliente en el libro (haber − debe de su auxiliar en Anticipos). */
-export async function saldoAnticipos(trx: TransactionClientContract, clienteId: number): Promise<Dec> {
+export async function saldoAnticipos(trx: QueryClientContract, clienteId: number): Promise<Dec> {
     const fila = (await trx
         .from('ledger.movimientos as m')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
