@@ -4,9 +4,9 @@ import { expect, test } from '@playwright/test'
  * Prueba obligatoria 3 del brief de A4: "Registrar pago y ver el servicio reactivarse".
  *
  * Con fixtures: Juan Carlos Ramírez (cliente 2) tiene su servicio `juan.carlos2` suspendido y
- * debe Q 300.00 vencidos. El cajero lo cobra en `/cobro`, recibe el recibo y, cuando la
- * reactivación llega por evento (los fixtures la difieren 4 s), el panel muestra
- * "Servicio reactivado" sin recargar.
+ * debe Q 300.00 vencidos. El cajero lo cobra en `/cobro` y recibe el recibo. `POST /pagos`
+ * evalúa el servicio en la misma transacción y lo devuelve en `Pago.servicios[]`, así que el
+ * panel muestra "Servicio reactivado" de inmediato, sin recargar ni sondear.
  */
 test('registrar pago y ver el servicio reactivarse', async ({ page }) => {
     await page.goto('/login')
@@ -47,12 +47,13 @@ test('registrar pago y ver el servicio reactivarse', async ({ page }) => {
     await expect(recibo).toContainText('Caja Central')
     await expect(recibo).toContainText('Q 300.00')
     await expect(recibo).toContainText(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} \(hora de Guatemala\)/)
+    await expect(recibo).toContainText('Servicio juan.carlos2 reactivado')
     await expect(page.getByRole('button', { name: 'Imprimir' })).toBeVisible()
 
     await expect(page.locator('[data-prueba="vencido"]')).toHaveText('Q 0.00')
 
-    // La reactivación llega por evento: el panel relee cada 3 s hasta 30 s.
-    await expect(servicio).toContainText('Servicio reactivado', { timeout: 30_000 })
+    // Sale en la respuesta del pago: no hay que esperar al sondeo de respaldo (3 s).
+    await expect(servicio).toContainText('Servicio reactivado', { timeout: 2_000 })
     await expect(servicio).toContainText('Activo')
     await expect(servicio).not.toContainText('Suspendido')
 

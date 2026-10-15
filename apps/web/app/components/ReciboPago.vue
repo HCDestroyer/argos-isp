@@ -13,10 +13,16 @@ const props = withDefaults(defineProps<{
     facturas?: Schema<'Factura'>[]
     caja?: string | null
     cajero?: string | null
+    /** Servicios que el pago reactivó (`Pago.servicios[]`). */
+    reactivados?: Servicio[]
+    /** Servicios suspendidos a mano: el pago no los reactiva y el recibo lo dice. */
+    suspendidosManual?: Servicio[]
 }>(), {
     facturas: () => [],
     caja: null,
     cajero: null,
+    reactivados: () => [],
+    suspendidosManual: () => [],
 })
 
 const periodos = computed(() => new Map(props.facturas.map(f => [f.id, f])))
@@ -132,6 +138,33 @@ function periodo(facturaId: number): string {
             <span class="font-medium text-highlighted">Total recibido</span>
             <span class="text-xl font-semibold tabular-nums text-highlighted">{{ formatearQuetzales(pago.monto) }}</span>
         </div>
+
+        <template v-if="reactivados.length || suspendidosManual.length">
+            <USeparator type="dashed" />
+            <div class="flex flex-col gap-1">
+                <p
+                    v-for="servicio in reactivados"
+                    :key="`r-${servicio.id}`"
+                    class="flex items-center gap-1.5 text-success"
+                    data-prueba="recibo-reactivado"
+                >
+                    <UIcon
+                        name="i-lucide-circle-check"
+                        class="size-4 shrink-0"
+                    />
+                    <span>Servicio <span class="font-mono">{{ servicio.user_ppp }}</span> reactivado</span>
+                </p>
+                <p
+                    v-for="servicio in suspendidosManual"
+                    :key="`m-${servicio.id}`"
+                    class="text-xs text-highlighted"
+                    data-prueba="recibo-suspension-manual"
+                >
+                    El servicio <span class="font-mono">{{ servicio.user_ppp }}</span> está suspendido manualmente: este pago no lo
+                    reactiva. Para reactivarlo, comuníquese con la oficina.
+                </p>
+            </div>
+        </template>
 
         <p
             v-if="pago.nota"

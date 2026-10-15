@@ -81,8 +81,9 @@ const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 
 /**
  * Espejo del validador de `POST /pagos`: monto string con hasta 2 decimales y mayor que cero;
- * `caja_id` obligatoria con `caja`; referencia hasta 100 y obligatoria salvo en efectivo
- * (regla del panel: sin referencia no se puede conciliar un depósito); nota hasta 500.
+ * `caja_id` opcional (con `caja` y sin caja, la API usa la caja principal); referencia hasta
+ * 100 y obligatoria salvo en efectivo (regla del panel: sin referencia no se puede conciliar un
+ * depósito); nota hasta 500.
  */
 export const esquemaCobro = z.object({
     monto: z.string()
@@ -94,9 +95,6 @@ export const esquemaCobro = z.object({
     referencia: z.string().trim().max(100, 'Máximo 100 caracteres'),
     nota: z.string().trim().max(500, 'Máximo 500 caracteres'),
 }).superRefine((datos, ctx) => {
-    if (datos.metodo === 'caja' && datos.caja_id === null) {
-        ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'Elige la caja con turno abierto' })
-    }
     if (datos.metodo !== 'caja' && !datos.referencia) {
         ctx.addIssue({ code: 'custom', path: ['referencia'], message: 'La referencia es obligatoria salvo en efectivo' })
     }
