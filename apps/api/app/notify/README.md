@@ -23,6 +23,7 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 | Consumidor de eventos (`ConsumidorEventos`, `EventoEntrante`)                   | `consumidor.ts`                                                                                                   |
 | Cola y worker BullMQ                                                            | `cola.ts`; proceso: `node ace notify:worker` (servicio `worker` del compose)                                      |
 | Cron de recordatorios                                                           | `recordatorios.ts`, `actions/programar_recordatorios.ts`, `actions/editar_recordatorio.ts`                        |
+| Cron mensual de particiones de `audit`                                          | `particiones.ts`, `actions/crear_particiones_auditoria.ts`                                                        |
 | Acciones                                                                        | `actions/programar_notificacion.ts`, `actions/enviar_notificacion.ts`, `actions/editar_plantilla_notificacion.ts` |
 | Plantillas iniciales (seeder idempotente, no pisa ediciones)                    | `plantillas_base.ts`, `database/seeders/notify_plantillas_seeder.ts`                                              |
 | Rutas                                                                           | `start/routes/notify.ts`                                                                                          |
@@ -51,6 +52,14 @@ Hay hasta tres recordatorios, configurables en `notify.recordatorios`. Cada uno 
 - **Lotes.** Procesa 200 facturas por transacción y repite hasta agotar lo pendiente. Cada aviso pasa por `ProgramarNotificacion` (todos los canales disponibles) y se audita por fila.
 
 Variables extra: `recordatorio.orden`, `recordatorio.dias` y `factura.vence_relativo` ("vence en 3 días", "vence hoy", "venció hace 4 días").
+
+## Particiones de auditoría (cron mensual)
+
+`audit.acciones`, `audit.cambios` y `audit.red` están particionadas por mes. La acción `CrearParticionesAuditoria` (`auditoria.crear_particiones`, solo sistema) llama `audit.crear_particiones(desde, meses)` y devuelve las particiones que creó; es idempotente.
+
+- **Cron.** En la cola `notify-cron`, id `particiones`, patrón `7 6 1 * *` UTC (día 1 de cada mes, 06:07): asegura el mes actual y los 12 siguientes. `notify:worker` además la encola una vez al arrancar. `--sin-cron` la desactiva junto con los recordatorios. Archivo: `particiones.ts`.
+- **Permisos.** La función es `SECURITY DEFINER` (migración `1761100000001_audit_particiones_definer`): el worker conecta con el usuario de la aplicación (miembro de `argosisp_app`, sin DDL en `audit`) y aun así crea las particiones con los permisos del dueño. EXECUTE solo para `argosisp_app`.
+- **Si el cron se detiene.** Las filas caen en la partición DEFAULT y no se pierde nada, pero crear después la partición de un mes que ya tiene filas en DEFAULT falla. Con 12 meses de adelanto hay margen de sobra.
 
 ## Variables de las plantillas (Mustache)
 

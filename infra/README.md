@@ -1,13 +1,13 @@
 # infra
 
-| Ruta | Qué es |
-| --- | --- |
-| `docker-compose.yml` | Stack completo: postgres, redis, mailpit, migrate, api, procesos de fondo (relay, billing-worker, sesiones-worker, worker), web, portal y, con el perfil `lab`, freeradius, aaa y coa |
-| `.env.example` | Variables del compose; cópialo a `infra/.env` |
-| `mikrotik/` | `lab.rsc` y su README: RouterOS del laboratorio (PPPoE, RADIUS, corte IPv4/IPv6, WireGuard) |
-| `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6) |
-| `ci/` | Verificaciones de CI de infraestructura (FreeRADIUS) |
-| `postgres/` | Inicialización de Postgres |
+| Ruta                     | Qué es                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker-compose.yml`     | Stack completo: postgres, redis, mailpit, migrate, api, procesos de fondo (relay, billing-worker, sesiones-worker, worker), web, portal y, con el perfil `lab`, freeradius, aaa y coa |
+| `.env.example`           | Variables del compose; cópialo a `infra/.env`                                                                                                                                         |
+| `mikrotik/`              | `lab.rsc` y su README: RouterOS del laboratorio (PPPoE, RADIUS, corte IPv4/IPv6, WireGuard)                                                                                           |
+| `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6)                                                                                    |
+| `ci/`                    | Verificaciones de CI de infraestructura (FreeRADIUS)                                                                                                                                  |
+| `postgres/`              | Inicialización de Postgres                                                                                                                                                            |
 
 ```sh
 cp infra/.env.example infra/.env        # completa los secretos
@@ -18,12 +18,12 @@ docker compose -f infra/docker-compose.yml up -d
 
 Cuatro servicios corren con la imagen de api (`argosisp/api`), sin puerto HTTP, cada uno con un solo comando de ace. Comparten el entorno de la API (`x-api-env`) y arrancan después de `migrate` (migraciones terminadas) con Postgres y Redis sanos.
 
-| Servicio | Comando | Dueño | Qué hace |
-| --- | --- | --- | --- |
-| `relay` | `node ace eventos:relay` | A1 | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md` |
-| `billing-worker` | `node ace billing:worker` | A3 | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte |
-| `sesiones-worker` | `node ace sesiones:worker` | A2 | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada` |
-| `worker` | `node ace notify:worker` | A6 | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago y cron mensual de particiones de `audit` (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
+| Servicio          | Comando                    | Dueño | Qué hace                                                                                                                                                                                                    |
+| ----------------- | -------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `relay`           | `node ace eventos:relay`   | A1    | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md`    |
+| `billing-worker`  | `node ace billing:worker`  | A3    | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte                                                    |
+| `sesiones-worker` | `node ace sesiones:worker` | A2    | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada`                                                      |
+| `worker`          | `node ace notify:worker`   | A6    | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago y cron mensual de particiones de `audit` (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
 
 - **Healthcheck por proceso vivo.** El contenedor ejecuta el comando con `exec`, así que el PID 1 es el propio proceso de ace; el healthcheck comprueba que `/proc/1/cmdline` sigue siendo ese comando. La imagen trae un `HEALTHCHECK` HTTP de la API que en estos procesos no aplica y se reemplaza.
 - **Varias réplicas.** Los crons de BullMQ y el relay toman lock, así que escalar (`docker compose up -d --scale billing-worker=2`) no duplica trabajo; los consumidores de streams reparten mensajes dentro de su grupo.
@@ -49,12 +49,12 @@ En el servidor del laboratorio:
 
 1. Daemon de Docker sin `userland-proxy` y con IPv6. Copia `infra/docker/daemon.lab.json` a `/etc/docker/daemon.json` (o combínalo con el que ya tengas) y reinicia Docker con `systemctl restart docker`.
 2. En `infra/.env`:
-   - `COMPOSE_PROFILES=lab`
-   - `COMPOSE_IPV6=true`: la red de compose recibe `COMPOSE_SUBNET_V6`.
-   - `PORTAL_BIND_IP` = `portalV4` de `lab.rsc`.
-   - `PORTAL_CORTE_PORT_HOST` = `portalCortePuerto` (80).
-   - `PORTAL_URL_PUBLICA=http://<portalFqdn>`.
-   - `PORTAL_HOSTS=<portalV4>,<portalV6>`.
+    - `COMPOSE_PROFILES=lab`
+    - `COMPOSE_IPV6=true`: la red de compose recibe `COMPOSE_SUBNET_V6`.
+    - `PORTAL_BIND_IP` = `portalV4` de `lab.rsc`.
+    - `PORTAL_CORTE_PORT_HOST` = `portalCortePuerto` (80).
+    - `PORTAL_URL_PUBLICA=http://<portalFqdn>`.
+    - `PORTAL_HOSTS=<portalV4>,<portalV6>`.
 3. Para publicar también por IPv6, agrega una línea `"[<portalV6>]:80:3001"` a `ports` del servicio `portal`. `PORTAL_BIND_IP` acepta una sola dirección.
 4. Si el host no puede desactivar `userland-proxy`, la alternativa es correr el portal con `network_mode: host`, en un archivo override solo del laboratorio. En ese caso el portal escucha directo en el host, `NUXT_API_BASE_INTERNAL` debe apuntar a la API publicada (`http://127.0.0.1:3333`) y `PORTAL_PROXIES_CONFIABLES` debe incluir `127.0.0.1` y `::1`.
 
