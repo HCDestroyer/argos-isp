@@ -1,6 +1,7 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, fechaIso, idEntidad, instanteIso, motivo, versionEsperada } from '#shared/validadores'
+import { reglasPromesaSchema } from '#billing/reglas_promesa'
 
 /*
 |--------------------------------------------------------------------------
@@ -26,10 +27,9 @@ const camposPlantilla = {
         .optional()
         .meta({ description: 'HH:MM hora de Guatemala' }),
     certificar_al: vine.enum(['emitir', 'pagar', 'nunca'] as const).optional(),
-    reglas_promesa: vine
-        .record(vine.any())
+    reglas_promesa: reglasPromesaSchema()
         .optional()
-        .meta({ description: 'Reglas de promesas (las define A3)' }),
+        .meta({ description: 'Reglas de promesas; las claves que falten toman su valor por defecto' }),
 }
 
 export const crearPlantillaValidator = vine.compile(vine.object(camposPlantilla))
@@ -53,7 +53,10 @@ export const editarPlantillaValidator = vine.compile(
             .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
             .optional(),
         certificar_al: vine.enum(['emitir', 'pagar', 'nunca'] as const).optional(),
-        reglas_promesa: vine.record(vine.any()).optional(),
+        reglas_promesa: reglasPromesaSchema().optional().meta({
+            description:
+                'Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto)',
+        }),
     }),
 )
 

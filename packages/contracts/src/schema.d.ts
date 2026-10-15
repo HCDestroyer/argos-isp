@@ -568,7 +568,7 @@ export interface paths {
         };
         /**
          * Identifica al cliente por la IP de origen (página de corte)
-         * @description Sin login. Solo devuelve nombre parcial, estado y monto adeudado.
+         * @description Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`.
          */
         get: operations["portalQuienSoy"];
         put?: never;
@@ -1087,6 +1087,8 @@ export interface components {
             /** @enum {string} */
             origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste";
             origen_id: number | null;
+            /** @description Asiento que este revierte (correcciones por reverso) */
+            reversa_de: number | null;
             created_by: number | null;
             /** Format: date-time */
             created_at: string;
@@ -1186,6 +1188,10 @@ export interface components {
             /** @enum {string} */
             tipo: "activo" | "pasivo" | "ingreso" | "gasto";
             padre_id: number | null;
+            /** @description Recibe movimientos (false = cuenta de agrupación) */
+            imputable: boolean;
+            /** @description Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id */
+            auxiliar_cliente: boolean;
             activa: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -1253,6 +1259,12 @@ export interface components {
             precio_unitario: components["schemas"]["Dinero"];
             gravable: boolean;
             iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+        };
+        FacturasVencidasResumen: {
+            /** @description Número de facturas vencidas con saldo */
+            cantidad: number;
+            /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
         };
         Ipv6Bloque: {
@@ -1443,13 +1455,11 @@ export interface components {
             mora_tipo: "ninguna" | "fija" | "porcentaje";
             mora_valor: components["schemas"]["Dinero"];
             mora_recurrente: boolean;
-            /** @description HH:MM:SS hora de Guatemala */
+            /** @description HH:MM hora de Guatemala */
             hora_corte: string;
             /** @enum {string} */
             certificar_al: "emitir" | "pagar" | "nunca";
-            reglas_promesa: {
-                [key: string]: unknown;
-            };
+            reglas_promesa: components["schemas"]["ReglasPromesa"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1493,11 +1503,16 @@ export interface components {
         QuienSoy: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
             identificado: boolean;
+            /** @description IP de origen con la que la API identificó la petición */
+            ip: string;
             /** @description Nombre recortado, p. ej. "Juan P." */
             nombre_parcial: string | null;
             estado: components["schemas"]["EstadoServicio"] | null;
+            /** @description Hay una promesa de pago activa */
+            promesa_activa: boolean | null;
+            /** @description Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas) */
             monto_adeudado: components["schemas"]["Dinero"] | null;
-            facturas_vencidas: number | null;
+            facturas_vencidas: components["schemas"]["FacturasVencidasResumen"] | null;
         };
         RedIpv4: {
             id: number;
@@ -1512,6 +1527,58 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ReglasPromesa: {
+            habilitadas: boolean;
+            /** @description Promesas por periodo de facturación */
+            max_por_periodo: number;
+            /** @description Máximo si el cumplimiento reciente es >= buen_historial_pct */
+            max_por_periodo_buen_historial: number;
+            buen_historial_pct: number;
+            /** @description Últimas N promesas para medir el cumplimiento */
+            historial_ventana: number;
+            plazo_max_dias: number;
+            no_exceder_siguiente_facturacion: boolean;
+            deuda_maxima: components["schemas"]["Dinero"] | null;
+            /** @description Porcentaje de la deuda a pagar antes de la promesa */
+            abono_inicial_pct: number;
+            antiguedad_minima_dias: number;
+            cumplimiento_minimo_pct: number | null;
+            bloqueo_tras_incumplida_dias: number;
+            canales: {
+                portal: {
+                    permitido: boolean;
+                    /** @description true → la promesa queda pendiente_aprobacion */
+                    requiere_aprobacion: boolean;
+                    plazo_max_dias: number | null;
+                    max_por_periodo: number | null;
+                    deuda_maxima: components["schemas"]["Dinero"] | null;
+                };
+                ia: {
+                    permitido: boolean;
+                    /** @description true → la promesa queda pendiente_aprobacion */
+                    requiere_aprobacion: boolean;
+                    plazo_max_dias: number | null;
+                    max_por_periodo: number | null;
+                    deuda_maxima: components["schemas"]["Dinero"] | null;
+                };
+                operador: {
+                    permitido: boolean;
+                    /** @description true → la promesa queda pendiente_aprobacion */
+                    requiere_aprobacion: boolean;
+                    plazo_max_dias: number | null;
+                    max_por_periodo: number | null;
+                    deuda_maxima: components["schemas"]["Dinero"] | null;
+                };
+                supervisor: {
+                    permitido: boolean;
+                    /** @description true → la promesa queda pendiente_aprobacion */
+                    requiere_aprobacion: boolean;
+                    plazo_max_dias: number | null;
+                    max_por_periodo: number | null;
+                    deuda_maxima: components["schemas"]["Dinero"] | null;
+                };
+            };
         };
         ResolucionIp: {
             servicio_id: number;
@@ -3044,15 +3111,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     libroDiario: {
@@ -3111,15 +3169,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     libroMayor: {
@@ -3170,15 +3219,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3989,15 +4029,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     plantillasCrear: {
@@ -4030,9 +4061,70 @@ export interface operations {
                     hora_corte?: string;
                     /** @enum {string} */
                     certificar_al?: "emitir" | "pagar" | "nunca";
-                    /** @description Reglas de promesas (las define A3) */
+                    /** @description Reglas de promesas; las claves que falten toman su valor por defecto */
                     reglas_promesa?: {
-                        [key: string]: string | number | boolean | unknown[] | Record<string, never>;
+                        habilitadas?: boolean;
+                        max_por_periodo?: number;
+                        max_por_periodo_buen_historial?: number;
+                        buen_historial_pct?: number;
+                        historial_ventana?: number;
+                        plazo_max_dias?: number;
+                        no_exceder_siguiente_facturacion?: boolean;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        deuda_maxima?: string | null;
+                        abono_inicial_pct?: number;
+                        antiguedad_minima_dias?: number;
+                        cumplimiento_minimo_pct?: number | null;
+                        bloqueo_tras_incumplida_dias?: number;
+                        canales?: {
+                            portal?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            ia?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            operador?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            supervisor?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                        };
                     };
                 };
             };
@@ -4067,15 +4159,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4132,15 +4215,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     plantillasEditar: {
@@ -4176,8 +4250,70 @@ export interface operations {
                     hora_corte?: string;
                     /** @enum {string} */
                     certificar_al?: "emitir" | "pagar" | "nunca";
+                    /** @description Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto) */
                     reglas_promesa?: {
-                        [key: string]: string | number | boolean | unknown[] | Record<string, never>;
+                        habilitadas?: boolean;
+                        max_por_periodo?: number;
+                        max_por_periodo_buen_historial?: number;
+                        buen_historial_pct?: number;
+                        historial_ventana?: number;
+                        plazo_max_dias?: number;
+                        no_exceder_siguiente_facturacion?: boolean;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        deuda_maxima?: string | null;
+                        abono_inicial_pct?: number;
+                        antiguedad_minima_dias?: number;
+                        cumplimiento_minimo_pct?: number | null;
+                        bloqueo_tras_incumplida_dias?: number;
+                        canales?: {
+                            portal?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            ia?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            operador?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                            supervisor?: {
+                                permitido?: boolean;
+                                requiere_aprobacion?: boolean;
+                                plazo_max_dias?: number | null;
+                                max_por_periodo?: number | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                deuda_maxima?: string | null;
+                            };
+                        };
                     };
                 };
             };
@@ -4237,15 +4373,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     portalQuienSoy: {
@@ -4264,15 +4391,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuienSoy"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
