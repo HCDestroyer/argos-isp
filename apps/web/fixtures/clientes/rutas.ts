@@ -1,5 +1,5 @@
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { RutasFixture } from '~/utils/fetchFixtures'
+import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import {
     ahora,
@@ -104,6 +104,40 @@ function coincide(cliente: Cliente, q: string): boolean {
         && (normalizar(servicio.user_ppp).includes(texto) || servicio.ipv4 === q.trim()))
 }
 
+/** `true`/`false` de un query param booleano, o `undefined` si no viene. */
+function banderaQuery(solicitud: SolicitudFixture, nombre: string): boolean | undefined {
+    const valor = solicitud.query.get(nombre)
+    if (valor === 'true' || valor === '1') {
+        return true
+    }
+    return valor === 'false' || valor === '0' ? false : undefined
+}
+
+/**
+ * Igual que `aplicarFiltrosAvanzados` de la API: estado, router y plan sobre el MISMO servicio;
+ * deuda = alguna factura `vencida`; promesa = algún servicio con promesa activa.
+ */
+function cumpleFiltrosAvanzados(cliente: Cliente, solicitud: SolicitudFixture): boolean {
+    const estado = solicitud.query.get('estado_servicio')
+    const router = numeroQuery(solicitud, 'router_id')
+    const plan = numeroQuery(solicitud, 'plan_id')
+    const servicios = bd.servicios.filter(s => s.cliente_id === cliente.id)
+    if (estado || router !== undefined || plan !== undefined) {
+        const alguno = servicios.some(s => (!estado || s.estado === estado)
+            && (router === undefined || s.router_id === router)
+            && (plan === undefined || s.plan_id === plan))
+        if (!alguno) {
+            return false
+        }
+    }
+    const deuda = banderaQuery(solicitud, 'con_deuda_vencida')
+    if (deuda !== undefined && bd.facturas.some(f => f.cliente_id === cliente.id && f.estado === 'vencida') !== deuda) {
+        return false
+    }
+    const promesa = banderaQuery(solicitud, 'con_promesa_activa')
+    return promesa === undefined || servicios.some(s => s.promesa_activa) === promesa
+}
+
 export const rutasClientes: RutasFixture = {
     'GET /api/v1/clientes': conPermiso('clientes.ver', (solicitud) => {
         const q = solicitud.query.get('q') ?? ''
@@ -111,6 +145,7 @@ export const rutasClientes: RutasFixture = {
         const filas = bd.clientes
             .filter(cliente => zona === undefined || cliente.zona_id === zona)
             .filter(cliente => coincide(cliente, q))
+            .filter(cliente => cumpleFiltrosAvanzados(cliente, solicitud))
             .sort((a, b) => b.id - a.id)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),

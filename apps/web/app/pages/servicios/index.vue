@@ -32,13 +32,17 @@ const estado = ref<EstadoServicio | typeof TODOS>(estadoQuery(route.query.estado
 const routerId = ref(textoQuery(route.query.router) || TODOS)
 const planId = ref(textoQuery(route.query.plan) || TODOS)
 const clienteId = ref(idQuery(route.query.cliente))
+const zonaId = ref(textoQuery(route.query.zona) || TODOS)
+const conDeuda = ref(['1', 'true'].includes(textoQuery(route.query.deuda)))
 const clienteElegido = shallowRef<Cliente | null>(null)
 
 const verRouters = computed(() => puede('routers.ver'))
 const verPlanes = computed(() => puede('planes.ver'))
+const verZonas = computed(() => puede('zonas.ver'))
 
 const routers = shallowRef<RouterNas[]>([])
 const planes = shallowRef<Plan[]>([])
+const zonas = shallowRef<Zona[]>([])
 /** Nombres de los clientes de la página. `Servicio` no trae `cliente_nombre` (pedido a A1). */
 const clientes = ref(new Map<number, Cliente>())
 
@@ -60,6 +64,11 @@ const itemsPlan = computed<SelectItem[]>(() => [
     ...planes.value.map(p => ({ label: p.nombre, value: String(p.id) })),
 ])
 
+const itemsZona = computed<SelectItem[]>(() => [
+    { label: 'Todas las zonas', value: TODOS },
+    ...zonas.value.map(z => ({ label: z.nombre, value: String(z.id) })),
+])
+
 function filtros(): FiltrosServicios {
     const resultado: FiltrosServicios = { limit: LIMITE_SERVICIOS }
     const q = busqueda.value.trim()
@@ -77,6 +86,13 @@ function filtros(): FiltrosServicios {
     }
     if (clienteId.value) {
         resultado.cliente_id = clienteId.value
+    }
+    if (zonaId.value !== TODOS) {
+        resultado.zona_id = Number(zonaId.value)
+    }
+    // `false` en la API es "sin deuda"; apagado no se manda.
+    if (conDeuda.value) {
+        resultado.con_deuda_vencida = true
     }
     return resultado
 }
@@ -121,14 +137,33 @@ const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || estado.value !== TODOS
     || routerId.value !== TODOS
     || planId.value !== TODOS
-    || clienteId.value !== 0)
+    || clienteId.value !== 0
+    || zonaId.value !== TODOS
+    || conDeuda.value)
 
-/** Accesos rápidos: "Todos", "Cortados" (suspendido) y "Limitados". */
-const accesos: { etiqueta: string, estado: EstadoServicio | typeof TODOS, color: 'neutral' | 'error' | 'warning' }[] = [
-    { etiqueta: 'Todos', estado: TODOS, color: 'neutral' },
-    { etiqueta: 'Cortados', estado: 'suspendido', color: 'error' },
-    { etiqueta: 'Limitados', estado: 'limitado', color: 'warning' },
+/** Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados" y "Con deuda" vencida. */
+interface AccesoServicios {
+    etiqueta: string
+    estado: EstadoServicio | typeof TODOS
+    deuda: boolean
+    color: 'neutral' | 'error' | 'warning'
+}
+
+const accesos: AccesoServicios[] = [
+    { etiqueta: 'Todos', estado: TODOS, deuda: false, color: 'neutral' },
+    { etiqueta: 'Cortados', estado: 'suspendido', deuda: false, color: 'error' },
+    { etiqueta: 'Limitados', estado: 'limitado', deuda: false, color: 'warning' },
+    { etiqueta: 'Con deuda', estado: TODOS, deuda: true, color: 'warning' },
 ]
+
+function accesoActivo(acceso: AccesoServicios): boolean {
+    return estado.value === acceso.estado && conDeuda.value === acceso.deuda
+}
+
+function elegirAcceso(acceso: AccesoServicios) {
+    estado.value = acceso.estado
+    conDeuda.value = acceso.deuda
+}
 
 async function aplicarFiltros() {
     const query: Record<string, string> = {}
@@ -148,6 +183,12 @@ async function aplicarFiltros() {
     if (clienteId.value) {
         query.cliente = String(clienteId.value)
     }
+    if (zonaId.value !== TODOS) {
+        query.zona = zonaId.value
+    }
+    if (conDeuda.value) {
+        query.deuda = '1'
+    }
     await router.replace({ query })
     await lista.recargar()
 }
@@ -159,6 +200,8 @@ function limpiarFiltros() {
     planId.value = TODOS
     clienteId.value = 0
     clienteElegido.value = null
+    zonaId.value = TODOS
+    conDeuda.value = false
 }
 
 let temporizador: ReturnType<typeof setTimeout> | undefined
@@ -166,7 +209,7 @@ watch(busqueda, () => {
     clearTimeout(temporizador)
     temporizador = setTimeout(aplicarFiltros, 300)
 })
-watch([estado, routerId, planId, clienteId], aplicarFiltros)
+watch([estado, routerId, planId, clienteId, zonaId, conDeuda], aplicarFiltros)
 onBeforeUnmount(() => clearTimeout(temporizador))
 
 function nombreCliente(servicio: Servicio): string {
@@ -179,11 +222,15 @@ function nombrePlan(servicio: Servicio): string {
 
 onMounted(async () => {
     void lista.recargar()
-    const [resultadoRouters, resultadoPlanes, resultadoCliente] = await Promise.all([
+    const [resultadoRouters, resultadoPlanes, resultadoZonas, resultadoCliente] = await Promise.all([
         verRouters.value ? useRouters().listar() : null,
         verPlanes.value ? usePlanes().listar() : null,
+        verZonas.value ? useZonas().listar() : null,
         clienteId.value ? useClientes().ver(clienteId.value) : null,
     ])
+    if (resultadoZonas?.ok) {
+        zonas.value = resultadoZonas.data
+    }
     if (resultadoRouters?.ok) {
         routers.value = resultadoRouters.data.data
     }
@@ -224,11 +271,11 @@ onMounted(async () => {
                     :key="acceso.etiqueta"
                     :label="acceso.etiqueta"
                     :color="acceso.color"
-                    :variant="estado === acceso.estado ? 'solid' : 'outline'"
-                    :aria-pressed="estado === acceso.estado"
+                    :variant="accesoActivo(acceso) ? 'solid' : 'outline'"
+                    :aria-pressed="accesoActivo(acceso)"
                     size="sm"
                     class="rounded-full"
-                    @click="estado = acceso.estado"
+                    @click="elegirAcceso(acceso)"
                 />
             </div>
 
@@ -291,6 +338,19 @@ onMounted(async () => {
                     aria-label="Filtrar por cliente"
                     class="w-full sm:max-w-md"
                     @elegido="clienteElegido = $event"
+                />
+                <USelect
+                    v-if="verZonas"
+                    v-model="zonaId"
+                    :items="itemsZona"
+                    icon="i-lucide-map-pin"
+                    aria-label="Filtrar por zona"
+                    class="w-full sm:w-52"
+                />
+                <USwitch
+                    v-model="conDeuda"
+                    label="Con deuda vencida"
+                    class="shrink-0"
                 />
                 <UButton
                     v-if="hayFiltros"
@@ -385,7 +445,7 @@ onMounted(async () => {
                         <UEmpty
                             icon="i-lucide-search-x"
                             :title="hayFiltros ? 'Ningún servicio coincide' : 'Todavía no hay servicios'"
-                            :description="hayFiltros ? 'Prueba con otro estado, router, plan o búsqueda.' : undefined"
+                            :description="hayFiltros ? 'Prueba con otro estado, router, plan, zona o búsqueda.' : undefined"
                             variant="naked"
                         />
                     </template>

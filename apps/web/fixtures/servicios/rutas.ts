@@ -242,7 +242,11 @@ export const rutasServicios: RutasFixture = {
         const router = numeroQuery(solicitud, 'router_id')
         const plan = numeroQuery(solicitud, 'plan_id')
         const estado = solicitud.query.get('estado')
+        const zona = numeroQuery(solicitud, 'zona_id')
+        const deuda = solicitud.query.get('con_deuda_vencida')
         const filas = bd.servicios
+            .filter(s => zona === undefined || bd.clientes.find(c => c.id === s.cliente_id)?.zona_id === zona)
+            .filter(s => deuda === null || bd.facturas.some(f => f.servicio_id === s.id && f.estado === 'vencida') === (deuda === 'true'))
             .filter(s => cliente === undefined || s.cliente_id === cliente)
             .filter(s => router === undefined || s.router_id === router)
             .filter(s => plan === undefined || s.plan_id === plan)
