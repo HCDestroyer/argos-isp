@@ -12,7 +12,8 @@ import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
  * alrededor, así el cambio de estado y su evento quedan en la misma transacción que el pago.
  *
  * Reglas, con la configuración efectiva (plantilla + excepciones del servicio):
- *  1. Retirado o sin plantilla: no se toca.
+ *  1. Retirado, suspendido a mano por un operador (`suspension_manual`, decisión del PM) o sin
+ *     plantilla: no se toca. La suspensión manual solo la quita `reactivar`.
  *  2. Promesa de pago activa → `activo` (la promesa no corta).
  *  3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`.
  *  4. Vencidas ≥ `facturas_para_limitar` (> 0) → `limitado`, solo si el plan tiene velocidad
@@ -68,6 +69,7 @@ export default class EvaluarEstadoServicio extends DomainAction<
             promesa_activa: false,
         }
         if (servicio.estado === 'retirado') return { ...base, motivo: 'servicio retirado' }
+        if (servicio.suspension_manual) return { ...base, motivo: 'suspensión manual' }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) return { ...base, motivo: 'sin plantilla de facturación' }
 
