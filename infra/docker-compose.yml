@@ -240,9 +240,18 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       REDIS_HOST: redis
       REDIS_PORT: '6379'
-      API_INTERNAL_URL: http://api:3333
+      # Respaldo cuando Redis no tiene el servicio: api (GET /internal/aaa/servicio) o fixtures.
+      AAA_RESPALDO: ${AAA_RESPALDO:-api}
+      AAA_API_URL: ${AAA_API_URL:-http://api:3333}
+      API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333}
       AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      # Misma clave que el servicio api (cifra pass_ppp y radius_secret, formato v1).
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}
+      # Perfil de suspendido (verificado en RouterOS 7.24.5, ver infra/mikrotik/README.md)
+      AAA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      AAA_SUSPENDIDO_GRUPO: ${AAA_SUSPENDIDO_GRUPO:-suspendido}
+      AAA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
