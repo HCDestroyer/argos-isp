@@ -2041,6 +2041,112 @@
         "x-implementado": true
       }
     },
+    "/api/v1/facturas/vencer": {
+      "post": {
+        "operationId": "facturasVencer",
+        "summary": "Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo las facturas de este servicio; si falta, todas"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del vencimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoVencimiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
@@ -12566,6 +12672,28 @@
           "errores": {
             "type": "integer",
             "description": "Servicios que no se pudieron facturar (ver log)"
+          }
+        }
+      },
+      "ResultadoVencimiento": {
+        "type": "object",
+        "required": [
+          "vencidas",
+          "moras",
+          "errores"
+        ],
+        "properties": {
+          "vencidas": {
+            "type": "integer",
+            "description": "Facturas que pasaron a vencida"
+          },
+          "moras": {
+            "type": "integer",
+            "description": "Recargos de mora creados"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Facturas que no se pudieron procesar (ver log)"
           }
         }
       },

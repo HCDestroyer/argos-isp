@@ -10,6 +10,7 @@ import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billin
 import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
 import GenerarFacturas from '#billing/actions/generar_facturas'
+import VencerFacturas from '#billing/actions/vencer_facturas'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { exigirAlcance } from '#core/acl'
 import {
@@ -20,6 +21,7 @@ import {
     PlantillaFacturacion,
     Promesa,
     ResultadoGeneracion,
+    ResultadoVencimiento,
 } from '#billing/esquemas'
 
 const plantillas: Ruta[] = [
@@ -106,6 +108,18 @@ const facturas: Ruta[] = [
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Resultado de la generación', esquema: ResultadoGeneracion },
         handler: (ctx, { cuerpo }) => new GenerarFacturas().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/facturas/vencer',
+        operacion: 'facturasVencer',
+        resumen: 'Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.generar',
+        cuerpo: v.vencerFacturasValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Resultado del vencimiento', esquema: ResultadoVencimiento },
+        handler: (ctx, { cuerpo }) => new VencerFacturas().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',

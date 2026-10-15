@@ -147,6 +147,15 @@ export const ResultadoGeneracion = definirEsquema(
     ),
 )
 
+export const ResultadoVencimiento = definirEsquema(
+    'ResultadoVencimiento',
+    objeto({
+        vencidas: { type: 'integer', description: 'Facturas que pasaron a vencida' },
+        moras: { type: 'integer', description: 'Recargos de mora creados' },
+        errores: { type: 'integer', description: 'Facturas que no se pudieron procesar (ver log)' },
+    }),
+)
+
 export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
 
 export const Pago = definirEsquema(

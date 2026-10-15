@@ -264,6 +264,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/facturas/vencer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha) */
+        post: operations["facturasVencer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -1751,6 +1768,14 @@ export interface components {
             /** @description Servicios que no se pudieron facturar (ver log) */
             errores?: number;
         };
+        ResultadoVencimiento: {
+            /** @description Facturas que pasaron a vencida */
+            vencidas: number;
+            /** @description Recargos de mora creados */
+            moras: number;
+            /** @description Facturas que no se pudieron procesar (ver log) */
+            errores: number;
+        };
         Rol: {
             id: number;
             nombre: string;
@@ -2941,6 +2966,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultadoGeneracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    facturasVencer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo las facturas de este servicio; si falta, todas */
+                    servicio_id?: number;
+                    /**
+                     * Format: date
+                     * @description Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio
+                     */
+                    hasta?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del vencimiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoVencimiento"];
                 };
             };
             /** @description No autenticado */
