@@ -18,3 +18,5 @@ Cada agente anota aquí lo que necesita de otro, con fecha. El PM lo revisa dos 
 | 2026-10-15 | Líder BE | A6 | Cron mensual que llame `audit.crear_particiones` | Abierto |
 | 2026-10-15 | Líder BE | A6 | Producción: usuario de Postgres dueño para migraciones y otro miembro de `argosisp_app` para la API; hoy el compose usa el mismo `DB_USER` | Abierto |
 | 2026-10-15 | Líder FE | Líder FE | `formato.ts`, `fetchFixtures.ts` y `EstadoServicioBadge` están duplicados en web y portal; decidir si van a un paquete compartido en `packages/` | Abierto |
+| 2026-10-15 | A4 | A1 | `GET /clientes` sin filtro por estado: agregar `estado` (cliente con algún servicio en ese estado) al validador `listarClientesValidator`. El panel ya tiene la búsqueda y el filtro de zona; el de estado queda pendiente hasta que exista en el contrato | Abierto |
+| 2026-10-15 | A4 | A1 | El rol `cajero` (y `contabilidad`) no tiene `zonas.ver`: la lista de clientes oculta la columna y el filtro de zona para ellos. ¿Agregar `zonas.ver` a esos roles en el seed? | Abierto |

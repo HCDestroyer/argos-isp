@@ -3,15 +3,20 @@
  * para que un cambio de contrato rompa el typecheck aquí y no en pantalla.
  *
  * Usuarios: `admin@argos.test` y `cajero@argos.test`, cualquier contraseña.
- * Para agregar un recurso: crea `fixtures/<recurso>/*.json` y registra su ruta abajo.
+ * Para agregar un recurso: crea `fixtures/<recurso>/datos.ts` (tipado con `Schema<'X'>`),
+ * sus rutas en `fixtures/<recurso>/rutas.ts` y regístralas abajo. Los datos mutables viven
+ * en `bd.ts` (`reiniciarFixtures()` en pruebas).
  */
-import type { Problem, Schema, paths } from '@argosisp/contracts'
+import type { Problem, paths } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
-import meAdmin from './auth/me.admin.json'
-import meCajero from './auth/me.cajero.json'
+import { rutasClientes } from './clientes/rutas'
+import { sinSesion, usuariosPorToken } from './comun'
+import { rutasZonas } from './zonas/rutas'
+
+export { reiniciarFixtures } from './bd'
 
 type RespuestaLogin = paths['/api/v1/auth/login']['post']['responses'][200]['content']['application/json']
 
@@ -20,19 +25,7 @@ const logins: Record<string, RespuestaLogin> = {
     'cajero@argos.test': loginCajero,
 }
 
-const usuariosPorToken: Record<string, Schema<'Me'>> = {
-    [loginAdmin.token]: meAdmin,
-    [loginCajero.token]: meCajero,
-}
-
 const credencialesInvalidas: Problem = login401
-
-const sinSesion: Problem = {
-    type: 'about:blank',
-    title: 'Sin sesión',
-    status: 401,
-    detail: 'El token no es válido o expiró.',
-}
 
 function emailDe(cuerpo: unknown): string {
     if (typeof cuerpo === 'object' && cuerpo !== null && 'email' in cuerpo && typeof cuerpo.email === 'string') {
@@ -49,6 +42,9 @@ export const rutasFixture: RutasFixture = {
 
     'GET /api/v1/me': ({ token }) => {
         const usuario = token ? usuariosPorToken[token] : undefined
-        return usuario ? { status: 200, cuerpo: usuario } : { status: 401, cuerpo: sinSesion }
+        return usuario ? { status: 200, cuerpo: usuario } : sinSesion()
     },
+
+    ...rutasZonas,
+    ...rutasClientes,
 }
