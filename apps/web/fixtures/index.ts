@@ -8,7 +8,8 @@
  * en `bd.ts` (`reiniciarFixtures()` en pruebas).
  */
 import type { Problem, paths } from '@argosisp/contracts'
-import type { RutasFixture } from '~/utils/fetchFixtures'
+import type { ManejadorFixture, RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
+import { bd } from './bd'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
@@ -39,7 +40,49 @@ function emailDe(cuerpo: unknown): string {
     return ''
 }
 
-export const rutasFixture: RutasFixture = {
+/** Clave de `localStorage` con fallas simuladas para Playwright: `{"GET /api/v1/pagos": 501}`. */
+export const CLAVE_FALLAS = 'argos_fixtures_fallas'
+
+/**
+ * Hace que una ruta responda `status` con el mismo Problem que la API real (`NoImplementado`
+ * para 501). Sirve para probar que la pantalla muestra el error y no datos inventados.
+ */
+export function simularFalla(ruta: string, status = 501): void {
+    bd.fallas[ruta] = status
+}
+
+function fallasGuardadas(): Record<string, number> {
+    try {
+        const texto = globalThis.localStorage?.getItem(CLAVE_FALLAS)
+        const valor: unknown = texto ? JSON.parse(texto) : null
+        if (typeof valor !== 'object' || valor === null) {
+            return {}
+        }
+        return Object.fromEntries(Object.entries(valor).filter((par): par is [string, number] => typeof par[1] === 'number'))
+    }
+    catch {
+        return {}
+    }
+}
+
+function respuestaFalla(ruta: string, status: number): RespuestaFixture {
+    const cuerpo: Problem = status === 501
+        ? { type: 'urn:argosisp:problema:no_implementado', title: 'No implementado', status, detail: `La operación ${ruta} aún no está implementada` }
+        : { type: 'urn:argosisp:problema:error_interno', title: 'Error interno', status, detail: `Falla simulada en ${ruta}` }
+    return { status, cuerpo }
+}
+
+function conFallasSimuladas(rutas: RutasFixture): RutasFixture {
+    return Object.fromEntries(Object.entries(rutas).map(([clave, manejador]): [string, ManejadorFixture] => [
+        clave,
+        (solicitud) => {
+            const status = bd.fallas[clave] ?? fallasGuardadas()[clave]
+            return status ? respuestaFalla(clave, status) : manejador(solicitud)
+        },
+    ]))
+}
+
+export const rutasFixture: RutasFixture = conFallasSimuladas({
     'POST /api/v1/auth/login': ({ cuerpo }) => {
         const respuesta = logins[emailDe(cuerpo)]
         return respuesta ? { status: 200, cuerpo: respuesta } : { status: 401, cuerpo: credencialesInvalidas }
@@ -57,4 +100,4 @@ export const rutasFixture: RutasFixture = {
     ...rutasPlanes,
     ...rutasPlantillas,
     ...rutasBitacora,
-}
+})

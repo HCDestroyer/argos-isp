@@ -17,6 +17,7 @@ const problema = ref<Problem | null>(null)
 
 const servicios = shallowRef<Servicio[]>([])
 const cargandoServicios = ref(false)
+const problemaServicios = ref<Problem | null>(null)
 
 useHead(() => ({ title: `${cliente.value?.nombre ?? 'Cliente'} · ArgosIsp` }))
 
@@ -71,6 +72,7 @@ async function cargarServicios() {
     const resultado = await useServicios().listar({ cliente_id: clienteId.value, limit: 200 })
     cargandoServicios.value = false
     servicios.value = resultado.ok ? resultado.data.data : []
+    problemaServicios.value = resultado.ok ? null : resultado.problema
 }
 
 async function cargarZona(id: number | null) {
@@ -290,11 +292,19 @@ onMounted(cargar)
                 </dl>
             </div>
 
-            <ClienteServicios
-                v-else-if="pestana === 'servicios'"
-                :servicios="servicios"
-                :cargando="cargandoServicios"
-            />
+            <template v-else-if="pestana === 'servicios'">
+                <ProblemaAlerta
+                    v-if="problemaServicios"
+                    :problema="problemaServicios"
+                    :reintentar="cargarServicios"
+                    :reintentando="cargandoServicios"
+                />
+                <ClienteServicios
+                    v-else
+                    :servicios="servicios"
+                    :cargando="cargandoServicios"
+                />
+            </template>
 
             <ClienteEstadoCuenta
                 v-else-if="pestana === 'cuenta'"

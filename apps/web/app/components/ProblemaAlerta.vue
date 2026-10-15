@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 
-/** Muestra un error RFC 9457 de la API, con botón de reintento opcional. */
+/**
+ * Muestra un error RFC 9457 de la API, con botón de reintento opcional. Úsalo en lugar de los
+ * datos que no se pudieron leer, nunca junto a totales o tablas vacías.
+ */
 const props = withDefaults(defineProps<{
     problema: Problem
     reintentar?: () => void
+    /** Pone el botón "Reintentar" en espera mientras se repite la llamada. */
+    reintentando?: boolean
 }>(), {
     reintentar: undefined,
+    reintentando: false,
 })
 
 const descripcion = computed(() => {
@@ -18,6 +24,20 @@ const descripcion = computed(() => {
     }
     return undefined
 })
+
+const acciones = computed(() => {
+    if (!props.reintentar) {
+        return undefined
+    }
+    return [{
+        label: 'Reintentar',
+        icon: 'i-lucide-rotate-cw',
+        color: 'error' as const,
+        variant: 'outline' as const,
+        loading: props.reintentando,
+        onClick: props.reintentar,
+    }]
+})
 </script>
 
 <template>
@@ -27,6 +47,6 @@ const descripcion = computed(() => {
         icon="i-lucide-circle-alert"
         :title="problema.title"
         :description="descripcion"
-        :actions="reintentar ? [{ label: 'Reintentar', color: 'error', variant: 'outline', onClick: reintentar }] : undefined"
+        :actions="acciones"
     />
 </template>

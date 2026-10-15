@@ -24,9 +24,16 @@ const acciones = shallowRef<AccionAuditoria[]>([])
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
-const items = computed<EntradaLinea[]>(() => acciones.value.map(accion => ({
+/**
+ * Cuántas entradas se piden por entidad. Alto a propósito: la API no filtra por cliente ni
+ * excluye lecturas (pedido a A1), y las visitas a `/corte` (`portal.quien_soy`) se cuelan
+ * entre las acciones que sí importan.
+ */
+const LIMITE_POR_ENTIDAD = 200
+
+const items = computed<EntradaLinea[]>(() => acciones.value.filter(visibleEnLineaTiempo).map(accion => ({
     date: formatearFechaHora(accion.created_at),
-    title: etiquetaAccion(accion.accion),
+    title: tituloAccion(accion),
     icon: iconoAccion(accion),
     accion,
     ui: accion.resultado === 'error' ? { indicator: INDICADOR_ERROR } : undefined,
@@ -37,7 +44,7 @@ async function cargar() {
     const resultado = await useBitacora().deEntidades([
         { tipo: 'cliente', id: props.clienteId },
         ...props.servicioIds.map(id => ({ tipo: 'servicio', id })),
-    ])
+    ], LIMITE_POR_ENTIDAD)
     cargando.value = false
     if (resultado.ok) {
         acciones.value = resultado.data
@@ -79,7 +86,7 @@ onMounted(cargar)
         />
 
         <UTimeline
-            v-else
+            v-else-if="!problema"
             :items="items"
             :default-value="items.length"
             aria-label="Línea de tiempo del cliente"
@@ -92,7 +99,7 @@ onMounted(cargar)
                         <span>{{ etiquetaActor(item.accion) }}</span>
                         <span aria-hidden="true">·</span>
                         <UBadge
-                            :label="item.accion.canal"
+                            :label="etiquetaCanal(item.accion.canal)"
                             color="neutral"
                             variant="outline"
                             size="sm"

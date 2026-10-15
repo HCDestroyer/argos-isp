@@ -59,23 +59,39 @@ const delServicio: Accion[] = servicios.flatMap((servicio) => {
         created_at: servicio.created_at,
     })]
     if (servicio.estado === 'suspendido' || servicio.estado === 'limitado') {
-        const verbo = servicio.estado === 'suspendido' ? 'servicios.suspender' : 'servicios.limitar'
+        // El corte automático pasa por `evaluarEstadoServicio` → `servicios.cambiar_estado`
+        // (apps/api/app/core/actions/cambiar_estado_servicio.ts), con su entrada tal cual.
         lista.push(accion({
             actor_tipo: 'sistema',
             actor_id: null,
             canal: 'cron',
-            accion: verbo,
+            accion: 'servicios.cambiar_estado',
             entidad_tipo: 'servicio',
             entidad_id: servicio.id,
-            entrada: { motivo: 'Facturas vencidas según la plantilla' },
+            entrada: { servicioId: servicio.id, nuevo: servicio.estado, motivo: 'Facturas vencidas según la plantilla' },
             created_at: '2026-10-11T14:00:00.000Z',
         }))
+    }
+    if (servicio.estado === 'suspendido') {
+        // Cada visita a la página de corte audita un `portal.quien_soy` (captura 07).
+        for (let visita = 0; visita < 6; visita++) {
+            lista.push(accion({
+                actor_tipo: 'sistema',
+                actor_id: null,
+                canal: 'portal',
+                accion: 'portal.quien_soy',
+                entidad_tipo: 'servicio',
+                entidad_id: servicio.id,
+                entrada: { ip: servicio.ipv4 },
+                created_at: mas('2026-10-11T15:00:00.000Z', visita * 3),
+            }))
+        }
     }
     if (servicio.estado === 'suspendido' && servicio.id % 2 === 0) {
         lista.push(accion({
             actor_tipo: 'sistema',
             actor_id: null,
-            canal: 'evento',
+            canal: 'worker',
             accion: 'servicios.desconectar',
             entidad_tipo: 'servicio',
             entidad_id: servicio.id,

@@ -25,6 +25,11 @@ interface BaseFixtures {
     acciones: Schema<'AccionAuditoria'>[]
     /** Respuestas guardadas por `Idempotency-Key`. */
     idempotencia: Record<string, RespuestaFixture>
+    /**
+     * Fallas simuladas: `'GET /api/v1/clientes/:id/estado-cuenta': 501` hace que esa ruta
+     * responda ese status (como hoy la API real). Ver `simularFalla()` en `fixtures/index.ts`.
+     */
+    fallas: Record<string, number>
 }
 
 function inicial(): BaseFixtures {
@@ -40,6 +45,7 @@ function inicial(): BaseFixtures {
         plantillas,
         acciones,
         idempotencia: {},
+        fallas: {},
     })
 }
 
