@@ -1,0 +1,5 @@
+# -*- text -*-
+#  CHAP contra control:Cleartext-Password que devuelve aaa en /aaa/authorize.
+#  MS-CHAP no se habilita: requeriría hash NT; el PPPoE del MikroTik se limita a pap,chap.
+chap {
+}
