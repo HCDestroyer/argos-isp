@@ -18,7 +18,7 @@ export interface FuenteRespaldo {
 
 export class ErrorFuente extends Error {}
 
-/** `GET <API_INTERNAL_URL>/internal/aaa/servicio?user_ppp=` con `Authorization: Bearer`. */
+/** `GET <API_INTERNAL_URL>internal/aaa/servicio?user_ppp=` con `Authorization: Bearer`; la base termina en `/api/v1/`. */
 export class FuenteApi implements FuenteRespaldo {
     readonly nombre = 'api' as const
     private readonly url: string
@@ -32,7 +32,10 @@ export class FuenteApi implements FuenteRespaldo {
     }
 
     async obtener(userPpp: string): Promise<RegistroAaa | null> {
-        const url = new URL('/internal/aaa/servicio', this.url)
+        // Ruta relativa: la base incluye el prefijo de la API (`…/api/v1/`). Con una ruta absoluta
+        // `new URL` descartaba `/api/v1` y cada consulta daba 404 (= usuario inexistente → Reject).
+        const base = this.url.endsWith('/') ? this.url : `${this.url}/`
+        const url = new URL('internal/aaa/servicio', base)
         url.searchParams.set('user_ppp', userPpp)
         let res: Response
         try {

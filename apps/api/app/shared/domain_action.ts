@@ -41,6 +41,15 @@ export abstract class DomainAction<Entrada, Salida> {
 
     protected abstract handle(input: Entrada, t: Transaccion): Promise<Salida>
 
+    /**
+     * Si el resultado exitoso se registra en `audit.acciones`. Por defecto siempre (regla 9).
+     * Única excepción admitida: telemetría de alta frecuencia que no es una acción de nadie
+     * (Interim-Update de accounting). Los errores se auditan siempre.
+     */
+    protected auditarExito(_salida: Salida): boolean {
+        return true
+    }
+
     async execute(
         input: Entrada,
         ctx: ContextoAccion,
@@ -54,7 +63,9 @@ export abstract class DomainAction<Entrada, Salida> {
             t = new Transaccion(trx, ctx)
             transacciones.set(trx, t)
             const salida = await this.handle(input, t)
-            await registrarAccion(trx, ctx, this.nombre, entrada, t.entidadActual, null)
+            if (this.auditarExito(salida)) {
+                await registrarAccion(trx, ctx, this.nombre, entrada, t.entidadActual, null)
+            }
             // Las acciones anidadas dejan la verificación a la transacción externa.
             if (!anidada) await verificarRestriccionesDiferidas(trx)
             return salida

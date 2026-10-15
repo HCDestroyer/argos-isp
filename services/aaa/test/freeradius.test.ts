@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, it } from 'node:test'
+import type { ColaAccounting, RegistroAccounting } from '../src/accounting.ts'
 import { crearApp } from '../src/app.ts'
 import { cifrar } from '../src/cifrado.ts'
 import { FuenteFixtures, ResolutorServicios } from '../src/fuentes.ts'
@@ -49,6 +50,28 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
     const prefijo = prefijoDePrueba()
     const contenedor = `a2-freeradius-prueba-${randomBytes(3).toString('hex')}`
     let app: ReturnType<typeof crearApp>
+    const encolados: RegistroAccounting[] = []
+    const cola: ColaAccounting = {
+        encolar: async (r) => {
+            encolados.push(r)
+        },
+    }
+
+    /** Accounting-Request desde el contenedor como lo mandaría el MikroTik (radclient → 1813). */
+    async function radacct(atributos: string): Promise<boolean> {
+        const r = await exec(
+            'docker',
+            [
+                'exec',
+                contenedor,
+                'sh',
+                '-c',
+                `printf '%s\\n' '${atributos}' | radclient -x -c 1 -r 1 -t 3 127.0.0.1:1813 acct ${SECRET}`,
+            ],
+            { timeout: 15_000 },
+        ).catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? '' }))
+        return /Received Accounting-Response/.test(r.stdout)
+    }
 
     async function radtest(usuario: string, clave: string, metodo: 'pap' | 'chap'): Promise<Respuesta> {
         const r = await exec(
@@ -69,6 +92,7 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
             claveSecretos: CLAVE,
             perfil: PERFIL,
             logLevel: 'silent',
+            cola,
         })
         // 0.0.0.0: el contenedor llega al host por host-gateway (sin --network host, sin chocar con 1812 del host).
         await app.listen({ port: 0, host: '0.0.0.0' })
@@ -221,5 +245,51 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
         assert.equal(r.tipo, 'Access-Accept')
         assert.equal(r.atributos['Mikrotik-Address-List'], 'suspendidos')
         assert.equal(r.atributos['Filter-Id'], 'argos-corte.in')
+    })
+
+    it('accounting Start / Interim-Update / Stop → Accounting-Response y un job por paquete', async () => {
+        const comunes =
+            'User-Name = "prueba-activo", NAS-IP-Address = 127.0.0.1, Acct-Session-Id = "81a0000f", ' +
+            'Framed-IP-Address = 10.10.1.10, Framed-IPv6-Prefix = 2001:db8:101:1::/64'
+        assert.ok(await radacct(`Acct-Status-Type = Start, ${comunes}`))
+        assert.ok(
+            await radacct(
+                `Acct-Status-Type = Interim-Update, ${comunes}, Acct-Input-Octets = 100, Acct-Output-Gigawords = 1, Acct-Session-Time = 300`,
+            ),
+        )
+        assert.ok(
+            await radacct(
+                `Acct-Status-Type = Stop, ${comunes}, Acct-Input-Octets = 200, Acct-Session-Time = 600, Acct-Terminate-Cause = User-Request`,
+            ),
+        )
+        assert.deepEqual(
+            encolados.map((r) => r.tipo),
+            ['Start', 'Interim-Update', 'Stop'],
+        )
+        const [inicio, interino, fin] = encolados
+        assert.equal(inicio?.user_ppp, 'prueba-activo')
+        assert.equal(inicio?.nas_ip, '127.0.0.1')
+        assert.equal(inicio?.acct_session_id, '81a0000f')
+        assert.equal(inicio?.ipv4, '10.10.1.10')
+        assert.equal(inicio?.prefijo_enlace_v6, '2001:db8:101:1::/64')
+        assert.equal(interino?.bytes_in, '100')
+        assert.equal(interino?.bytes_out, '4294967296')
+        assert.equal(fin?.duracion_s, 600)
+        assert.equal(fin?.causa_fin, 'User-Request')
+    })
+
+    it('accounting sin cola disponible → sin Accounting-Response (el NAS reintenta)', async () => {
+        const original = cola.encolar
+        cola.encolar = async () => {
+            throw new Error('Redis caído')
+        }
+        try {
+            const ok = await radacct(
+                'Acct-Status-Type = Start, User-Name = "prueba-activo", NAS-IP-Address = 127.0.0.1, Acct-Session-Id = "81a00010"',
+            )
+            assert.equal(ok, false)
+        } finally {
+            cola.encolar = original
+        }
     })
 })

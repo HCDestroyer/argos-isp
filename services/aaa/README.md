@@ -7,9 +7,9 @@ Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabiliz
 | `GET /health`          | healthcheck de compose            | hecho (incluye estado Redis) |
 | `POST /aaa/authorize`  | `authorize` de FreeRADIUS         | hecho (tarea 1)              |
 | `POST /aaa/post-auth`  | `post-auth` (no bloqueante)       | 204, solo registra           |
-| `POST /aaa/accounting` | `accounting` (Start/Interim/Stop) | 501, tarea 4 (día 3)         |
+| `POST /aaa/accounting` | `accounting` (Start/Interim/Stop) | hecho (tarea 4): encola      |
 
-Eventos: emitirá `sesion.iniciada`, `sesion.terminada` (tarea 4) y `aaa.caido` (tarea 9). No consume eventos: la caché la mantiene A1.
+Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accounting de `apps/api` (`app/network/sesiones`) a partir de lo que encola `aaa`; `aaa.caido` llega en la tarea 9. No consume eventos: la caché la mantiene A1.
 
 ## `/aaa/authorize`
 
@@ -43,6 +43,19 @@ Además, en todo Accept:
 ¹ FreeRADIUS 3.2 no define `Delegated-IPv6-Pool`; RouterOS usa el VSA `Mikrotik-Delegated-IPv6-Pool` (vendor 14988, atributo 22).
 
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
+
+## `/aaa/accounting`
+
+1. Normaliza el paquete (`src/accounting.ts`): `Acct-Status-Type` (`Start`, `Interim-Update`, `Stop`, `Accounting-On`, `Accounting-Off`), NAS, sesión, usuario, `Framed-IP-Address`, `Framed-IPv6-Prefix`, `Delegated-IPv6-Prefix` si viene, octetos con gigawords, duración, causa y el instante (`Event-Timestamp` o recepción − `Acct-Delay-Time`).
+2. Lo encola en BullMQ (`aaa-accounting`, prefijo `COLAS_PREFIJO`). Contrato del job: `.claude/integration/contratos/accounting.md`. Lo consume `node ace sesiones:worker` (`apps/api/app/network/sesiones`), que escribe `network.sesiones` y emite los eventos.
+
+| Caso                                                    | HTTP | FreeRADIUS                                       |
+| ------------------------------------------------------- | ---- | ------------------------------------------------ |
+| encolado                                                | 204  | ok → Accounting-Response                         |
+| paquete inservible (tipo desconocido, sin NAS o sesión) | 204  | ok → Accounting-Response (se descarta con aviso) |
+| Redis no acepta el job en 1,5 s                         | 503  | fail → sin respuesta: el NAS reintenta           |
+
+`aaa` no escribe en Postgres ni decide nada sobre la sesión. RouterOS 7.24.5 no manda `Delegated-IPv6-Prefix` en accounting (lo comprobó el PM): el worker lo toma de la asignación vigente en modo `radius_servicio` (ver `apps/api/app/network/sesiones/README.md`).
 
 ## Comandos
 
@@ -93,6 +106,8 @@ docker compose -f infra/docker-compose.yml exec freeradius \
   radtest -t chap prueba-suspendido clave-suspendido 127.0.0.1 0 "$RADIUS_LOCAL_SECRET"
 ```
 
+`test/freeradius.test.ts` también manda accounting con `radclient` (Start, Interim-Update, Stop) por el puerto 1813 y comprueba el Accounting-Response y el job; sin cola disponible no hay respuesta.
+
 Resultado (2026-10-20, idéntico en PAP y CHAP; todas las respuestas traen `Message-Authenticator`):
 
 | Usuario              | Respuesta     | Atributos                                                                                                                                                                                                                |
@@ -116,3 +131,4 @@ Pendiente con el MikroTik del laboratorio (A6/PM): PPPoE real con estos atributo
 | `fastify` 5.12.5 | El brief pide Fastify o Hono. Fastify: logger pino incluido (JSON), `inject` para pruebas sin puerto, buen rendimiento para el p95 < 100 ms de la semana 2 |
 | `ioredis` 5.11.1 | Cliente Redis; misma versión que ya usa BullMQ en el workspace                                                                                             |
 | `pg` 8.23.1      | `pnpm aaa:clients` lee `network.routers`; misma versión que ya usa Lucid en `apps/api`                                                                     |
+| `bullmq` 6.3.15  | Tarea 4: `/aaa/accounting` encola en la cola que consume `sesiones:worker` (el brief pide BullMQ); misma versión que `apps/api`                            |

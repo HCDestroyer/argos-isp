@@ -1,4 +1,5 @@
 import { Redis } from 'ioredis'
+import { ColaAccountingBullmq } from './accounting.ts'
 import { crearApp } from './app.ts'
 import { claveDesdeEntorno } from './cifrado.ts'
 import { leerConfig } from './config.ts'
@@ -26,6 +27,18 @@ const respaldo: FuenteRespaldo =
         ? await FuenteFixtures.desdeArchivo(config.fixturesRuta, clave)
         : new FuenteApi(config.api)
 
+// Conexión propia de BullMQ: sin cola offline, para que un Redis caído se note en el acto (503).
+const cola = new ColaAccountingBullmq({
+    conexion: {
+        host: config.redis.host,
+        port: config.redis.port,
+        db: config.redis.db,
+        connectTimeout: 1000,
+        enableOfflineQueue: false,
+    },
+    prefijo: config.colasPrefijo,
+})
+
 const app = crearApp({
     resolutor: new ResolutorServicios({
         redis,
@@ -37,6 +50,7 @@ const app = crearApp({
     perfil: { suspendido: config.suspendido, interimSegundos: config.interimSegundos },
     logLevel: config.logLevel,
     redisListo: () => redis.status === 'ready',
+    cola,
 })
 
 await app.listen({ port: config.port, host: config.host })
@@ -49,6 +63,7 @@ async function apagar(signal: string): Promise<void> {
     app.log.info(`${signal}: cerrando`)
     setTimeout(() => process.exit(1), 10_000).unref()
     await app.close()
+    await cola.cerrar().catch(() => {})
     redis.disconnect()
     process.exit(0)
 }
