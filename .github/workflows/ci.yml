@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: lint, typecheck, pruebas, build y contratos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: argosisp
+          POSTGRES_PASSWORD: argosisp
+          POSTGRES_DB: argosisp_test
+          TZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U argosisp -d argosisp_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    # Variables que usan las pruebas de integración de apps/api (Japa) contra los servicios.
+    env:
+      NODE_ENV: test
+      TZ: UTC
+      HOST: 127.0.0.1
+      PORT: "3333"
+      LOG_LEVEL: warn
+      APP_KEY: ci-app-key-solo-pruebas-0123456789abcdef
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: argosisp
+      DB_PASSWORD: argosisp
+      DB_DATABASE: argosisp_test
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      SMTP_HOST: localhost
+      SMTP_PORT: "1025"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Versión de pnpm desde "packageManager" del package.json raíz
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Pruebas
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Regenerar contratos (OpenAPI → packages/contracts)
+        run: pnpm contracts:build
+
+      - name: Contratos commiteados
+        run: |
+          if ! git diff --exit-code -- packages/contracts \
+            || [ -n "$(git status --porcelain --untracked-files=all -- packages/contracts)" ]; then
+            echo "::error::packages/contracts cambió al regenerarlo. Corre 'pnpm contracts:build' y commitea el resultado."
+            git status --short -- packages/contracts
+            exit 1
+          fi
+
+  infra:
+    name: docker compose y FreeRADIUS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: docker compose config
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
+
+      - name: radiusd -XC
+        run: infra/ci/freeradius-check.sh
