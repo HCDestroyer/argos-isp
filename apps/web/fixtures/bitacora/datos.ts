@@ -60,7 +60,19 @@ const delServicio: Accion[] = servicios.flatMap((servicio) => {
         entrada: { cliente_id: servicio.cliente_id, router_id: servicio.router_id, plan_id: servicio.plan_id, pass_ppp: '***' },
         created_at: servicio.created_at,
     })]
-    if (servicio.estado === 'suspendido' || servicio.estado === 'limitado') {
+    if (servicio.suspension_manual) {
+        lista.push(accion({
+            actor_tipo: 'usuario',
+            actor_id: 1,
+            canal: 'panel',
+            accion: 'servicios.suspender',
+            entidad_tipo: 'servicio',
+            entidad_id: servicio.id,
+            entrada: { id: servicio.id, motivo: servicio.suspension_manual_motivo },
+            created_at: '2026-10-10T16:30:00.000Z',
+        }))
+    }
+    else if (servicio.estado === 'suspendido' || servicio.estado === 'limitado') {
         // El corte automático pasa por `evaluarEstadoServicio` → `servicios.cambiar_estado`
         // (apps/api/app/core/actions/cambiar_estado_servicio.ts), con su entrada tal cual.
         lista.push(accion({

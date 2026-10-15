@@ -226,6 +226,15 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
         if (!motivo || motivo.length < 3) {
             return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener al menos 3 caracteres', rule: 'minLength' }])
         }
+        if (actual.suspension_manual && (ruta === 'limitar' || ruta === 'quitar-limite')) {
+            const rechazo: Problem = {
+                type: 'urn:argosisp:problema:suspension_manual',
+                title: 'Regla de negocio',
+                status: 422,
+                detail: 'El servicio está suspendido manualmente: reactívalo antes de cambiar su estado',
+            }
+            return { status: 422, cuerpo: rechazo }
+        }
         if (!regla.desde.includes(actual.estado)) {
             const rechazo: Problem = { type: 'urn:argosisp:problema:regla_negocio', title: 'Regla de negocio', status: 422, detail: regla.rechazo(actual.estado) }
             return { status: 422, cuerpo: rechazo }
@@ -238,6 +247,9 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
                     version: actual.version + 1,
                     updated_at: ahora(),
                     ...(regla.a === 'retirado' ? { ipv4: null, prefijo_enlace_v6: null, prefijo_delegado_v6: null } : {}),
+                    // `suspender` pone la marca de suspensión manual; solo `reactivar` la quita.
+                    ...(ruta === 'suspender' ? { suspension_manual: true, suspension_manual_motivo: motivo } : {}),
+                    ...(ruta === 'reactivar' ? { suspension_manual: false, suspension_manual_motivo: null } : {}),
                 }
         bd.servicios[indice] = despues
         // Suspender y limitar van por CoA (la sesión sigue); reactivar va por Disconnect-Request

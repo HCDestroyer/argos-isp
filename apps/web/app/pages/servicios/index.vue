@@ -409,6 +409,11 @@ onMounted(async () => {
                                 variant="outline"
                                 size="sm"
                             />
+                            <SuspensionManualBadge
+                                :servicio="row.original"
+                                size="sm"
+                                con-motivo
+                            />
                         </div>
                     </template>
 

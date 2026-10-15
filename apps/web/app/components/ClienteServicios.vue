@@ -62,6 +62,12 @@ onMounted(async () => {
                     size="sm"
                     class="mt-1 self-start sm:hidden"
                 />
+                <SuspensionManualBadge
+                    :servicio="row.original"
+                    size="sm"
+                    con-motivo
+                    class="mt-1 sm:hidden"
+                />
             </div>
         </template>
 
@@ -102,6 +108,11 @@ onMounted(async () => {
                     color="info"
                     variant="outline"
                     size="sm"
+                />
+                <SuspensionManualBadge
+                    :servicio="row.original"
+                    size="sm"
+                    con-motivo
                 />
             </div>
         </template>

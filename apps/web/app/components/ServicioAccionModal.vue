@@ -71,6 +71,24 @@ async function confirmar(evento: FormSubmitEvent<DatosMotivo>) {
                     :description="accion.efecto"
                 />
 
+                <UAlert
+                    v-if="accion.accion === 'suspender'"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-hand"
+                    title="Es una suspensión manual"
+                    description="El corte automático y los pagos no lo reactivarán: aunque el cliente pague, sigue suspendido hasta que alguien use Reactivar."
+                    data-prueba="aviso-suspender-manual"
+                />
+                <UAlert
+                    v-else-if="accion.accion === 'reactivar' && servicio.suspension_manual"
+                    color="info"
+                    variant="subtle"
+                    icon="i-lucide-hand"
+                    title="Quita la suspensión manual"
+                    :description="servicio.suspension_manual_motivo ? `Se suspendió a mano por: ${servicio.suspension_manual_motivo}` : 'Se suspendió a mano.'"
+                />
+
                 <UFormField
                     label="Motivo"
                     name="motivo"

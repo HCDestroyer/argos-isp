@@ -44,7 +44,7 @@ const MODOS_IPV6: Record<ModoIpv6, string> = {
 }
 
 function aplica(accion: PresentacionAccionServicio): boolean {
-    return servicio.value !== null && accion.desde.includes(servicio.value.estado)
+    return servicio.value !== null && accionDisponible(accion, servicio.value)
 }
 
 function abrirAccion(accion: PresentacionAccionServicio) {
@@ -163,6 +163,7 @@ onMounted(cargar)
                         color="info"
                         variant="outline"
                     />
+                    <SuspensionManualBadge :servicio="servicio" />
                 </div>
                 <p class="text-sm text-muted">
                     Servicio #{{ servicio.id }} ·
@@ -178,6 +179,25 @@ onMounted(cargar)
                     · versión {{ servicio.version }}
                 </p>
             </div>
+
+            <UAlert
+                v-if="servicio.suspension_manual"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-hand"
+                title="Suspendido manualmente"
+                data-prueba="aviso-suspension-manual"
+            >
+                <template #description>
+                    <p v-if="servicio.suspension_manual_motivo">
+                        Motivo: {{ servicio.suspension_manual_motivo }}
+                    </p>
+                    <p>
+                        El corte automático y los pagos no lo reactivan, y no se puede limitar ni quitar el límite.
+                        Solo <strong>Reactivar</strong> quita la suspensión manual.
+                    </p>
+                </template>
+            </UAlert>
 
             <div
                 v-if="acciones.length"

@@ -101,7 +101,8 @@ function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null):
  */
 function evaluarServicios(clienteId: number): void {
     for (const [indice, servicio] of bd.servicios.entries()) {
-        if (servicio.cliente_id !== clienteId || (servicio.estado !== 'limitado' && servicio.estado !== 'suspendido')) {
+        // Suspendido a mano: `evaluarEstadoServicio` no lo toca (solo "Reactivar" quita la marca).
+        if (servicio.cliente_id !== clienteId || servicio.suspension_manual || (servicio.estado !== 'limitado' && servicio.estado !== 'suspendido')) {
             continue
         }
         const debeVencidas = bd.facturas.some(f => f.servicio_id === servicio.id && f.estado === 'vencida')

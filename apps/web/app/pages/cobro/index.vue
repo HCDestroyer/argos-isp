@@ -440,6 +440,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                         :estado="servicio.estado"
                                         size="sm"
                                     />
+                                    <SuspensionManualBadge
+                                        :servicio="servicio"
+                                        size="sm"
+                                    />
                                 </div>
                             </li>
                         </ul>
