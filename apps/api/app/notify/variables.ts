@@ -156,7 +156,17 @@ export async function variablesFactura(
         dias_vencida: dias !== null ? Math.max(-dias, 0) : null,
         vence_hoy: dias === 0,
         vencida: dias !== null && dias < 0,
+        vence_relativo: dias === null ? '' : venceRelativo(dias),
     }
+}
+
+/** "vence hoy", "vence mañana", "vence en 3 días", "venció ayer", "venció hace 5 días" */
+export function venceRelativo(dias: number): string {
+    if (dias === 0) return 'vence hoy'
+    if (dias === 1) return 'vence mañana'
+    if (dias > 1) return `vence en ${dias} días`
+    if (dias === -1) return 'venció ayer'
+    return `venció hace ${-dias} días`
 }
 
 async function variablesServicio(
@@ -246,6 +256,13 @@ export async function construirVariables(
     }
 
     if (evento === 'servicio.estado_cambiado') variables.estado = variablesEstado(payload)
+
+    if (evento.startsWith('recordatorio.')) {
+        variables.recordatorio = {
+            orden: entero(payload.orden),
+            dias: typeof payload.dias === 'number' ? payload.dias : null,
+        }
+    }
 
     if (evento.startsWith('comprobante.')) {
         variables.comprobante = {

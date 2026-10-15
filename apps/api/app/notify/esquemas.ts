@@ -51,3 +51,15 @@ export const EnvioNotificacion = definirEsquema(
         updated_at: instante,
     }),
 )
+
+export const RecordatorioPago = definirEsquema(
+    'RecordatorioPago',
+    objeto({
+        id,
+        orden: { type: 'integer', minimum: 1, maximum: 3, description: 'Plantilla `recordatorio.<orden>`' },
+        dias: { type: 'integer', description: 'Días respecto al vencimiento (negativo = antes)' },
+        hora: { type: 'string', description: 'HH:MM:SS hora de Guatemala' },
+        activo: booleano,
+        ...auditable,
+    }),
+)

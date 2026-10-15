@@ -15,6 +15,13 @@ export async function listarPlantillas(): Promise<Fila[]> {
         .orderBy('canal')) as Fila[]
 }
 
+export async function listarRecordatorios(): Promise<Fila[]> {
+    return (await db
+        .from('notify.recordatorios')
+        .select('id', 'orden', 'dias', 'hora', 'activo', 'version', 'created_at', 'updated_at')
+        .orderBy('orden')) as Fila[]
+}
+
 export interface FiltrosEnvios extends OpcionesPaginacion {
     cliente_id?: number
     evento?: string

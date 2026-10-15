@@ -438,6 +438,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notificaciones/recordatorios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recordatorios de pago configurados (hasta tres) */
+        get: operations["notificacionesRecordatoriosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/recordatorios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Configurar un recordatorio de pago: días respecto al vencimiento, hora y activo */
+        put: operations["notificacionesRecordatoriosEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pagos": {
         parameters: {
             query?: never;
@@ -1536,6 +1570,22 @@ export interface components {
             estado: components["schemas"]["EstadoServicio"] | null;
             monto_adeudado: components["schemas"]["Dinero"] | null;
             facturas_vencidas: number | null;
+        };
+        RecordatorioPago: {
+            id: number;
+            /** @description Plantilla `recordatorio.<orden>` */
+            orden: number;
+            /** @description Días respecto al vencimiento (negativo = antes) */
+            dias: number;
+            /** @description HH:MM:SS hora de Guatemala */
+            hora: string;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         RedIpv4: {
             id: number;
@@ -3436,6 +3486,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlantillaNotificacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesRecordatoriosListar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recordatorios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordatorioPago"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesRecordatoriosEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Días respecto al vencimiento: negativo antes, 0 el día, positivo después */
+                    dias?: number;
+                    /** @description HH:MM, hora de Guatemala */
+                    hora?: string;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Recordatorio actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordatorioPago"];
                 };
             };
             /** @description No autenticado */

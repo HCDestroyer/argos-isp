@@ -38,3 +38,19 @@ export const listarEnviosValidator = vine.compile(
         estado: vine.enum(['encolado', 'enviado', 'fallido'] as const).optional(),
     }),
 )
+
+export const editarRecordatorioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        dias: vine.number().withoutDecimals().range([-60, 60]).optional().meta({
+            description: 'Días respecto al vencimiento: negativo antes, 0 el día, positivo después',
+        }),
+        hora: vine
+            .string()
+            .trim()
+            .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+            .optional()
+            .meta({ description: 'HH:MM, hora de Guatemala' }),
+        activo: vine.boolean().optional(),
+    }),
+)

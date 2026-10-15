@@ -22,7 +22,26 @@ function ambos(evento: string, asunto: string, cuerpo: string): PlantillaBase[] 
     ]
 }
 
+const recordatorio = (orden: number) =>
+    ambos(
+        `recordatorio.${orden}`,
+        'Recordatorio: tu factura {{factura.numero}} {{factura.vence_relativo}}',
+        'Tu factura {{factura.numero}}{{#factura.periodo}} del periodo {{factura.periodo}}{{/factura.periodo}} {{factura.vence_relativo}} ({{factura.vence}}). Saldo pendiente: {{factura.saldo_q}}.' +
+            '{{#factura.vencida}} Paga hoy para evitar la suspensión de tu servicio.{{/factura.vencida}}' +
+            portal,
+    )
+
+/** Recordatorios iniciales: 3 días antes, el día y 3 días después del vencimiento, a las 09:00. */
+export const RECORDATORIOS_BASE = [
+    { orden: 1, dias: -3, hora: '09:00' },
+    { orden: 2, dias: 0, hora: '09:00' },
+    { orden: 3, dias: 3, hora: '09:00' },
+]
+
 export const PLANTILLAS_BASE: PlantillaBase[] = [
+    ...recordatorio(1),
+    ...recordatorio(2),
+    ...recordatorio(3),
     ...ambos(
         'factura.emitida',
         'Factura {{factura.numero}} por {{factura.total_q}}',

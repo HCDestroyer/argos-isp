@@ -22,6 +22,7 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 | Canales activos según el entorno | `canales/registro.ts` |
 | Consumidor de eventos (`ConsumidorEventos`, `EventoEntrante`) | `consumidor.ts` |
 | Cola y worker BullMQ | `cola.ts`; proceso: `node ace notify:worker` (servicio `worker` del compose) |
+| Cron de recordatorios | `recordatorios.ts`, `actions/programar_recordatorios.ts`, `actions/editar_recordatorio.ts` |
 | Acciones | `actions/programar_notificacion.ts`, `actions/enviar_notificacion.ts`, `actions/editar_plantilla_notificacion.ts` |
 | Plantillas iniciales (seeder idempotente, no pisa ediciones) | `plantillas_base.ts`, `database/seeders/notify_plantillas_seeder.ts` |
 | Rutas | `start/routes/notify.ts` |
@@ -39,6 +40,18 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 - **Reintentos.** BullMQ reintenta `NOTIFY_INTENTOS` veces (5 por defecto), con backoff exponencial desde 5 s. Un error transitorio (red, SMTP 4xx, Telegram 429 o 5xx) deja el envío `encolado`, guarda el error y suma un intento. Un error permanente (SMTP 5xx, Telegram 400 o 403, canal no configurado) o el último intento lo marcan `fallido`. Si el canal que falló no era correo, se crea un envío por correo con `fallback_de`.
 - **Texto.** El asunto y el cuerpo se renderizan al programar y se guardan en el envío, junto con un snapshot de `variables` que se usa para el fallback. Las plantillas son texto plano y no se escapa HTML. En Telegram el asunto va como primera línea.
 
+## Recordatorios de pago (tarea 6)
+
+Hay hasta tres recordatorios, configurables en `notify.recordatorios`. Cada uno tiene `orden` (1 a 3), `dias` respecto al vencimiento (negativo es antes, 0 el mismo día, positivo después), `hora` local de Guatemala y `activo`. Por defecto son −3, 0 y +3 días a las 09:00. La plantilla de cada uno es la del evento `recordatorio.<orden>`, una por canal.
+
+- **Cron.** Un job scheduler de BullMQ (`notify-cron`, id `recordatorios`) dispara cada minuto dentro de `node ace notify:worker`. Usa concurrencia 1 y BullMQ entrega cada disparo a un solo worker. Con `--sin-cron` el proceso no corre el cron.
+- **Qué se envía.** La acción `ProgramarRecordatorios` programa todo lo pendiente hasta ahora, no "lo de hoy". Para cada factura con saldo (no pagada ni anulada) toma el recordatorio activo más reciente cuyo momento ya pasó. El momento es `vence_en + dias` a la `hora` del recordatorio. Si el cron estuvo detenido, al volver manda el último recordatorio que toca, no los tres atrasados.
+- **Qué no se envía.** Momentos anteriores a la emisión de la factura, momentos de hace más de 7 días (para no avisar facturas viejas importadas ni después de una caída larga) y recordatorios sin plantilla activa.
+- **Idempotencia.** El origen es `recordatorio:<orden>:factura:<id>` y es único: correr el cron dos veces no duplica el aviso. Cambiar la configuración no reenvía lo que ya salió.
+- **Lotes.** Procesa 200 facturas por transacción y repite hasta agotar lo pendiente. Cada aviso pasa por `ProgramarNotificacion` (canal preferido con fallback a correo) y se audita por fila.
+
+Variables extra: `recordatorio.orden`, `recordatorio.dias` y `factura.vence_relativo` ("vence en 3 días", "vence hoy", "venció hace 4 días").
+
 ## Variables de las plantillas (Mustache)
 
 Siempre:
@@ -54,11 +67,12 @@ Según el evento:
 | Grupo | Variables | Cuándo |
 | --- | --- | --- |
 | `servicio` | `id`, `usuario` (user PPP), `estado`, `direccion`, `plan` | el payload trae `servicio_id` |
-| `factura` | `id`, `numero` (serie-número FEL o id), `estado`, `total`, `total_q` (`Q 1,234.50`), `saldo`, `saldo_q`, `vence` (`15/10/2026`), `vence_iso`, `periodo` (`octubre 2026`), `dias_para_vencer`, `dias_vencida`, `vence_hoy`, `vencida` | el payload trae `factura_id` |
+| `factura` | `id`, `numero` (serie-número FEL o id), `estado`, `total`, `total_q` (`Q 1,234.50`), `saldo`, `saldo_q`, `vence` (`15/10/2026`), `vence_iso`, `periodo` (`octubre 2026`), `dias_para_vencer`, `dias_vencida`, `vence_hoy`, `vencida`, `vence_relativo` | el payload trae `factura_id` |
 | `pago` | `id`, `monto`, `monto_q`, `metodo`, `facturas` (ids separados por coma), `fecha` | `pago.*` |
 | `promesa` | `id`, `monto`, `monto_q`, `vence` (`dd/MM/yyyy HH:mm`, Guatemala), `vence_iso` | `promesa.*` |
 | `estado` | `de`, `a`, `motivo`, `es_activo`, `es_limitado`, `es_suspendido`, `es_retirado` | `servicio.estado_cambiado` |
 | `comprobante` | `id`, `motivo` | `comprobante.*` |
+| `recordatorio` | `orden`, `dias` | `recordatorio.*` |
 
 Las fechas se muestran en `America/Guatemala`. Los montos llegan como string con 2 decimales y su versión `_q` ya formateada en quetzales. Para condicionar texto se usan secciones: `{{#estado.es_suspendido}}…{{/estado.es_suspendido}}`.
 
@@ -69,6 +83,8 @@ Las fechas se muestran en `America/Guatemala`. Los montos llegan como string con
 | `GET /api/v1/notificaciones/plantillas` | `notificaciones.ver` |
 | `PUT /api/v1/notificaciones/plantillas/:id` (`version`, `asunto?`, `cuerpo?`, `activa?`). Valida Mustache (422), devuelve 409 si la `version` cambió y registra el cambio en `audit.cambios` | `notificaciones.editar` |
 | `GET /api/v1/notificaciones/envios?cliente_id=&evento=&canal=&estado=&cursor=&limit=` | `notificaciones.ver` |
+| `GET /api/v1/notificaciones/recordatorios` | `notificaciones.ver` |
+| `PUT /api/v1/notificaciones/recordatorios/:id` (`version`, `dias?`, `hora?` HH:MM, `activo?`). Devuelve 409 si la `version` cambió y registra el cambio en `audit.cambios` | `notificaciones.editar` |
 
 ## Conexión con el relay (A1)
 

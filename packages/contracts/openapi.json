@@ -3169,6 +3169,181 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/recordatorios": {
+      "get": {
+        "operationId": "notificacionesRecordatoriosListar",
+        "summary": "Recordatorios de pago configurados (hasta tres)",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recordatorios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordatorioPago"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/recordatorios/{id}": {
+      "put": {
+        "operationId": "notificacionesRecordatoriosEditar",
+        "summary": "Configurar un recordatorio de pago: días respecto al vencimiento, hora y activo",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "dias": {
+                    "type": "integer",
+                    "minimum": -60,
+                    "maximum": 60,
+                    "description": "Días respecto al vencimiento: negativo antes, 0 el día, positivo después"
+                  },
+                  "hora": {
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "description": "HH:MM, hora de Guatemala"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recordatorio actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordatorioPago"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/pagos": {
       "get": {
         "operationId": "pagosListar",
@@ -11671,6 +11846,55 @@
               "integer",
               "null"
             ]
+          }
+        }
+      },
+      "RecordatorioPago": {
+        "type": "object",
+        "required": [
+          "id",
+          "orden",
+          "dias",
+          "hora",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "orden": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "Plantilla `recordatorio.<orden>`"
+          },
+          "dias": {
+            "type": "integer",
+            "description": "Días respecto al vencimiento (negativo = antes)"
+          },
+          "hora": {
+            "type": "string",
+            "description": "HH:MM:SS hora de Guatemala"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -5,9 +5,10 @@
 */
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
-import { EnvioNotificacion, PlantillaNotificacion } from '#notify/esquemas'
-import { listarEnvios, listarPlantillas } from '#notify/consultas'
+import { EnvioNotificacion, PlantillaNotificacion, RecordatorioPago } from '#notify/esquemas'
+import { listarEnvios, listarPlantillas, listarRecordatorios } from '#notify/consultas'
 import EditarPlantillaNotificacion from '#notify/actions/editar_plantilla_notificacion'
+import EditarRecordatorio from '#notify/actions/editar_recordatorio'
 import * as v from '#notify/validators'
 
 const notify: Ruta[] = [
@@ -48,6 +49,29 @@ const notify: Ruta[] = [
         query: v.listarEnviosValidator,
         respuesta: { status: 200, descripcion: 'Página de envíos', esquema: pagina(EnvioNotificacion) },
         handler: (_ctx, { query }) => listarEnvios(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notificaciones/recordatorios',
+        operacion: 'notificacionesRecordatoriosListar',
+        resumen: 'Recordatorios de pago configurados (hasta tres)',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.ver',
+        respuesta: { status: 200, descripcion: 'Recordatorios', esquema: lista(RecordatorioPago) },
+        handler: () => listarRecordatorios(),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/notificaciones/recordatorios/:id',
+        operacion: 'notificacionesRecordatoriosEditar',
+        resumen: 'Configurar un recordatorio de pago: días respecto al vencimiento, hora y activo',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.editar',
+        cuerpo: v.editarRecordatorioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Recordatorio actualizado', esquema: RecordatorioPago },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarRecordatorio().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
 ]
 
