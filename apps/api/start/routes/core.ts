@@ -12,6 +12,15 @@ import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
 import CerrarSesion from '#core/actions/cerrar_sesion'
+import CrearUsuario from '#core/actions/crear_usuario'
+import EditarUsuario from '#core/actions/editar_usuario'
+import CrearRol from '#core/actions/crear_rol'
+import EditarRol from '#core/actions/editar_rol'
+import CrearTokenApi from '#core/actions/crear_token_api'
+import RevocarTokenApi from '#core/actions/revocar_token_api'
+import { listarPermisos, listarRoles, listarTokens, listarUsuarios, verUsuario } from '#core/consultas/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Problema } from '#shared/errores'
 import * as v from '#core/validators'
 import {
     AaaServicio,
@@ -52,7 +61,15 @@ const auth: Ruta[] = [
         permiso: null,
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
         handler: async (ctx) => {
-            const usuario = ctx.auth.getUserOrFail()
+            if (ctx.auth.authenticatedViaGuard !== 'api') {
+                throw new Problema(
+                    400,
+                    'no_es_sesion',
+                    'No es una sesión de login',
+                    'Un token de API se revoca con POST /tokens/:id/revocar',
+                )
+            }
+            const usuario = ctx.auth.use('api').getUserOrFail()
             const tokenId = usuario.currentAccessToken.identifier
             await new CerrarSesion().execute(
                 {
@@ -74,7 +91,7 @@ const auth: Ruta[] = [
         etiqueta: 'auth',
         permiso: null,
         respuesta: { status: 200, descripcion: 'Usuario actual con permisos', esquema: Me },
-        handler: (ctx) => construirMe(ctx.auth.getUserOrFail()),
+        handler: (ctx) => construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx)),
     }),
 ]
 
@@ -88,6 +105,7 @@ const usuarios: Ruta[] = [
         permiso: 'usuarios.ver',
         query: v.listarPaginadoValidator,
         respuesta: { status: 200, descripcion: 'Página de usuarios', esquema: pagina(Usuario) },
+        handler: (_ctx, { query }) => listarUsuarios(query),
     }),
     definirRuta({
         metodo: 'post',
@@ -98,6 +116,7 @@ const usuarios: Ruta[] = [
         permiso: 'usuarios.crear',
         cuerpo: v.crearUsuarioValidator,
         respuesta: { status: 201, descripcion: 'Usuario creado', esquema: Usuario },
+        handler: (ctx, { cuerpo }) => new CrearUsuario().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -107,6 +126,7 @@ const usuarios: Ruta[] = [
         etiqueta: 'acl',
         permiso: 'usuarios.ver',
         respuesta: { status: 200, descripcion: 'Usuario', esquema: Usuario },
+        handler: (_ctx, { params }) => verUsuario(Number(params.id)),
     }),
     definirRuta({
         metodo: 'put',
@@ -118,6 +138,8 @@ const usuarios: Ruta[] = [
         cuerpo: v.editarUsuarioValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Usuario actualizado', esquema: Usuario },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarUsuario().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -127,6 +149,7 @@ const usuarios: Ruta[] = [
         etiqueta: 'acl',
         permiso: 'roles.ver',
         respuesta: { status: 200, descripcion: 'Roles', esquema: { type: 'array', items: Rol } },
+        handler: () => listarRoles(),
     }),
     definirRuta({
         metodo: 'post',
@@ -137,6 +160,7 @@ const usuarios: Ruta[] = [
         permiso: 'roles.crear',
         cuerpo: v.crearRolValidator,
         respuesta: { status: 201, descripcion: 'Rol creado', esquema: Rol },
+        handler: (ctx, { cuerpo }) => new CrearRol().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'put',
@@ -148,6 +172,8 @@ const usuarios: Ruta[] = [
         cuerpo: v.editarRolValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Rol actualizado', esquema: Rol },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarRol().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -157,6 +183,7 @@ const usuarios: Ruta[] = [
         etiqueta: 'acl',
         permiso: 'roles.ver',
         respuesta: { status: 200, descripcion: 'Permisos', esquema: { type: 'array', items: Permiso } },
+        handler: () => listarPermisos(),
     }),
     definirRuta({
         metodo: 'get',
@@ -167,6 +194,7 @@ const usuarios: Ruta[] = [
         permiso: 'tokens.ver',
         query: v.listarPaginadoValidator,
         respuesta: { status: 200, descripcion: 'Página de tokens', esquema: pagina(TokenApi) },
+        handler: (_ctx, { query }) => listarTokens(query),
     }),
     definirRuta({
         metodo: 'post',
@@ -177,6 +205,7 @@ const usuarios: Ruta[] = [
         permiso: 'tokens.crear',
         cuerpo: v.crearTokenValidator,
         respuesta: { status: 201, descripcion: 'Token creado', esquema: TokenApiCreado },
+        handler: (ctx, { cuerpo }) => new CrearTokenApi().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',
@@ -186,6 +215,8 @@ const usuarios: Ruta[] = [
         etiqueta: 'acl',
         permiso: 'tokens.revocar',
         respuesta: { status: 200, descripcion: 'Token revocado', esquema: TokenApi },
+        handler: (ctx, { params }) =>
+            new RevocarTokenApi().execute({ id: Number(params.id) }, ctx.contextoAccion()),
     }),
 ]
 

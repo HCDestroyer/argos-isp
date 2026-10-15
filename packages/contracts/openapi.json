@@ -3431,20 +3431,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes": {
@@ -5238,20 +5228,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "rolesCrear",
@@ -5395,20 +5375,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/roles/{id}": {
@@ -5585,20 +5555,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "roles.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers": {
@@ -8383,20 +8343,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "tokensCrear",
@@ -8427,26 +8377,96 @@
                   },
                   "alcances": {
                     "type": "object",
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
+                    "properties": {
+                      "permisos": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "bitacora.ver",
+                            "cajas.abrir",
+                            "cajas.cerrar",
+                            "cajas.ver",
+                            "clientes.crear",
+                            "clientes.editar",
+                            "clientes.estado_cuenta",
+                            "clientes.ver",
+                            "facturas.anular",
+                            "facturas.generar",
+                            "facturas.ver",
+                            "ip.resolver",
+                            "ipv6.crear",
+                            "ipv6.ver",
+                            "libro.ver",
+                            "pagos.anular",
+                            "pagos.registrar",
+                            "pagos.ver",
+                            "planes.crear",
+                            "planes.editar",
+                            "planes.ver",
+                            "plantillas.crear",
+                            "plantillas.editar",
+                            "plantillas.ver",
+                            "promesas.aprobar",
+                            "promesas.crear",
+                            "promesas.ver",
+                            "redes.crear",
+                            "redes.ver",
+                            "roles.crear",
+                            "roles.editar",
+                            "roles.ver",
+                            "routers.crear",
+                            "routers.editar",
+                            "routers.ver",
+                            "servicios.crear",
+                            "servicios.desconectar",
+                            "servicios.editar",
+                            "servicios.limitar",
+                            "servicios.quitar_limite",
+                            "servicios.reactivar",
+                            "servicios.retirar",
+                            "servicios.suspender",
+                            "servicios.ver",
+                            "sesiones.desconectar",
+                            "sesiones.ver",
+                            "tokens.crear",
+                            "tokens.revocar",
+                            "tokens.ver",
+                            "usuarios.crear",
+                            "usuarios.editar",
+                            "usuarios.ver",
+                            "zonas.crear",
+                            "zonas.editar",
+                            "zonas.ver"
+                          ]
                         },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "array"
-                        },
-                        {
-                          "type": "object"
+                        "description": "Recorta los permisos del usuario a esta lista"
+                      },
+                      "routers": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
                         }
-                      ]
+                      },
+                      "zonas": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "cajas": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
                     },
-                    "description": "Alcances (routers, zonas, cajas, permisos)"
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Alcances: permisos permitidos y routers, zonas o cajas"
                   }
                 },
                 "required": [
@@ -8498,20 +8518,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/tokens/{id}/revocar": {
@@ -8577,20 +8587,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "tokens.revocar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/usuarios": {
@@ -8686,20 +8686,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "usuariosCrear",
@@ -8825,20 +8815,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/usuarios/{id}": {
@@ -8904,20 +8884,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "usuariosEditar",
@@ -9077,20 +9047,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "usuarios.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/zonas": {
