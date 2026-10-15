@@ -1178,6 +1178,8 @@ export interface components {
             /** @enum {string} */
             actor_tipo: "usuario" | "token" | "agente" | "sistema";
             actor_id: number | null;
+            /** @description Nombre del usuario (null para el sistema) */
+            actor_nombre?: string | null;
             canal: string;
             accion: string;
             entidad_tipo: string | null;
@@ -1819,6 +1821,10 @@ export interface components {
             /** @enum {string} */
             ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
             ipv6_duid: string | null;
+            cliente_nombre?: string;
+            plan_nombre?: string;
+            router_nombre?: string;
+            zona_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1979,6 +1985,11 @@ export interface operations {
                 request_id?: string;
                 desde?: string;
                 hasta?: string;
+                /** @description Acciones del cliente y de sus servicios, facturas, pagos y promesas */
+                cliente_id?: number;
+                canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
+                /** @description Oculta las acciones de este canal (p. ej. portal) */
+                excluir_canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
             };
             header?: never;
             path?: never;
@@ -2397,6 +2408,16 @@ export interface operations {
                 /** @description Busca por nombre, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
                 zona_id?: number;
+                /** @description Clientes con al menos un servicio en este estado */
+                estado_servicio?: "activo" | "limitado" | "suspendido" | "retirado";
+                /** @description Clientes con al menos un servicio en este router */
+                router_id?: number;
+                /** @description Clientes con al menos un servicio en este plan */
+                plan_id?: number;
+                /** @description true: con alguna factura vencida; false: sin ninguna */
+                con_deuda_vencida?: boolean;
+                /** @description true: con alguna promesa de pago activa; false: sin ninguna */
+                con_promesa_activa?: boolean;
             };
             header?: never;
             path?: never;
@@ -5798,6 +5819,10 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                /** @description Zona del cliente */
+                zona_id?: number;
+                /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
+                con_deuda_vencida?: boolean;
             };
             header?: never;
             path?: never;

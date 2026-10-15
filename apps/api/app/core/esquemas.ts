@@ -116,28 +116,36 @@ export const EstadoServicio = definirEsquema(
 
 export const Servicio = definirEsquema(
     'Servicio',
-    objeto({
-        id,
-        cliente_id: id,
-        router_id: id,
-        plan_id: id,
-        plantilla_facturacion_id: nulable(id),
-        estado: EstadoServicio,
-        promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
-        user_ppp: texto,
-        mac: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        fecha_instalacion: nulable(fecha),
-        costo_override: nulable(Dinero),
-        excluir_firewall: booleano,
-        ipv4: nulable(texto),
-        prefijo_enlace_v6: nulable(texto),
-        prefijo_delegado_v6: nulable(texto),
-        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-        ipv6_duid: nulable(texto),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            router_id: id,
+            plan_id: id,
+            plantilla_facturacion_id: nulable(id),
+            estado: EstadoServicio,
+            promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
+            user_ppp: texto,
+            mac: nulable(texto),
+            direccion: nulable(texto),
+            coordenadas: nulable(texto),
+            fecha_instalacion: nulable(fecha),
+            costo_override: nulable(Dinero),
+            excluir_firewall: booleano,
+            ipv4: nulable(texto),
+            prefijo_enlace_v6: nulable(texto),
+            prefijo_delegado_v6: nulable(texto),
+            ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
+            ipv6_duid: nulable(texto),
+            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper fixtures
+            cliente_nombre: texto,
+            plan_nombre: texto,
+            router_nombre: texto,
+            zona_nombre: nulable(texto),
+            ...auditable,
+        },
+        ['cliente_nombre', 'plan_nombre', 'router_nombre', 'zona_nombre'],
+    ),
 )
 
 export const CredencialesPpp = definirEsquema(
@@ -151,20 +159,28 @@ export const CredencialesPpp = definirEsquema(
 
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
-    objeto({
-        id,
-        actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
-        actor_id: nulable(id),
-        canal: texto,
-        accion: texto,
-        entidad_tipo: nulable(texto),
-        entidad_id: nulable(id),
-        entrada: {},
-        resultado: enumerado(['ok', 'error']),
-        error: nulable(texto),
-        request_id: nulable(texto),
-        created_at: instante,
-    }),
+    objeto(
+        {
+            id,
+            actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
+            actor_id: nulable(id),
+            // aditivo (día 3): la API siempre lo envía; opcional en el esquema para no romper fixtures
+            actor_nombre: {
+                type: ['string', 'null'],
+                description: 'Nombre del usuario (null para el sistema)',
+            },
+            canal: texto,
+            accion: texto,
+            entidad_tipo: nulable(texto),
+            entidad_id: nulable(id),
+            entrada: {},
+            resultado: enumerado(['ok', 'error']),
+            error: nulable(texto),
+            request_id: nulable(texto),
+            created_at: instante,
+        },
+        ['actor_nombre'],
+    ),
 )
 
 export const CambioAuditoria = definirEsquema(

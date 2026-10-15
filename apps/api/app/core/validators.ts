@@ -12,6 +12,9 @@ import {
     versionEsperada,
 } from '#shared/validadores'
 import { NOMBRES_PERMISOS } from '#core/permisos'
+import { CANALES } from '#shared/contexto'
+
+const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
 /*
 |--------------------------------------------------------------------------
@@ -77,6 +80,24 @@ export const listarClientesValidator = vine.compile(
             .optional()
             .meta({ description: 'Busca por nombre, NIT/CUI, teléfono, user_ppp o IP' }),
         zona_id: idEntidad().optional(),
+        estado_servicio: vine
+            .enum(ESTADOS_SERVICIO)
+            .optional()
+            .meta({ description: 'Clientes con al menos un servicio en este estado' }),
+        router_id: idEntidad()
+            .optional()
+            .meta({ description: 'Clientes con al menos un servicio en este router' }),
+        plan_id: idEntidad()
+            .optional()
+            .meta({ description: 'Clientes con al menos un servicio en este plan' }),
+        con_deuda_vencida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: con alguna factura vencida; false: sin ninguna' }),
+        con_promesa_activa: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: con alguna promesa de pago activa; false: sin ninguna' }),
     }),
 )
 
@@ -171,7 +192,12 @@ export const listarServiciosValidator = vine.compile(
         cliente_id: idEntidad().optional(),
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
-        estado: vine.enum(['activo', 'limitado', 'suspendido', 'retirado'] as const).optional(),
+        estado: vine.enum(ESTADOS_SERVICIO).optional(),
+        zona_id: idEntidad().optional().meta({ description: 'Zona del cliente' }),
+        con_deuda_vencida: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: el servicio tiene alguna factura vencida; false: ninguna' }),
     }),
 )
 
@@ -272,6 +298,14 @@ export const listarAccionesValidator = vine.compile(
         request_id: vine.string().trim().maxLength(128).optional(),
         desde: instanteIso().optional(),
         hasta: instanteIso().optional(),
+        cliente_id: idEntidad()
+            .optional()
+            .meta({ description: 'Acciones del cliente y de sus servicios, facturas, pagos y promesas' }),
+        canal: vine.enum(CANALES).optional(),
+        excluir_canal: vine
+            .enum(CANALES)
+            .optional()
+            .meta({ description: 'Oculta las acciones de este canal (p. ej. portal)' }),
     }),
 )
 

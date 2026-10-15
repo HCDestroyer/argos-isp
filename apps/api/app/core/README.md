@@ -20,6 +20,7 @@ Lecturas en `consultas/acl.ts`.
 
 - NIT con dígito verificador (módulo 11, `K`) o CUI de 13 dígitos (verificador y departamento) o `CF`; se guardan normalizados (`nit_cui.ts`). Sin columna `saldo`: el saldo es el auxiliar del libro.
 - `buscarClientes` (`consultas/clientes.ts`): nombre, nombre fiscal, correo, NIT/CUI, teléfono o móvil (solo dígitos), `user_ppp` o IP (IPv4 vigente, o IPv6 dentro de un prefijo vigente). Alcance por zona y por router (clientes con servicios en el router).
+- Filtros de `GET /clientes` (día 3): `zona_id`, `estado_servicio`, `router_id` y `plan_id` (los tres se exigen sobre **el mismo** servicio del cliente), `con_deuda_vencida` (alguna `billing.facturas` en `vencida`; `false` = ninguna) y `con_promesa_activa` (`billing.promesas` en `activa`). Se combinan con `q`. Lectura de `billing` sin escribir nada (A3 es dueño).
 
 ## Servicios
 
@@ -41,6 +42,9 @@ Lecturas en `consultas/acl.ts`.
 - Alta: `user_ppp` `<nombre>.<cliente_id>` (y `-2`, `-3`… si se repite) y `pass_ppp` de 12 caracteres si no vienen. `pass_ppp` se guarda cifrada (formato `v1`, `AAA_PPP_KEY`) y nunca sale en la vista del servicio.
 - IPv4: la pedida o la primera libre del router; sin redes en el router se acepta si el plan define `pool_ipv4` en ese router. Plan `v6` no lleva IPv4.
 - IPv6 según `ipv6_modo` (por defecto `radius_servicio`, o `ninguno` con plan `v4`): `radius_servicio` reserva /64 de enlace y delegado del tamaño del plan; `duid` solo delegado (exige `ipv6_duid`); `estatico` exige `prefijo_delegado_v6`; `radius_pool` y `ninguno` no reservan. Ver `asignaciones_servicio.ts`.
+- `GET /servicios`: `q`, `cliente_id`, `router_id`, `plan_id`, `estado`, `zona_id` (zona del cliente) y `con_deuda_vencida` (facturas del servicio). La vista `Servicio` trae `cliente_nombre`, `plan_nombre`, `router_nombre` y `zona_nombre` (para roles sin `routers.ver` ni `zonas.ver`); en el OpenAPI son opcionales para no romper fixtures, pero la API siempre los envía.
+- Bitácora (`app/shared/bitacora.ts`): `GET /bitacora/acciones` filtra además por `cliente_id` (acciones con entidad `cliente` y las de sus `servicio`, `factura`, `pago` y `promesa`), `canal` y `excluir_canal` (p. ej. `portal`), y trae `actor_nombre` (null para el sistema).
+- Índices de estos filtros: `1761100000002_indices_filtros_listados`.
 - Interfaces públicas (solo lectura): `obtenerConfiguracionEfectiva(servicio_id, trx?)` (`actions/obtener_configuracion_efectiva.ts`): servicio, plan efectivo, plantilla y excepciones. Las excepciones aplicadas con `aplicarExcepciones` de A3 llegan con la tarea 11.
 
 ### Columnas que lee facturación (A3, `generarFacturas`)
