@@ -91,6 +91,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
 ### 9. Auditoría
 
 - `audit.acciones`: actor, canal, acción, entidad, entrada, resultado, request_id. Automática por `DomainAction`.
+- Única excepción: telemetría de alta frecuencia que no es una acción de nadie. Hoy solo el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores; se declara con `auditarExito()` en la acción. Los errores se auditan siempre.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
 - `audit.red`: cada CoA, Disconnect o comando a RouterOS con la respuesta del equipo.

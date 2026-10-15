@@ -17,9 +17,16 @@ import {
  * - Sin Start previo (se perdió, o `aaa` arrancó con sesiones vivas): abre la sesión con
  *   `inicio = evento − Acct-Session-Time` y emite `sesion.iniciada`.
  * - Sobre una sesión cerrada: se ignora (Interim tardío).
+ * - Auditoría: solo cuando abre la sesión. Una actualización de contadores llega cada 5 minutos
+ *   por cliente (≈ 576 000 al día con 2 000 clientes) y es telemetría, no una acción de nadie
+ *   (decisión del líder BE, excepción de la regla 9 en `.claude/CLAUDE.md`).
  */
 export default class ActualizarSesion extends DomainAction<RegistroAccounting, ResultadoAccounting> {
     readonly nombre = 'sesiones.actualizar'
+
+    protected override auditarExito(salida: ResultadoAccounting): boolean {
+        return salida.efecto === 'abierta'
+    }
 
     protected async handle(r: RegistroAccounting, t: Transaccion): Promise<ResultadoAccounting> {
         const ctx = await resolverContexto(t, r)

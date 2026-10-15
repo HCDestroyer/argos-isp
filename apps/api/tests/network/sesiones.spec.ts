@@ -228,6 +228,28 @@ test.group('network · sesiones (accounting)', () => {
         assert.deepEqual(await nombresEventos(stop.acct_session_id), ['sesion.terminada'])
     })
 
+    test('auditoría: un Interim que solo actualiza contadores no deja fila; uno que abre la sesión sí', async ({
+        assert,
+    }) => {
+        const e = await escenario()
+        const r = registro(e)
+        await procesarAccounting(r, randomUUID())
+
+        const soloContadores = randomUUID()
+        const interim = { ...r, tipo: 'Interim-Update' as const, bytes_in: '10', duracion_s: 300 }
+        assert.deepInclude(await procesarAccounting(interim, soloContadores), { efecto: 'actualizada' })
+        assert.lengthOf(await db.from('audit.acciones').where('request_id', soloContadores), 0)
+
+        const abre = randomUUID()
+        const sinStart = registro(e, { tipo: 'Interim-Update', duracion_s: 60 })
+        assert.deepInclude(await procesarAccounting(sinStart, abre), { efecto: 'abierta' })
+        const filas = await db.from('audit.acciones').where('request_id', abre)
+        assert.deepEqual(
+            filas.map((f) => [f.accion, f.resultado]),
+            [['sesiones.actualizar', 'ok']],
+        )
+    })
+
     test('Interim sin Start abre la sesión con inicio = evento − Acct-Session-Time', async ({ assert }) => {
         const e = await escenario()
         const ahora = new Date()
