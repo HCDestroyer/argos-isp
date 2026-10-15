@@ -19,6 +19,41 @@ import {
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
  */
 
+const limitesCanal = objeto({
+    permitido: booleano,
+    requiere_aprobacion: { ...booleano, description: 'true → la promesa queda pendiente_aprobacion' },
+    plazo_max_dias: nulable(entero),
+    max_por_periodo: nulable(entero),
+    deuda_maxima: nulable(Dinero),
+})
+
+export const ReglasPromesa = definirEsquema(
+    'ReglasPromesa',
+    objeto({
+        habilitadas: booleano,
+        max_por_periodo: { ...entero, description: 'Promesas por periodo de facturación' },
+        max_por_periodo_buen_historial: {
+            ...entero,
+            description: 'Máximo si el cumplimiento reciente es >= buen_historial_pct',
+        },
+        buen_historial_pct: entero,
+        historial_ventana: { ...entero, description: 'Últimas N promesas para medir el cumplimiento' },
+        plazo_max_dias: entero,
+        no_exceder_siguiente_facturacion: booleano,
+        deuda_maxima: nulable(Dinero),
+        abono_inicial_pct: { ...entero, description: 'Porcentaje de la deuda a pagar antes de la promesa' },
+        antiguedad_minima_dias: entero,
+        cumplimiento_minimo_pct: nulable(entero),
+        bloqueo_tras_incumplida_dias: entero,
+        canales: objeto({
+            portal: limitesCanal,
+            ia: limitesCanal,
+            operador: limitesCanal,
+            supervisor: limitesCanal,
+        }),
+    }),
+)
+
 export const PlantillaFacturacion = definirEsquema(
     'PlantillaFacturacion',
     objeto({
@@ -33,9 +68,13 @@ export const PlantillaFacturacion = definirEsquema(
         mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
         mora_valor: Dinero,
         mora_recurrente: booleano,
-        hora_corte: { type: 'string', description: 'HH:MM:SS hora de Guatemala' },
+        hora_corte: {
+            type: 'string',
+            pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+            description: 'HH:MM hora de Guatemala',
+        },
         certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
-        reglas_promesa: jsonLibre,
+        reglas_promesa: ReglasPromesa,
         ...auditable,
     }),
 )

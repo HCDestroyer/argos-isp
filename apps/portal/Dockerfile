@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Portal del cliente y página de corte (@argosisp/portal). El contexto de build es la raíz del monorepo:
 #   docker build -f apps/portal/Dockerfile -t argosisp/portal .
-# Variables en tiempo de ejecución: NUXT_PUBLIC_API_BASE, NUXT_PUBLIC_USE_FIXTURES,
-# NUXT_PUBLIC_EMPRESA_NOMBRE, NUXT_PUBLIC_EMPRESA_TELEFONO, PORT.
+# Variables en tiempo de ejecución (ver .env.example): NUXT_API_BASE_INTERNAL, NUXT_PUBLIC_API_BASE, NUXT_PUBLIC_USE_FIXTURES,
+# NUXT_PUBLIC_EMPRESA_*, NUXT_PUBLIC_DEPOSITO_*, PORT.
 
 FROM node:22-alpine AS base
 ENV PNPM_HOME=/pnpm

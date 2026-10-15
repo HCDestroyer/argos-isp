@@ -7,6 +7,7 @@ import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
 import { Asiento, Caja, CajaTurno, Cuenta, Mayor } from '#ledger/esquemas'
+import { libroDiario, libroMayor, listarCuentas } from '#ledger/consultas'
 
 const cajas: Ruta[] = [
     definirRuta({
@@ -61,6 +62,7 @@ const libro: Ruta[] = [
         etiqueta: 'libro',
         permiso: 'libro.ver',
         respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(Cuenta) },
+        handler: () => listarCuentas(),
     }),
     definirRuta({
         metodo: 'get',
@@ -71,6 +73,7 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.diarioValidator,
         respuesta: { status: 200, descripcion: 'Página de asientos', esquema: pagina(Asiento) },
+        handler: (_ctx, { query }) => libroDiario(query),
     }),
     definirRuta({
         metodo: 'get',
@@ -81,6 +84,7 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.mayorValidator,
         respuesta: { status: 200, descripcion: 'Mayor de la cuenta', esquema: Mayor },
+        handler: (_ctx, { query }) => libroMayor(query),
     }),
 ]
 

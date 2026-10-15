@@ -1,54 +1,30 @@
-import corteSuspendido from '~~/fixtures/corte/suspendido.json'
+import type { Problem, Schema } from '@argosisp/contracts'
+
+/** Lo que la API devuelve para la IP que consulta (`GET /api/v1/portal/quien-soy`). */
+export type QuienSoy = Schema<'QuienSoy'>
 
 /**
- * Datos que muestra la página de corte para la IP que consulta.
- *
- * NEEDS(A5): publicar `GET /api/v1/portal/quien-soy` en el OpenAPI y reemplazar este tipo
- * por `Schema<'PortalQuienSoy'>` (o el nombre que salga del validador). Solo nombre parcial
- * y montos: nunca datos personales completos a partir de la IP.
- */
-export interface DatosCorte {
-    cliente: {
-        nombreParcial: string
-    }
-    servicio: {
-        estado: EstadoServicio
-        plan: string
-        promesaActiva: boolean
-    }
-    /** String decimal, como lo envía la API. */
-    montoAdeudado: string
-    facturasVencidas: {
-        numero: string
-        periodo: string
-        venceEn: string
-        total: string
-    }[]
-}
-
-export const FIXTURE_CORTE: DatosCorte = {
-    ...corteSuspendido,
-    servicio: {
-        ...corteSuspendido.servicio,
-        estado: 'suspendido',
-    },
-}
-
-/**
- * Estado del servicio para la página de corte. Se consulta solo en el navegador: la API
- * identifica al cliente por la IP de origen de la petición, no por la del servidor Nitro.
+ * Identificación por IP para la página de corte. Se consulta solo en el navegador: la API
+ * identifica al cliente por la IP de origen, y en SSR la petición saldría del servidor Nitro.
+ * Solo trae nombre parcial, estado y montos: nunca datos personales completos.
  */
 export function useCorte() {
-    const config = useRuntimeConfig()
+    const api = useApi()
 
-    return useAsyncData<DatosCorte | null>('portal:corte', async () => {
-        if (config.public.useFixtures) {
-            return FIXTURE_CORTE
+    return useAsyncData<QuienSoy>('portal:quien-soy', async () => {
+        const { data, error, response } = await api.GET('/api/v1/portal/quien-soy', {
+            headers: { 'X-Canal': 'portal' },
+        })
+        if (!data) {
+            // El contrato solo declara el 200; cualquier error de la API llega como Problem (RFC 9457).
+            const problema = error as Problem | undefined
+            throw createError({
+                statusCode: response.status,
+                statusMessage: problema?.title ?? 'No se pudo consultar el estado del servicio',
+            })
         }
-        // NEEDS(A5): `useApi().GET('/api/v1/portal/quien-soy')` cuando exista en el contrato.
-        return null
+        return data
     }, {
         server: false,
-        default: () => null,
     })
 }
