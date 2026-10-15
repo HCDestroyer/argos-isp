@@ -568,7 +568,7 @@ export interface paths {
         };
         /**
          * Identifica al cliente por la IP de origen (página de corte)
-         * @description Sin login. Solo devuelve nombre parcial, estado y monto adeudado.
+         * @description Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`.
          */
         get: operations["portalQuienSoy"];
         put?: never;
@@ -4335,15 +4335,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuienSoy"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

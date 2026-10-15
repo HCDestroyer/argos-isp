@@ -1,4 +1,4 @@
-import type { Schema } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
 
 /** Lo que la API devuelve para la IP que consulta (`GET /api/v1/portal/quien-soy`). */
 export type QuienSoy = Schema<'QuienSoy'>
@@ -16,9 +16,11 @@ export function useCorte() {
             headers: { 'X-Canal': 'portal' },
         })
         if (!data) {
+            // El contrato solo declara el 200; cualquier error de la API llega como Problem (RFC 9457).
+            const problema = error as Problem | undefined
             throw createError({
                 statusCode: response.status,
-                statusMessage: error?.title ?? 'No se pudo consultar el estado del servicio',
+                statusMessage: problema?.title ?? 'No se pudo consultar el estado del servicio',
             })
         }
         return data

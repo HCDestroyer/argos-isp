@@ -4758,7 +4758,7 @@
       "get": {
         "operationId": "portalQuienSoy",
         "summary": "Identifica al cliente por la IP de origen (página de corte)",
-        "description": "Sin login. Solo devuelve nombre parcial, estado y monto adeudado.",
+        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`.",
         "tags": [
           "portal"
         ],
@@ -4772,19 +4772,9 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/promesas": {
