@@ -1,0 +1,185 @@
+/**
+ * Catálogo de permisos del ACL. Permiso = nombre de la acción (`modulo.verbo`).
+ *
+ * Cada ruta de `start/routes/*.ts` declara su permiso; el generador de OpenAPI falla si una
+ * ruta usa un permiso que no está aquí. El seed (`database/seeders/acl_seeder.ts`) los crea y
+ * arma los roles base. El ACL completo (CRUD de roles, alcances, tokens) es de A1.
+ */
+export const PERMISOS = {
+    'clientes.ver': 'Ver y buscar clientes',
+    'clientes.crear': 'Crear clientes',
+    'clientes.editar': 'Editar datos de clientes',
+    'clientes.estado_cuenta': 'Ver el estado de cuenta de un cliente',
+    'zonas.ver': 'Ver zonas',
+    'zonas.crear': 'Crear zonas',
+    'zonas.editar': 'Editar zonas',
+
+    'servicios.ver': 'Ver servicios',
+    'servicios.crear': 'Crear servicios',
+    'servicios.editar': 'Editar servicios (plan, router, IPs, datos)',
+    'servicios.suspender': 'Suspender servicios manualmente',
+    'servicios.reactivar': 'Reactivar servicios manualmente',
+    'servicios.limitar': 'Limitar la velocidad de servicios',
+    'servicios.quitar_limite': 'Quitar el límite de velocidad',
+    'servicios.retirar': 'Retirar servicios',
+    'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
+
+    'routers.ver': 'Ver routers',
+    'routers.crear': 'Crear routers',
+    'routers.editar': 'Editar routers y sus credenciales',
+    'redes.ver': 'Ver redes IPv4',
+    'redes.crear': 'Crear redes IPv4',
+    'ipv6.ver': 'Ver bloques y pools IPv6',
+    'ipv6.crear': 'Crear bloques y pools IPv6',
+    'planes.ver': 'Ver planes',
+    'planes.crear': 'Crear planes',
+    'planes.editar': 'Editar planes e implementaciones por router',
+    'sesiones.ver': 'Ver sesiones PPPoE',
+    'sesiones.desconectar': 'Desconectar sesiones PPPoE',
+    'ip.resolver': 'Resolver una IP a su servicio',
+
+    'plantillas.ver': 'Ver plantillas de facturación',
+    'plantillas.crear': 'Crear plantillas de facturación',
+    'plantillas.editar': 'Editar plantillas de facturación',
+    'facturas.ver': 'Ver facturas',
+    'facturas.generar': 'Generar facturas',
+    'facturas.anular': 'Anular facturas',
+    'pagos.ver': 'Ver pagos',
+    'pagos.registrar': 'Registrar pagos',
+    'pagos.anular': 'Anular pagos',
+    'cajas.ver': 'Ver cajas y turnos',
+    'cajas.abrir': 'Abrir turno de caja',
+    'cajas.cerrar': 'Cerrar turno de caja',
+    'promesas.ver': 'Ver promesas de pago',
+    'promesas.crear': 'Crear promesas de pago',
+    'promesas.aprobar': 'Aprobar promesas pendientes',
+    'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
+
+    'bitacora.ver': 'Ver bitácora de acciones y cambios',
+    'usuarios.ver': 'Ver usuarios',
+    'usuarios.crear': 'Crear usuarios',
+    'usuarios.editar': 'Editar usuarios y sus roles',
+    'roles.ver': 'Ver roles y permisos',
+    'roles.crear': 'Crear roles',
+    'roles.editar': 'Editar roles y sus permisos',
+    'tokens.ver': 'Ver tokens de API',
+    'tokens.crear': 'Crear tokens de API',
+    'tokens.revocar': 'Revocar tokens de API',
+} as const satisfies Record<string, string>
+
+export type Permiso = keyof typeof PERMISOS
+
+export const NOMBRES_PERMISOS = Object.keys(PERMISOS).sort() as Permiso[]
+
+export function esPermiso(nombre: string): nombre is Permiso {
+    return Object.hasOwn(PERMISOS, nombre)
+}
+
+const lectura = NOMBRES_PERMISOS.filter((p) => p.endsWith('.ver'))
+
+/**
+ * Roles base. `admin` tiene todo. `cajero` NO tiene `routers.*` ni `servicios.suspender`.
+ */
+export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonly Permiso[] }> = {
+    admin: {
+        descripcion: 'Acceso total',
+        permisos: NOMBRES_PERMISOS,
+    },
+    cajero: {
+        descripcion: 'Cobro en caja: pagos, turnos y promesas',
+        permisos: [
+            'clientes.ver',
+            'clientes.estado_cuenta',
+            'servicios.ver',
+            'planes.ver',
+            'facturas.ver',
+            'pagos.ver',
+            'pagos.registrar',
+            'cajas.ver',
+            'cajas.abrir',
+            'cajas.cerrar',
+            'promesas.ver',
+            'promesas.crear',
+        ],
+    },
+    soporte: {
+        descripcion: 'Atención al cliente y gestión de servicios',
+        permisos: [
+            'clientes.ver',
+            'clientes.crear',
+            'clientes.editar',
+            'clientes.estado_cuenta',
+            'zonas.ver',
+            'servicios.ver',
+            'servicios.crear',
+            'servicios.editar',
+            'servicios.suspender',
+            'servicios.reactivar',
+            'servicios.limitar',
+            'servicios.quitar_limite',
+            'servicios.desconectar',
+            'routers.ver',
+            'redes.ver',
+            'ipv6.ver',
+            'planes.ver',
+            'plantillas.ver',
+            'facturas.ver',
+            'pagos.ver',
+            'promesas.ver',
+            'promesas.crear',
+            'sesiones.ver',
+            'sesiones.desconectar',
+            'ip.resolver',
+            'bitacora.ver',
+        ],
+    },
+    tecnico: {
+        descripcion: 'Red: routers, IPAM, planes por router, sesiones e instalaciones',
+        permisos: [
+            'clientes.ver',
+            'zonas.ver',
+            'servicios.ver',
+            'servicios.crear',
+            'servicios.editar',
+            'servicios.desconectar',
+            'routers.ver',
+            'routers.crear',
+            'routers.editar',
+            'redes.ver',
+            'redes.crear',
+            'ipv6.ver',
+            'ipv6.crear',
+            'planes.ver',
+            'sesiones.ver',
+            'sesiones.desconectar',
+            'ip.resolver',
+        ],
+    },
+    contabilidad: {
+        descripcion: 'Facturación, pagos, libro y cierres',
+        permisos: [
+            'clientes.ver',
+            'clientes.estado_cuenta',
+            'servicios.ver',
+            'planes.ver',
+            'plantillas.ver',
+            'plantillas.crear',
+            'plantillas.editar',
+            'facturas.ver',
+            'facturas.generar',
+            'facturas.anular',
+            'pagos.ver',
+            'pagos.registrar',
+            'pagos.anular',
+            'cajas.ver',
+            'promesas.ver',
+            'promesas.aprobar',
+            'libro.ver',
+            'bitacora.ver',
+        ],
+    },
+    lectura: {
+        descripcion: 'Solo lectura',
+        permisos: [...lectura, 'clientes.estado_cuenta'],
+    },
+}

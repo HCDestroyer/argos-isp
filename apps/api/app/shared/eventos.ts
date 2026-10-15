@@ -1,0 +1,140 @@
+/**
+ * Catálogo de eventos de dominio (ver `.claude/CLAUDE.md`).
+ *
+ * Los eventos se escriben en `audit.outbox` con `t.emit(evento, payload)` dentro de la misma
+ * transacción que el cambio; un relay (A1) los publica a Redis Streams. Los consumidores deben
+ * ser idempotentes: un evento puede llegar dos veces.
+ *
+ * Convenciones del payload: claves en snake_case, ids numéricos, dinero como string decimal
+ * ("150.00"), fechas como ISO 8601 (UTC para instantes, YYYY-MM-DD para fechas).
+ */
+
+export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
+export type MetodoPago = 'caja' | 'pasarela' | 'deposito' | 'agente' | 'debito'
+export type CanalNotificacion = 'correo' | 'telegram' | 'whatsapp'
+
+/** Monto decimal serializado, p. ej. "150.00". Nunca `number`. */
+export type Dinero = string
+
+interface PayloadFactura {
+    factura_id: number
+    servicio_id: number | null
+    cliente_id: number
+    total: Dinero
+    /** fecha de vencimiento YYYY-MM-DD */
+    vence: string
+}
+
+interface PayloadPago {
+    pago_id: number
+    cliente_id: number
+    monto: Dinero
+    metodo: MetodoPago
+    facturas: number[]
+}
+
+interface PayloadPromesa {
+    promesa_id: number
+    servicio_id: number
+    /** instante ISO 8601 */
+    vence: string
+    monto: Dinero
+}
+
+interface PayloadSesion {
+    servicio_id: number | null
+    nas_ip: string
+    acct_session_id: string
+    ipv4: string | null
+    prefijos_v6: string[]
+}
+
+export interface CatalogoEventos {
+    // núcleo (A1)
+    'servicio.creado': { servicio_id: number; cliente_id: number; router_id: number; plan_id: number }
+    'servicio.estado_cambiado': {
+        servicio_id: number
+        de: EstadoServicio
+        a: EstadoServicio
+        motivo: string
+    }
+    'servicio.config_cambiada': {
+        servicio_id: number
+        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router'>
+    }
+    'asignacion.cambiada': {
+        servicio_id: number
+        ipv4: string[]
+        prefijo_enlace_v6: string | null
+        prefijo_delegado_v6: string | null
+        inicio: string
+        fin: string | null
+    }
+
+    // aaa (A2)
+    'sesion.iniciada': PayloadSesion
+    'sesion.terminada': PayloadSesion
+    'coa.fallido': { servicio_id: number; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
+    'aaa.caido': { nodo: string; desde: string }
+
+    // billing (A3)
+    'factura.emitida': PayloadFactura
+    'factura.vencida': PayloadFactura
+    'factura.anulada': PayloadFactura
+    'pago.registrado': PayloadPago
+    'pago.anulado': PayloadPago
+    'promesa.creada': PayloadPromesa
+    'promesa.cumplida': PayloadPromesa
+    'promesa.incumplida': PayloadPromesa
+
+    // ledger (A3)
+    'caja.cerrada': {
+        caja_id: number
+        cajero_id: number | null
+        esperado: Dinero
+        contado: Dinero
+        diferencia: Dinero
+    }
+
+    // notify (A6)
+    'notificacion.enviada': {
+        cliente_id: number
+        canal: CanalNotificacion
+        evento_origen: string
+        estado: 'enviado' | 'fallido'
+    }
+}
+
+export type NombreEvento = keyof CatalogoEventos
+export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
+
+/** Lista en tiempo de ejecución (para validar y para el relay). */
+export const EVENTOS = [
+    'servicio.creado',
+    'servicio.estado_cambiado',
+    'servicio.config_cambiada',
+    'asignacion.cambiada',
+    'sesion.iniciada',
+    'sesion.terminada',
+    'coa.fallido',
+    'aaa.caido',
+    'factura.emitida',
+    'factura.vencida',
+    'factura.anulada',
+    'pago.registrado',
+    'pago.anulado',
+    'promesa.creada',
+    'promesa.cumplida',
+    'promesa.incumplida',
+    'caja.cerrada',
+    'notificacion.enviada',
+] as const satisfies readonly NombreEvento[]
+
+type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>
+// Si agregas un evento al catálogo y no a EVENTOS, esta línea no compila.
+const eventosCompletos: Faltantes extends never ? true : Faltantes = true
+void eventosCompletos
+
+export function esEvento(nombre: string): nombre is NombreEvento {
+    return (EVENTOS as readonly string[]).includes(nombre)
+}

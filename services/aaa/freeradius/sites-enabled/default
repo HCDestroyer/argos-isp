@@ -1,0 +1,92 @@
+# -*- text -*-
+#
+#  Servidor virtual de ArgosIsp. Se monta como /etc/freeradius/sites-enabled (reemplaza
+#  default e inner-tunnel de la imagen: no usamos EAP).
+#
+#  Flujo PPPoE (MikroTik → FreeRADIUS → aaa):
+#    authorize   → POST /aaa/authorize   (devuelve control:Cleartext-Password + atributos reply:)
+#    authenticate→ PAP o CHAP local contra Cleartext-Password
+#    post-auth   → POST /aaa/post-auth   (no bloqueante: un fallo aquí no rechaza al cliente)
+#    accounting  → POST /aaa/accounting  (Start / Interim-Update / Stop)
+#
+server default {
+
+listen {
+	type = auth
+	ipaddr = *
+	port = 1812
+	limit {
+		max_connections = 16
+		lifetime = 0
+		idle_timeout = 30
+	}
+}
+
+listen {
+	type = acct
+	ipaddr = *
+	port = 1813
+	limit {
+	}
+}
+
+authorize {
+	#  Normaliza User-Name (sin espacios ni caracteres de control); policy.d de la imagen.
+	filter_username
+
+	#  aaa decide: activo, limitado o suspendido → 200 con atributos (el suspendido se ACEPTA con
+	#  el perfil de corte); retirado o inexistente → 401 (reject) o 404 (notfound).
+	rest
+	if (fail || notfound || invalid || userlock) {
+		reject
+	}
+
+	chap
+	pap
+}
+
+authenticate {
+	Auth-Type PAP {
+		pap
+	}
+
+	Auth-Type CHAP {
+		chap
+	}
+}
+
+preacct {
+	#  Acct-Unique-Session-Id estable (policy.d/accounting de la imagen).
+	acct_unique
+}
+
+accounting {
+	#  Si aaa falla no se responde Accounting-Response y el NAS reintenta: es lo que queremos.
+	rest
+}
+
+post-auth {
+	#  Notificación no bloqueante: fail/notfound/invalid no convierten un Accept en Reject.
+	rest {
+		fail = 1
+		notfound = 1
+		invalid = 1
+		reject = 1
+	}
+	ok
+
+	Post-Auth-Type REJECT {
+		rest {
+			fail = 1
+			notfound = 1
+			invalid = 1
+			reject = 1
+		}
+		#  Un Access-Reject no lleva los atributos que aaa haya puesto en reply (rate-limit, IPs…).
+		update {
+			&reply: !* ANY
+		}
+	}
+}
+
+}

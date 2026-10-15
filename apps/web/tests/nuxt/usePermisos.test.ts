@@ -1,0 +1,41 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import meAdmin from '~~/fixtures/auth/me.admin.json'
+import meCajero from '~~/fixtures/auth/me.cajero.json'
+
+describe('usePermisos', () => {
+    afterEach(() => {
+        useUsuarioActual().value = null
+    })
+
+    it('sin sesión no puede nada', () => {
+        const { puede, puedeAlguno } = usePermisos()
+        expect(puede('clientes.ver')).toBe(false)
+        expect(puedeAlguno(['clientes.ver', 'routers.ver'])).toBe(false)
+    })
+
+    it('cajero cobra pero no ve routers', () => {
+        useUsuarioActual().value = meCajero
+        const { puede, puedeAlguno, puedeTodos } = usePermisos()
+        expect(puede('pagos.registrar')).toBe(true)
+        expect(puede('routers.ver')).toBe(false)
+        expect(puede('servicios.suspender')).toBe(false)
+        expect(puedeAlguno(['routers.ver', 'caja.ver'])).toBe(true)
+        expect(puedeTodos(['caja.abrir', 'caja.cerrar'])).toBe(true)
+        expect(puedeTodos(['caja.abrir', 'usuarios.ver'])).toBe(false)
+    })
+
+    it('reacciona al cambiar de usuario', () => {
+        const { puede } = usePermisos()
+        useUsuarioActual().value = meCajero
+        expect(puede('servicios.suspender')).toBe(false)
+        useUsuarioActual().value = meAdmin
+        expect(puede('servicios.suspender')).toBe(true)
+    })
+
+    it('el menú solo muestra las secciones permitidas', () => {
+        useUsuarioActual().value = meCajero
+        const { puede } = usePermisos()
+        const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
+        expect(visibles).toEqual(['clientes', 'servicios', 'facturas', 'pagos', 'caja', 'promesas'])
+    })
+})

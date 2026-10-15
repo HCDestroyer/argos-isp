@@ -1,0 +1,5 @@
+# -*- text -*-
+#  rlm_expr: expansiones %{md5:...}, %{string:...}, %{tolower:...} usadas por acct_unique
+#  (policy.d/accounting de la imagen).
+expr {
+}

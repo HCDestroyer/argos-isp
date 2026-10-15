@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+.output/
+.nuxt/
+.nitro/
+.data/
+coverage/
+tmp/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+playwright-report/
+test-results/
+
+# worktrees temporales de agentes de Claude Code
+.claude/worktrees/

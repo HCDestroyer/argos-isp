@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"],
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

@@ -1,0 +1,15 @@
+# Ignorados al construir con `docker build -f apps/api/Dockerfile .` (BuildKit usa este archivo
+# en lugar del .dockerignore de la raíz).
+**/node_modules
+**/build
+**/dist
+**/.nuxt
+**/.output
+**/coverage
+**/tmp
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.claude
