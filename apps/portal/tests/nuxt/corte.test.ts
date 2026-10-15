@@ -37,6 +37,16 @@ describe('página /corte', () => {
         expect(texto).toContain('Contacta a soporte')
     })
 
+    it('"Pagar en línea" apagado se ve apagado: neutro, sin el azul primario, y dice que llega pronto', async () => {
+        const wrapper = await montarCorte()
+        const pagar = wrapper.find('[data-testid="pagar-en-linea"]')
+        expect(pagar.attributes('disabled')).toBeDefined()
+        expect(pagar.classes().some(c => /(^|:)(bg|text|ring)-primary/.test(c))).toBe(false)
+        expect(pagar.text()).toContain('Pronto')
+        const ayuda = wrapper.find(`#${pagar.attributes('aria-describedby')}`)
+        expect(ayuda.text()).toContain('El pago en línea llega pronto')
+    })
+
     it('activo con promesa: sin vencidas y sin botón de promesa', async () => {
         const wrapper = await montarCorte('activo')
         const texto = wrapper.text()

@@ -251,6 +251,55 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "description": "Acciones del cliente y de sus servicios, facturas, pagos y promesas",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "panel",
+                "portal",
+                "api",
+                "ia",
+                "cron",
+                "worker",
+                "webhook",
+                "interno",
+                "consola"
+              ]
+            }
+          },
+          {
+            "name": "excluir_canal",
+            "in": "query",
+            "required": false,
+            "description": "Oculta las acciones de este canal (p. ej. portal)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "panel",
+                "portal",
+                "api",
+                "ia",
+                "cron",
+                "worker",
+                "webhook",
+                "interno",
+                "consola"
+              ]
+            }
           }
         ],
         "responses": {
@@ -962,6 +1011,59 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "estado_servicio",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este estado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activo",
+                "limitado",
+                "suspendido",
+                "retirado"
+              ]
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este router",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "description": "Clientes con al menos un servicio en este plan",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "con_deuda_vencida",
+            "in": "query",
+            "required": false,
+            "description": "true: con alguna factura vencida; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "con_promesa_activa",
+            "in": "query",
+            "required": false,
+            "description": "true: con alguna promesa de pago activa; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -1577,20 +1679,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "clientes.estado_cuenta",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas": {
@@ -1729,20 +1821,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}": {
@@ -1808,20 +1890,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}/anular": {
@@ -1955,6 +2027,110 @@
         "x-implementado": false
       }
     },
+    "/api/v1/facturas/corte": {
+      "post": {
+        "operationId": "facturasCorte",
+        "summary": "Ejecutar el corte ahora: vence lo pendiente y evalúa el estado de los servicios",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo este servicio; si falta, las horas de corte pendientes de hoy"
+                  },
+                  "ignorar_hora": {
+                    "description": "Baja de estado aunque no haya llegado la hora de corte (laboratorio)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del corte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/generar": {
       "post": {
         "operationId": "facturasGenerar",
@@ -2055,9 +2231,105 @@
                 }
               }
             }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/facturas/vencer": {
+      "post": {
+        "operationId": "facturasVencer",
+        "summary": "Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo las facturas de este servicio; si falta, todas"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Día de referencia: vence lo que venció antes de esta fecha (por defecto hoy). Una fecha futura fuerza el vencimiento en el laboratorio"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del vencimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoVencimiento"
+                }
+              }
+            }
           },
-          "501": {
-            "description": "No implementado todavía",
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2068,13 +2340,14 @@
           }
         },
         "x-permiso": "facturas.generar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
         "summary": "Datos de autorización RADIUS de un user_ppp (servicio aaa)",
+        "description": "Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.",
         "tags": [
           "interno"
         ],
@@ -2125,25 +2398,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ip/{ip}": {
       "get": {
         "operationId": "ipResolver",
         "summary": "Resolver IPv4 o IPv6 a su servicio (prefijo más largo)",
+        "description": "Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.",
         "tags": [
           "red"
         ],
@@ -2203,20 +2467,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ip.resolver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/ipv6-bloques/{id}/pools": {
@@ -3411,20 +3665,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "pagosRegistrar",
@@ -3570,20 +3814,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.registrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}": {
@@ -3649,20 +3883,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/pagos/{id}/anular": {
@@ -3780,20 +4004,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "pagos.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/permisos": {
@@ -5491,11 +5705,34 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/estado": {
+      "get": {
+        "operationId": "portalEstado",
+        "summary": "Estado del servicio de la IP de origen (estado en vivo de la página de corte)",
+        "description": "Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado y monto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoPortal"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
         "summary": "Identifica al cliente por la IP de origen (página de corte)",
-        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`.",
+        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -7284,6 +7521,25 @@
                 "retirado"
               ]
             }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "description": "Zona del cliente",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "con_deuda_vencida",
+            "in": "query",
+            "required": false,
+            "description": "true: el servicio tiene alguna factura vencida; false: ninguna",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -8018,7 +8274,7 @@
     "/api/v1/servicios/{id}/limitar": {
       "post": {
         "operationId": "serviciosLimitar",
-        "summary": "Limitar velocidad del servicio",
+        "summary": "Limitar velocidad del servicio (desde activo o suspendido)",
         "tags": [
           "servicios"
         ],
@@ -8130,26 +8386,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.limitar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/quitar-limite": {
       "post": {
         "operationId": "serviciosQuitarLimite",
-        "summary": "Quitar límite de velocidad",
+        "summary": "Quitar límite de velocidad (desde limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8261,26 +8507,16 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.quitar_limite",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/reactivar": {
       "post": {
         "operationId": "serviciosReactivar",
-        "summary": "Reactivar servicio",
+        "summary": "Reactivar servicio (desde suspendido o limitado, queda activo)",
         "tags": [
           "servicios"
         ],
@@ -8392,20 +8628,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.reactivar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/retirar": {
@@ -8532,7 +8758,7 @@
     "/api/v1/servicios/{id}/suspender": {
       "post": {
         "operationId": "serviciosSuspender",
-        "summary": "Suspender servicio",
+        "summary": "Suspender servicio (desde activo o limitado)",
         "tags": [
           "servicios"
         ],
@@ -8644,20 +8870,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.suspender",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/sesiones": {
@@ -9997,102 +10213,199 @@
         "type": "object",
         "required": [
           "servicio_id",
+          "version",
           "user_ppp",
           "pass_ppp",
           "estado",
-          "rate_limit",
-          "ipv4",
-          "pool_ipv4",
-          "ipv6_modo",
-          "prefijo_enlace_v6",
-          "prefijo_delegado_v6",
-          "pool_ipv6_enlace",
-          "pool_ipv6_delegacion",
-          "address_list",
           "router_id",
-          "nas_ip",
-          "acct_interim_interval"
+          "plan",
+          "ipv4",
+          "ipv6"
         ],
         "properties": {
           "servicio_id": {
             "type": "integer",
             "minimum": 1
           },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "core.servicios.version (diagnóstico)"
+          },
           "user_ppp": {
             "type": "string"
           },
           "pass_ppp": {
             "type": "string",
-            "description": "Cifrada; el servicio aaa la descifra"
+            "description": "Cifrada (formato v1); el servicio aaa la descifra"
           },
           "estado": {
             "$ref": "#/components/schemas/EstadoServicio"
-          },
-          "rate_limit": {
-            "type": "string",
-            "description": "\"<subida>k/<bajada>k\" efectivo (normal o limitado)"
-          },
-          "ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "ipv6_modo": {
-            "type": "string",
-            "enum": [
-              "radius_servicio",
-              "radius_pool",
-              "duid",
-              "estatico",
-              "ninguno"
-            ]
-          },
-          "prefijo_enlace_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "prefijo_delegado_v6": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_enlace": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pool_ipv6_delegacion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "address_list": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "router_id": {
             "type": "integer",
             "minimum": 1
           },
-          "nas_ip": {
-            "type": "string"
+          "plan": {
+            "type": "object",
+            "required": [
+              "id",
+              "subida_kbps",
+              "bajada_kbps",
+              "subida_limitada_kbps",
+              "bajada_limitada_kbps",
+              "rate_limit_override",
+              "profile_ppp"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "subida_kbps": {
+                "type": "integer"
+              },
+              "bajada_kbps": {
+                "type": "integer"
+              },
+              "subida_limitada_kbps": {
+                "type": "integer"
+              },
+              "bajada_limitada_kbps": {
+                "type": "integer"
+              },
+              "rate_limit_override": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile_ppp": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           },
-          "acct_interim_interval": {
-            "type": "integer"
+          "ipv4": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "ip"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "estatico"
+                    ]
+                  },
+                  "ip": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "pool"
+                    ]
+                  },
+                  "pool": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ipv6": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "prefijo_enlace",
+                  "prefijo_delegado"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_servicio"
+                    ]
+                  },
+                  "prefijo_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "prefijo_delegado": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo",
+                  "pool_enlace",
+                  "pool_delegacion"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "radius_pool"
+                    ]
+                  },
+                  "pool_enlace": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "pool_delegacion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "modo"
+                ],
+                "properties": {
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "duid",
+                      "estatico",
+                      "ninguno"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       },
@@ -10132,6 +10445,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "actor_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del usuario (null para el sistema)"
           },
           "canal": {
             "type": "string"
@@ -10858,6 +11178,10 @@
             "$ref": "#/components/schemas/Dinero",
             "description": "Suma del auxiliar CxC del cliente (positivo = debe)"
           },
+          "saldo_a_favor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Anticipos del cliente sin aplicar (se aplican a las próximas facturas)"
+          },
           "facturas_pendientes": {
             "type": "array",
             "items": {
@@ -10868,7 +11192,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
-            }
+            },
+            "description": "Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`"
           }
         }
       },
@@ -10881,6 +11206,41 @@
           "vencida",
           "anulada"
         ]
+      },
+      "EstadoPortal": {
+        "type": "object",
+        "required": [
+          "identificado",
+          "estado",
+          "monto_adeudado"
+        ],
+        "properties": {
+          "identificado": {
+            "type": "boolean",
+            "description": "false si la IP de origen no pertenece a ningún servicio"
+          },
+          "estado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstadoServicio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monto_adeudado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)"
+          }
+        }
       },
       "EstadoServicio": {
         "type": "string",
@@ -10983,6 +11343,30 @@
               "string",
               "null"
             ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora"
+            ],
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
+          },
+          "factura_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Factura que originó la mora"
+          },
+          "vencida_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se marcó vencida"
           },
           "version": {
             "type": "integer",
@@ -11475,6 +11859,27 @@
             "items": {
               "$ref": "#/components/schemas/AplicacionPago"
             }
+          },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioEvaluado"
+            },
+            "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
           },
           "version": {
             "type": "integer",
@@ -12547,6 +12952,47 @@
           }
         }
       },
+      "ResultadoCorte": {
+        "type": "object",
+        "required": [
+          "horas",
+          "evaluados",
+          "cambiados",
+          "errores",
+          "vencimiento"
+        ],
+        "properties": {
+          "horas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Horas de corte procesadas (HH:MM; * = corte manual)"
+          },
+          "evaluados": {
+            "type": "integer",
+            "description": "Servicios evaluados"
+          },
+          "cambiados": {
+            "type": "integer",
+            "description": "Servicios que cambiaron de estado"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron evaluar (ver log)"
+          },
+          "vencimiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultadoVencimiento"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ResultadoGeneracion": {
         "type": "object",
         "required": [
@@ -12568,6 +13014,32 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron facturar (ver log)"
+          }
+        }
+      },
+      "ResultadoVencimiento": {
+        "type": "object",
+        "required": [
+          "vencidas",
+          "moras",
+          "errores"
+        ],
+        "properties": {
+          "vencidas": {
+            "type": "integer",
+            "description": "Facturas que pasaron a vencida"
+          },
+          "moras": {
+            "type": "integer",
+            "description": "Recargos de mora creados"
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Facturas que no se pudieron procesar (ver log)"
           }
         }
       },
@@ -12749,6 +13221,16 @@
             "type": "boolean",
             "description": "Bandera: hay una promesa de pago activa"
           },
+          "suspension_manual": {
+            "type": "boolean",
+            "description": "Suspendido a mano por un operador: el corte y los pagos no lo reactivan"
+          },
+          "suspension_manual_motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "user_ppp": {
             "type": "string"
           },
@@ -12824,6 +13306,21 @@
               "null"
             ]
           },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "plan_nombre": {
+            "type": "string"
+          },
+          "router_nombre": {
+            "type": "string"
+          },
+          "zona_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -12836,6 +13333,46 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ServicioEvaluado": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "de",
+          "estado",
+          "cambiado",
+          "motivo"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "cambiado": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": "string"
           }
         }
       },

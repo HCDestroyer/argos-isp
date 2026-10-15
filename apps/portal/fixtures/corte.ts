@@ -1,5 +1,5 @@
 /**
- * Respuestas de `GET /api/v1/portal/quien-soy` para el modo fixtures y las pruebas.
+ * Respuestas de `GET /api/v1/portal/quien-soy` y `GET /api/v1/portal/estado` para el modo fixtures y las pruebas.
  * Tipadas contra el contrato: si el schema `QuienSoy` cambia, `pnpm typecheck` lo detecta.
  */
 import type { Schema } from '@argosisp/contracts'
@@ -34,10 +34,32 @@ export const QUIEN_SOY_DESCONOCIDO: Schema<'QuienSoy'> = {
     facturas_vencidas: null,
 }
 
+/** Suspendido con promesa aprobada: `/portal/estado` pasa a `activo` (escenario `reactivacion`). */
+export const QUIEN_SOY_CON_PROMESA: Schema<'QuienSoy'> = {
+    ...QUIEN_SOY_SUSPENDIDO,
+    promesa_activa: true,
+}
+
 export const ESCENARIOS_CORTE = {
     suspendido: QUIEN_SOY_SUSPENDIDO,
     activo: QUIEN_SOY_ACTIVO,
     desconocido: QUIEN_SOY_DESCONOCIDO,
+    reactivacion: QUIEN_SOY_CON_PROMESA,
+}
+
+/** Respuesta de `GET /api/v1/portal/estado` que corresponde a una de `quien-soy`. */
+export function estadoDe(quienSoy: Schema<'QuienSoy'>): Schema<'EstadoPortal'> {
+    return {
+        identificado: quienSoy.identificado,
+        estado: quienSoy.estado,
+        monto_adeudado: quienSoy.monto_adeudado,
+    }
+}
+
+export const ESTADO_REACTIVADO: Schema<'EstadoPortal'> = {
+    identificado: true,
+    estado: 'activo',
+    monto_adeudado: '0.00',
 }
 
 export type EscenarioCorte = keyof typeof ESCENARIOS_CORTE

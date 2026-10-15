@@ -26,13 +26,19 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import SuspenderServicio from '#core/actions/suspender_servicio'
+import ReactivarServicio from '#core/actions/reactivar_servicio'
+import LimitarServicio from '#core/actions/limitar_servicio'
+import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
 import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
-import { Problema } from '#shared/errores'
+import { NoEncontrado, Problema } from '#shared/errores'
+import { construirRegistroAaa } from '#core/aaa'
+import { resolverIp } from '#network/consultas/ip'
 import * as v from '#core/validators'
 import {
     AaaServicio,
@@ -421,14 +427,33 @@ const servicios: Ruta[] = [
             return new EditarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
-    accionServicio('suspender', 'serviciosSuspender', 'servicios.suspender', 'Suspender servicio'),
-    accionServicio('reactivar', 'serviciosReactivar', 'servicios.reactivar', 'Reactivar servicio'),
-    accionServicio('limitar', 'serviciosLimitar', 'servicios.limitar', 'Limitar velocidad del servicio'),
+    accionServicio(
+        'suspender',
+        'serviciosSuspender',
+        'servicios.suspender',
+        'Suspender servicio (desde activo o limitado)',
+        (entrada, ctx) => new SuspenderServicio().execute(entrada, ctx.contextoAccion()),
+    ),
+    accionServicio(
+        'reactivar',
+        'serviciosReactivar',
+        'servicios.reactivar',
+        'Reactivar servicio (desde suspendido o limitado, queda activo)',
+        (entrada, ctx) => new ReactivarServicio().execute(entrada, ctx.contextoAccion()),
+    ),
+    accionServicio(
+        'limitar',
+        'serviciosLimitar',
+        'servicios.limitar',
+        'Limitar velocidad del servicio (desde activo o suspendido)',
+        (entrada, ctx) => new LimitarServicio().execute(entrada, ctx.contextoAccion()),
+    ),
     accionServicio(
         'quitar-limite',
         'serviciosQuitarLimite',
         'servicios.quitar_limite',
-        'Quitar límite de velocidad',
+        'Quitar límite de velocidad (desde limitado, queda activo)',
+        (entrada, ctx) => new QuitarLimiteServicio().execute(entrada, ctx.contextoAccion()),
     ),
     accionServicio(
         'retirar',
@@ -492,8 +517,17 @@ const ip: Ruta[] = [
         resumen: 'Resolver IPv4 o IPv6 a su servicio (prefijo más largo)',
         etiqueta: 'red',
         permiso: 'ip.resolver',
+        descripcion:
+            'Busca en sesiones activas y asignaciones vigentes (IPv4 exacta, IPv6 dentro del prefijo). ' +
+            'Gana el prefijo más largo; a igual longitud, la sesión activa. 404 si nadie la tiene.',
         parametros: { ip: { type: 'string', description: 'IPv4 o IPv6' } },
         respuesta: { status: 200, descripcion: 'Servicio dueño de la IP', esquema: ResolucionIp },
+        handler: async (ctx, { params }) => {
+            const resolucion = await resolverIp(decodeURIComponent(String(params.ip)))
+            if (!resolucion) throw new NoEncontrado(`Ningún servicio tiene la IP ${String(params.ip)}`)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(resolucion.servicio_id))
+            return resolucion
+        },
     }),
 ]
 
@@ -506,8 +540,16 @@ const interno: Ruta[] = [
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
+        descripcion:
+            'Mismo JSON que `aaa:user:<user_ppp>` en Redis. 404 si el user_ppp no existe; un retirado ' +
+            'responde 200 con `estado: retirado`. Lee de Postgres (fuente de verdad); `aaa` repuebla Redis con SET NX.',
         query: v.aaaServicioValidator,
         respuesta: { status: 200, descripcion: 'Configuración efectiva para RADIUS', esquema: AaaServicio },
+        handler: async (_ctx, { query }) => {
+            const registro = await construirRegistroAaa(query.user_ppp)
+            if (!registro) throw new NoEncontrado(`El user_ppp ${query.user_ppp} no existe`)
+            return registro
+        },
     }),
 ]
 

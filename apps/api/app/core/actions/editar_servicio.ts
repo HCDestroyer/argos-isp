@@ -7,6 +7,7 @@ import { obtenerImplementacionPlan } from '#network/actions/obtener_implementaci
 import { verServicio, type ModoIpv6, type ServicioVista } from '#core/consultas/servicios'
 import { exigirReferencia } from '#core/actions/crear_servicio'
 import { asignacionesVigentes, reconciliarAsignaciones, validarModoIpv6 } from '#core/asignaciones_servicio'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaEditarServicio {
     id: number
@@ -135,6 +136,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 fin: null,
             })
         }
+        refrescarAaaAlConfirmar(t, { servicioId: id })
         return despues
     }
 }

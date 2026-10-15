@@ -18,8 +18,15 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
+    "@types/pg": "8.23.1",
+    "@types/radius": "0.0.33",
     "eslint": "^10.12.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.71.2"
+  },
+  "dependencies": {
+    "ioredis": "5.11.1",
+    "pg": "8.23.1",
+    "radius": "1.1.4"
   }
 }

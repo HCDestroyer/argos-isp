@@ -3,6 +3,7 @@ import logger from '@adonisjs/core/services/logger'
 import { contextoSistema } from '#shared/contexto'
 import ProgramarRecordatorios, { LIMITE_LOTE } from '#notify/actions/programar_recordatorios'
 import { conexionRedis, prefijoColas, type ColaEnvios, type OpcionesCola } from '#notify/cola'
+import { ID_PARTICIONES, ejecutarParticiones } from '#notify/particiones'
 
 /**
  * Cron de recordatorios de pago. Un job scheduler de BullMQ (`notify-cron`, id `recordatorios`)
@@ -65,6 +66,11 @@ export function crearWorkerCron(colaEnvios: ColaEnvios, opciones: OpcionesCola =
     const worker = new Worker(
         NOMBRE_COLA_CRON,
         async (job) => {
+            if (job.name === ID_PARTICIONES) {
+                const resultado = await ejecutarParticiones()
+                logger.info(resultado, 'Particiones de auditoría aseguradas')
+                return resultado
+            }
             if (job.name !== ID_RECORDATORIOS) return null
             const totales = await ejecutarRecordatorios(colaEnvios)
             if (totales.procesadas > 0) logger.info(totales, 'Recordatorios programados')
@@ -76,7 +82,7 @@ export function crearWorkerCron(colaEnvios: ColaEnvios, opciones: OpcionesCola =
             concurrency: 1,
         },
     )
-    worker.on('failed', (_job, error) => logger.error({ err: error }, 'Cron de recordatorios falló'))
+    worker.on('failed', (job, error) => logger.error({ err: error, cron: job?.name }, 'Cron de notify falló'))
     worker.on('error', (error) => logger.error({ err: error }, 'Worker del cron de notify'))
     return worker
 }

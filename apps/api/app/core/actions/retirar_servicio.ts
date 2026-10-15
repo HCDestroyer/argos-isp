@@ -3,6 +3,7 @@ import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import type { EstadoServicio } from '#shared/eventos'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { liberarAsignaciones } from '#core/asignaciones_servicio'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaRetirarServicio {
     id: number
@@ -12,8 +13,8 @@ export interface EntradaRetirarServicio {
 /**
  * Retira un servicio (baja definitiva): estado `retirado` desde cualquier estado, libera su IPv4
  * y sus prefijos IPv6 (quedan en el historial) y emite `servicio.estado_cambiado` y
- * `asignacion.cambiada`. El `user_ppp` se conserva para la bitácora. La máquina de estados
- * completa (`cambiarEstadoServicio`) llega con la tarea 8.
+ * `asignacion.cambiada`. El `user_ppp` se conserva para la bitácora; en Redis su clave
+ * `aaa:user:<user_ppp>` queda con una lápida.
  */
 export default class RetirarServicio extends DomainAction<EntradaRetirarServicio, ServicioVista> {
     readonly nombre = 'servicios.retirar'
@@ -59,6 +60,8 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             inicio: ahora,
             fin: ahora,
         })
+        // retirado → lápida en aaa:user:<user_ppp>
+        refrescarAaaAlConfirmar(t, { servicioId: input.id })
         return despues
     }
 }

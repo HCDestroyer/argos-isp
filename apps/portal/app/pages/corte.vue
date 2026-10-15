@@ -5,9 +5,13 @@
  * muestra nombre parcial, estado y montos.
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Comprobante y promesa
- * se activan el día 3; el pago en línea, en la semana 2.
+ * se activan el día 4; el pago en línea, en la semana 2 (mientras, el botón se ve apagado).
+ *
+ * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
+ * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
+ * 2 min; al ver `activo` muestra "Ya tienes servicio".
  */
-const { empresa } = useRuntimeConfig().public
+const { empresa, seguirNavegandoUrl } = useRuntimeConfig().public
 const { data: corte, status, refresh } = useCorte()
 
 useHead({ title: `Estado del servicio · ${empresa.nombre}` })
@@ -18,6 +22,34 @@ const identificado = computed(() => corte.value?.identificado === true)
 const retirado = computed(() => corte.value?.estado === 'retirado')
 
 const verDeposito = ref(false)
+
+const { activo: servicioActivo, vigilando, agotado, vigilar } = useEstadoServicio()
+/** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
+const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
+const reactivado = computed(() => servicioActivo.value && corte.value?.estado !== 'activo')
+
+/** Toda acción del cliente que pueda reactivar el servicio termina llamando a esta función. */
+function vigilarEstado() {
+    if (puedeVigilar.value) {
+        vigilar()
+    }
+}
+
+function alCambiarVisibilidad() {
+    if (document.visibilityState === 'visible') {
+        vigilarEstado()
+    }
+}
+
+// Con una promesa activa la reactivación ya va en camino: se vigila desde que carga.
+watch(() => corte.value?.promesa_activa, (promesa) => {
+    if (promesa) {
+        vigilarEstado()
+    }
+}, { immediate: true })
+
+onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad))
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', alCambiarVisibilidad))
 
 const contacto = computed(() => {
     if (empresa.telefono) {
@@ -50,6 +82,11 @@ const contacto = computed(() => {
             :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => refresh() }]"
         />
 
+        <CorteServicioReactivado
+            v-else-if="reactivado"
+            :url="seguirNavegandoUrl"
+        />
+
         <template v-else>
             <div>
                 <p
@@ -75,18 +112,37 @@ const contacto = computed(() => {
                 v-if="!retirado"
                 class="flex flex-col gap-2"
             >
+                <!-- Apagado hasta la semana 2: neutro, no el azul primario, y dice que llega pronto. -->
                 <UButton
+                    data-testid="pagar-en-linea"
                     label="Pagar en línea"
                     icon="i-lucide-credit-card"
+                    color="neutral"
+                    variant="soft"
                     size="xl"
                     block
                     disabled
-                />
+                    aria-describedby="pagar-en-linea-pronto"
+                >
+                    <template #trailing>
+                        <UBadge
+                            label="Pronto"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                            class="ms-auto"
+                        />
+                    </template>
+                </UButton>
+                <p
+                    id="pagar-en-linea-pronto"
+                    class="-mt-1 text-center text-xs text-muted"
+                >
+                    El pago en línea llega pronto. Mientras tanto, paga por depósito y sube tu comprobante.
+                </p>
                 <UButton
                     label="Ver datos de depósito"
                     icon="i-lucide-landmark"
-                    color="neutral"
-                    variant="outline"
                     size="xl"
                     block
                     @click="verDeposito = true"
@@ -111,9 +167,16 @@ const contacto = computed(() => {
                     disabled
                 />
                 <p class="text-center text-xs text-muted">
-                    El pago en línea, el comprobante y la promesa de pago estarán disponibles pronto.
+                    Subir el comprobante y solicitar la promesa de pago estarán disponibles pronto.
                 </p>
             </div>
+
+            <CorteEstadoEnVivo
+                v-if="puedeVigilar"
+                :vigilando="vigilando"
+                :agotado="agotado"
+                @revisar="vigilarEstado"
+            />
 
             <UButton
                 :label="contacto?.label ?? 'Contacta a soporte'"
