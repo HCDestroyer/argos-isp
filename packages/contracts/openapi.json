@@ -3507,20 +3507,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "planesCrear",
@@ -3555,22 +3545,22 @@
                   },
                   "bajada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "bajada_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "reuso": {
@@ -3605,7 +3595,9 @@
                   "nombre",
                   "precio",
                   "bajada_kbps",
-                  "subida_kbps"
+                  "subida_kbps",
+                  "bajada_limitada_kbps",
+                  "subida_limitada_kbps"
                 ],
                 "additionalProperties": false
               }
@@ -3652,20 +3644,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}": {
@@ -3731,20 +3713,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "planesEditar",
@@ -3795,22 +3767,22 @@
                   },
                   "bajada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "bajada_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "subida_limitada_kbps": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 100000000
                   },
                   "reuso": {
@@ -3909,20 +3881,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}/routers": {
@@ -3991,20 +3953,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/planes/{id}/routers/{routerId}": {
@@ -4163,20 +4115,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.editar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/plantillas-facturacion": {
@@ -5241,6 +5183,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.registrar_asiento",
+                        "libro.revertir_asiento",
                         "libro.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -5402,6 +5346,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.registrar_asiento",
+                        "libro.revertir_asiento",
                         "libro.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -6207,7 +6153,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Plan"
+                    "$ref": "#/components/schemas/PlanEfectivo"
                   }
                 }
               }
@@ -6242,20 +6188,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "planes.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/redes-ipv4": {
@@ -8297,6 +8233,8 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "libro.registrar_asiento",
+                            "libro.revertir_asiento",
                             "libro.ver",
                             "pagos.anular",
                             "pagos.registrar",
@@ -10645,6 +10583,153 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PlanEfectivo": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "precio",
+          "bajada_kbps",
+          "subida_kbps",
+          "bajada_limitada_kbps",
+          "subida_limitada_kbps",
+          "reuso",
+          "dual_stack",
+          "tamano_prefijo_delegado",
+          "global",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at",
+          "router_id",
+          "implementacion",
+          "rate_limit",
+          "rate_limit_limitado",
+          "profile_ppp",
+          "pool_ipv4",
+          "pool_ipv6_enlace",
+          "pool_ipv6_delegacion",
+          "local_address",
+          "no_crear_reglas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "precio": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "bajada_kbps": {
+            "type": "integer"
+          },
+          "subida_kbps": {
+            "type": "integer"
+          },
+          "bajada_limitada_kbps": {
+            "type": "integer"
+          },
+          "subida_limitada_kbps": {
+            "type": "integer"
+          },
+          "reuso": {
+            "type": "integer"
+          },
+          "dual_stack": {
+            "type": "string",
+            "enum": [
+              "ambos",
+              "v4",
+              "v6"
+            ]
+          },
+          "tamano_prefijo_delegado": {
+            "type": "integer",
+            "enum": [
+              64,
+              56,
+              48
+            ]
+          },
+          "global": {
+            "type": "boolean"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "implementacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRouter"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rate_limit": {
+            "type": "string",
+            "description": "rate-limit MikroTik subida/bajada: \"5000k/20000k\""
+          },
+          "rate_limit_limitado": {
+            "type": "string",
+            "description": "rate-limit en estado limitado"
+          },
+          "profile_ppp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv4": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv6_enlace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool_ipv6_delegacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "local_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "no_crear_reglas": {
+            "type": "boolean"
           }
         }
       },

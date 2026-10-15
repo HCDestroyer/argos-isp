@@ -11,7 +11,21 @@ import CrearRouter from '#network/actions/crear_router'
 import EditarRouter from '#network/actions/editar_router'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
 import { listarRedesIpv4, listarRouters, verRouter } from '#network/consultas/routers'
-import { Ipv6Bloque, Ipv6Pool, Plan, PlanRouter, RedIpv4, Router, Sesion } from '#network/esquemas'
+import {
+    Ipv6Bloque,
+    Ipv6Pool,
+    Plan,
+    PlanEfectivo,
+    PlanRouter,
+    RedIpv4,
+    Router,
+    Sesion,
+} from '#network/esquemas'
+import CrearPlan from '#network/actions/crear_plan'
+import EditarPlan from '#network/actions/editar_plan'
+import ImplementarPlan from '#network/actions/implementar_plan'
+import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementacion_plan'
+import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
 
 const routers: Ruta[] = [
     definirRuta({
@@ -139,7 +153,11 @@ const routers: Ruta[] = [
         resumen: 'Planes disponibles en el router (configuración efectiva)',
         etiqueta: 'planes',
         permiso: 'planes.ver',
-        respuesta: { status: 200, descripcion: 'Planes disponibles', esquema: lista(Plan) },
+        respuesta: { status: 200, descripcion: 'Planes disponibles', esquema: lista(PlanEfectivo) },
+        handler: (ctx, { params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return planesDisponiblesEnRouter(Number(params.id))
+        },
     }),
 ]
 
@@ -153,6 +171,7 @@ const planes: Ruta[] = [
         permiso: 'planes.ver',
         query: v.listarPlanesValidator,
         respuesta: { status: 200, descripcion: 'Página de planes', esquema: pagina(Plan) },
+        handler: (_ctx, { query }) => listarPlanes(query),
     }),
     definirRuta({
         metodo: 'post',
@@ -163,6 +182,7 @@ const planes: Ruta[] = [
         permiso: 'planes.crear',
         cuerpo: v.crearPlanValidator,
         respuesta: { status: 201, descripcion: 'Plan creado', esquema: Plan },
+        handler: (ctx, { cuerpo }) => new CrearPlan().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -172,6 +192,7 @@ const planes: Ruta[] = [
         etiqueta: 'planes',
         permiso: 'planes.ver',
         respuesta: { status: 200, descripcion: 'Plan', esquema: Plan },
+        handler: (_ctx, { params }) => verPlan(Number(params.id)),
     }),
     definirRuta({
         metodo: 'put',
@@ -183,6 +204,8 @@ const planes: Ruta[] = [
         cuerpo: v.editarPlanValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Plan actualizado', esquema: Plan },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarPlan().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -192,6 +215,7 @@ const planes: Ruta[] = [
         etiqueta: 'planes',
         permiso: 'planes.ver',
         respuesta: { status: 200, descripcion: 'Implementaciones', esquema: lista(PlanRouter) },
+        handler: (_ctx, { params }) => implementacionesDePlan(Number(params.id)),
     }),
     definirRuta({
         metodo: 'put',
@@ -203,6 +227,13 @@ const planes: Ruta[] = [
         cuerpo: v.implementacionPlanValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Implementación guardada', esquema: PlanRouter },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.routerId)] })
+            return new ImplementarPlan().execute(
+                { ...cuerpo, plan_id: Number(params.id), router_id: Number(params.routerId) },
+                ctx.contextoAccion(),
+            )
+        },
     }),
 ]
 
