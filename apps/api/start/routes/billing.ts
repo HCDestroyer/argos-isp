@@ -6,6 +6,9 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#billing/validators'
+import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billing/plantillas'
+import CrearPlantilla from '#billing/actions/crear_plantilla'
+import EditarPlantilla from '#billing/actions/editar_plantilla'
 import {
     EstadoCuenta,
     Factura,
@@ -25,6 +28,7 @@ const plantillas: Ruta[] = [
         etiqueta: 'facturacion',
         permiso: 'plantillas.ver',
         respuesta: { status: 200, descripcion: 'Plantillas', esquema: lista(PlantillaFacturacion) },
+        handler: () => listarPlantillas(),
     }),
     definirRuta({
         metodo: 'post',
@@ -35,6 +39,7 @@ const plantillas: Ruta[] = [
         permiso: 'plantillas.crear',
         cuerpo: v.crearPlantillaValidator,
         respuesta: { status: 201, descripcion: 'Plantilla creada', esquema: PlantillaFacturacion },
+        handler: (ctx, { cuerpo }) => new CrearPlantilla().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -44,6 +49,7 @@ const plantillas: Ruta[] = [
         etiqueta: 'facturacion',
         permiso: 'plantillas.ver',
         respuesta: { status: 200, descripcion: 'Plantilla', esquema: PlantillaFacturacion },
+        handler: async (_ctx, { params }) => serializarPlantilla(await obtenerPlantilla(Number(params.id))),
     }),
     definirRuta({
         metodo: 'put',
@@ -55,6 +61,8 @@ const plantillas: Ruta[] = [
         cuerpo: v.editarPlantillaValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Plantilla actualizada', esquema: PlantillaFacturacion },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarPlantilla().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
 ]
 
