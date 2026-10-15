@@ -1348,6 +1348,18 @@ export interface components {
             fel_serie: string | null;
             fel_numero: string | null;
             fel_estado: string | null;
+            /**
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
+             * @enum {string}
+             */
+            tipo?: "servicio" | "mora";
+            /** @description Factura que originó la mora */
+            factura_origen_id?: number | null;
+            /**
+             * Format: date-time
+             * @description Cuándo se marcó vencida
+             */
+            vencida_en?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1736,6 +1748,8 @@ export interface components {
             /** @description Ya tenían factura del periodo */
             omitidas: number;
             facturas: number[];
+            /** @description Servicios que no se pudieron facturar (ver log) */
+            errores?: number;
         };
         Rol: {
             id: number;
@@ -2760,15 +2774,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     facturasVer: {
@@ -2811,15 +2816,6 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2976,15 +2972,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

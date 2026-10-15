@@ -9,6 +9,9 @@ import * as v from '#billing/validators'
 import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billing/plantillas'
 import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
+import GenerarFacturas from '#billing/actions/generar_facturas'
+import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
+import { exigirAlcance } from '#core/acl'
 import {
     EstadoCuenta,
     Factura,
@@ -76,6 +79,7 @@ const facturas: Ruta[] = [
         permiso: 'facturas.ver',
         query: v.listarFacturasValidator,
         respuesta: { status: 200, descripcion: 'Página de facturas', esquema: pagina(Factura) },
+        handler: (ctx, { query }) => listarFacturas(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'get',
@@ -85,6 +89,11 @@ const facturas: Ruta[] = [
         etiqueta: 'facturacion',
         permiso: 'facturas.ver',
         respuesta: { status: 200, descripcion: 'Factura', esquema: FacturaDetalle },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            return verFactura(id)
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -96,6 +105,7 @@ const facturas: Ruta[] = [
         cuerpo: v.generarFacturasValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Resultado de la generación', esquema: ResultadoGeneracion },
+        handler: (ctx, { cuerpo }) => new GenerarFacturas().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',

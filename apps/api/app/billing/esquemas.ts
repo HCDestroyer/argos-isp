@@ -100,25 +100,34 @@ export const FacturaLinea = definirEsquema(
 
 export const Factura = definirEsquema(
     'Factura',
-    objeto({
-        id,
-        cliente_id: id,
-        servicio_id: nulable(id),
-        periodo: fecha,
-        clave_unica: texto,
-        emitida_en: instante,
-        vence_en: fecha,
-        estado: EstadoFactura,
-        subtotal: Dinero,
-        iva: Dinero,
-        total: Dinero,
-        pagado: Dinero,
-        fel_uuid: nulable(texto),
-        fel_serie: nulable(texto),
-        fel_numero: nulable(texto),
-        fel_estado: nulable(texto),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            servicio_id: nulable(id),
+            periodo: fecha,
+            clave_unica: texto,
+            emitida_en: instante,
+            vence_en: fecha,
+            estado: EstadoFactura,
+            subtotal: Dinero,
+            iva: Dinero,
+            total: Dinero,
+            pagado: Dinero,
+            fel_uuid: nulable(texto),
+            fel_serie: nulable(texto),
+            fel_numero: nulable(texto),
+            fel_estado: nulable(texto),
+            tipo: {
+                ...enumerado(['servicio', 'mora']),
+                description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
+            },
+            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
+            vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
+            ...auditable,
+        },
+        ['tipo', 'factura_origen_id', 'vencida_en'],
+    ),
 )
 
 export const FacturaDetalle = definirEsquema('FacturaDetalle', {
@@ -127,11 +136,15 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
 
 export const ResultadoGeneracion = definirEsquema(
     'ResultadoGeneracion',
-    objeto({
-        generadas: entero,
-        omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
-        facturas: lista(id),
-    }),
+    objeto(
+        {
+            generadas: entero,
+            omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
+            facturas: lista(id),
+            errores: { type: 'integer', description: 'Servicios que no se pudieron facturar (ver log)' },
+        },
+        ['errores'],
+    ),
 )
 
 export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))

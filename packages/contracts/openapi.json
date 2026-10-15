@@ -1729,20 +1729,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}": {
@@ -1808,20 +1798,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/{id}/anular": {
@@ -2055,20 +2035,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.generar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/internal/aaa/servicio": {
@@ -10984,6 +10954,30 @@
               "null"
             ]
           },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora"
+            ],
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
+          },
+          "factura_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Factura que originó la mora"
+          },
+          "vencida_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se marcó vencida"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -12568,6 +12562,10 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          "errores": {
+            "type": "integer",
+            "description": "Servicios que no se pudieron facturar (ver log)"
           }
         }
       },
