@@ -3,15 +3,18 @@ import type { Problem } from '@argosisp/contracts'
 import type { TimelineItem } from '@nuxt/ui'
 
 /**
- * Pestaña "Línea de tiempo": bitácora del cliente y de sus servicios, de lo más reciente a lo
- * más viejo. Cada entrada dice quién, por qué canal y con qué resultado.
+ * Línea de tiempo de la bitácora de una o varias entidades (el cliente y sus servicios, o un
+ * servicio), de lo más reciente a lo más viejo. Cada entrada dice quién, por qué canal y con
+ * qué resultado. Oculta las lecturas del portal (`visibleEnLineaTiempo`).
  */
 const props = withDefaults(defineProps<{
-    clienteId: number
-    servicioIds?: number[]
+    entidades: EntidadAuditada[]
+    etiqueta?: string
 }>(), {
-    servicioIds: () => [],
+    etiqueta: 'Línea de tiempo',
 })
+
+defineExpose({ recargar: () => cargar() })
 
 /** El tema pinta el indicador con `group-data-[state=completed]:bg-primary`; hay que pisar esa misma variante. */
 const INDICADOR_ERROR = 'group-data-[state=completed]:bg-error group-data-[state=active]:bg-error'
@@ -41,10 +44,7 @@ const items = computed<EntradaLinea[]>(() => acciones.value.filter(visibleEnLine
 
 async function cargar() {
     cargando.value = true
-    const resultado = await useBitacora().deEntidades([
-        { tipo: 'cliente', id: props.clienteId },
-        ...props.servicioIds.map(id => ({ tipo: 'servicio', id })),
-    ], LIMITE_POR_ENTIDAD)
+    const resultado = await useBitacora().deEntidades(props.entidades, LIMITE_POR_ENTIDAD)
     cargando.value = false
     if (resultado.ok) {
         acciones.value = resultado.data
@@ -55,7 +55,7 @@ async function cargar() {
     }
 }
 
-watch(() => props.servicioIds.join(','), cargar)
+watch(() => props.entidades.map(e => `${e.tipo}:${e.id}`).join(','), cargar)
 onMounted(cargar)
 </script>
 
@@ -89,7 +89,7 @@ onMounted(cargar)
             v-else-if="!problema"
             :items="items"
             :default-value="items.length"
-            aria-label="Línea de tiempo del cliente"
+            :aria-label="etiqueta"
             size="sm"
             class="max-w-2xl"
         >

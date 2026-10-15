@@ -10,6 +10,7 @@ import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, redesIpv4, routers } from './routers/datos'
 import { servicios } from './servicios/datos'
+import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
 interface BaseFixtures {
@@ -23,6 +24,9 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
+    sesiones: Schema<'Sesion'>[]
+    /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
+    clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
     idempotencia: Record<string, RespuestaFixture>
     /**
@@ -44,6 +48,8 @@ function inicial(): BaseFixtures {
         planesPorRouter,
         plantillas,
         acciones,
+        sesiones,
+        clavesPpp: {},
         idempotencia: {},
         fallas: {},
     })

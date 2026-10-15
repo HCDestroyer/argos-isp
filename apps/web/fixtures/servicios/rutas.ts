@@ -2,6 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { ipEnCidr, ipv4ANumero } from '~/utils/red'
 import { bd, siguienteId } from '../bd'
+import { nuevaSesion } from '../sesiones/datos'
 import {
     ahora,
     conIdempotencia,
@@ -115,6 +116,125 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     }
 }
 
+/** Contraseña PPPoE determinista para los servicios de los fixtures (la API la genera al dar de alta). */
+export function claveGenerada(id: number): string {
+    const alfabeto = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let semilla = id * 7919 + 104729
+    let clave = ''
+    for (let i = 0; i < 12; i++) {
+        semilla = (semilla * 48271) % 2147483647
+        clave += alfabeto[semilla % alfabeto.length]
+    }
+    return clave
+}
+
+type EstadoServicio = Servicio['estado']
+
+interface ReglaAccion {
+    permiso: string
+    /** Estados desde los que se permite; fuera de ellos, 422 como `ReglaNegocio`. */
+    desde: EstadoServicio[]
+    /** Estado al que pasa; `null` = no cambia (desconectar). */
+    a: EstadoServicio | null
+    /** Motivo del 422 cuando el estado no lo permite. */
+    rechazo: (estado: EstadoServicio) => string
+}
+
+/**
+ * Acciones explícitas del servicio con las mismas reglas que la máquina de estados de A1
+ * (`cambiar_estado_servicio.ts`, `retirar_servicio.ts`): desde `retirado` no hay vuelta, y
+ * retirar libera IPv4 y prefijos IPv6. Las que hoy responden 501 en la API se pueden simular
+ * con `simularFalla('POST /api/v1/servicios/:id/suspender', 501)`.
+ */
+const REGLAS: Record<string, ReglaAccion> = {
+    'suspender': {
+        permiso: 'servicios.suspender',
+        desde: ['activo', 'limitado'],
+        a: 'suspendido',
+        rechazo: estado => `El servicio está ${estado}; solo se suspende un servicio activo o limitado`,
+    },
+    'reactivar': {
+        permiso: 'servicios.reactivar',
+        desde: ['suspendido'],
+        a: 'activo',
+        rechazo: estado => `El servicio está ${estado}; solo se reactiva un servicio suspendido`,
+    },
+    'limitar': {
+        permiso: 'servicios.limitar',
+        desde: ['activo'],
+        a: 'limitado',
+        rechazo: estado => `El servicio está ${estado}; solo se limita un servicio activo`,
+    },
+    'quitar-limite': {
+        permiso: 'servicios.quitar_limite',
+        desde: ['limitado'],
+        a: 'activo',
+        rechazo: estado => `El servicio está ${estado}; no tiene límite que quitar`,
+    },
+    'retirar': {
+        permiso: 'servicios.retirar',
+        desde: ['activo', 'limitado', 'suspendido'],
+        a: 'retirado',
+        rechazo: () => 'El servicio ya está retirado',
+    },
+    'desconectar': {
+        permiso: 'servicios.desconectar',
+        desde: ['activo', 'limitado', 'suspendido'],
+        a: null,
+        rechazo: () => 'El servicio está retirado y no tiene sesión',
+    },
+}
+
+function terminarSesiones(servicioId: number, causa: string): void {
+    const momento = ahora()
+    for (const sesion of bd.sesiones) {
+        if (sesion.servicio_id === servicioId && sesion.fin === null) {
+            sesion.fin = momento
+            sesion.causa_fin = causa
+        }
+    }
+}
+
+const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).map(([ruta, regla]) => [
+    `POST /api/v1/servicios/:id/${ruta}`,
+    conPermiso(regla.permiso, conIdempotencia((solicitud) => {
+        const indice = bd.servicios.findIndex(s => s.id === idDe(solicitud))
+        const actual = bd.servicios[indice]
+        if (!actual) {
+            return noEncontrado('el servicio')
+        }
+        const motivo = texto(cuerpoObjeto(solicitud).motivo)
+        if (!motivo || motivo.length < 3) {
+            return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener al menos 3 caracteres', rule: 'minLength' }])
+        }
+        if (!regla.desde.includes(actual.estado)) {
+            const rechazo: Problem = { type: 'urn:argosisp:problema:regla_negocio', title: 'Regla de negocio', status: 422, detail: regla.rechazo(actual.estado) }
+            return { status: 422, cuerpo: rechazo }
+        }
+        const despues: Servicio = regla.a === null
+            ? actual
+            : {
+                    ...actual,
+                    estado: regla.a,
+                    version: actual.version + 1,
+                    updated_at: ahora(),
+                    ...(regla.a === 'retirado' ? { ipv4: null, prefijo_enlace_v6: null, prefijo_delegado_v6: null } : {}),
+                }
+        bd.servicios[indice] = despues
+        // Suspender y limitar van por CoA (la sesión sigue); reactivar va por Disconnect-Request
+        // (decisión del PM en lideres.md), igual que desconectar y retirar.
+        if (regla.a === null || regla.a === 'retirado' || ruta === 'reactivar') {
+            terminarSesiones(actual.id, 'Admin-Reset')
+        }
+        if (ruta === 'reactivar') {
+            // El CPE vuelve a marcar enseguida y RADIUS ya lo autoriza como activo.
+            bd.sesiones.push(nuevaSesion(siguienteId(bd.sesiones), despues, ahora()))
+        }
+        registrarAccion(solicitud, regla.permiso, { tipo: 'servicio', id: actual.id }, { id: actual.id, motivo })
+        return { status: 200, cuerpo: despues }
+    })),
+]))
+
 export const rutasServicios: RutasFixture = {
     'GET /api/v1/servicios': conPermiso('servicios.ver', (solicitud) => {
         const q = normalizar(solicitud.query.get('q')?.trim())
@@ -149,8 +269,25 @@ export const rutasServicios: RutasFixture = {
             return datosInvalidos(resultado)
         }
         bd.servicios.push(resultado)
-        const { pass_ppp: _clave, ...entrada } = cuerpoObjeto(solicitud)
+        const { pass_ppp: clave, ...entrada } = cuerpoObjeto(solicitud)
+        bd.clavesPpp[resultado.id] = typeof clave === 'string' && clave ? clave : claveGenerada(resultado.id)
         registrarAccion(solicitud, 'servicios.crear', { tipo: 'servicio', id: resultado.id }, { ...entrada, pass_ppp: '***' })
         return { status: 201, cuerpo: resultado }
     })),
+
+    'GET /api/v1/servicios/:id/credenciales': conPermiso('servicios.ver_credenciales', (solicitud) => {
+        const servicio = bd.servicios.find(s => s.id === idDe(solicitud))
+        if (!servicio) {
+            return noEncontrado('el servicio')
+        }
+        registrarAccion(solicitud, 'servicios.ver_credenciales', { tipo: 'servicio', id: servicio.id }, { id: servicio.id })
+        const credenciales: Schema<'CredencialesPpp'> = {
+            servicio_id: servicio.id,
+            user_ppp: servicio.user_ppp,
+            pass_ppp: bd.clavesPpp[servicio.id] ?? claveGenerada(servicio.id),
+        }
+        return { status: 200, cuerpo: credenciales }
+    }),
+
+    ...rutasAcciones,
 }

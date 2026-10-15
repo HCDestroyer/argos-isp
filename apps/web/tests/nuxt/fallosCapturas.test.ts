@@ -4,7 +4,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reiniciarFixtures, simularFalla } from '~~/fixtures'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
-import ClienteLineaTiempo from '~/components/ClienteLineaTiempo.vue'
+import LineaTiempoBitacora from '~/components/LineaTiempoBitacora.vue'
 import PaginacionCursor from '~/components/PaginacionCursor.vue'
 
 type Accion = Schema<'AccionAuditoria'>
@@ -70,7 +70,8 @@ describe('fallos de las capturas 06 y 07', () => {
         const todas = await useBitacora().deEntidades(ids.map(id => ({ tipo: 'servicio', id })), 200)
         expect(todas.ok && todas.data.some(a => a.accion === 'portal.quien_soy')).toBe(true)
 
-        const wrapper = await mountSuspended(ClienteLineaTiempo, { props: { clienteId: 2, servicioIds: ids } })
+        const entidades = [{ tipo: 'cliente', id: 2 }, ...ids.map(id => ({ tipo: 'servicio', id }))]
+        const wrapper = await mountSuspended(LineaTiempoBitacora, { props: { entidades } })
         await vi.waitFor(() => expect(wrapper.text()).toContain('Servicio creado'))
 
         const texto = wrapper.text()

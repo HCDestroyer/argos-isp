@@ -62,6 +62,12 @@ const mapa = computed(() => {
 const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos_personalizados ?? {})
     .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) })))
 
+/** La bitácora todavía no filtra por cliente (pedido a A1): se piden el cliente y cada servicio. */
+const entidadesLinea = computed<EntidadAuditada[]>(() => [
+    { tipo: 'cliente', id: clienteId.value },
+    ...servicios.value.map(s => ({ tipo: 'servicio', id: s.id })),
+])
+
 const consumidorFinal = computed(() => cliente.value?.nit_cui?.toUpperCase() === 'CF')
 
 async function cargarServicios() {
@@ -311,10 +317,10 @@ onMounted(cargar)
                 :cliente-id="cliente.id"
             />
 
-            <ClienteLineaTiempo
+            <LineaTiempoBitacora
                 v-else-if="pestana === 'linea'"
-                :cliente-id="cliente.id"
-                :servicio-ids="servicios.map(s => s.id)"
+                :entidades="entidadesLinea"
+                etiqueta="Línea de tiempo del cliente"
             />
         </div>
     </PanelPagina>

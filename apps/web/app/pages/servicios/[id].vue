@@ -1,0 +1,406 @@
+<script setup lang="ts">
+import type { Problem } from '@argosisp/contracts'
+
+definePageMeta({ permiso: 'servicios.ver' })
+
+const route = useRoute()
+const { puede } = usePermisos()
+const toast = useToast()
+
+const servicioId = computed(() => Number(route.params.id))
+
+const servicio = shallowRef<Servicio | null>(null)
+const cargando = ref(true)
+const problema = ref<Problem | null>(null)
+
+const cliente = shallowRef<Cliente | null>(null)
+const plan = shallowRef<Plan | null>(null)
+const routerNas = shallowRef<RouterNas | null>(null)
+const plantilla = shallowRef<PlantillaFacturacion | null>(null)
+
+const sesion = shallowRef<Sesion | null>(null)
+const cargandoSesion = ref(false)
+const problemaSesion = ref<Problem | null>(null)
+
+const accionAbierta = ref(false)
+const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
+const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
+
+useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` }))
+
+/**
+ * Botones de acción: solo los que el usuario puede (permiso con el mismo nombre de la acción) y
+ * que aplican al estado actual; un botón deshabilitado se confundía con uno activo.
+ */
+const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
+
+const entidadesLinea = computed<EntidadAuditada[]>(() => [{ tipo: 'servicio', id: servicioId.value }])
+
+const MODOS_IPV6: Record<ModoIpv6, string> = {
+    radius_servicio: 'RADIUS (prefijos del servicio)',
+    radius_pool: 'RADIUS (pool del router)',
+    duid: 'Por DUID',
+    estatico: 'Estático',
+    ninguno: 'Sin IPv6',
+}
+
+function aplica(accion: PresentacionAccionServicio): boolean {
+    return servicio.value !== null && accion.desde.includes(servicio.value.estado)
+}
+
+function abrirAccion(accion: PresentacionAccionServicio) {
+    accionElegida.value = accion
+    accionAbierta.value = true
+}
+
+async function cargarSesion() {
+    if (!puede('sesiones.ver')) {
+        return
+    }
+    cargandoSesion.value = true
+    const resultado = await useSesiones().activaDe(servicioId.value)
+    cargandoSesion.value = false
+    sesion.value = resultado.ok ? resultado.data : null
+    problemaSesion.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarRelacionados(actual: Servicio) {
+    const [resultadoCliente, resultadoPlanes, resultadoRouters, resultadoPlantillas] = await Promise.all([
+        puede('clientes.ver') ? useClientes().ver(actual.cliente_id) : null,
+        puede('planes.ver') ? usePlanes().listar() : null,
+        puede('routers.ver') ? useRouters().listar() : null,
+        puede('plantillas.ver') && actual.plantilla_facturacion_id ? usePlantillas().listar() : null,
+    ])
+    cliente.value = resultadoCliente?.ok ? resultadoCliente.data : null
+    plan.value = resultadoPlanes?.ok ? (resultadoPlanes.data.data.find(p => p.id === actual.plan_id) ?? null) : null
+    routerNas.value = resultadoRouters?.ok ? (resultadoRouters.data.data.find(r => r.id === actual.router_id) ?? null) : null
+    plantilla.value = resultadoPlantillas?.ok ? (resultadoPlantillas.data.find(p => p.id === actual.plantilla_facturacion_id) ?? null) : null
+}
+
+async function cargar() {
+    cargando.value = true
+    problema.value = null
+    const resultado = await useServicios().ver(servicioId.value)
+    cargando.value = false
+    if (!resultado.ok) {
+        servicio.value = null
+        problema.value = resultado.problema
+        return
+    }
+    servicio.value = resultado.data
+    void cargarRelacionados(resultado.data)
+    void cargarSesion()
+}
+
+function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
+    servicio.value = actualizado
+    toast.add({
+        title: accion.hecho,
+        description: `${actualizado.user_ppp} · ${ESTADOS_SERVICIO[actualizado.estado].etiqueta}`,
+        icon: accion.icono,
+        color: 'success',
+    })
+    void cargarSesion()
+    void lineaTiempo.value?.recargar()
+}
+
+const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
+
+watch(servicioId, cargar)
+onMounted(cargar)
+</script>
+
+<template>
+    <PanelPagina
+        id="servicio"
+        :titulo="servicio?.user_ppp ?? 'Servicio'"
+        icono="i-lucide-wifi"
+    >
+        <template #acciones>
+            <UButton
+                to="/servicios"
+                icon="i-lucide-arrow-left"
+                label="Servicios"
+                color="neutral"
+                variant="ghost"
+                class="hidden sm:inline-flex"
+            />
+        </template>
+
+        <div
+            v-if="cargando && !servicio"
+            class="flex flex-col gap-4"
+        >
+            <USkeleton class="h-8 w-64" />
+            <USkeleton class="h-10 w-full" />
+            <USkeleton class="h-48 w-full" />
+        </div>
+
+        <UEmpty
+            v-else-if="problema?.status === 404"
+            icon="i-lucide-wifi-off"
+            title="Servicio no encontrado"
+            :description="`No existe un servicio con id ${route.params.id}.`"
+            :actions="[{ label: 'Volver a servicios', to: '/servicios', icon: 'i-lucide-arrow-left', color: 'neutral', variant: 'subtle' }]"
+        />
+
+        <ProblemaAlerta
+            v-else-if="problema"
+            :problema="problema"
+            :reintentar="cargar"
+            :reintentando="cargando"
+        />
+
+        <div
+            v-else-if="servicio"
+            class="flex flex-col gap-6"
+        >
+            <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="break-all font-mono text-xl font-semibold text-highlighted">
+                        {{ servicio.user_ppp }}
+                    </h2>
+                    <EstadoServicioBadge :estado="servicio.estado" />
+                    <UBadge
+                        v-if="servicio.promesa_activa"
+                        label="Promesa activa"
+                        icon="i-lucide-calendar-clock"
+                        color="info"
+                        variant="outline"
+                    />
+                </div>
+                <p class="text-sm text-muted">
+                    Servicio #{{ servicio.id }} ·
+                    <ULink
+                        :to="`/clientes/${servicio.cliente_id}`"
+                        class="text-default hover:text-primary"
+                    >
+                        {{ cliente?.nombre ?? `Cliente #${servicio.cliente_id}` }}
+                    </ULink>
+                    · versión {{ servicio.version }}
+                </p>
+            </div>
+
+            <div
+                v-if="acciones.length"
+                class="flex flex-wrap gap-2"
+                role="group"
+                aria-label="Acciones del servicio"
+            >
+                <UButton
+                    v-for="accion in acciones"
+                    :key="accion.accion"
+                    :label="accion.etiqueta"
+                    :icon="accion.icono"
+                    :color="accion.color"
+                    variant="outline"
+                    @click="abrirAccion(accion)"
+                />
+            </div>
+            <p
+                v-else-if="servicio.estado === 'retirado'"
+                class="text-sm text-muted"
+            >
+                Servicio retirado: ya no admite acciones.
+            </p>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+                <UPageCard
+                    title="Plan y facturación"
+                    icon="i-lucide-gauge"
+                    variant="subtle"
+                >
+                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <DatoFicha
+                            etiqueta="Plan"
+                            :valor="plan?.nombre ?? `Plan #${servicio.plan_id}`"
+                        />
+                        <DatoFicha
+                            etiqueta="Precio mensual"
+                            :valor="precio ? `${formatearQuetzales(precio)}${servicio.costo_override ? ' (precio especial)' : ''}` : null"
+                        />
+                        <DatoFicha
+                            v-if="plan"
+                            etiqueta="Velocidad"
+                            :valor="`${formatearVelocidad(plan.bajada_kbps)} ↓ / ${formatearVelocidad(plan.subida_kbps)} ↑`"
+                        />
+                        <DatoFicha
+                            v-if="plan"
+                            etiqueta="Velocidad limitada"
+                            :valor="`${formatearVelocidad(plan.bajada_limitada_kbps)} ↓ / ${formatearVelocidad(plan.subida_limitada_kbps)} ↑`"
+                        />
+                        <DatoFicha
+                            etiqueta="Plantilla de facturación"
+                            :valor="servicio.plantilla_facturacion_id ? (plantilla?.nombre ?? `Plantilla #${servicio.plantilla_facturacion_id}`) : 'Sin plantilla'"
+                        />
+                        <DatoFicha
+                            etiqueta="Instalación"
+                            :valor="formatearFecha(servicio.fecha_instalacion)"
+                        />
+                    </dl>
+                </UPageCard>
+
+                <UPageCard
+                    title="Red"
+                    icon="i-lucide-network"
+                    variant="subtle"
+                >
+                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <DatoFicha
+                            etiqueta="Router"
+                            :valor="routerNas?.nombre ?? `Router #${servicio.router_id}`"
+                        />
+                        <DatoFicha
+                            etiqueta="IPv4"
+                            :valor="servicio.ipv4 ?? 'Sin IPv4'"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Prefijo de enlace IPv6"
+                            :valor="servicio.prefijo_enlace_v6"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Prefijo delegado IPv6"
+                            :valor="servicio.prefijo_delegado_v6"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Modo IPv6"
+                            :valor="MODOS_IPV6[servicio.ipv6_modo]"
+                        />
+                        <DatoFicha
+                            v-if="servicio.ipv6_duid"
+                            etiqueta="DUID"
+                            :valor="servicio.ipv6_duid"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="MAC"
+                            :valor="servicio.mac"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Firewall de corte"
+                            :valor="servicio.excluir_firewall ? 'Excluido' : 'Aplica'"
+                        />
+                    </dl>
+                </UPageCard>
+
+                <UPageCard
+                    title="Credenciales PPPoE"
+                    icon="i-lucide-key-round"
+                    variant="subtle"
+                >
+                    <ServicioCredenciales
+                        :servicio="servicio"
+                        @consultado="lineaTiempo?.recargar()"
+                    />
+                </UPageCard>
+
+                <UPageCard
+                    v-if="puede('sesiones.ver')"
+                    title="Sesión activa"
+                    icon="i-lucide-activity"
+                    variant="subtle"
+                >
+                    <ProblemaAlerta
+                        v-if="problemaSesion"
+                        :problema="problemaSesion"
+                        :reintentar="cargarSesion"
+                        :reintentando="cargandoSesion"
+                    />
+                    <div
+                        v-else-if="cargandoSesion && !sesion"
+                        class="flex flex-col gap-2"
+                    >
+                        <USkeleton class="h-5 w-48" />
+                        <USkeleton class="h-5 w-64" />
+                    </div>
+                    <p
+                        v-else-if="!sesion"
+                        class="flex items-center gap-2 text-sm text-muted"
+                    >
+                        <UIcon
+                            name="i-lucide-plug-zap"
+                            class="size-4"
+                        />
+                        Sin sesión PPPoE abierta.
+                    </p>
+                    <dl
+                        v-else
+                        class="grid gap-x-6 gap-y-4 sm:grid-cols-2"
+                    >
+                        <DatoFicha
+                            etiqueta="Conectado desde"
+                            :valor="`${formatearFechaHora(sesion.inicio)} (${formatearDuracion(sesion.inicio)})`"
+                        />
+                        <DatoFicha
+                            etiqueta="NAS"
+                            :valor="`${sesion.nas_ip} · ${sesion.acct_session_id}`"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="IPv4 de la sesión"
+                            :valor="sesion.ipv4"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Prefijos IPv6 de la sesión"
+                            :valor="[sesion.prefijo_enlace_v6, sesion.prefijo_delegado_v6].filter(Boolean).join(' · ') || null"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Tráfico"
+                            :valor="`${formatearBytes(sesion.bytes_in)} ↓ / ${formatearBytes(sesion.bytes_out)} ↑`"
+                        />
+                    </dl>
+                </UPageCard>
+
+                <UPageCard
+                    title="Instalación"
+                    icon="i-lucide-map-pin"
+                    variant="subtle"
+                >
+                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <DatoFicha
+                            etiqueta="Dirección"
+                            :valor="servicio.direccion"
+                            class="sm:col-span-2"
+                        />
+                        <DatoFicha
+                            etiqueta="Coordenadas"
+                            :valor="servicio.coordenadas"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Última modificación"
+                            :valor="formatearFechaHora(servicio.updated_at)"
+                        />
+                    </dl>
+                </UPageCard>
+            </div>
+
+            <section
+                v-if="puede('bitacora.ver')"
+                class="flex flex-col gap-3"
+            >
+                <h3 class="text-sm font-semibold text-highlighted">
+                    Historial
+                </h3>
+                <LineaTiempoBitacora
+                    ref="linea"
+                    :entidades="entidadesLinea"
+                    etiqueta="Historial del servicio"
+                />
+            </section>
+
+            <ServicioAccionModal
+                v-model:open="accionAbierta"
+                :servicio="servicio"
+                :accion="accionElegida"
+                @hecho="alTerminar"
+            />
+        </div>
+    </PanelPagina>
+</template>
