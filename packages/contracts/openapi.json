@@ -13163,6 +13163,16 @@
             "type": "boolean",
             "description": "Bandera: hay una promesa de pago activa"
           },
+          "suspension_manual": {
+            "type": "boolean",
+            "description": "Suspendido a mano por un operador: el corte y los pagos no lo reactivan"
+          },
+          "suspension_manual_motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "user_ppp": {
             "type": "string"
           },

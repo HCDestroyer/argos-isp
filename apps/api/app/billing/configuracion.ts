@@ -24,6 +24,8 @@ export interface ServicioFacturable {
     /** el plan tiene velocidad limitada (> 0 en bajada y subida) */
     limitable: boolean
     plantilla_id: number | null
+    /** suspendido a mano por un operador: `evaluarEstadoServicio` no lo toca */
+    suspension_manual: boolean
 }
 
 interface FilaServicio {
@@ -39,6 +41,7 @@ interface FilaServicio {
     bajada_limitada_kbps: number | null
     subida_limitada_kbps: number | null
     plantilla_facturacion_id: number | null
+    suspension_manual: boolean
 }
 
 export async function leerServicio(
@@ -62,6 +65,7 @@ export async function leerServicio(
             'p.bajada_limitada_kbps',
             'p.subida_limitada_kbps',
             's.plantilla_facturacion_id',
+            's.suspension_manual',
         )
     const fila = (await consulta.first()) as FilaServicio | null
     if (!fila) throw new NoEncontrado(`El servicio ${servicioId} no existe`)
@@ -75,6 +79,7 @@ export async function leerServicio(
         inicio: fila.fecha_instalacion ?? hoyGuatemala(fila.created_at),
         limitable: (fila.bajada_limitada_kbps ?? 0) > 0 && (fila.subida_limitada_kbps ?? 0) > 0,
         plantilla_id: fila.plantilla_facturacion_id,
+        suspension_manual: fila.suspension_manual,
     }
 }
 
