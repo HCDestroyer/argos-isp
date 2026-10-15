@@ -2282,20 +2282,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "ipv6PoolsCrear",
@@ -2414,20 +2404,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/libro/cuentas": {
@@ -5215,6 +5195,7 @@
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "tokens.crear",
@@ -5378,6 +5359,7 @@
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "tokens.crear",
@@ -5998,20 +5980,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "ipv6BloquesCrear",
@@ -6106,20 +6078,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "ipv6.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/planes": {
@@ -6523,20 +6485,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "serviciosCrear",
@@ -6731,20 +6683,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}": {
@@ -6810,20 +6752,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "put": {
         "operationId": "serviciosEditar",
@@ -7018,9 +6950,68 @@
                 }
               }
             }
+          }
+        },
+        "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/credenciales": {
+      "get": {
+        "operationId": "serviciosCredenciales",
+        "summary": "Ver usuario y contraseña PPPoE (queda auditado)",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credenciales PPPoE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredencialesPpp"
+                }
+              }
+            }
           },
-          "501": {
-            "description": "No implementado todavía",
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver_credenciales",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7030,8 +7021,8 @@
             }
           }
         },
-        "x-permiso": "servicios.editar",
-        "x-implementado": false
+        "x-permiso": "servicios.ver_credenciales",
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/desconectar": {
@@ -7673,20 +7664,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.retirar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/suspender": {
@@ -8265,6 +8246,7 @@
                             "servicios.retirar",
                             "servicios.suspender",
                             "servicios.ver",
+                            "servicios.ver_credenciales",
                             "sesiones.desconectar",
                             "sesiones.ver",
                             "tokens.crear",
@@ -9780,6 +9762,27 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CredencialesPpp": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "user_ppp",
+          "pass_ppp"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "user_ppp": {
+            "type": "string"
+          },
+          "pass_ppp": {
+            "type": "string",
+            "description": "En claro; cada consulta queda auditada"
           }
         }
       },

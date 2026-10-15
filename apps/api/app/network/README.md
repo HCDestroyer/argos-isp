@@ -13,6 +13,12 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 - `liberarIpv4(trx, servicioId)`: cierra la asignación vigente (`fin = now()`); el historial queda en `network.ipv4_asignaciones`.
 - Redes: no se traslapan (409 `red_traslapada`), el CIDR debe venir normalizado y el gateway dentro de la red.
 
+## IPAM IPv6 (`ipam_v6.ts`, `ipv6.ts`)
+
+- Bloques por router (`/routers/:id/ipv6-bloques`) y pools dentro del bloque (`/ipv6-bloques/:id/pools`): `enlace` entrega /64, `delegacion` /56 o /48. Prefijos normalizados y sin traslapes.
+- `reservarPrefijo(trx, { servicioId, routerId, tipo, tamano })`: conserva el vigente si sigue en un pool válido del router; si no, recupera el anterior del servicio en ese pool si está libre; si no, el primer subprefijo libre (saltando cualquier vigente que se traslape). Advisory lock por pool.
+- `asignarPrefijoEstatico` (modo `estatico`) y `liberarPrefijos` (retiro, cambio de modo). Historial en `network.ipv6_asignaciones`.
+
 ## Planes
 
 - `global = true`: disponible en todos los routers; si no, solo donde tenga fila en `planes_routers`. Inactivos no se ofrecen.
@@ -25,5 +31,6 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 | `CrearRedIpv4` | `redes.crear` | — |
 | `CrearPlan`, `EditarPlan` | `planes.crear`, `planes.editar` | — |
 | `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar` | — |
+| `CrearBloqueIpv6`, `CrearPoolIpv6` | `ipv6.crear` | — |
 
 Lecturas en `consultas/routers.ts` y `consultas/planes.ts`.

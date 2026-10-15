@@ -6,6 +6,7 @@
 | Solo validan y llaman acciones. Las que no tienen `handler` responden 501.
 |
 */
+import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
@@ -21,6 +22,11 @@ import RevocarTokenApi from '#core/actions/revocar_token_api'
 import { listarPermisos, listarRoles, listarTokens, listarUsuarios, verUsuario } from '#core/consultas/acl'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { exigirAlcance } from '#core/acl'
+import CrearServicio from '#core/actions/crear_servicio'
+import EditarServicio from '#core/actions/editar_servicio'
+import RetirarServicio from '#core/actions/retirar_servicio'
+import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
 import CrearZona from '#core/actions/crear_zona'
@@ -33,6 +39,7 @@ import {
     AccionAuditoria,
     CambioAuditoria,
     Cliente,
+    CredencialesPpp,
     Me,
     Permiso,
     ResolucionIp,
@@ -333,6 +340,7 @@ function accionServicio(
         | 'servicios.retirar'
         | 'servicios.desconectar',
     resumen: string,
+    ejecutar?: (entrada: { id: number; motivo: string }, ctx: HttpContext) => Promise<unknown>,
 ): Ruta {
     return definirRuta({
         metodo: 'post',
@@ -344,6 +352,13 @@ function accionServicio(
         cuerpo: v.motivoValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Servicio después de la acción', esquema: Servicio },
+        handler: ejecutar
+            ? async (ctx, { cuerpo, params }) => {
+                  const id = Number(params.id)
+                  exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+                  return ejecutar({ id, motivo: cuerpo.motivo }, ctx)
+              }
+            : undefined,
     })
 }
 
@@ -357,6 +372,7 @@ const servicios: Ruta[] = [
         permiso: 'servicios.ver',
         query: v.listarServiciosValidator,
         respuesta: { status: 200, descripcion: 'Página de servicios', esquema: pagina(Servicio) },
+        handler: (ctx, { query }) => listarServicios(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -368,6 +384,11 @@ const servicios: Ruta[] = [
         cuerpo: v.crearServicioValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Servicio creado', esquema: Servicio },
+        handler: async (ctx, { cuerpo }) => {
+            const cliente = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => ({ zona: [] }))
+            exigirAlcance(ctx.alcance, { router: [cuerpo.router_id], zona: cliente.zona ?? [] })
+            return new CrearServicio().execute(cuerpo, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -377,6 +398,11 @@ const servicios: Ruta[] = [
         etiqueta: 'servicios',
         permiso: 'servicios.ver',
         respuesta: { status: 200, descripcion: 'Servicio', esquema: Servicio },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return verServicio(id)
+        },
     }),
     definirRuta({
         metodo: 'put',
@@ -388,6 +414,12 @@ const servicios: Ruta[] = [
         cuerpo: v.editarServicioValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Servicio actualizado', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            if (cuerpo.router_id !== undefined) exigirAlcance(ctx.alcance, { router: [cuerpo.router_id] })
+            return new EditarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
     }),
     accionServicio('suspender', 'serviciosSuspender', 'servicios.suspender', 'Suspender servicio'),
     accionServicio('reactivar', 'serviciosReactivar', 'servicios.reactivar', 'Reactivar servicio'),
@@ -398,7 +430,27 @@ const servicios: Ruta[] = [
         'servicios.quitar_limite',
         'Quitar límite de velocidad',
     ),
-    accionServicio('retirar', 'serviciosRetirar', 'servicios.retirar', 'Retirar servicio (libera IPs)'),
+    accionServicio(
+        'retirar',
+        'serviciosRetirar',
+        'servicios.retirar',
+        'Retirar servicio (libera IPs)',
+        (entrada, ctx) => new RetirarServicio().execute(entrada, ctx.contextoAccion()),
+    ),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/credenciales',
+        operacion: 'serviciosCredenciales',
+        resumen: 'Ver usuario y contraseña PPPoE (queda auditado)',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver_credenciales',
+        respuesta: { status: 200, descripcion: 'Credenciales PPPoE', esquema: CredencialesPpp },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return new VerCredencialesServicio().execute({ id }, ctx.contextoAccion())
+        },
+    }),
     accionServicio(
         'desconectar',
         'serviciosDesconectar',

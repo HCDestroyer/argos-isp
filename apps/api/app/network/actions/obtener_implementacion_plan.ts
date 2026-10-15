@@ -56,16 +56,18 @@ export function componerPlanEfectivo(
 
 /**
  * Configuración efectiva del plan en el router. 404 si el plan no existe; 422
- * `plan_no_disponible` si no es global ni tiene implementación en ese router.
+ * `plan_no_disponible` si no es global ni tiene implementación en ese router (salvo
+ * `aunqueNoDisponible`: un servicio que ya tiene el plan lo conserva aunque deje de ofrecerse).
  */
 export async function obtenerImplementacionPlan(
     planId: number,
     routerId: number,
     cliente: QueryClientContract = db.connection(),
+    opciones: { aunqueNoDisponible?: boolean } = {},
 ): Promise<PlanEfectivo> {
     const plan = await verPlan(planId, cliente)
     const implementacion = await verImplementacion(planId, routerId, cliente)
-    if (!plan.global && !implementacion) {
+    if (!plan.global && !implementacion && !opciones.aunqueNoDisponible) {
         throw new ReglaNegocio(
             `El plan ${plan.nombre} no está disponible en el router ${routerId}`,
             'plan_no_disponible',

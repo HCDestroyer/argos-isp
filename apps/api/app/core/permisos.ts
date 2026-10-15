@@ -23,6 +23,7 @@ export const PERMISOS = {
     'servicios.quitar_limite': 'Quitar el límite de velocidad',
     'servicios.retirar': 'Retirar servicios',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
+    'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
@@ -120,6 +121,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.limitar',
             'servicios.quitar_limite',
             'servicios.desconectar',
+            'servicios.ver_credenciales',
             'routers.ver',
             'redes.ver',
             'ipv6.ver',
@@ -144,6 +146,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.crear',
             'servicios.editar',
             'servicios.desconectar',
+            'servicios.ver_credenciales',
             'routers.ver',
             'routers.crear',
             'routers.editar',

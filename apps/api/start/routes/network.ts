@@ -21,6 +21,9 @@ import {
     Router,
     Sesion,
 } from '#network/esquemas'
+import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
+import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
+import { listarBloques, listarPools, verBloque } from '#network/consultas/ipv6'
 import CrearPlan from '#network/actions/crear_plan'
 import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
@@ -116,6 +119,10 @@ const routers: Ruta[] = [
         etiqueta: 'ipam',
         permiso: 'ipv6.ver',
         respuesta: { status: 200, descripcion: 'Bloques IPv6', esquema: lista(Ipv6Bloque) },
+        handler: (ctx, { params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return listarBloques(Number(params.id))
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -126,6 +133,13 @@ const routers: Ruta[] = [
         permiso: 'ipv6.crear',
         cuerpo: v.crearBloqueIpv6Validator,
         respuesta: { status: 201, descripcion: 'Bloque creado', esquema: Ipv6Bloque },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return new CrearBloqueIpv6().execute(
+                { ...cuerpo, router_id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -135,6 +149,11 @@ const routers: Ruta[] = [
         etiqueta: 'ipam',
         permiso: 'ipv6.ver',
         respuesta: { status: 200, descripcion: 'Pools IPv6', esquema: lista(Ipv6Pool) },
+        handler: async (ctx, { params }) => {
+            const bloque = await verBloque(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [bloque.router_id] })
+            return listarPools(bloque.id)
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -145,6 +164,11 @@ const routers: Ruta[] = [
         permiso: 'ipv6.crear',
         cuerpo: v.crearPoolIpv6Validator,
         respuesta: { status: 201, descripcion: 'Pool creado', esquema: Ipv6Pool },
+        handler: async (ctx, { cuerpo, params }) => {
+            const bloque = await verBloque(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [bloque.router_id] })
+            return new CrearPoolIpv6().execute({ ...cuerpo, bloque_id: bloque.id }, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'get',
