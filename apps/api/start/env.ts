@@ -36,6 +36,27 @@ export default await Env.create(new URL('../', import.meta.url), {
     REDIS_PORT: Env.schema.number.optional(),
     REDIS_PASSWORD: Env.schema.string.optional(),
 
+    /** Prefijo de las claves de BullMQ en Redis (por defecto `argosisp`; las pruebas usan uno propio). */
+    COLAS_PREFIJO: Env.schema.string.optional(),
+
+    /*
+    |----------------------------------------------------------
+    | Notificaciones (A6): correo SMTP, Telegram y datos de la empresa en plantillas
+    |----------------------------------------------------------
+    */
+    SMTP_HOST: Env.schema.string.optional({ format: 'host' }),
+    SMTP_PORT: Env.schema.number.optional(),
+    SMTP_SECURE: Env.schema.boolean.optional(),
+    SMTP_USER: Env.schema.string.optional(),
+    SMTP_PASSWORD: Env.schema.string.optional(),
+    MAIL_FROM: Env.schema.string.optional(),
+    TELEGRAM_BOT_TOKEN: Env.schema.string.optional(),
+    TELEGRAM_API_ROOT: Env.schema.string.optional(),
+    NOTIFY_INTENTOS: Env.schema.number.optional(),
+    NOTIFY_EMPRESA_NOMBRE: Env.schema.string.optional(),
+    NOTIFY_EMPRESA_TELEFONO: Env.schema.string.optional(),
+    NOTIFY_PORTAL_URL: Env.schema.string.optional(),
+
     /*
     |----------------------------------------------------------
     | Seguridad

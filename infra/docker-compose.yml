@@ -107,6 +107,12 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       MAIL_FROM: ${MAIL_FROM:-ArgosIsp <no-responder@argosisp.example>}
+      # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
+      # y los clientes con esa preferencia reciben correo.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
+      NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
+      NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
       # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
       INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}
@@ -143,6 +149,28 @@ services:
         - node
         - -e
         - fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+
+  # Workers de BullMQ (notificaciones; luego crons). Misma imagen que api, sin puerto HTTP.
+  worker:
+    image: argosisp/api:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: [node, ace.js, notify:worker]
+    restart: unless-stopped
+    environment: *api-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    # La imagen trae un HEALTHCHECK HTTP de la API; el worker no expone HTTP (tarea 10: métricas).
+    healthcheck:
+      disable: true
 
   web:
     image: argosisp/web:${IMAGE_TAG:-dev}

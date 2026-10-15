@@ -43,6 +43,17 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      # SMTP de prueba: la prueba de aceptación de notify (factura emitida → correo < 10 s)
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports:
+          - 1025:1025
+          - 8025:8025
+        options: >-
+          --health-cmd "/mailpit readyz"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
 
     # Variables que usan las pruebas de integración de apps/api (Japa) contra los servicios.
     env:
@@ -61,6 +72,9 @@ jobs:
       REDIS_PORT: "6379"
       SMTP_HOST: localhost
       SMTP_PORT: "1025"
+      MAILPIT_API: http://localhost:8025
+      # Prefijo propio de BullMQ para las pruebas
+      COLAS_PREFIJO: argosisp-ci
 
     steps:
       - uses: actions/checkout@v5
