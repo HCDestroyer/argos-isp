@@ -2,25 +2,11 @@ import logger from '@adonisjs/core/services/logger'
 import { contextoSistema } from '#shared/contexto'
 import ProgramarNotificacion from '#notify/actions/programar_notificacion'
 import type { ColaEnvios } from '#notify/cola'
+import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
 
-/**
- * Evento tal como lo entrega el relay del outbox (A1): `id` es el id de `audit.outbox`.
- * El relay puede entregar el mismo evento más de una vez; los consumidores deduplican por `id`.
- */
-export interface EventoEntrante {
-    id: number | string
-    evento: string
-    payload: Record<string, unknown>
-    /** `audit.outbox.request_id` de la acción que emitió el evento */
-    requestId?: string | null
-}
-
-/** Contrato de un consumidor de eventos del outbox. */
-export interface ConsumidorEventos {
-    readonly nombre: string
-    acepta(evento: string): boolean
-    procesar(evento: EventoEntrante): Promise<void>
-}
+// La interfaz del bus vive en `app/shared/eventos_bus.ts` (A1, tarea 10); se reexporta aquí
+// para no romper los imports existentes.
+export type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
 
 /** Eventos de negocio que pueden generar una notificación al cliente (si hay plantilla activa). */
 export const EVENTOS_NOTIFICABLES = [

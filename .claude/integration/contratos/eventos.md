@@ -16,7 +16,8 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 
 - Después del `XADD` marca `publicado_en`. Si el proceso cae entre ambos pasos, el evento se publica dos veces: **entrega al menos una vez**.
 - El stream se recorta con `XADD … MAXLEN ~ 100000`. No es un mecanismo de consistencia (regla 5): los grupos leen mucho antes de que una entrada se recorte.
-- Un solo relay activo a la vez (lock en Redis, regla 6).
+- Un solo relay activo a la vez (lock en Redis `<COLAS_PREFIJO>:lock:eventos-relay` con dueño y renovación, regla 6).
+- Implementación (A1, tarea 10): `apps/api/app/shared/relay_outbox.ts`, comando `node ace eventos:relay` (que además consume el grupo `aaa-cache`; `--sin-aaa-cache` lo apaga). El orden es el de `id` dentro de cada lote; una transacción que confirma tarde puede publicar un `id` menor después de uno mayor.
 
 ## Consumo
 
@@ -29,17 +30,18 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y cambios de plan (reescribe `aaa:user:<user_ppp>`) |
 
-- Dentro de `apps/api` el consumidor implementa la interfaz `ConsumidorEventos` (hoy en `apps/api/app/notify/consumidor.ts`; A1 la mueve a `apps/api/app/shared/eventos_bus.ts` en la tarea 10 y deja el import viejo reexportado):
+- Dentro de `apps/api` el consumidor implementa la interfaz `ConsumidorEventos` (en `apps/api/app/shared/eventos_bus.ts`; `apps/api/app/notify/consumidor.ts` la reexporta):
 
 ```ts
 interface EventoEntrante { id: number | string; evento: string; payload: Record<string, unknown>; requestId?: string | null }
 interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): boolean; procesar(e: EventoEntrante): Promise<void> }
 ```
 
+- Ejecutor genérico para `apps/api`: `new EjecutorGrupo({ grupo, consumidores })` de `#shared/eventos_bus` (`iniciar()`, `detener()`, `procesarLote()`). Crea el grupo con `XGROUP CREATE ... 0 MKSTREAM` (un grupo nuevo lee el stream desde el principio), lee con `XREADGROUP`, confirma con `XACK` cuando todos los consumidores que `acepta`n terminaron bien y reclama con `XAUTOCLAIM` lo pendiente hace más de 60 s. Lo usan `node ace eventos:relay` (`aaa-cache`) y `node ace notify:worker` (`notify`); A3 lo usa igual para `billing`.
 - `procesar` es **idempotente por `id`**: el mismo evento puede llegar dos veces. Si lanza, el worker no hace `XACK` y el evento se reintenta (reclamado con `XAUTOCLAIM` tras 60 s).
 - Los consumidores no deciden estados ni mueven dinero por su cuenta: llaman acciones de dominio (regla 1).
 
 ## Pruebas
 
 - Los consumidores se prueban alimentando `procesar()` directamente con un `EventoEntrante`, sin Redis.
-- La prueba de integración del relay (A1) usa un prefijo de stream propio (`<COLAS_PREFIJO>argos:eventos`) para no chocar con otros agentes que prueban en paralelo.
+- La prueba de integración del relay (A1) usa un prefijo de stream propio (`<COLAS_PREFIJO>:argos:eventos`; con `NODE_ENV=test` es el valor por defecto; en otros entornos `EVENTOS_STREAM`) para no chocar con otros agentes que prueban en paralelo.

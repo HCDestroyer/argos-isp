@@ -66,7 +66,7 @@ test.group('ACL y endpoints sin implementar', () => {
         const { token } = await usuarioConRoles(['admin'])
         const ruta = '/api/v1/internal/aaa/servicio'
         await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(token), 401)
-        await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(env.get('INTERNAL_TOKEN')), 501)
+        await estado(client.get(ruta).qs({ user_ppp: 'x' }).bearerToken(env.get('INTERNAL_TOKEN')), 404)
     })
 
     test('GET /health responde 200', async ({ client }) => {

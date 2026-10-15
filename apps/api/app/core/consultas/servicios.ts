@@ -1,6 +1,7 @@
 import { isIP } from 'node:net'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { EstadoServicio } from '#shared/eventos'
@@ -33,6 +34,10 @@ export interface ServicioVista {
     prefijo_delegado_v6: string | null
     ipv6_modo: ModoIpv6
     ipv6_duid: string | null
+    cliente_nombre: string
+    plan_nombre: string
+    router_nombre: string
+    zona_nombre: string | null
     version: number
     created_at: string
     updated_at: string
@@ -67,6 +72,17 @@ function columnas(cliente: QueryClientContract) {
         ),
         's.ipv6_modo',
         's.ipv6_duid',
+        // nombres para pantallas sin permiso de ver routers, planes o zonas
+        cliente.raw(
+            `(SELECT c_n.nombre FROM core.clientes c_n WHERE c_n.id = s.cliente_id) AS cliente_nombre`,
+        ),
+        cliente.raw(`(SELECT p_n.nombre FROM network.planes p_n WHERE p_n.id = s.plan_id) AS plan_nombre`),
+        cliente.raw(
+            `(SELECT r_n.nombre FROM network.routers r_n WHERE r_n.id = s.router_id) AS router_nombre`,
+        ),
+        cliente.raw(
+            `(SELECT z_n.nombre FROM core.clientes c_z JOIN core.zonas z_n ON z_n.id = c_z.zona_id WHERE c_z.id = s.cliente_id) AS zona_nombre`,
+        ),
         's.version',
         's.created_at',
         's.updated_at',
@@ -101,6 +117,10 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     router_id?: number
     plan_id?: number
     estado?: EstadoServicio
+    /** zona del cliente del servicio */
+    zona_id?: number
+    /** alguna factura del servicio en estado `vencida` (true) o ninguna (false) */
+    con_deuda_vencida?: boolean
 }
 
 export async function listarServicios(
@@ -113,6 +133,23 @@ export async function listarServicios(
     if (filtros.router_id) consulta.where('s.router_id', filtros.router_id)
     if (filtros.plan_id) consulta.where('s.plan_id', filtros.plan_id)
     if (filtros.estado) consulta.where('s.estado', filtros.estado)
+    if (filtros.zona_id) {
+        consulta.whereExists((c) =>
+            c
+                .from('core.clientes as c_zf')
+                .whereRaw('c_zf.id = s.cliente_id')
+                .where('c_zf.zona_id', filtros.zona_id!),
+        )
+    }
+    if (filtros.con_deuda_vencida !== undefined) {
+        const deuda = (f: DatabaseQueryBuilderContract<any>) =>
+            f
+                .from('billing.facturas as f_v')
+                .whereRaw('f_v.servicio_id = s.id')
+                .where('f_v.estado', 'vencida')
+        if (filtros.con_deuda_vencida) consulta.whereExists(deuda)
+        else consulta.whereNotExists(deuda)
+    }
     if (filtros.q) {
         const texto = filtros.q.trim()
         if (isIP(texto)) {

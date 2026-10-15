@@ -116,28 +116,36 @@ export const EstadoServicio = definirEsquema(
 
 export const Servicio = definirEsquema(
     'Servicio',
-    objeto({
-        id,
-        cliente_id: id,
-        router_id: id,
-        plan_id: id,
-        plantilla_facturacion_id: nulable(id),
-        estado: EstadoServicio,
-        promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
-        user_ppp: texto,
-        mac: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        fecha_instalacion: nulable(fecha),
-        costo_override: nulable(Dinero),
-        excluir_firewall: booleano,
-        ipv4: nulable(texto),
-        prefijo_enlace_v6: nulable(texto),
-        prefijo_delegado_v6: nulable(texto),
-        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-        ipv6_duid: nulable(texto),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            router_id: id,
+            plan_id: id,
+            plantilla_facturacion_id: nulable(id),
+            estado: EstadoServicio,
+            promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
+            user_ppp: texto,
+            mac: nulable(texto),
+            direccion: nulable(texto),
+            coordenadas: nulable(texto),
+            fecha_instalacion: nulable(fecha),
+            costo_override: nulable(Dinero),
+            excluir_firewall: booleano,
+            ipv4: nulable(texto),
+            prefijo_enlace_v6: nulable(texto),
+            prefijo_delegado_v6: nulable(texto),
+            ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
+            ipv6_duid: nulable(texto),
+            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper fixtures
+            cliente_nombre: texto,
+            plan_nombre: texto,
+            router_nombre: texto,
+            zona_nombre: nulable(texto),
+            ...auditable,
+        },
+        ['cliente_nombre', 'plan_nombre', 'router_nombre', 'zona_nombre'],
+    ),
 )
 
 export const CredencialesPpp = definirEsquema(
@@ -151,20 +159,28 @@ export const CredencialesPpp = definirEsquema(
 
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
-    objeto({
-        id,
-        actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
-        actor_id: nulable(id),
-        canal: texto,
-        accion: texto,
-        entidad_tipo: nulable(texto),
-        entidad_id: nulable(id),
-        entrada: {},
-        resultado: enumerado(['ok', 'error']),
-        error: nulable(texto),
-        request_id: nulable(texto),
-        created_at: instante,
-    }),
+    objeto(
+        {
+            id,
+            actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
+            actor_id: nulable(id),
+            // aditivo (día 3): la API siempre lo envía; opcional en el esquema para no romper fixtures
+            actor_nombre: {
+                type: ['string', 'null'],
+                description: 'Nombre del usuario (null para el sistema)',
+            },
+            canal: texto,
+            accion: texto,
+            entidad_tipo: nulable(texto),
+            entidad_id: nulable(id),
+            entrada: {},
+            resultado: enumerado(['ok', 'error']),
+            error: nulable(texto),
+            request_id: nulable(texto),
+            created_at: instante,
+        },
+        ['actor_nombre'],
+    ),
 )
 
 export const CambioAuditoria = definirEsquema(
@@ -192,25 +208,49 @@ export const ResolucionIp = definirEsquema(
     }),
 )
 
-/** Todo lo que necesita RADIUS para autorizar un user_ppp (lo arma A1, lo consume A2). */
+/**
+ * Todo lo que necesita RADIUS para autorizar un user_ppp (lo arma A1, lo consume A2). Mismo JSON
+ * que `aaa:user:<user_ppp>` en Redis; contrato en `.claude/integration/contratos/aaa.md`.
+ */
 export const AaaServicio = definirEsquema(
     'AaaServicio',
     objeto({
         servicio_id: id,
+        version: { type: 'integer', minimum: 1, description: 'core.servicios.version (diagnóstico)' },
         user_ppp: texto,
-        pass_ppp: { type: 'string', description: 'Cifrada; el servicio aaa la descifra' },
+        pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
         estado: EstadoServicio,
-        rate_limit: { type: 'string', description: '"<subida>k/<bajada>k" efectivo (normal o limitado)' },
-        ipv4: nulable(texto),
-        pool_ipv4: nulable(texto),
-        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-        prefijo_enlace_v6: nulable(texto),
-        prefijo_delegado_v6: nulable(texto),
-        pool_ipv6_enlace: nulable(texto),
-        pool_ipv6_delegacion: nulable(texto),
-        address_list: nulable(texto),
         router_id: id,
-        nas_ip: texto,
-        acct_interim_interval: entero,
+        plan: objeto({
+            id,
+            subida_kbps: entero,
+            bajada_kbps: entero,
+            subida_limitada_kbps: entero,
+            bajada_limitada_kbps: entero,
+            rate_limit_override: nulable(texto),
+            profile_ppp: nulable(texto),
+        }),
+        ipv4: {
+            anyOf: [
+                objeto({ modo: enumerado(['estatico']), ip: texto }),
+                objeto({ modo: enumerado(['pool']), pool: texto }),
+                { type: 'null' },
+            ],
+        },
+        ipv6: {
+            anyOf: [
+                objeto({
+                    modo: enumerado(['radius_servicio']),
+                    prefijo_enlace: nulable(texto),
+                    prefijo_delegado: nulable(texto),
+                }),
+                objeto({
+                    modo: enumerado(['radius_pool']),
+                    pool_enlace: nulable(texto),
+                    pool_delegacion: nulable(texto),
+                }),
+                objeto({ modo: enumerado(['duid', 'estatico', 'ninguno']) }),
+            ],
+        },
     }),
 )

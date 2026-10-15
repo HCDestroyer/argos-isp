@@ -34,3 +34,8 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 | `CrearBloqueIpv6`, `CrearPoolIpv6` | `ipv6.crear` | — |
 
 Lecturas en `consultas/routers.ts` y `consultas/planes.ts`.
+
+## Resolver una IP (`consultas/ip.ts`, tarea 13)
+
+- `GET /ip/{ip}` (permiso `ip.resolver`) y `resolverIp(ip, cliente?)` para uso interno: busca en `network.sesiones` activas (IPv4 igual, IPv6 dentro de `prefijo_enlace_v6`/`prefijo_delegado_v6`) y en asignaciones vigentes (`ipv4_asignaciones`, `ipv6_asignaciones`). Gana el prefijo más largo (una IPv4 cuenta como /32); a igual longitud, la sesión activa y luego la más reciente. Responde `{ servicio_id, cliente_id, prefijo }`, 404 si nadie la tiene, 422 si no es IP.
+- Índices GiST parciales sobre los prefijos IPv6 de sesiones activas (`1761100000001_network_indices_ip`).
