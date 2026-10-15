@@ -6,7 +6,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
  *
  * Formato `v1.<iv>.<tag>.<texto cifrado>`: AES-256-GCM, IV de 12 bytes, tag de 16 bytes, las tres
  * partes en base64url sin relleno. La clave son 32 bytes en base64 (`AAA_PPP_KEY`), la misma en
- * `apps/api` (que cifra) y en `aaa`/`coa` (que descifran). Contrato completo en `.claude/INTEGRATION.md`.
+ * `apps/api` (que cifra) y en `aaa`/`coa` (que descifran). Contrato completo en `.claude/integration/contratos/aaa.md`.
  */
 
 const VERSION = 'v1'

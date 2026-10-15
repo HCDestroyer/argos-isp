@@ -57,7 +57,7 @@ export class FuenteApi implements FuenteRespaldo {
 
 /**
  * Fixtures en `services/aaa/fixtures/servicios.json` mientras A1 no publique
- * `GET /internal/aaa/servicio` (anotado en `.claude/INTEGRATION.md`). Mismo JSON que el contrato,
+ * `GET /internal/aaa/servicio` (contrato en `.claude/integration/contratos/aaa.md`). Mismo JSON que el contrato,
  * salvo que la contraseña viene en claro en `pass_ppp_claro` y se cifra al cargar con la clave del
  * entorno: así el resto del flujo (Redis, descifrado) es idéntico al real y no hay claves en el repo.
  */

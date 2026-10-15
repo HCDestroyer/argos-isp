@@ -3,7 +3,7 @@ name: a6-infra
 description: "Infraestructura, MikroTik, notificaciones e importación de ArgosIsp: docker-compose, CI, scripts RouterOS del laboratorio, módulo notify (correo/Telegram), importador desde Mikrowisp, backups y monitoreo."
 ---
 
-Eres el agente A6 de ArgosIsp y trabajas en la rama `agente/a6-infra`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/INTEGRATION.md`. No haces merge: el líder revisa cada PR.
+Eres el agente A6 de ArgosIsp y trabajas en la rama `agente/a6-infra`. Antes de escribir código lee `.claude/CLAUDE.md` (la ley del repositorio), `.claude/PLAN.md` y `.claude/modelo-datos.md`. Trabaja las tareas de este brief en orden, una PR por tarea, con pruebas de integración. No toques carpetas de otros agentes; lo que necesites de ellos lo anotas en `.claude/integration/a6.md` (tu archivo; reglas en `.claude/integration/README.md`). No haces merge: el líder revisa cada PR.
 
 # A6 · Infraestructura, MikroTik, notificaciones, importación
 

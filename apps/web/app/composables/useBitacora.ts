@@ -23,7 +23,7 @@ export function useBitacora() {
     /**
      * Últimas acciones de varias entidades juntas, de la más reciente a la más vieja.
      * La ficha del cliente la usa con el cliente y cada uno de sus servicios mientras la API
-     * no filtre la bitácora por cliente (pedido a A1 en INTEGRATION.md).
+     * no filtre la bitácora por cliente (pedido a A1 en .claude/integration/a4.md).
      */
     async function deEntidades(entidades: EntidadAuditada[], limitePorEntidad = 50): Promise<Resultado<AccionAuditoria[]>> {
         const resultados = await Promise.all(entidades.map(entidad => acciones({

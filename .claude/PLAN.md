@@ -15,7 +15,7 @@ Cada agente corre en una sesión de Claude Code propia, en una rama `agente/aN-<
 Reglas para los líderes:
 
 - Un líder supervisa como máximo 3 agentes. Si no te da tiempo de leer lo que apruebas, pausa un agente.
-- Los agentes no toman tareas de la ruta crítica de otro agente. Si A2 necesita algo de A1, lo pide en `.claude/INTEGRATION.md` y el líder decide.
+- Los agentes no toman tareas de la ruta crítica de otro agente. Si A2 necesita algo de A1, lo pide en su archivo de `.claude/integration/` y el líder decide.
 - Al final de cada día, cada líder deja en `.claude/STATUS.md` tres líneas por agente: hecho, bloqueado, siguiente.
 
 ## Calendario
@@ -36,7 +36,7 @@ FEL va al final a propósito: la factura interna mueve cobro, corte y libro; FEL
 
 Nada de código de negocio hoy. El día 1 decide si los seis agentes producen un sistema o seis.
 
-- [ ] PM: monorepo con pnpm workspaces y `.claude/` con `CLAUDE.md`, `PLAN.md`, `agents/`, `INTEGRATION.md` vacío y `STATUS.md`
+- [ ] PM: monorepo con pnpm workspaces y `.claude/` con `CLAUDE.md`, `PLAN.md`, `agents/`, `integration/` y `STATUS.md`
 - [ ] PM: `infra/docker-compose.yml` con Postgres 16, Redis 7, FreeRADIUS 3.2, api, web, portal, aaa, coa; CI que corre lint, typecheck y pruebas
 - [ ] Líder BE: migraciones del modelo de datos base (`.claude/modelo-datos.md`) y clase `DomainAction` con auditoría y outbox
 - [ ] Líder BE: OpenAPI base con los recursos y acciones de la semana, aunque devuelvan 501; `packages/contracts` generado
@@ -72,7 +72,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 - [ ] Crear promesa desde la página de corte; reactiva; forzar vencimiento; vuelve a cortar
 - [ ] Notificación por correo de factura emitida y de corte
 - [ ] Bitácora muestra todas las acciones con actor y canal
-- [ ] Lista de todo lo que falló en `.claude/INTEGRATION.md` con dueño y prioridad
+- [ ] Lista de todo lo que falló en `.claude/integration/lideres.md` con dueño y prioridad
 
 ## Semana 2 · Validación
 

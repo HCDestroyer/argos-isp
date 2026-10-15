@@ -8,7 +8,7 @@ Todo el material de coordinación vive en `.claude/` del monorepo `argosisp`.
 | `.claude/PLAN.md` | Líderes y PM | Equipo, calendario de 5 semanas, día a día de la semana 1, criterios |
 | `.claude/modelo-datos.md` | Líder BE (día 1) y todos | Tablas base por schema |
 | `.claude/agents/a1-nucleo.md` … `a6-infra.md` | Cada agente, el suyo | Definición del agente de Claude Code: tareas en orden, interfaces, criterios, prohibiciones |
-| `.claude/INTEGRATION.md` | Todos | Peticiones entre agentes |
+| `.claude/integration/` | Todos | Peticiones entre agentes (un archivo por agente) y contratos |
 | `.claude/STATUS.md` | Líderes | Hecho / bloqueado / siguiente por agente y día |
 
 ## Agentes
@@ -35,6 +35,6 @@ Primer mensaje al agente:
 
 > Empieza por la tarea 1 de tu brief.
 
-El agente ya trae en su definición la instrucción de leer `.claude/CLAUDE.md`, `.claude/PLAN.md` y `.claude/modelo-datos.md`, trabajar en orden con una PR por tarea y anotar dependencias en `.claude/INTEGRATION.md`. Cambia el nombre del agente y la rama para A2 a A6.
+El agente ya trae en su definición la instrucción de leer `.claude/CLAUDE.md`, `.claude/PLAN.md` y `.claude/modelo-datos.md`, trabajar en orden con una PR por tarea y anotar dependencias en su archivo de `.claude/integration/`. Cambia el nombre del agente y la rama para A2 a A6.
 
 Desde cualquier otra sesión también se pueden invocar como subagentes (`/agents` los lista).
