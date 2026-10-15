@@ -1,9 +1,9 @@
 import { isIP } from 'node:net'
-import { Redis } from 'ioredis'
-import app from '@adonisjs/core/services/app'
+import type { Redis } from 'ioredis'
 import logger from '@adonisjs/core/services/logger'
 import type { HttpContext } from '@adonisjs/core/http'
 import { Problema } from '#shared/errores'
+import { enteroDeEntorno, prefijoRedisPortal, redisPortal } from '#portal/redis_portal'
 
 /**
  * Límite de peticiones de los endpoints públicos del portal (`quien-soy`, `estado`), por IP de
@@ -20,8 +20,7 @@ import { Problema } from '#shared/errores'
  * Variables (se leen en cada petición; `.env.example` de la API):
  * - `PORTAL_LIMITE_PETICIONES`: peticiones por ventana y por IP (30 por defecto; `0` lo apaga).
  * - `PORTAL_LIMITE_VENTANA_S`: largo de la ventana en segundos (60 por defecto).
- * - `PORTAL_LIMITE_PREFIJO`: prefijo de las claves en Redis (por defecto `COLAS_PREFIJO` o
- *   `argosisp`); las pruebas usan uno propio.
+ * - `PORTAL_REDIS_PREFIJO`: prefijo de las claves en Redis (`redis_portal.ts`).
  */
 
 export interface ConfigLimite {
@@ -34,18 +33,8 @@ export function configLimite(entorno: NodeJS.ProcessEnv = process.env): ConfigLi
     return {
         peticiones: enteroDeEntorno(entorno, 'PORTAL_LIMITE_PETICIONES', 30, 0),
         ventanaS: enteroDeEntorno(entorno, 'PORTAL_LIMITE_VENTANA_S', 60, 1),
-        prefijo: entorno.PORTAL_LIMITE_PREFIJO || entorno.COLAS_PREFIJO || 'argosisp',
+        prefijo: prefijoRedisPortal(entorno),
     }
-}
-
-function enteroDeEntorno(entorno: NodeJS.ProcessEnv, nombre: string, defecto: number, minimo: number) {
-    const texto = entorno[nombre]?.trim()
-    if (!texto) return defecto
-    const valor = Number(texto)
-    if (!Number.isInteger(valor) || valor < minimo) {
-        throw new Error(`${nombre}: se esperaba un entero >= ${minimo}, llegó "${texto}"`)
-    }
-    return valor
 }
 
 /** 429 con `Retry-After` (la cabecera la pone `limitarPorIp` antes de lanzar). */
@@ -140,22 +129,8 @@ export class LimitePeticiones {
 
 let compartido: LimitePeticiones | undefined
 
-/** Conexión perezosa a Redis (`REDIS_*`), con respuesta rápida si Redis no está. */
 function limitador(): LimitePeticiones {
-    if (compartido) return compartido
-    const redis = new Redis({
-        host: process.env.REDIS_HOST || '127.0.0.1',
-        port: Number(process.env.REDIS_PORT || 6379),
-        password: process.env.REDIS_PASSWORD || undefined,
-        lazyConnect: true,
-        commandTimeout: 500,
-        maxRetriesPerRequest: 1,
-    })
-    redis.on('error', (error) => logger.warn({ err: error }, 'Redis del límite del portal no disponible'))
-    app.terminating(async () => {
-        await redis.quit().catch(() => redis.disconnect())
-    })
-    compartido = new LimitePeticiones(redis)
+    compartido ??= new LimitePeticiones(redisPortal())
     return compartido
 }
 

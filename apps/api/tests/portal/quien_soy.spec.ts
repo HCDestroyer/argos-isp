@@ -28,9 +28,9 @@ test.group('Portal: quien-soy por IP', (group) => {
         process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
         delete process.env.PORTAL_CABECERA_IP
         // Contadores del límite de peticiones propios de cada prueba.
-        process.env.PORTAL_LIMITE_PREFIJO = unico('prueba-quien-soy')
+        process.env.PORTAL_REDIS_PREFIJO = unico('prueba-quien-soy')
         return () => {
-            delete process.env.PORTAL_LIMITE_PREFIJO
+            delete process.env.PORTAL_REDIS_PREFIJO
             process.env.PORTAL_PROXIES_CONFIABLES = previo.PORTAL_PROXIES_CONFIABLES
             if (previo.PORTAL_PROXIES_CONFIABLES === undefined) delete process.env.PORTAL_PROXIES_CONFIABLES
             if (previo.PORTAL_CABECERA_IP !== undefined) {

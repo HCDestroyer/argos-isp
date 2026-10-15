@@ -15,7 +15,7 @@ const VARIABLES = [
     'PORTAL_PROXIES_CONFIABLES',
     'PORTAL_LIMITE_PETICIONES',
     'PORTAL_LIMITE_VENTANA_S',
-    'PORTAL_LIMITE_PREFIJO',
+    'PORTAL_REDIS_PREFIJO',
 ] as const
 
 test.group('Portal: límite de peticiones por IP', (group) => {
@@ -24,7 +24,7 @@ test.group('Portal: límite de peticiones por IP', (group) => {
         process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
         process.env.PORTAL_LIMITE_PETICIONES = '3'
         process.env.PORTAL_LIMITE_VENTANA_S = '60'
-        process.env.PORTAL_LIMITE_PREFIJO = unico('prueba-limite')
+        process.env.PORTAL_REDIS_PREFIJO = unico('prueba-limite')
         return () => {
             for (const variable of VARIABLES) {
                 if (previo[variable] === undefined) delete process.env[variable]

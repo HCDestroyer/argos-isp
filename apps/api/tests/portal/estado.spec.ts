@@ -10,13 +10,13 @@ import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
  */
 
 const RUTA = '/api/v1/portal/estado'
-const VARIABLES = ['PORTAL_PROXIES_CONFIABLES', 'PORTAL_LIMITE_PETICIONES', 'PORTAL_LIMITE_PREFIJO'] as const
+const VARIABLES = ['PORTAL_PROXIES_CONFIABLES', 'PORTAL_LIMITE_PETICIONES', 'PORTAL_REDIS_PREFIJO'] as const
 
 test.group('Portal: estado en vivo por IP', (group) => {
     group.each.setup(() => {
         const previo = Object.fromEntries(VARIABLES.map((v) => [v, process.env[v]]))
         process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
-        process.env.PORTAL_LIMITE_PREFIJO = unico('prueba-estado')
+        process.env.PORTAL_REDIS_PREFIJO = unico('prueba-estado')
         delete process.env.PORTAL_LIMITE_PETICIONES
         return () => {
             for (const variable of VARIABLES) {
