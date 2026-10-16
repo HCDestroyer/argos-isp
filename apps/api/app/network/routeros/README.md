@@ -33,7 +33,7 @@ Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|
 | `/ip/dhcp-server/lease`     | `address`, `mac-address`, `server` (del router o `ROUTEROS_DHCP_SERVIDOR`, por defecto `all`)                                                                 | Solo `dhcp_fija`                                                                     |
 | `/ip/arp`                   | `address`, `mac-address`, `interface` (del router o `ROUTEROS_INTERFAZ_CLIENTES`)                                                                             | Solo con `amarre_ip_mac` y `mac`; sin interfaz se avisa y no se crea                 |
 
-Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:*` no se toca.
+Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:<id>` no se toca (en particular las reglas fijas de `lab.rsc`, `argosisp: …` y `argosisp:top …`). El `target` lleva la IPv4 y el prefijo delegado propio del servicio, nunca el /64 del segmento WISP (compartido con RA).
 
 ## Eventos
 

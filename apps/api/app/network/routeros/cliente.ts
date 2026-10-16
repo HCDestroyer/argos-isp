@@ -360,6 +360,15 @@ export class ClienteRouterOS {
     }
 
     #http(metodo: string, camino: string, cuerpo?: Propiedades): Promise<RespuestaHttp> {
+        return this.#peticion(metodo, camino, cuerpo).catch((error: unknown) => {
+            if (error instanceof ErrorRouterOS && error.operacion === null) {
+                error.operacion = operacionLegible(metodo, camino)
+            }
+            throw error
+        })
+    }
+
+    #peticion(metodo: string, camino: string, cuerpo?: Propiedades): Promise<RespuestaHttp> {
         const url = new URL(`rest/${camino}`, this.#base)
         const datos = cuerpo === undefined ? undefined : JSON.stringify(cuerpo)
         const inicio = performance.now()
@@ -409,6 +418,18 @@ export class ClienteRouterOS {
             req.end(datos)
         })
     }
+}
+
+const VERBOS: Record<string, string> = { GET: 'print', PUT: 'add', PATCH: 'set', DELETE: 'remove' }
+
+/** `queue/simple/*1A?x=y` + `PATCH` → `queue/simple set` (va tal cual en `routeros.fallido`). */
+export function operacionLegible(metodo: string, camino: string): string {
+    const base = camino
+        .split('?')[0]!
+        .split('/')
+        .filter((parte) => parte !== '' && !parte.startsWith('*') && !parte.startsWith('%2A'))
+        .join('/')
+    return `${base} ${VERBOS[metodo] ?? metodo.toLowerCase()}`
 }
 
 function leer(res: IncomingMessage): Promise<string> {

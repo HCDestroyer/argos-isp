@@ -17,6 +17,8 @@ import { bitacoraRed, clavePendientes, type OpcionesDispatcher } from '#network/
 import { commentServicio, propiedadesCola } from '#network/routeros/estado_deseado'
 import { leerVelocidad, rateLimitServicio } from '#network/velocidad'
 import type { EventoEntrante } from '#shared/eventos_bus'
+import { recolectarMetricas, registrarSeccionMetricas } from '#monitoreo/metricas'
+import { leerMetricasRouterOS } from '#network/routeros/metricas'
 
 /**
  * Dispatcher WISP (semana 2, tarea 3; `contratos/routeros.md`) con Postgres real y el RouterOS
@@ -278,6 +280,14 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         })
         falso.tabla('/queue/simple').push({ '.id': '*FFF1', name: 'ajena', target: '192.168.1.9/32' })
 
+        // Reglas fijas de lab.rsc (A6): `argosisp: …` y `argosisp:top …` nunca se tocan
+        falso
+            .tabla('/ip/firewall/address-list')
+            .push(
+                { '.id': '*FFF2', list: 'portal', address: '10.0.0.1', comment: 'argosisp: portal de corte' },
+                { '.id': '*FFF3', list: 'top', address: '10.0.0.2', comment: 'argosisp:top walled garden' },
+            )
+
         const ctx = contextoPrueba()
         const r = await new ReconciliarRouterOS(OPCIONES).execute(
             { router_id: routerId, motivo: 'manual' },
@@ -307,6 +317,24 @@ test.group('RouterOS · dispatcher WISP', (group) => {
             .where('request_id', ctx.requestId)
             .first()
         assert.exists(auditada)
+
+        assert.includeMembers(
+            falso.tabla('/ip/firewall/address-list').map((o) => o['.id']),
+            ['*FFF2', '*FFF3'],
+        )
+        // Métrica de A6: colas simples del router (todas, también las ajenas) en /metrics
+        assert.equal(r.colas_simples, 3, 'lectura antes de corregir: b, la huérfana y la ajena')
+        // (otra prueba de /metrics puede haber reemplazado la sección: se registra igual que la API)
+        registrarSeccionMetricas('routeros', leerMetricasRouterOS)
+        const texto = await recolectarMetricas()
+        assert.match(
+            texto,
+            new RegExp(`argosisp_routeros_colas_simples\\{router_id="${routerId}",router="[^"]+"\\} 3`),
+        )
+        assert.match(
+            texto,
+            new RegExp(`argosisp_routeros_colas_leidas_timestamp_seconds\\{router_id="${routerId}"`),
+        )
 
         // Segunda pasada: nada que corregir, sin escrituras ni fila de auditoría
         const escrituras = falso.escrituras.length
@@ -340,7 +368,7 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         assert.containsSubset(fallido?.payload, {
             servicio_id: servicio.id,
             router_id: routerId,
-            operacion: 'aplicar',
+            operacion: 'queue/simple print',
         })
         assert.include(await redis().smembers(clavePendientes()), String(routerId))
         const fallos = await db

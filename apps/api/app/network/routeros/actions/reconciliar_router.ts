@@ -11,6 +11,7 @@ import {
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
 import { routerDispatcher, serviciosRedDeRouter } from '#network/routeros/consultas'
+import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
     aplicarEstado,
     fabricaPorDefecto,
@@ -42,6 +43,8 @@ export interface ResultadoReconciliar {
     error: string | null
     /** El router no existe, está inactivo o sin servicios que reconciliar */
     omitido: boolean
+    /** Colas simples del router en esta lectura (todas); null si no se pudo leer */
+    colas_simples: number | null
 }
 
 /**
@@ -82,6 +85,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             avisos: [],
             error: null,
             omitido: false,
+            colas_simples: null,
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
         const router = await routerDispatcher(input.router_id, t.trx, this.#red)
@@ -107,7 +111,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                 const enRouter = new Set<number>()
                 for (const ruta of RUTAS_SERVICIO) {
                     const porComment = new Map<string, ObjetoRouterOS[]>()
-                    for (const objeto of await cliente.listar(ruta)) {
+                    const objetos = await cliente.listar(ruta)
+                    // Todas las colas simples (también las dinámicas de PPPoE): métrica de A6.
+                    if (ruta === '/queue/simple') salida.colas_simples = objetos.length
+                    for (const objeto of objetos) {
                         const id = servicioDeComment(objeto.comment)
                         if (id === null) continue
                         enRouter.add(id)
@@ -135,6 +142,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                 cliente.cerrar()
             }
             t.alConfirmar(() => quitarPendiente(input.router_id))
+            const colas = salida.colas_simples
+            if (colas !== null) {
+                t.alConfirmar(() => guardarLecturaColas(input.router_id, router.nombre, colas))
+            }
         } catch (error) {
             if (!(error instanceof ErrorRouterOS) && !(error instanceof RouterSinCredenciales)) throw error
             salida.error = error.message

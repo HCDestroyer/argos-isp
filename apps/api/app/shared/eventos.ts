@@ -148,7 +148,8 @@ export interface CatalogoEventos {
     'routeros.fallido': {
         servicio_id: number | null
         router_id: number
-        operacion: 'aplicar' | 'reconciliar'
+        /** Comando legible que falló (`queue/simple add`, `ip/firewall/address-list remove`…) o `reconciliar` */
+        operacion: string
         error: string
     }
     /** `aaa` no respondió su health check durante el umbral (60 s). `desde` = primer fallo. */

@@ -10,6 +10,8 @@ export class ErrorRouterOS extends Error {
     /** Código HTTP si el router respondió */
     readonly status: number | null
     readonly reintentable: boolean
+    /** Comando legible que falló, estilo RouterOS (`queue/simple add`, `ip/arp remove`, `system/resource print`) */
+    operacion: string | null = null
 
     constructor(tipo: TipoErrorRouterOS, mensaje: string, status: number | null, reintentable: boolean) {
         super(mensaje)

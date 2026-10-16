@@ -50,7 +50,10 @@ export interface ServicioRed {
     router_id: number
     plan_id: number
     ipv4: string | null
-    /** /64 y /56 vigentes (modo `estatico`/`duid`): van al `target` de la cola para limitar IPv6 */
+    /**
+     * Prefijo delegado vigente (/56 por DUID o estático): va al `target` de la cola para limitar IPv6.
+     * Nunca el /64 de enlace: en WISP es el del segmento, compartido entre clientes.
+     */
     prefijos_v6: string[]
     mac: string | null
     amarre_ip_mac: boolean

@@ -63,8 +63,10 @@ function consultaServicios(cliente: QueryClientContract) {
                    WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
             ),
             cliente.raw(
+                // Solo el prefijo delegado (propio del servicio): el /64 de enlace de WISP es el del
+                // segmento, compartido con RA (`infra/mikrotik/README.md`), y no va en la cola.
                 `ARRAY(SELECT a.prefijo::text FROM network.ipv6_asignaciones a
-                        WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.tipo DESC) AS prefijos_v6`,
+                        WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'delegacion') AS prefijos_v6`,
             ),
         )
 }
@@ -156,6 +158,7 @@ export interface PredeterminadosRed {
 }
 
 export interface RouterDispatcher {
+    nombre: string
     api: RouterApi
     red: RouterRed
     activo: boolean
@@ -181,6 +184,7 @@ export async function routerDispatcher(
     const texto = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null)
     return {
         activo: r.activo !== false,
+        nombre: String(r.nombre ?? r.id),
         api: {
             id: Number(r.id),
             host: String(r.host),

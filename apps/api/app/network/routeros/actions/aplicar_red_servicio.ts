@@ -126,7 +126,11 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 await t.emit('routeros.fallido', {
                     servicio_id: input.servicio_id,
                     router_id: routerId,
-                    operacion: 'aplicar',
+                    // legible para la alerta de A6: `queue/simple add`, `ip/arp remove`…
+                    operacion:
+                        error instanceof ErrorRouterOS && error.operacion
+                            ? error.operacion
+                            : 'credenciales del router',
                     error: error.message,
                 })
                 t.alConfirmar(() => marcarPendiente(routerId))
