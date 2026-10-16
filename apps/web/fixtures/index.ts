@@ -14,14 +14,19 @@ import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
 import { rutasBitacora } from './bitacora/rutas'
+import { rutasCajas } from './cajas/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
+import { rutasLibro } from './libro/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
+import { rutasPromesas } from './promesas/rutas'
 import { rutasRouters } from './routers/rutas'
+import { rutasAsignaciones } from './servicios/asignaciones'
 import { rutasServicios } from './servicios/rutas'
 import { rutasSesiones } from './sesiones/rutas'
+import { rutasUsuarios } from './usuarios/rutas'
 import { rutasZonas } from './zonas/rutas'
 
 export { reiniciarFixtures } from './bd'
@@ -98,10 +103,15 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasZonas,
     ...rutasClientes,
     ...rutasServicios,
+    ...rutasAsignaciones,
     ...rutasRouters,
     ...rutasPlanes,
     ...rutasPlantillas,
     ...rutasBitacora,
     ...rutasSesiones,
     ...rutasFacturacion,
+    ...rutasLibro,
+    ...rutasCajas,
+    ...rutasPromesas,
+    ...rutasUsuarios,
 })

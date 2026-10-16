@@ -1,9 +1,9 @@
-import string from '@adonisjs/core/helpers/string'
 import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { ContextoAccion } from '#shared/contexto'
 import { MASCARA, enmascarar, esCampoSensible } from '#shared/enmascarar'
+import { nombreCampo } from '#shared/nombres_campo'
 import { insertarEvento } from '#shared/outbox'
 import type { NombreEvento, PayloadEvento } from '#shared/eventos'
 
@@ -197,7 +197,8 @@ export class Transaccion {
     /**
      * Escribe en `audit.cambios` un registro por campo que cambió entre `antes` y `despues`.
      * Acepta objetos planos o modelos Lucid (se usa `$attributes`). Los nombres de campo se
-     * guardan en snake_case; los sensibles se enmascaran como `***`. Devuelve los campos escritos.
+     * guardan en snake_case con `nombreCampo` (las claves snake_case quedan igual: `ipv4`,
+     * `prefijo_enlace_v6`); los sensibles se enmascaran como `***`. Devuelve los campos escritos.
      */
     async registrarCambios(
         entidad: EntidadRef,
@@ -246,7 +247,7 @@ function normalizar(entrada: object | null | undefined): Registro {
     const plano = JSON.parse(JSON.stringify(origen)) as Registro
     const salida: Registro = {}
     for (const [clave, interno] of Object.entries(plano)) {
-        salida[string.snakeCase(clave)] = interno
+        salida[nombreCampo(clave)] = interno
     }
     return salida
 }

@@ -1843,12 +1843,15 @@ export interface components {
             id: number;
             entidad_tipo: string;
             entidad_id: number;
+            /** @description Nombre del campo en snake_case (`ipv4`, `prefijo_enlace_v6`). Filas anteriores al día 4 pueden traer `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6` */
             campo: string;
             antes: unknown;
             despues: unknown;
             /** @enum {string|null} */
             actor_tipo: "usuario" | "token" | "agente" | "sistema" | null;
             actor_id: number | null;
+            /** @description Nombre del usuario (null para el sistema) */
+            actor_nombre?: string | null;
             request_id: string | null;
             /** Format: date-time */
             created_at: string;
