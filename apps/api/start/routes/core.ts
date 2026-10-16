@@ -40,6 +40,8 @@ import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#
 import { NoEncontrado, Problema } from '#shared/errores'
 import { construirRegistroAaa } from '#core/aaa'
 import { resolverIp } from '#network/consultas/ip'
+import { listarTramos } from '#network/historial'
+import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import {
     AaaServicio,
@@ -428,6 +430,24 @@ const servicios: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
             return configuracionEfectivaPublica(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/asignaciones',
+        operacion: 'serviciosAsignaciones',
+        resumen: 'Historial de router, plan, IPv4 y prefijos IPv6 del servicio',
+        descripcion:
+            'Tramos del más reciente al más viejo; el vigente tiene `fin: null`. Cada cambio de router, ' +
+            'plan, IPv4 o prefijos cierra un tramo y abre otro.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: v.listarPaginadoValidator,
+        respuesta: { status: 200, descripcion: 'Página de tramos', esquema: pagina(TramoAsignacion) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return listarTramos(id, query)
         },
     }),
     definirRuta({

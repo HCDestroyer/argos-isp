@@ -11,6 +11,7 @@ import {
     validarModoIpv6,
 } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { registrarTramo } from '#network/historial'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 
 export interface EntradaCrearServicio {
@@ -128,6 +129,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             prefijoEstatico: input.prefijo_delegado_v6,
         })
 
+        await registrarTramo(t.trx, id, 'alta')
         await guardarExcepciones(t.trx, id, excepciones)
 
         const servicio = await verServicio(id, t.trx)

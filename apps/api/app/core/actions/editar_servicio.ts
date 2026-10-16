@@ -14,6 +14,7 @@ import {
     paraAuditoriaServicio,
     validarExcepciones,
 } from '#core/excepciones_servicio'
+import { registrarTramo } from '#network/historial'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 export interface EntradaEditarServicio {
@@ -153,7 +154,10 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         ) {
             campos.push('prefijo_v6')
         }
-        if (campos.length > 0) await t.emit('servicio.config_cambiada', { servicio_id: id, campos })
+        if (campos.length > 0) {
+            await registrarTramo(t.trx, id, `edicion: ${campos.join(', ')}`)
+            await t.emit('servicio.config_cambiada', { servicio_id: id, campos })
+        }
         if (campos.includes('ips') || campos.includes('prefijo_v6')) {
             await t.emit('asignacion.cambiada', {
                 servicio_id: id,
