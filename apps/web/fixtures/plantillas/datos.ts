@@ -66,7 +66,11 @@ export const plantillas: Schema<'PlantillaFacturacion'>[] = [
         mora_recurrente: false,
         hora_corte: '09:00:00',
         certificar_al: 'emitir',
-        reglas_promesa: structuredClone(reglasPromesa),
+        // Empresas: la promesa que pide un operador queda pendiente de aprobación.
+        reglas_promesa: {
+            ...structuredClone(reglasPromesa),
+            canales: { ...structuredClone(reglasPromesa.canales), operador: { ...sinLimitesCanal, requiere_aprobacion: true } },
+        },
         ...meta,
     },
 ]

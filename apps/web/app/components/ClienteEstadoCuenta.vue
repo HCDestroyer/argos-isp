@@ -11,6 +11,19 @@ const props = defineProps<{
 type Factura = Schema<'Factura'>
 type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
+const { puede } = usePermisos()
+
+/** Enlace al documento del movimiento (factura, mora o pago), si el usuario puede verlo. */
+function enlaceMovimiento(movimiento: Movimiento): string | null {
+    if ((movimiento.tipo === 'factura' || movimiento.tipo === 'mora') && puede('facturas.ver')) {
+        return `/facturas/${movimiento.referencia_id}`
+    }
+    if (movimiento.tipo === 'pago' && puede('pagos.ver')) {
+        return `/pagos/${movimiento.referencia_id}`
+    }
+    return null
+}
+
 const estado = shallowRef<EstadoCuenta | null>(null)
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
@@ -97,6 +110,13 @@ onMounted(cargar)
                     <p class="text-xs text-muted">
                         {{ saldo.gt(0) ? 'El cliente debe este monto' : saldo.lt(0) ? 'Saldo a favor del cliente' : 'Al día' }}
                     </p>
+                    <p
+                        v-if="estado?.saldo_a_favor && !esCero(estado.saldo_a_favor)"
+                        class="text-xs font-medium text-success"
+                        data-prueba="saldo-a-favor"
+                    >
+                        Anticipo sin aplicar: {{ formatearQuetzales(estado.saldo_a_favor) }}
+                    </p>
                 </template>
             </UPageCard>
 
@@ -122,6 +142,39 @@ onMounted(cargar)
             </UPageCard>
         </div>
 
+        <div
+            v-if="puede('facturas.ver') || puede('pagos.ver')"
+            class="flex flex-wrap gap-2"
+        >
+            <UButton
+                v-if="puede('facturas.ver')"
+                :to="`/facturas?cliente=${clienteId}`"
+                label="Todas sus facturas"
+                icon="i-lucide-receipt-text"
+                color="neutral"
+                variant="outline"
+                size="sm"
+            />
+            <UButton
+                v-if="puede('pagos.ver')"
+                :to="`/pagos?cliente=${clienteId}`"
+                label="Sus pagos"
+                icon="i-lucide-banknote"
+                color="neutral"
+                variant="outline"
+                size="sm"
+            />
+            <UButton
+                v-if="puede('promesas.ver')"
+                :to="`/promesas?cliente=${clienteId}`"
+                label="Sus promesas"
+                icon="i-lucide-calendar-clock"
+                color="neutral"
+                variant="outline"
+                size="sm"
+            />
+        </div>
+
         <section class="flex flex-col gap-2">
             <h3 class="text-sm font-semibold text-highlighted">
                 Avisos de cobro pendientes
@@ -133,7 +186,17 @@ onMounted(cargar)
             >
                 <template #periodo-cell="{ row }">
                     <div class="flex flex-col">
-                        <span class="text-sm">{{ formatearFecha(row.original.periodo) }}</span>
+                        <ULink
+                            v-if="puede('facturas.ver')"
+                            :to="`/facturas/${row.original.id}`"
+                            class="text-sm text-highlighted hover:text-primary"
+                        >
+                            {{ formatearFecha(row.original.periodo) }}
+                        </ULink>
+                        <span
+                            v-else
+                            class="text-sm"
+                        >{{ formatearFecha(row.original.periodo) }}</span>
                         <span class="text-xs text-muted">Aviso #{{ row.original.id }}<template v-if="row.original.servicio_id"> · servicio {{ row.original.servicio_id }}</template></span>
                     </div>
                 </template>
@@ -178,7 +241,17 @@ onMounted(cargar)
                 </template>
                 <template #descripcion-cell="{ row }">
                     <div class="flex flex-col">
-                        <span class="text-sm">{{ row.original.descripcion }}</span>
+                        <ULink
+                            v-if="enlaceMovimiento(row.original)"
+                            :to="enlaceMovimiento(row.original) ?? undefined"
+                            class="text-sm text-highlighted hover:text-primary"
+                        >
+                            {{ row.original.descripcion }}
+                        </ULink>
+                        <span
+                            v-else
+                            class="text-sm"
+                        >{{ row.original.descripcion }}</span>
                         <span class="text-xs tabular-nums text-muted sm:hidden">
                             {{ formatearFecha(row.original.fecha) }} ·
                             {{ esCero(row.original.cargo) ? `abono ${formatearQuetzales(row.original.abono)}` : `cargo ${formatearQuetzales(row.original.cargo)}` }}

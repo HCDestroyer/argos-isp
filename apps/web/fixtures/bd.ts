@@ -4,9 +4,12 @@
  */
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture } from '~/utils/fetchFixtures'
+import { cambios } from './bitacora/cambios'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
-import { cajas, facturas, pagos } from './facturacion/datos'
+import { cajas, facturas, pagos, turnos } from './facturacion/datos'
+import { asientos, cuentas } from './libro/datos'
+import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, redesIpv4, routers } from './routers/datos'
@@ -25,10 +28,15 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
+    cambios: Schema<'CambioAuditoria'>[]
     sesiones: Schema<'Sesion'>[]
     facturas: Schema<'Factura'>[]
     pagos: Schema<'Pago'>[]
     cajas: Schema<'Caja'>[]
+    turnos: Schema<'CajaTurno'>[]
+    promesas: Schema<'Promesa'>[]
+    cuentas: Schema<'Cuenta'>[]
+    asientos: Schema<'Asiento'>[]
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -52,10 +60,15 @@ function inicial(): BaseFixtures {
         planesPorRouter,
         plantillas,
         acciones,
+        cambios,
         sesiones,
         facturas,
         pagos,
         cajas,
+        turnos,
+        promesas,
+        cuentas,
+        asientos,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},

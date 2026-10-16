@@ -59,6 +59,7 @@ export const facturas: Factura[] = servicios
             const vence = sumarDias(periodo, servicio.estado === 'activo' && indice === 1 ? 19 : 9)
             const pagado = pagadoDe(servicio, periodo, total)
             const emitida = `${periodo}T14:00:00.000Z`
+            const estado = estadoFactura(pagado, total, vence)
             return {
                 id: servicio.id * 100 + indice + 9,
                 cliente_id: servicio.cliente_id,
@@ -67,7 +68,7 @@ export const facturas: Factura[] = servicios
                 clave_unica: `${servicio.id}-${periodo}`,
                 emitida_en: emitida,
                 vence_en: vence,
-                estado: estadoFactura(pagado, total, vence),
+                estado,
                 subtotal: dinero(subtotal),
                 iva: dinero(total.minus(subtotal)),
                 total: dinero(total),
@@ -76,6 +77,10 @@ export const facturas: Factura[] = servicios
                 fel_serie: null,
                 fel_numero: null,
                 fel_estado: null,
+                // Como la API: `tipo` siempre viene; `vencida_en` cuando el cron la marcó vencida.
+                tipo: 'servicio',
+                factura_origen_id: null,
+                vencida_en: estado === 'vencida' ? `${sumarDias(vence, 1)}T06:05:00.000Z` : null,
                 version: 1,
                 created_at: emitida,
                 updated_at: emitida,
@@ -101,6 +106,8 @@ export const pagos: Pago[] = facturas
             nota: null,
             registrado_por: 2,
             aplicaciones: [{ factura_id: factura.id, monto: factura.pagado }],
+            anulado_en: null,
+            motivo_anulacion: null,
             version: 1,
             created_at: fecha,
             updated_at: fecha,
@@ -114,4 +121,55 @@ export const cajas: Schema<'Caja'>[] = [
     { id: 1, nombre: 'Caja Central', cajero_id: 2, cuenta_id: 3, activa: true, turno_abierto_id: 41, version: 3, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
     { id: 2, nombre: 'Caja Oficina', cajero_id: 1, cuenta_id: 4, activa: true, turno_abierto_id: 42, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
     { id: 3, nombre: 'Caja Mixco', cajero_id: null, cuenta_id: 5, activa: true, turno_abierto_id: null, version: 1, created_at: '2026-09-01T15:00:00.000Z', updated_at: '2026-09-01T15:00:00.000Z' },
+]
+
+type Turno = Schema<'CajaTurno'>
+
+function turnoCerrado(id: number, cajaId: number, dia: string, fondo: string, esperado: string, contado: string, motivo: string | null): Turno {
+    const abierto = `${dia}T13:00:00.000Z`
+    const cerrado = `${dia}T23:30:00.000Z`
+    return {
+        id,
+        caja_id: cajaId,
+        abierto_en: abierto,
+        fondo_inicial: fondo,
+        cerrado_en: cerrado,
+        esperado,
+        contado,
+        diferencia: new Decimal(contado).minus(esperado).toFixed(2),
+        motivo,
+        version: 2,
+        created_at: abierto,
+        updated_at: cerrado,
+    }
+}
+
+function turnoAbierto(id: number, cajaId: number, fondo: string): Turno {
+    return {
+        id,
+        caja_id: cajaId,
+        abierto_en: momentoCaja,
+        fondo_inicial: fondo,
+        cerrado_en: null,
+        esperado: null,
+        contado: null,
+        diferencia: null,
+        motivo: null,
+        version: 1,
+        created_at: momentoCaja,
+        updated_at: momentoCaja,
+    }
+}
+
+/**
+ * Turnos de caja: los abiertos 41 y 42 (`Caja.turno_abierto_id`) y cierres anteriores: uno
+ * exacto, uno con faltante y uno con sobrante (con motivo, como exige `cerrarCaja`).
+ */
+export const turnos: Turno[] = [
+    turnoCerrado(37, 1, '2026-10-12', '500.00', '1450.00', '1450.00', null),
+    turnoCerrado(38, 2, '2026-10-12', '300.00', '620.00', '620.00', null),
+    turnoCerrado(39, 1, '2026-10-13', '500.00', '1875.50', '1870.50', 'Faltaron Q 5.00: vuelto mal entregado'),
+    turnoCerrado(40, 1, '2026-10-14', '500.00', '960.00', '980.00', 'Sobrante: un cliente no esperó su vuelto'),
+    turnoAbierto(41, 1, '500.00'),
+    turnoAbierto(42, 2, '300.00'),
 ]

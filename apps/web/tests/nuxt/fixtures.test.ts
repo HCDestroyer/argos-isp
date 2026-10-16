@@ -49,7 +49,7 @@ describe('modo fixtures', () => {
 
     it('rutas sin fixture responden 501 con Problem', async () => {
         const fetchFixtures = crearFetchFixtures(rutasFixture)
-        const respuesta = await fetchFixtures(`${ORIGEN_FIXTURES}/api/v1/facturas`)
+        const respuesta = await fetchFixtures(`${ORIGEN_FIXTURES}/api/v1/plantillas-notificacion`)
         expect(respuesta.status).toBe(501)
         expect(respuesta.headers.get('Content-Type')).toBe('application/problem+json')
     })
