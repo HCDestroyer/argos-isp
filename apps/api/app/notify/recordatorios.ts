@@ -4,6 +4,7 @@ import { contextoSistema } from '#shared/contexto'
 import ProgramarRecordatorios, { LIMITE_LOTE } from '#notify/actions/programar_recordatorios'
 import { conexionRedis, prefijoColas, type ColaEnvios, type OpcionesCola } from '#notify/cola'
 import { ID_PARTICIONES, ejecutarParticiones } from '#notify/particiones'
+import { ID_VIGILANCIA, ejecutarVigilancia } from '#notify/vigilancia'
 
 /**
  * Cron de recordatorios de pago. Un job scheduler de BullMQ (`notify-cron`, id `recordatorios`)
@@ -69,6 +70,11 @@ export function crearWorkerCron(colaEnvios: ColaEnvios, opciones: OpcionesCola =
             if (job.name === ID_PARTICIONES) {
                 const resultado = await ejecutarParticiones()
                 logger.info(resultado, 'Particiones de auditoría aseguradas')
+                return resultado
+            }
+            if (job.name === ID_VIGILANCIA) {
+                const resultado = await ejecutarVigilancia(colaEnvios)
+                if (resultado.atrasados.length > 0) logger.warn(resultado, 'Crons atrasados')
                 return resultado
             }
             if (job.name !== ID_RECORDATORIOS) return null
