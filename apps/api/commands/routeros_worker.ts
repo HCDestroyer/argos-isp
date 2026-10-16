@@ -4,7 +4,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 /**
  * `node ace routeros:worker`: dispatcher de servicios sin PPPoE (A2, semana 2). Consume el grupo
  * `routeros` del bus de eventos (`ConsumidorRouterOS` → `AplicarRedServicio`) y corre los crons
- * del reconciliador (`recuperar` cada 30 s, `reconciliar` cada 15 min). Proceso aparte en el
+ * del reconciliador (`recuperar` cada 30 s, `reconciliar` cada 15 min) y la cola `routeros-prefijos`
+ * (prefijo delegado de las sesiones en modo `radius_pool`). Proceso aparte en el
  * docker-compose (servicio `routeros-worker`, A6). Lógica en `app/network/routeros`.
  *
  * `--una-vez reconciliar|recuperar` ejecuta un cron y termina (laboratorio, scripts).
@@ -36,8 +37,10 @@ export default class RouterOSWorker extends BaseCommand {
             return
         }
 
+        const { crearWorkerPrefijos, cerrarColaPrefijos } = await import('#network/routeros/prefijos')
         const cola = await programarCronsRouterOS()
         const worker = crearWorkerRouterOS()
+        const prefijos = crearWorkerPrefijos()
         this.logger.info(`routeros:worker escuchando la cola ${NOMBRE_COLA_ROUTEROS}`)
 
         let ejecutor: { detener(): Promise<void> } | null = null
@@ -53,6 +56,8 @@ export default class RouterOSWorker extends BaseCommand {
         const terminar = async () => {
             await ejecutor?.detener()
             await worker.close()
+            await prefijos.close()
+            await cerrarColaPrefijos()
             await cola.close()
             await this.terminate()
         }

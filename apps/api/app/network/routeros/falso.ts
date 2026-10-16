@@ -1,7 +1,13 @@
 import { createServer as crearHttp, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { createServer as crearHttps } from 'node:https'
 import type { AddressInfo } from 'node:net'
-import { RUTAS, type ObjetoRouterOS, type RutaRouterOS } from '#network/routeros/cliente'
+import {
+    RUTAS,
+    RUTAS_LECTURA,
+    type ObjetoRouterOS,
+    type RutaLectura,
+    type RutaRouterOS,
+} from '#network/routeros/cliente'
 
 /**
  * RouterOS falso para pruebas: servidor HTTP(S) en memoria que imita la API REST de RouterOS 7 en
@@ -88,6 +94,8 @@ export class RouterOSFalso {
     readonly peticiones: PeticionRecibida[] = []
     retrasoMs = 0
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
+    /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
+    readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
     readonly #servidor: Server
     readonly #tls: boolean
     #siguienteId = 1
@@ -108,6 +116,7 @@ export class RouterOSFalso {
             ? crearHttps({ cert: op.tls.cert, key: op.tls.key }, manejar)
             : crearHttp(manejar)
         for (const ruta of RUTAS) this.#tablas.set(ruta, [])
+        for (const ruta of RUTAS_LECTURA) this.#lectura.set(ruta, [])
     }
 
     get url(): string {
@@ -148,6 +157,11 @@ export class RouterOSFalso {
     }
 
     /** Estado del menú (referencia viva: se puede modificar a mano en una prueba). */
+    /** Menú de solo lectura (`/ipv6/dhcp-server/binding`, `/ppp/active`), referencia viva. */
+    lectura(ruta: RutaLectura): ObjetoRouterOS[] {
+        return this.#lectura.get(ruta)!
+    }
+
     tabla(ruta: RutaRouterOS): ObjetoRouterOS[] {
         return this.#tablas.get(ruta)!
     }
@@ -214,6 +228,15 @@ export class RouterOSFalso {
             return this.#json(res, 200, { 'board-name': 'falso', version: '7.24.5 (stable)', uptime: '1d' })
         }
 
+        const soloLectura = RUTAS_LECTURA.find((r) => camino === r)
+        if (soloLectura && metodo === 'GET') {
+            const filtros = [...url.searchParams.entries()]
+            return this.#json(
+                res,
+                200,
+                this.lectura(soloLectura).filter((o) => filtros.every(([k, v]) => o[k] === v)),
+            )
+        }
         const ruta = RUTAS.find((r) => camino === r || camino.startsWith(`${r}/`))
         if (!ruta) return this.#error(res, 400, 'Bad Request', 'no such command prefix')
         const id = camino.length > ruta.length ? decodeURIComponent(camino.slice(ruta.length + 1)) : null

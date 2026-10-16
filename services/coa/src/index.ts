@@ -24,7 +24,7 @@ redis.on('error', () => {
     // Se ve en /health y en el log del bucle del consumidor.
 })
 
-const almacen = new AlmacenPg(config.db)
+const almacen = new AlmacenPg(config.db, { redis, prefijo: config.aaaPrefijo })
 const dispatcher = new Dispatcher({
     almacen,
     nas: new ClienteNasUdp(config.nas.origen),

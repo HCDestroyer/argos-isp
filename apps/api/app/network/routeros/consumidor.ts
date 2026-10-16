@@ -4,6 +4,7 @@ import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
 import { routersConServiciosSinPppoe } from '#network/routeros/consultas'
 import type { OpcionesDispatcher } from '#network/routeros/dispatcher'
+import { encolarPrefijo } from '#network/routeros/prefijos'
 
 /** Eventos de servicio: se recalcula el estado deseado completo del servicio. */
 const EVENTOS_SERVICIO = new Set([
@@ -18,6 +19,8 @@ const EVENTOS_SERVICIO = new Set([
  *
  * - `servicio.*` y `asignacion.cambiada` → `AplicarRedServicio` del `servicio_id` (idempotente:
  *   el estado deseado sale de Postgres, así que un evento repetido o atrasado aplica lo vigente).
+ * - `sesion.iniciada` sin prefijo delegado → job `routeros-prefijos` (`CompletarPrefijoDelegado`, modo
+ *   `radius_pool`: lee del router el /56 que delegó).
  * - `plan.velocidad_cambiada` → reconciliar los routers con servicios sin PPPoE de ese plan (o el
  *   router de la excepción).
  * - Un router caído no hace lanzar: la acción emite `routeros.fallido` y el job `recuperar` lo
@@ -32,7 +35,11 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
     }
 
     acepta(evento: string): boolean {
-        return EVENTOS_SERVICIO.has(evento) || evento === 'plan.velocidad_cambiada'
+        return (
+            EVENTOS_SERVICIO.has(evento) ||
+            evento === 'plan.velocidad_cambiada' ||
+            evento === 'sesion.iniciada'
+        )
     }
 
     async procesar(evento: EventoEntrante): Promise<void> {
@@ -45,6 +52,19 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
                 { servicio_id: servicioId, evento_id: String(evento.id), evento: evento.evento },
                 ctx,
             )
+            return
+        }
+        if (evento.evento === 'sesion.iniciada') {
+            // Sin /56 en el accounting (modo radius_pool): se pregunta al router en unos segundos.
+            const { nas_ip: nasIp, acct_session_id: acct, prefijos_v6: prefijos } = evento.payload
+            if (
+                typeof nasIp === 'string' &&
+                typeof acct === 'string' &&
+                evento.payload.servicio_id !== null &&
+                (!Array.isArray(prefijos) || prefijos.length < 2)
+            ) {
+                await encolarPrefijo({ nas_ip: nasIp, acct_session_id: acct })
+            }
             return
         }
         const planId = Number(evento.payload.plan_id)

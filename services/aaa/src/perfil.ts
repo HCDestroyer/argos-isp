@@ -44,12 +44,15 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
 
     switch (servicio.estado) {
         case 'activo':
+            // `plan.rate_limit` ya trae el `rate_limit_override` del router si existe.
             reply['Mikrotik-Rate-Limit'] =
-                plan.rate_limit_override ?? rateLimit(plan.subida_kbps, plan.bajada_kbps)
+                plan.rate_limit ?? plan.rate_limit_override ?? rateLimit(plan.subida_kbps, plan.bajada_kbps)
             if (plan.profile_ppp) reply['Mikrotik-Group'] = plan.profile_ppp
             break
         case 'limitado':
-            if (plan.subida_limitada_kbps > 0 && plan.bajada_limitada_kbps > 0) {
+            if (plan.rate_limit_limitado && plan.subida_limitada_kbps > 0 && plan.bajada_limitada_kbps > 0) {
+                reply['Mikrotik-Rate-Limit'] = plan.rate_limit_limitado
+            } else if (plan.subida_limitada_kbps > 0 && plan.bajada_limitada_kbps > 0) {
                 reply['Mikrotik-Rate-Limit'] = rateLimit(plan.subida_limitada_kbps, plan.bajada_limitada_kbps)
             } else {
                 // El plan no define velocidad limitada: se entrega la del plan y se avisa (A1 debería
@@ -81,8 +84,13 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
             avisos.push('ipv6 radius_servicio sin prefijos asignados')
     } else if (v6.modo === 'radius_pool') {
         if (v6.pool_enlace) reply['Framed-IPv6-Pool'] = v6.pool_enlace
-        // FreeRADIUS 3.2 no tiene "Delegated-IPv6-Pool"; RouterOS usa el VSA Mikrotik-Delegated-IPv6-Pool.
-        if (v6.pool_delegacion) reply['Mikrotik-Delegated-IPv6-Pool'] = v6.pool_delegacion
+        // El pool de delegación va en los dos atributos: `Delegated-IPv6-Prefix-Pool` (RFC 6911, 171;
+        // FreeRADIUS 3.2 lo llama así, no "Delegated-IPv6-Pool") y el VSA `Mikrotik-Delegated-IPv6-Pool`
+        // (14988/22), que es el que lee RouterOS. Un NAS ignora el que no conoce.
+        if (v6.pool_delegacion) {
+            reply['Delegated-IPv6-Prefix-Pool'] = v6.pool_delegacion
+            reply['Mikrotik-Delegated-IPv6-Pool'] = v6.pool_delegacion
+        }
     }
     // duid / estatico / ninguno: IPv6 no viaja por RADIUS (DHCPv6 por DUID o ruta por API de A6).
 

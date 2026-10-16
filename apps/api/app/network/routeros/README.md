@@ -6,43 +6,45 @@ Vive en `apps/api` y no en `services/coa` porque usa la función de velocidad ú
 
 ## Piezas
 
-| Archivo | Qué hace |
-| --- | --- |
-| `cliente.ts` | `ClienteRouterOS`: cliente REST de RouterOS 7, reutilizable (A6). `listar`, `buscar(ruta, comment)`, `asegurar(ruta, comment, props, ctx)`, `borrar(ruta, comment, ctx)`, `crear`, `actualizar`, `borrarPorId`, `probar` |
-| `errores.ts` | `RouterOSInalcanzable` (red, timeout, TLS, 5xx), `RouterOSCredenciales` (401/403), `RouterOSSolicitud` (400/404 con el `detail` del router), `RouterOSRespuesta`. Todos con `tipo` y `reintentable` |
-| `normalizar.ts` | Compara lo deseado con lo que guarda el router (`5120k` = `5120000`, `yes` = `true`, MAC sin mayúsculas, `16s` = `16`) |
-| `router.ts` | `clienteDeRouter(fila, { clave, bitacora })`: descifra `api_password` (`v1`), arma la URL y la política TLS |
-| `falso.ts` | RouterOS falso en memoria (HTTP/HTTPS) para pruebas: mismas rutas, normalizaciones y errores; `caer()`, `levantar()`, `fallar()`, `borrarAMano()` |
-| `estado_deseado.ts` | Función pura: con los datos vigentes del servicio, qué objetos deben existir y cuáles no |
-| `consultas.ts` | Lecturas de Postgres (servicio con velocidad efectiva, servicios del router, router con su API) |
-| `dispatcher.ts` | `audit.red` (`bitacoraRed`), fábrica de clientes, perfil de suspendido, routers pendientes, `aplicarEstado` |
-| `actions/aplicar_red_servicio.ts` | `AplicarRedServicio` (`routeros.aplicar_servicio`): un servicio en su router, y limpieza de routers anteriores |
-| `actions/reconciliar_router.ts` | `ReconciliarRouterOS` (`routeros.reconciliar`): un router completo contra todos sus servicios sin PPPoE |
-| `consumidor.ts` | Grupo `routeros` del bus |
-| `jobs.ts` | Crons `recuperar` y `reconciliar` (cola `routeros-cron`) |
+| Archivo                           | Qué hace                                                                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cliente.ts`                      | `ClienteRouterOS`: cliente REST de RouterOS 7, reutilizable (A6). `listar`, `buscar(ruta, comment)`, `asegurar(ruta, comment, props, ctx)`, `borrar(ruta, comment, ctx)`, `crear`, `actualizar`, `borrarPorId`, `probar` |
+| `errores.ts`                      | `RouterOSInalcanzable` (red, timeout, TLS, 5xx), `RouterOSCredenciales` (401/403), `RouterOSSolicitud` (400/404 con el `detail` del router), `RouterOSRespuesta`. Todos con `tipo` y `reintentable`                      |
+| `normalizar.ts`                   | Compara lo deseado con lo que guarda el router (`5120k` = `5120000`, `yes` = `true`, MAC sin mayúsculas, `16s` = `16`)                                                                                                   |
+| `router.ts`                       | `clienteDeRouter(fila, { clave, bitacora })`: descifra `api_password` (`v1`), arma la URL y la política TLS                                                                                                              |
+| `falso.ts`                        | RouterOS falso en memoria (HTTP/HTTPS) para pruebas: mismas rutas, normalizaciones y errores; `caer()`, `levantar()`, `fallar()`, `borrarAMano()`                                                                        |
+| `estado_deseado.ts`               | Función pura: con los datos vigentes del servicio, qué objetos deben existir y cuáles no                                                                                                                                 |
+| `consultas.ts`                    | Lecturas de Postgres (servicio con velocidad efectiva, servicios del router, router con su API)                                                                                                                          |
+| `dispatcher.ts`                   | `audit.red` (`bitacoraRed`), fábrica de clientes, perfil de suspendido, routers pendientes, `aplicarEstado`                                                                                                              |
+| `actions/aplicar_red_servicio.ts` | `AplicarRedServicio` (`routeros.aplicar_servicio`): un servicio en su router, y limpieza de routers anteriores                                                                                                           |
+| `actions/reconciliar_router.ts`   | `ReconciliarRouterOS` (`routeros.reconciliar`): un router completo contra todos sus servicios sin PPPoE                                                                                                                  |
+| `consumidor.ts`                   | Grupo `routeros` del bus                                                                                                                                                                                                 |
+| `jobs.ts`                         | Crons `recuperar` y `reconciliar` (cola `routeros-cron`)                                                                                                                                                                 |
+| `prefijos.ts`                     | Cola `routeros-prefijos`: tras `sesion.iniciada` sin /56 (IPv6 `radius_pool`), `CompletarPrefijoDelegado` lee el binding DHCPv6-PD del router (`app/network/sesiones`)                                                   |
 
 Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|recuperar`, `--sin-eventos`).
 
 ## Objetos por servicio (`comment = argosisp:servicio:<id>`)
 
-| Objeto | Propiedades | Cuándo |
-| --- | --- | --- |
-| `/queue/simple` | `name = argosisp-servicio-<id>`, `target = <ipv4>/32[,/64,/56]`, `max-limit`, `limit-at`, `burst-*`, `priority` de `rateLimitServicio(plan efectivo, estado)` | Siempre. Suspendido: `ROUTEROS_SUSPENDIDO_RATE_LIMIT` (`256k/256k`, igual que PPPoE) |
-| `/ip/firewall/address-list` | `list = suspendidos`, `address = <ipv4>` | Solo suspendido |
-| `/ip/dhcp-server/lease` | `address`, `mac-address`, `server` (del router o `ROUTEROS_DHCP_SERVIDOR`, por defecto `all`) | Solo `dhcp_fija` |
-| `/ip/arp` | `address`, `mac-address`, `interface` (del router o `ROUTEROS_INTERFAZ_CLIENTES`) | Solo con `amarre_ip_mac` y `mac`; sin interfaz se avisa y no se crea |
+| Objeto                      | Propiedades                                                                                                                                                   | Cuándo                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `/queue/simple`             | `name = argosisp-servicio-<id>`, `target = <ipv4>/32[,/64,/56]`, `max-limit`, `limit-at`, `burst-*`, `priority` de `rateLimitServicio(plan efectivo, estado)` | Siempre. Suspendido: `ROUTEROS_SUSPENDIDO_RATE_LIMIT` (`256k/256k`, igual que PPPoE) |
+| `/ip/firewall/address-list` | `list = suspendidos`, `address = <ipv4>`                                                                                                                      | Solo suspendido                                                                      |
+| `/ip/dhcp-server/lease`     | `address`, `mac-address`, `server` (del router o `ROUTEROS_DHCP_SERVIDOR`, por defecto `all`)                                                                 | Solo `dhcp_fija`                                                                     |
+| `/ip/arp`                   | `address`, `mac-address`, `interface` (del router o `ROUTEROS_INTERFAZ_CLIENTES`)                                                                             | Solo con `amarre_ip_mac` y `mac`; sin interfaz se avisa y no se crea                 |
 
 Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:*` no se toca.
 
 ## Eventos
 
-| Consume (grupo `routeros`) | Hace |
-| --- | --- |
+| Consume (grupo `routeros`)                                                                       | Hace                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` | `AplicarRedServicio` del servicio: estado deseado completo con los datos **vigentes** de Postgres (no del payload), así que un evento repetido o fuera de orden no escribe de más |
-| `plan.velocidad_cambiada` | `ReconciliarRouterOS` de los routers del plan (o el de la excepción) |
+| `plan.velocidad_cambiada`                                                                        | `ReconciliarRouterOS` de los routers del plan (o el de la excepción)                                                                                                              |
+| `sesion.iniciada` sin prefijo delegado                                                           | Job en `routeros-prefijos` (solo lectura en el router; `/ipv6/dhcp-server/binding` y `/ppp/active` son menús de solo lectura del cliente)                                         |
 
-| Emite (outbox) | Cuándo |
-| --- | --- |
+| Emite (outbox)                                                  | Cuándo                                                                                                                                                                                                                              |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `routeros.fallido { servicio_id, router_id, operacion, error }` | El router no respondió tras 1 + 3 intentos (backoff 0,5 · 1 · 2 s), rechazó las credenciales, respondió 400 o no tiene credenciales. El router queda pendiente y la acción **no lanza** (reintentar el evento no arregla el router) |
 
 ## Garantías

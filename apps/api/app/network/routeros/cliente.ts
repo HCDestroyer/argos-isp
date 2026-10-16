@@ -36,6 +36,13 @@ export const RUTAS = [
 ] as const
 export type RutaRouterOS = (typeof RUTAS)[number]
 
+/**
+ * Menús que ArgosIsp solo lee (nunca escribe): bindings de DHCPv6-PD para conocer el prefijo que
+ * el router delegó a una sesión PPPoE en modo `radius_pool`, y las sesiones PPP activas.
+ */
+export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active'] as const
+export type RutaLectura = (typeof RUTAS_LECTURA)[number]
+
 /** Un objeto tal como lo devuelve RouterOS: todas las propiedades son texto. */
 export interface ObjetoRouterOS {
     '.id': string
@@ -156,8 +163,8 @@ export class ClienteRouterOS {
     }
 
     /** Lista un menú, opcionalmente filtrado por propiedades (`?comment=…`). */
-    async listar(ruta: RutaRouterOS, filtro: Propiedades = {}): Promise<ObjetoRouterOS[]> {
-        return this.#conReintentos(() => this.#listar(ruta, filtro))
+    async listar(ruta: RutaRouterOS | RutaLectura, filtro: Propiedades = {}): Promise<ObjetoRouterOS[]> {
+        return this.#conReintentos(() => this.#listar(ruta, filtro, true))
     }
 
     /** Objetos de un menú con ese `comment` exacto. */
@@ -249,8 +256,12 @@ export class ClienteRouterOS {
         }
     }
 
-    async #listar(ruta: RutaRouterOS, filtro: Propiedades): Promise<ObjetoRouterOS[]> {
-        this.#validarRuta(ruta)
+    async #listar(
+        ruta: RutaRouterOS | RutaLectura,
+        filtro: Propiedades,
+        lectura = false,
+    ): Promise<ObjetoRouterOS[]> {
+        if (!(lectura && (RUTAS_LECTURA as readonly string[]).includes(ruta))) this.#validarRuta(ruta)
         const consulta = new URLSearchParams(filtro).toString()
         const r = await this.#http('GET', `${ruta.slice(1)}${consulta ? `?${consulta}` : ''}`)
         if (!Array.isArray(r.cuerpo)) {
