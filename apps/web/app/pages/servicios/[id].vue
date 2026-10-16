@@ -32,6 +32,7 @@ const pendienteServicio = ref<string | null>(null)
 const accionAbierta = ref(false)
 const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
 const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
+const historialAsignaciones = useTemplateRef<{ recargar: () => Promise<void> }>('asignaciones')
 
 useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` }))
 
@@ -151,6 +152,8 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
     })
     void cargarSesion()
     void lineaTiempo.value?.recargar()
+    // Retirar libera IPv4 y prefijos: cierra el tramo vigente.
+    void historialAsignaciones.value?.recargar()
 }
 
 const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
@@ -460,6 +463,19 @@ onMounted(cargar)
                     </dl>
                 </UPageCard>
             </div>
+
+            <section
+                class="flex flex-col gap-3"
+                aria-label="Historial de asignaciones"
+            >
+                <h3 class="text-sm font-semibold text-highlighted">
+                    Historial de asignaciones
+                </h3>
+                <ServicioAsignaciones
+                    ref="asignaciones"
+                    :servicio-id="servicio.id"
+                />
+            </section>
 
             <section
                 v-if="puede('promesas.ver')"
