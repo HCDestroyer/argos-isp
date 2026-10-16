@@ -62,9 +62,8 @@
 # El portal debe responder cualquier Host/ruta en ese puerto con la página /corte.
 :local portalV4 "192.0.2.20"
 :local portalCortePuerto 80
-# IPv6 del portal: destino del dst-nat IPv6 de TCP/80 (RouterOS 7, /ipv6 firewall nat). El portal
-# debe estar publicado en [portalV6]:portalCortePuerto (infra/README.md). Vacío = sin redirección
-# por IPv6 (TCP recibe reset y el navegador cae a IPv4).
+# IPv6 del portal: se permite a los suspendidos (argos-portal). Sin NAT IPv6 (decisión del PM): ver
+# la alternativa comentada en la sección 9.
 :local portalV6 "2001:db8:ffff::20"
 :local portalFqdn "portal.argosisp.example"
 # Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.).
@@ -251,7 +250,8 @@ add chain=argos-corte action=reject reject-with=icmp-admin-prohibited comment="a
 add chain=argos-corte-in protocol=udp dst-port=53 action=accept comment="argosisp: corte-in DNS udp"
 add chain=argos-corte-in protocol=tcp dst-port=53 action=accept comment="argosisp: corte-in DNS tcp"
 add chain=argos-corte-in protocol=icmp action=accept comment="argosisp: corte-in ICMP"
-add chain=argos-corte-in action=drop comment="argosisp: corte-in drop del resto"
+add chain=argos-corte-in protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte-in TCP reset"
+add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment="argosisp: corte-in rechazo del resto"
 
 # Cadena neutra para reactivar por CoA (Filter-Id = "argos-activo.in" reemplaza a argos-corte).
 add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro)"
@@ -266,23 +266,26 @@ add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$
 add chain=srcnat src-address=$clientesV4 out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
 
 # ============================================================================
-# 9. Firewall IPv6 (espejo del IPv4, con dst-nat IPv6 de TCP/80 al portal)
+# 9. Firewall IPv6 (espejo del IPv4, SIN NAT: decisión del PM, día 4)
 # ============================================================================
-# RouterOS 7 tiene /ipv6 firewall nat (dst-nat, redirect, netmap). TCP/80 de un suspendido va a
-# [portalV6]:portalCortePuerto, así la página de corte y la detección de portal cautivo funcionan
-# por IPv6 (antes recibía tcp-reset y solo se veía /corte si el navegador caía a IPv4).
-# El dst-nat ocurre en prerouting: el forward ya ve como destino el portal (argos-portal) y lo acepta.
-# Coincide igual que en IPv4: address-list "suspendidos" (el router agrega el /64 y el /56 al
-# entrar con el perfil) o interface-list "suspendidos". Una sesión suspendida solo por CoA
-# (Filter-Id) no entra en ninguna de las dos: se filtra pero NO se redirige (ver README).
+# Se suspende por CoA sin reconectar (COA_SUSPENDER_CON_IPV6=coa). El cliente siempre tiene IPv4 y
+# llega a /corte por ahí: en IPv6 el suspendido solo alcanza DNS (nuestros resolvers y el router), el
+# portal y el walled garden, y el resto se RECHAZA al instante (tcp-reset / icmp-admin-prohibited,
+# nunca drop) para que Happy Eyeballs caiga a IPv4 sin esperar y la detección de portal cautivo
+# funcione. Detalle y verificación en infra/mikrotik/README.md, "Corte por IPv6".
 :put "argosisp: firewall IPv6"
-:if ($portalV6 != "") do={
-    /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
-    /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
-    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
-    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
-    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
-}
+#
+# Alternativa (solo con COA_SUSPENDER_CON_IPV6=disconnect, que reconecta al suspendido con
+# Mikrotik-Group=suspendido y llena las listas IPv6): redirigir TCP/80 por IPv6 al portal con
+# /ipv6 firewall nat. No se aplica; para usarla, quita los "#" (la limpieza de la sección 0 y el
+# orden de la sección 10 ya cubren /ipv6 firewall nat).
+#:if ($portalV6 != "") do={
+#    /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
+#    /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
+#    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
+#    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
+#    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+#}
 /ipv6 firewall filter
 add chain=input src-address-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por address-list"
 add chain=input in-interface-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por interface-list"
@@ -294,7 +297,7 @@ add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action
 add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
 add chain=argos-corte dst-address-list=argos-portal action=accept comment="argosisp: corte portal"
 add chain=argos-corte dst-address-list=argos-walled action=accept comment="argosisp: corte walled garden"
-# TCP/80 ya llegó aquí con destino el portal (dst-nat). El resto se rechaza, no se descarta.
+# Rechazo explícito, nunca drop: TCP recibe reset y lo demás (QUIC, ICMPv6 de eco) admin-prohibited.
 add chain=argos-corte protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte TCP reset"
 add chain=argos-corte action=reject reject-with=icmp-admin-prohibited comment="argosisp: corte rechazo del resto"
 
@@ -303,7 +306,8 @@ add chain=argos-corte-in protocol=icmpv6 action=accept comment="argosisp: corte-
 add chain=argos-corte-in protocol=udp dst-port=547 action=accept comment="argosisp: corte-in DHCPv6"
 add chain=argos-corte-in protocol=udp dst-port=53 action=accept comment="argosisp: corte-in DNS udp"
 add chain=argos-corte-in protocol=tcp dst-port=53 action=accept comment="argosisp: corte-in DNS tcp"
-add chain=argos-corte-in action=drop comment="argosisp: corte-in drop del resto"
+add chain=argos-corte-in protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte-in TCP reset"
+add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment="argosisp: corte-in rechazo del resto"
 
 add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro)"
 
