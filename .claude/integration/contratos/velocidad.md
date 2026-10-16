@@ -50,7 +50,7 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
 - **FastTrack:** desactivado o excluido para el tráfico de clientes con colas. Con FastTrack las colas no se aplican; `lab.rsc` lo deja sin FastTrack para esas redes y lo verifica.
 - **Colas simples:** pocas y en orden. Primero las padres por plan; ArgosIsp no deja colas sueltas sin `comment = argosisp:…`. Más de ~1000 colas simples en un router es una alerta del monitoreo y se recomienda `arbol_pcq`.
 - **IPv6 incluido:** el `target` de las colas simples lleva la IPv4, el /64 y el /56; el árbol marca IPv6 con las mismas listas. Un cliente dual-stack nunca queda sin límite en IPv6.
-- **Garantía coherente:** `limit-at` ≤ `max-limit`, y la suma de los `limit-at` de un padre ≤ el `max-limit` del padre. Si no se cumple, la acción responde 422 con el detalle.
+- **Garantía coherente:** `limit-at` ≤ `max-limit`, y la suma de los `limit-at` de un padre ≤ el `max-limit` del padre. Si no se cumple, la acción responde 422 con el detalle. Del lado del router (A2) se vuelve a verificar con lo que hay de verdad (excepciones, sesiones PPPoE bajo el padre, capacidad del enlace en el árbol): si no se cumple, el padre o el árbol no se escribe y sale `routeros.fallido` con el detalle.
 - **Ráfaga sana:** `burst-threshold` < MIR < `burst-limit`.
 - **Prioridades:** 1 a 8 según el plan. Corporativos con prioridad alta, residenciales con 8.
 - **Cambios auditados e idempotentes:** cada escritura de cola, perfil, lista o mangle queda en `audit.red`; el reconciliador de `contratos/routeros.md` también corrige colas, listas y padres.

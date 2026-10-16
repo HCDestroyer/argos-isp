@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import type { Transaccion } from '#shared/domain_action'
 import env from '#start/env'
 import { prefijoColas, redis } from '#shared/redis'
 import { claveDesdeTexto } from '#shared/cifrado'
@@ -192,6 +193,40 @@ export async function aplicarEstado(
         if (borrados > 0) cambios.push({ ruta, comment, accion: 'borrado' })
     }
     return cambios
+}
+
+/**
+ * Reglas de oro que el router no cumpliría (`EstadoVelocidad.errores`): una fila en `audit.red` y
+ * `routeros.fallido` por cada una, con el detalle. El objeto afectado no se escribió.
+ */
+export async function reportarReglasOro(
+    t: Transaccion,
+    datos: { router_id: number; servicio_id: number | null; evento_id: string | null },
+    estado: EstadoVelocidad,
+): Promise<string[]> {
+    for (const e of estado.errores) {
+        await bitacoraRed.registrar({
+            tipo: 'routeros',
+            router_id: datos.router_id,
+            servicio_id: datos.servicio_id,
+            comando: {
+                operacion: 'validar_velocidad',
+                regla: e.regla,
+                plan_id: e.plan_id,
+                evento_id: datos.evento_id,
+                request_id: t.ctx.requestId,
+            },
+            respuesta: { error: e.detalle, final: true },
+            ok: false,
+        })
+        await t.emit('routeros.fallido', {
+            servicio_id: datos.servicio_id,
+            router_id: datos.router_id,
+            operacion: `validar velocidad (${e.regla})`,
+            error: e.detalle,
+        })
+    }
+    return estado.errores.map((e) => e.detalle)
 }
 
 /** Lee los menús del control de velocidad (un `listar` por menú). */

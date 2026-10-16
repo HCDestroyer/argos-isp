@@ -23,6 +23,7 @@ import {
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
+    reportarReglasOro,
     type Cambio,
     type FabricaClientes,
     type OpcionesDispatcher,
@@ -42,6 +43,8 @@ export interface ResultadoRouter {
     cambios: Cambio[]
     avisos: string[]
     error: string | null
+    /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
+    errores_velocidad: string[]
 }
 
 export interface ResultadoAplicarRed {
@@ -79,7 +82,9 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
     }
 
     protected auditarExito(salida: ResultadoAplicarRed): boolean {
-        return salida.routers.some((r) => r.cambios.length > 0 || r.error !== null)
+        return salida.routers.some(
+            (r) => r.cambios.length > 0 || r.error !== null || r.errores_velocidad.length > 0,
+        )
     }
 
     protected async handle(input: EntradaAplicarRed, t: Transaccion): Promise<ResultadoAplicarRed> {
@@ -127,6 +132,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 cambios: [],
                 avisos: estado.avisos,
                 error: null,
+                errores_velocidad: [],
             }
             resultado.routers.push(fila)
             if (!router) continue
@@ -146,6 +152,15 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         const lectura = await leerVelocidadRouter(cliente)
                         const velocidad = estadoVelocidadRouter(router.velocidad, planes, lectura)
                         fila.avisos = [...fila.avisos, ...velocidad.avisos]
+                        fila.errores_velocidad = await reportarReglasOro(
+                            t,
+                            {
+                                router_id: routerId,
+                                servicio_id: input.servicio_id,
+                                evento_id: input.evento_id ?? null,
+                            },
+                            velocidad,
+                        )
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
                         if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
                         // Durante un cambio de modo, lo del modo anterior lo borra el cambio al final.

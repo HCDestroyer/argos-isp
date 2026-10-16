@@ -1,5 +1,12 @@
-import { formatoKbps, limitesPadrePlan, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
+import {
+    formatoKbps,
+    limitesPadrePlan,
+    type ControlVelocidad,
+    type LimitesPadre,
+    type VelocidadPlan,
+} from '#network/velocidad'
 import type { ObjetoRouterOS, Propiedades, RutaRouterOS } from '#network/routeros/cliente'
+import { normalizarValor } from '#network/routeros/normalizar'
 
 /**
  * Estado deseado del control de velocidad de un router (`contratos/velocidad.md`): los objetos por
@@ -107,6 +114,25 @@ export interface PlanRouter {
     en_limitado: number
     /** `target` de las colas WISP del plan que cuelgan del padre (activas y limitadas) */
     targets_wisp: string[]
+    /** Σ `limit-at` de esas colas WISP (kbps) */
+    limit_at_wisp_kbps: { subida: number; bajada: number }
+}
+
+/**
+ * Valor de velocidad de RouterOS (`rx/tx`, con o sin sufijo, o bits como lo devuelve el router)
+ * → kbps por sentido (`rx` = subida del cliente, `tx` = bajada).
+ */
+export function kbpsPar(valor: string | undefined): { subida: number; bajada: number } {
+    const [rx = '0', tx = rx] = normalizarValor(valor ?? '0').split('/')
+    const kbps = (v: string) => (Number.isFinite(Number(v)) ? Math.floor(Number(v) / 1000) : 0)
+    return { subida: kbps(rx), bajada: kbps(tx) }
+}
+
+/** Regla de oro del contrato que el router no cumpliría (`routeros.fallido` con el detalle). */
+export interface ErrorReglaOro {
+    plan_id: number | null
+    regla: 'limit_at_hijos' | 'limit_at_global' | 'ipv6'
+    detalle: string
 }
 
 /** Un objeto del control de velocidad: menú, clave de identidad (`comment` o `name`) y propiedades. */
@@ -122,6 +148,11 @@ export interface EstadoVelocidad {
     avisos: string[]
     /** Objetos existentes que no se tocan ni se borran (`ruta|clave`) */
     conservar: string[]
+    /**
+     * Reglas de oro que no se cumplen: el padre (o el árbol) afectado no se escribe (queda como
+     * está, en `conservar`) y el dispatcher emite `routeros.fallido` con el detalle.
+     */
+    errores: ErrorReglaOro[]
 }
 
 /** Menús con objetos de velocidad, en el orden en que se borran los sobrantes (hijas primero). */
@@ -207,7 +238,44 @@ function hijasDinamicas(lectura: LecturaVelocidad): Map<string, string[]> {
     return salida
 }
 
+/** Σ `limit-at` (kbps) de las colas dinámicas de cada padre. */
+function limitAtDinamicas(lectura: LecturaVelocidad): Map<string, { subida: number; bajada: number }> {
+    const salida = new Map<string, { subida: number; bajada: number }>()
+    for (const cola of lectura.get('/queue/simple') ?? []) {
+        if (cola.dynamic !== 'true' || !cola.parent || cola.parent === 'none') continue
+        const suma = salida.get(cola.parent) ?? { subida: 0, bajada: 0 }
+        const limitAt = kbpsPar(cola['limit-at'])
+        suma.subida += limitAt.subida
+        suma.bajada += limitAt.bajada
+        salida.set(cola.parent, suma)
+    }
+    return salida
+}
+
+/** `limit-at` total de hijas > `max-limit` del padre, por sentido. */
+function excede(
+    hijas: { subida: number; bajada: number },
+    padre: { subida: number; bajada: number },
+): Array<'subida' | 'bajada'> {
+    return (['subida', 'bajada'] as const).filter((d) => hijas[d] > padre[d])
+}
+
+/** Prefijos IPv6 de una lista de `target` (lo que lleva `:`). */
+function prefijosV6(targets: string[]): string[] {
+    return targets.filter((t) => t.includes(':'))
+}
+
 const dobles = (n: number) => `${n}/${n}`
+
+/**
+ * Sin servicios que cuenten, el padre no garantiza nada: `limit-at = CIR × 0 = 0` (el `max-limit`
+ * se sigue calculando con 1, porque 0 en RouterOS es "sin límite"). Así un plan vacío o un nodo
+ * limitado sin limitados no ocupa garantía del enlace.
+ */
+function sinGarantiaVacio(limites: LimitesPadre, activos: number): LimitesPadre {
+    if (activos > 0) return limites
+    return { ...limites, limit_at: '0/0', limit_at_kbps: { subida: 0, bajada: 0 } }
+}
 
 export function estadoVelocidadRouter(
     router: RouterVelocidad,
@@ -217,6 +285,7 @@ export function estadoVelocidadRouter(
     const presentes: ObjetoVelocidad[] = []
     const avisos: string[] = []
     const conservar: string[] = []
+    const errores: ErrorReglaOro[] = []
     if (router.control === 'arbol_pcq') {
         // Padres de `simple` con sesiones PPPoE todavía colgando (cambio de modo en curso): quedan
         // hasta que la sesión reconecte; los borra el `sesion.terminada` de la última.
@@ -257,7 +326,39 @@ export function estadoVelocidadRouter(
             conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(planId) })}`)
             continue
         }
-        const limites = limitesPadrePlan(plan.velocidad, plan.activos)
+        const limites = sinGarantiaVacio(limitesPadrePlan(plan.velocidad, plan.activos), plan.activos)
+        // Regla de oro: Σ limit-at de las hijas (WISP deseadas + dinámicas de PPPoE) ≤ max-limit del padre.
+        const dinamico = limitAtDinamicas(lectura).get(nombre) ?? { subida: 0, bajada: 0 }
+        const hijas = {
+            subida: plan.limit_at_wisp_kbps.subida + dinamico.subida,
+            bajada: plan.limit_at_wisp_kbps.bajada + dinamico.bajada,
+        }
+        const sobre = excede(hijas, limites.max_limit_kbps)
+        // Regla de oro: el target IPv6 de cada hija también está en el del padre.
+        const faltanV6 = prefijosV6([...plan.targets_wisp, ...(dinamicas.get(nombre) ?? [])]).filter(
+            (p) => !targets.includes(p),
+        )
+        if (sobre.length > 0 || faltanV6.length > 0) {
+            for (const d of sobre) {
+                errores.push({
+                    plan_id: planId,
+                    regla: 'limit_at_hijos',
+                    detalle:
+                        `plan ${planId}: la suma de limit-at de las hijas en ${d} (${hijas[d]} kbps) supera el ` +
+                        `max-limit del padre ${nombre} (${limites.max_limit_kbps[d]} kbps)`,
+                })
+            }
+            if (faltanV6.length > 0) {
+                errores.push({
+                    plan_id: planId,
+                    regla: 'ipv6',
+                    detalle: `plan ${planId}: el target del padre no incluye ${faltanV6.join(', ')}`,
+                })
+            }
+            conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(planId) })}`)
+            conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(planId) })}`)
+            continue
+        }
         colas.push({
             ruta: '/queue/simple',
             clave: { comment: commentPlan(planId) },
@@ -281,7 +382,7 @@ export function estadoVelocidadRouter(
         })
     }
     presentes.push(...colas, ...perfiles)
-    return { presentes, avisos, conservar }
+    return { presentes, avisos, conservar, errores }
 }
 
 /**
@@ -329,7 +430,8 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
                       subida_kbps: plan.velocidad.subida_limitada_kbps,
                   }
                 : plan.velocidad
-            const limites = limitesPadrePlan(vel, limitado ? plan.en_limitado : plan.en_activo)
+            const cuenta = limitado ? plan.en_limitado : plan.en_activo
+            const limites = sinGarantiaVacio(limitesPadrePlan(vel, cuenta), cuenta)
             const lista = listaPlan(plan.plan_id, limitado)
             for (const sentido of SENTIDOS) {
                 const nombre = nombreNodo(plan.plan_id, limitado, sentido)
@@ -375,7 +477,32 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
             }
         }
     }
-    return { presentes: [...tipos, ...globales, ...nodos, ...mangles], avisos: [], conservar: [] }
+    // Regla de oro: Σ limit-at de los nodos de plan ≤ max-limit del global (capacidad del enlace).
+    const errores: ErrorReglaOro[] = []
+    for (const sentido of SENTIDOS) {
+        const techo = capacidad[sentido]
+        if (techo === null) continue
+        const suma = nodos
+            .filter((n) => n.propiedades.parent === nombreGlobal(sentido))
+            .reduce((total, n) => total + kbpsPar(n.propiedades['limit-at']).subida, 0)
+        if (suma > techo) {
+            errores.push({
+                plan_id: null,
+                regla: 'limit_at_global',
+                detalle:
+                    `la suma de limit-at de los planes en ${sentido} (${suma} kbps) supera la capacidad del ` +
+                    `enlace (${techo} kbps, ${nombreGlobal(sentido)})`,
+            })
+        }
+    }
+    if (errores.length > 0) {
+        // Árbol inválido: no se escribe nada del árbol; lo que hay queda como está.
+        const conservar = [...tipos, ...globales, ...nodos, ...mangles].map(
+            (o) => `${o.ruta}|${claveTexto(o.clave)}`,
+        )
+        return { presentes: [], avisos: [], conservar, errores }
+    }
+    return { presentes: [...tipos, ...globales, ...nodos, ...mangles], avisos: [], conservar: [], errores }
 }
 
 /**

@@ -10,6 +10,7 @@ import {
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
+import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
 import type { ControlVelocidad } from '#network/velocidad'
 import {
@@ -23,6 +24,7 @@ import {
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
+    reportarReglasOro,
     type Cambio,
     type FabricaClientes,
     type OpcionesDispatcher,
@@ -54,6 +56,8 @@ export interface ResultadoMigrarControl {
     desconexiones: number
     avisos: string[]
     error: string | null
+    /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
+    errores_velocidad: string[]
     /** El router ya no está en el modo `a` (otro cambio lo superó): no se hace nada */
     superado: boolean
 }
@@ -99,6 +103,7 @@ export default class MigrarControlRouterOS extends DomainAction<
             desconexiones: 0,
             avisos: [],
             error: null,
+            errores_velocidad: [],
             superado: false,
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
@@ -129,10 +134,25 @@ export default class MigrarControlRouterOS extends DomainAction<
                     const lectura = await leerVelocidadRouter(cliente)
                     const velocidad = estadoVelocidadRouter(router.velocidad, planes, lectura)
                     salida.avisos.push(...velocidad.avisos)
+                    salida.errores_velocidad = await reportarReglasOro(
+                        t,
+                        { router_id: input.router_id, servicio_id: null, evento_id: input.evento_id },
+                        velocidad,
+                    )
                     salida.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctx)))
                     if (input.fase === 'terminar') {
                         const despues = await leerVelocidadRouter(cliente)
                         salida.cambios.push(...(await limpiarVelocidad(cliente, velocidad, despues, ctx)))
+                        // Métrica de colas por router con el modo nuevo (la de A6 no espera al reconciliador).
+                        const final = await leerVelocidadRouter(cliente)
+                        const simples = final.get('/queue/simple')?.length ?? 0
+                        const arbol = final.get('/queue/tree')?.length ?? 0
+                        t.alConfirmar(() =>
+                            guardarLecturaColas(input.router_id, router.nombre, simples, {
+                                arbol,
+                                control: input.a,
+                            }),
+                        )
                     }
                 } else {
                     for (const id of input.servicio_ids ?? []) {

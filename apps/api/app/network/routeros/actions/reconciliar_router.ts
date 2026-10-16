@@ -29,6 +29,7 @@ import {
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
+    reportarReglasOro,
     quitarPendiente,
     type Cambio,
     type FabricaClientes,
@@ -55,6 +56,8 @@ export interface ResultadoReconciliar {
     omitido: boolean
     /** Colas simples del router en esta lectura (todas); null si no se pudo leer */
     colas_simples: number | null
+    /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
+    errores_velocidad: string[]
 }
 
 /**
@@ -82,7 +85,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
     }
 
     protected auditarExito(salida: ResultadoReconciliar): boolean {
-        return salida.correcciones.length > 0 || salida.error !== null
+        return salida.correcciones.length > 0 || salida.error !== null || salida.errores_velocidad.length > 0
     }
 
     protected async handle(input: EntradaReconciliar, t: Transaccion): Promise<ResultadoReconciliar> {
@@ -96,6 +99,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             error: null,
             omitido: false,
             colas_simples: null,
+            errores_velocidad: [],
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
         const router = await routerDispatcher(input.router_id, t.trx, this.#red)
@@ -116,6 +120,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             motivo: `reconciliar: ${input.motivo}`,
         })
 
+        let nodosArbol: number | null = null
         try {
             const cliente = this.#fabrica(router.api)
             try {
@@ -127,11 +132,17 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     motivo: `reconciliar: ${input.motivo}`,
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
+                nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null
                 const velocidad = lecturaVelocidad
                     ? estadoVelocidadRouter(router.velocidad, planes, lecturaVelocidad)
                     : null
                 if (velocidad && lecturaVelocidad) {
                     salida.avisos.push(...velocidad.avisos)
+                    salida.errores_velocidad = await reportarReglasOro(
+                        t,
+                        { router_id: input.router_id, servicio_id: null, evento_id: input.evento_id ?? null },
+                        velocidad,
+                    )
                     salida.correcciones.push(
                         ...(await asegurarVelocidad(cliente, velocidad, lecturaVelocidad, ctxPlan)),
                     )
@@ -181,7 +192,13 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             t.alConfirmar(() => quitarPendiente(input.router_id))
             const colas = salida.colas_simples
             if (colas !== null) {
-                t.alConfirmar(() => guardarLecturaColas(input.router_id, router.nombre, colas))
+                const arbol = nodosArbol
+                t.alConfirmar(() =>
+                    guardarLecturaColas(input.router_id, router.nombre, colas, {
+                        arbol,
+                        control: router.velocidad.control,
+                    }),
+                )
             }
         } catch (error) {
             if (!(error instanceof ErrorRouterOS) && !(error instanceof RouterSinCredenciales)) throw error

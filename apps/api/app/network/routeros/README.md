@@ -70,6 +70,12 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 - Orden: tipos → globales → nodos → mangle → listas por servicio; los sobrantes se borran al revés (mangle, nodos de plan, globales, tipos). El falso rechaza un nodo con `parent` o `queue` inexistente y el borrado de un tipo en uso o de un nodo con hijos.
 - Los tipos se reconocen por nombre (`argosisp-plan-<id>-…`, `id > 0`): el ejemplo de `lab.rsc` (plan `0`) no se toca.
 
+### Reglas de oro (validadas antes de escribir)
+
+- **Garantía coherente**: en `simple`, Σ `limit-at` de las hijas de un padre (colas WISP deseadas + colas dinámicas de PPPoE leídas del router) ≤ `max-limit` del padre, por sentido; en `arbol_pcq`, Σ `limit-at` de los nodos de plan ≤ capacidad del enlace (global). Si no se cumple, ese padre (o el árbol entero) **no se escribe**: queda como está en el router, se deja una fila `operacion = validar_velocidad` (`ok = false`, `regla`, detalle) en `audit.red` y se emite `routeros.fallido` con `operacion = validar velocidad (<regla>)` y el detalle (p. ej. un `rate_limit_override` que garantiza más que el reuso, o una capacidad menor que la suma de garantías). Un padre o nodo sin servicios que cuenten tiene `limit-at = 0`.
+- **IPv6 siempre**: el `target` de la cola WISP lleva el prefijo delegado; el del padre, todos los prefijos IPv6 de sus hijas (si faltara alguno, regla `ipv6`); en el árbol, las listas IPv6 llevan el /64 y el /56. El reconciliador repone un `target` al que le quitaron el IPv6 a mano.
+- **Métricas** (`/metrics` de la API, sección `routeros`; las guarda el reconciliador y el último paso del cambio de modo): `argosisp_routeros_colas_simples{router_id,router}` (la de A6), `argosisp_routeros_colas_arbol{router_id,router}` y `argosisp_routeros_control_velocidad{router_id,router,modo}` (1).
+
 ### Cambio de modo (`router.control_cambiado`)
 
 `POST /routers/:id/cambiar-control-velocidad` (A1, permiso `routers.cambiar_control_velocidad`) cambia el campo y emite `router.control_cambiado`. El consumidor `routeros` encola el job `cambiar_control` en `routeros-cron` (`jobId` = el evento) y el worker lo ejecuta con `cambio_control.ts`, paso a paso con `MigrarControlRouterOS` (`routeros.cambiar_control`), cada paso en su transacción:

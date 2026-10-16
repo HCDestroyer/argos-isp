@@ -1,10 +1,20 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
-import { leerVelocidad, velocidadEfectiva } from '#network/velocidad'
+import { leerVelocidad, rateLimitServicio, velocidadEfectiva } from '#network/velocidad'
 import type { RouterApi } from '#network/routeros/router'
-import type { RouterRed, ServicioRed, TipoConexion } from '#network/routeros/estado_deseado'
-import { conPadreSimple, type PlanRouter, type RouterVelocidad } from '#network/routeros/velocidad_router'
+import {
+    propiedadesCola,
+    type RouterRed,
+    type ServicioRed,
+    type TipoConexion,
+} from '#network/routeros/estado_deseado'
+import {
+    conPadreSimple,
+    kbpsPar,
+    type PlanRouter,
+    type RouterVelocidad,
+} from '#network/routeros/velocidad_router'
 import type { EstadoServicio } from '#shared/eventos'
 
 /**
@@ -160,6 +170,7 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
                 en_activo: 0,
                 en_limitado: 0,
                 targets_wisp: [],
+                limit_at_wisp_kbps: { subida: 0, bajada: 0 },
             }
             planes.set(s.plan_id, plan)
         }
@@ -170,6 +181,10 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
         else plan.en_activo++
         if (s.tipo_conexion !== 'pppoe' && s.ipv4 && conPadreSimple(router.control, s.velocidad)) {
             plan.targets_wisp.push(`${s.ipv4}/32`, ...s.prefijos_v6)
+            // `limit-at` de la cola WISP (el mismo que arma `estado_deseado.ts`), para la regla de oro.
+            const limitAt = kbpsPar(propiedadesCola(rateLimitServicio(s.velocidad, s.estado))['limit-at']!)
+            plan.limit_at_wisp_kbps.subida += limitAt.subida
+            plan.limit_at_wisp_kbps.bajada += limitAt.bajada
         }
     }
     return [...planes.values()].sort((a, b) => a.plan_id - b.plan_id)
