@@ -61,9 +61,9 @@ watch(lista.filas, filas => void nombres.cargar(filas.map(p => p.cliente_id)))
 const columnas = computed<TableColumn<Promesa>[]>(() => [
     { accessorKey: 'id', header: 'Promesa' },
     { accessorKey: 'cliente_id', header: 'Cliente', meta: SOLO_ANCHO },
-    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'estado', header: 'Estado y evaluación' },
-    ...(puede('promesas.aprobar') ? [{ id: 'acciones', header: '', meta: { class: { td: 'text-right' } } }] : []),
+    { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
+    { accessorKey: 'estado', header: 'Estado y evaluación', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden whitespace-normal sm:table-cell' } } },
+    ...(puede('promesas.aprobar') ? [{ id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden text-right sm:table-cell' } } }] : []),
 ])
 
 const hayFiltros = computed(() => estado.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
@@ -210,8 +210,8 @@ onMounted(async () => {
                     :ui="{ td: 'py-3 align-top' }"
                 >
                     <template #id-cell="{ row }">
-                        <div class="flex min-w-32 flex-col">
-                            <span class="text-sm font-medium text-highlighted">Promesa #{{ row.original.id }}</span>
+                        <div class="flex min-w-0 flex-col whitespace-normal sm:min-w-28">
+                            <span class="text-sm font-medium text-highlighted">Promesa #{{ row.original.id }}<span class="sm:hidden"> · {{ formatearQuetzales(row.original.monto) }}</span></span>
                             <span class="text-xs text-muted">Vence {{ formatearFechaHora(row.original.vence_en) }}</span>
                             <span class="text-xs text-muted">
                                 <ULink
@@ -221,6 +221,31 @@ onMounted(async () => {
                                 · {{ CANALES_PROMESA[row.original.canal] }}
                             </span>
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
+                            <!-- En teléfono, estado, evaluación y "Aprobar" van en la misma celda. -->
+                            <div class="mt-1 flex flex-col gap-1 whitespace-normal sm:hidden">
+                                <UBadge
+                                    :label="ESTADOS_PROMESA[row.original.estado].etiqueta"
+                                    :icon="ESTADOS_PROMESA[row.original.estado].icono"
+                                    :color="ESTADOS_PROMESA[row.original.estado].color"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="self-start"
+                                />
+                                <EvaluacionPromesa
+                                    :promesa="row.original"
+                                    compacta
+                                />
+                                <UButton
+                                    v-if="puede('promesas.aprobar') && row.original.estado === 'pendiente_aprobacion'"
+                                    label="Aprobar"
+                                    icon="i-lucide-check"
+                                    color="success"
+                                    variant="outline"
+                                    size="sm"
+                                    class="self-start"
+                                    @click="abrirAprobar(row.original)"
+                                />
+                            </div>
                         </div>
                     </template>
 
