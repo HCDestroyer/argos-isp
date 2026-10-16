@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Cómo pagar por depósito: cuentas bancarias activas (fuente única `billing.cuentas_bancarias`, A3)
- * e instrucciones de pago, ambas configuradas en el panel (`GET /portal/empresa`).
+ * Cómo pagar por depósito: cuentas bancarias activas en quetzales (fuente única
+ * `billing.cuentas_bancarias`, A3; la API no envía las de USD) e instrucciones de pago, ambas
+ * configuradas en el panel (`GET /portal/empresa`). Cada cuenta: banco, alias, moneda y número.
  *
  * Sin cuentas no se muestra la sección de cuentas (nunca datos inventados). Si no se pudo leer
  * la configuración, error con "Reintentar".
