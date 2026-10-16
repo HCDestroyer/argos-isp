@@ -1057,7 +1057,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anular pago (asiento de reverso y re-evaluación) */
+        /**
+         * Anular pago (asiento de reverso y re-evaluación)
+         * @description Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.
+         */
         post: operations["pagosAnular"];
         delete?: never;
         options?: never;

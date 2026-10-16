@@ -303,6 +303,8 @@ const pagos: Ruta[] = [
         permiso: 'pagos.anular',
         cuerpo: v.anularPagoValidator,
         idempotente: true,
+        descripcion:
+            'Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.',
         respuesta: { status: 200, descripcion: 'Pago anulado', esquema: Pago },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)

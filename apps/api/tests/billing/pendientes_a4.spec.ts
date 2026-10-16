@@ -154,6 +154,66 @@ test.group('billing · pendientes de A4', () => {
         await afirmarLibroCuadrado(assert)
     })
 
+    test('anular: servicios[] llega también en la repetición idempotente y vacío sin facturas', async ({
+        client,
+        assert,
+    }) => {
+        const datos = await servicioCortado()
+        const { token } = await usuarioConRoles(['contabilidad'])
+        const pago = await estado(
+            client
+                .post('/api/v1/pagos')
+                .bearerToken(token)
+                .json({ cliente_id: datos.clienteId, metodo: 'caja', monto: '150.00' }),
+            201,
+        )
+        const clave = unico('anular')
+        const anular = () =>
+            client
+                .post(`/api/v1/pagos/${pago.body().id}/anular`)
+                .bearerToken(token)
+                .header('Idempotency-Key', clave)
+                .json({ motivo: 'error de digitación' })
+        const respuestaPrimero = await estado(anular(), 200)
+        const respuestaRepetido = await estado(anular(), 200)
+        const primero = respuestaPrimero.body()
+        const repetido = respuestaRepetido.body()
+        assert.lengthOf(primero.servicios, 1)
+        assert.equal(primero.servicios[0].servicio_id, datos.servicioId)
+        assert.equal(primero.servicios[0].estado, 'suspendido')
+        assert.deepEqual(repetido.servicios, primero.servicios)
+
+        // con todo pagado, un pago nuevo va completo a anticipos y anularlo no re-evalúa nada
+        const otro = await servicioCortado()
+        const anticipo = await estado(
+            client.post('/api/v1/pagos').bearerToken(token).json({
+                cliente_id: otro.clienteId,
+                metodo: 'caja',
+                monto: '1000.00',
+            }),
+            201,
+        )
+        const sobrante = await estado(
+            client.post('/api/v1/pagos').bearerToken(token).json({
+                cliente_id: otro.clienteId,
+                metodo: 'caja',
+                monto: '25.00',
+            }),
+            201,
+        )
+        assert.deepEqual(sobrante.body().aplicaciones, [])
+        const sinFacturas = await estado(
+            client
+                .post(`/api/v1/pagos/${sobrante.body().id}/anular`)
+                .bearerToken(token)
+                .json({ motivo: 'devuelto al cliente' }),
+            200,
+        )
+        assert.deepEqual(sinFacturas.body().servicios, [])
+        assert.equal(anticipo.body().servicios[0].estado, 'activo')
+        await afirmarLibroCuadrado(assert)
+    })
+
     test('estado de cuenta del dependiente: el pago lista solo sus facturas', async ({ client, assert }) => {
         const pagador = await servicioCortado()
         const familiar = await servicioCortado()
