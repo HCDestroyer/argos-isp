@@ -30,7 +30,7 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 
 ## Eventos
 
-**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado`, `promesa.*`, `comprobante.*` (`comprobante.aprobado` y `comprobante.rechazado` tienen plantilla, pero aún no están en el catálogo de `app/shared/eventos.ts`; los agrega A3).
+**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado`, `promesa.*`, `comprobante.*` (`comprobante.aprobado` y `comprobante.rechazado` tienen plantilla, pero aún no están en el catálogo de `app/shared/eventos.ts`; los agrega A3). Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `caja.cerrada`.
 
 **Emite**: `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (también cuando el cliente no tiene destino). Las alertas internas sin cliente no lo emiten.
 
@@ -52,6 +52,25 @@ Hay hasta tres recordatorios, configurables en `notify.recordatorios`. Cada uno 
 - **Lotes.** Procesa 200 facturas por transacción y repite hasta agotar lo pendiente. Cada aviso pasa por `ProgramarNotificacion` (todos los canales disponibles) y se audita por fila.
 
 Variables extra: `recordatorio.orden`, `recordatorio.dias` y `factura.vence_relativo` ("vence en 3 días", "vence hoy", "venció hace 4 días").
+
+## Alertas internas al equipo (tarea 7)
+
+Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. Cada problema es un **incidente** en `notify.incidentes` identificado por `clave`; mientras está abierto, repetir el evento solo suma `eventos`. Resultado: una alerta por incidente y, cuando aplica, un "RESUELTO" al cerrarse.
+
+| Origen | Clave del incidente | Alerta | Se cierra |
+| --- | --- | --- | --- |
+| `aaa.caido` (`{ nodo?, desde, ultimo_error }`) | `aaa:<nodo>` (`aaa` si no viene nodo) | al abrir | con `aaa.recuperado`, que avisa "resuelto" con la duración |
+| `coa.fallido` | `coa:<nas_ip>` | al abrir | tras 30 min sin fallos de ese router (en silencio); el siguiente fallo avisa de nuevo |
+| `caja.cerrada` con `diferencia ≠ 0` | `caja:<caja_id>` (puntual, nace cerrado) | siempre, faltante o sobrante | — |
+| Vigilancia: `facturas.generar`, `facturas.vencer_pendientes` | `cron:<accion>` | última corrida por cron con más de 60 min + tolerancia (o nunca) | cuando vuelve a correr, con "resuelto" |
+| Vigilancia: `servicios.corte` | `cron:servicios.corte:<fecha> <HH:MM>` | hora de corte de hoy que pasó hace más de la tolerancia sin aparecer en `resultado.horas` de una corrida | cuando una corrida la procesa |
+
+- **Acciones.** `RegistrarAlerta` (`notificaciones.alertar`) para los eventos; `VigilarCrons` (`notificaciones.vigilar_crons`) para los crons. Solo sistema.
+- **Idempotencia.** Cada evento procesado queda en `notify.alertas_eventos` (`outbox:<id>`): una reentrega no suma ni avisa. El envío tiene origen `alerta:<incidente>:abierto|cerrado` y la unicidad de `notify.envios` impide duplicarlo.
+- **Consumidor.** `ConsumidorAlertas` (`consumidor_alertas.ts`) en el grupo `notify`, junto a `ConsumidorNotify`. Un cierre cuadrado no se audita ni se registra.
+- **Vigilancia.** Job `vigilancia-crons` de la cola `notify-cron`, cada 5 min, en `notify:worker` (si `billing-worker` está caído, el que avisa es otro proceso). Lee las corridas que registra A3 con `RegistrarCorrida` (`audit.acciones`, canal `cron`, resultado `ok`) y las horas de corte de `billing.plantillas_facturacion` y `core.servicios_excepciones`. Gracia: `NOTIFY_CRON_TOLERANCIA_MIN` (30).
+- **Plantillas.** `alerta.aaa.caido`, `alerta.aaa.recuperado`, `alerta.coa.fallido`, `alerta.caja.diferencia`, `alerta.cron.atrasado`, `alerta.cron.recuperado` (canal telegram, variables `alerta.*`). Si se desactiva una, esa alerta se silencia (el incidente igual se registra); si no existe, se usa el texto de `PLANTILLAS_ALERTA`.
+- **Sin configurar.** Sin `TELEGRAM_CHAT_EQUIPO` o sin `TELEGRAM_BOT_TOKEN`, la alerta queda como envío `fallido` con el motivo (visible en `GET /notificaciones/envios`). No emite `notificacion.enviada` (no hay cliente).
 
 ## Particiones de auditoría (cron mensual)
 

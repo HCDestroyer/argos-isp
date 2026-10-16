@@ -50,6 +50,9 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
+  TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+  NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
   NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
@@ -364,7 +367,16 @@ services:
       DB_USER: ${DB_APP_USER:-argosisp_api}
       DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
       DB_DATABASE: argosisp
+      # Descifra network.routers.radius_secret (la misma clave que api y aaa)
+      AAA_PPP_KEY: ${AAA_PPP_KEY:-}
       COA_NAS_PORT: '3799'
+      COA_TIMEOUT_MS: ${COA_TIMEOUT_MS:-2000}
+      COA_REINTENTOS: ${COA_REINTENTOS:-3}
+      # IP de origen de los CoA: la que el router tiene en /radius (túnel WireGuard o LAN)
+      COA_ORIGEN_IP: ${COA_ORIGEN_IP:-}
+      COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
     ports:
       - 127.0.0.1:${COA_PORT_HOST:-3200}:3200
     depends_on:

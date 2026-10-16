@@ -38,7 +38,62 @@ export const RECORDATORIOS_BASE = [
     { orden: 3, dias: 3, hora: '09:00' },
 ]
 
+/**
+ * Alertas internas al chat del equipo (`TELEGRAM_CHAT_EQUIPO`, tarea 7). Solo Telegram. Variables:
+ * `alerta.*` (ver `app/notify/alertas.ts`) y `empresa.*`. Si la plantilla está desactivada o no
+ * existe se usa este mismo texto: una alerta interna nunca se pierde por falta de plantilla.
+ */
+export const PLANTILLAS_ALERTA: PlantillaBase[] = [
+    {
+        evento: 'alerta.aaa.caido',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · RADIUS (aaa) caído\nNodo: {{alerta.nodo}}\nDesde: {{alerta.desde}}' +
+            '{{#alerta.ultimo_error}}\nÚltimo error: {{alerta.ultimo_error}}{{/alerta.ultimo_error}}' +
+            '\nLos routers autentican con sus secrets locales hasta que vuelva.',
+    },
+    {
+        evento: 'alerta.aaa.recuperado',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo: 'RESUELTO · RADIUS (aaa) recuperado\nNodo: {{alerta.nodo}}\nCaído desde: {{alerta.desde}} ({{alerta.duracion}})',
+    },
+    {
+        evento: 'alerta.coa.fallido',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · {{alerta.tipo}} sin respuesta del router {{alerta.nas_ip}}\nServicio: {{alerta.servicio_id}}\nError: {{alerta.error}}' +
+            '\nLos siguientes fallos de este router en {{alerta.ventana_min}} min no se repiten aquí (quedan en audit.red).',
+    },
+    {
+        evento: 'alerta.caja.diferencia',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · Cierre de caja con {{#alerta.faltante}}faltante{{/alerta.faltante}}{{^alerta.faltante}}sobrante{{/alerta.faltante}}' +
+            '\nCaja: {{alerta.caja_id}}{{#alerta.cajero_id}} · cajero {{alerta.cajero_id}}{{/alerta.cajero_id}}' +
+            '\nEsperado: {{alerta.esperado_q}}\nContado: {{alerta.contado_q}}\nDiferencia: {{alerta.diferencia_q}}',
+    },
+    {
+        evento: 'alerta.cron.atrasado',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · {{alerta.descripcion}} no se ejecutó a su hora\nDebía correr: {{alerta.esperado}}\nÚltima ejecución: {{alerta.ultima}}' +
+            '\nRevisa el proceso billing-worker.',
+    },
+    {
+        evento: 'alerta.cron.recuperado',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo: 'RESUELTO · {{alerta.descripcion}} volvió a ejecutarse\nÚltima ejecución: {{alerta.ultima}}',
+    },
+]
+
 export const PLANTILLAS_BASE: PlantillaBase[] = [
+    ...PLANTILLAS_ALERTA,
     ...recordatorio(1),
     ...recordatorio(2),
     ...recordatorio(3),
