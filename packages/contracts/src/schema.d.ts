@@ -12671,7 +12671,7 @@ export interface operations {
                     tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
                     amarre_ip_mac?: boolean;
-                    /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
+                    /** @description Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
                     /** @description Solo pppoe; se genera si no viene */
                     user_ppp?: string;

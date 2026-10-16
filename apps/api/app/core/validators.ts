@@ -194,7 +194,7 @@ export const crearServicioValidator = vine.compile(
         amarre_ip_mac: amarreIpMac().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional().meta({
             description:
-                'Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla',
+                'Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla',
         }),
         user_ppp: vine
             .string()
