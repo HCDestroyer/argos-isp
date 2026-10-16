@@ -2,8 +2,20 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const { puede } = usePermisos()
+const comprobantes = useComprobantes()
 
 const abierto = ref(false)
+
+/** Contadores junto a una sección del menú (hoy, los comprobantes pendientes de verificar). */
+const contadores = computed<Record<string, string | undefined>>(() => ({
+    comprobantes: textoContador(comprobantes.contador.value),
+}))
+
+onMounted(() => {
+    if (puede('comprobantes.ver')) {
+        void comprobantes.actualizarContador()
+    }
+})
 
 const items = computed<NavigationMenuItem[][]>(() => {
     const inicio: NavigationMenuItem[] = [{
@@ -27,6 +39,7 @@ const items = computed<NavigationMenuItem[][]>(() => {
                     label: seccion.etiqueta,
                     icon: seccion.icono,
                     to: seccion.ruta,
+                    badge: contadores.value[seccion.id] ? { label: contadores.value[seccion.id], color: 'warning' as const, variant: 'subtle' as const } : undefined,
                     onSelect: () => {
                         abierto.value = false
                     },

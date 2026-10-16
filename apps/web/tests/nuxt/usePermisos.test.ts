@@ -37,6 +37,6 @@ describe('usePermisos', () => {
         const { puede } = usePermisos()
         const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
         // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (incluye planes.ver).
-        expect(visibles).toEqual(['clientes', 'servicios', 'planes', 'cobro', 'facturas', 'pagos', 'caja', 'promesas', 'cuentas-bancarias'])
+        expect(visibles).toEqual(['clientes', 'servicios', 'planes', 'cobro', 'facturas', 'pagos', 'comprobantes', 'caja', 'promesas', 'cuentas-bancarias'])
     })
 })
