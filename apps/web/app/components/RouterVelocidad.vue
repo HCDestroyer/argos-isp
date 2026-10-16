@@ -99,10 +99,33 @@ const motivo = ref('')
 const cambiando = ref(false)
 const problemaCambio = ref<Problem | null>(null)
 
+/* Vista previa del cambio (A2): se pide al abrir la confirmación y sin ella no se confirma. */
+const vistaPrevia = shallowRef<VistaPreviaControl | null>(null)
+const problemaVista = ref<Problem | null>(null)
+const cargandoVista = ref(false)
+
+async function cargarVistaPrevia() {
+    cargandoVista.value = true
+    problemaVista.value = null
+    const destino = otro.value
+    const resultado = await useRouters().vistaPreviaControl(actual.value.id, destino)
+    cargandoVista.value = false
+    vistaPrevia.value = resultado.ok && resultado.data.a === destino ? resultado.data : null
+    problemaVista.value = resultado.ok ? null : resultado.problema
+}
+
+/** El modo cambió desde que se pidió la vista previa (409 al confirmar): releer el router y la vista. */
+async function recargarCambio() {
+    await recargarRouter()
+    await cargarVistaPrevia()
+}
+
 function abrirCambio() {
     motivo.value = ''
     problemaCambio.value = null
+    vistaPrevia.value = null
     confirmando.value = true
+    void cargarVistaPrevia()
 }
 
 async function cambiar() {
@@ -127,14 +150,12 @@ async function cambiar() {
 /** Qué se crea y qué se borra al pasar de un modo al otro (`contratos/velocidad.md`). */
 const implicaciones = computed(() => (otro.value === 'arbol_pcq'
     ? [
-            'Se crean el árbol de colas en global (padre de bajada y de subida con la capacidad del enlace) y un hijo por plan con su reuso y su garantía.',
-            'Se crean tipos de cola PCQ por plan (bajada y subida, con máscara /64 para IPv6), listas de direcciones y reglas mangle que marcan el tráfico de cada servicio.',
-            'Se borran las colas simples de los servicios y las padres por plan. PPPoE deja de usar el rate-limit de RADIUS para su cola.',
+            'El árbol de colas usa la capacidad del enlace como techo global y un hijo por plan con su reuso y su garantía.',
+            'PPPoE deja de usar el rate-limit de RADIUS para su cola: el tráfico se marca con mangle y listas por servicio.',
             'FastTrack debe quedar desactivado para el tráfico de clientes; sin eso las colas no se aplican.',
         ]
     : [
-            'Se crea una cola simple por servicio (la dinámica de PPPoE con el rate-limit de RADIUS, una estática en WISP) y una cola padre por plan con el reuso.',
-            'Se borran el árbol de colas, los tipos PCQ, las listas de direcciones y las reglas mangle de ArgosIsp.',
+            'Cada servicio vuelve a su cola simple (la dinámica de PPPoE con el rate-limit de RADIUS, una estática en WISP).',
             'Con más de unos cientos de clientes por router, las colas simples cargan el CPU: el monitoreo avisa desde ~1000.',
         ]))
 </script>
@@ -313,14 +334,37 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                 v-model:open="confirmando"
                 :title="`${CONTROLES_VELOCIDAD[otro].cambiarA} · ${actual.nombre}`"
                 :dismissible="!cambiando"
+                :ui="{ content: 'sm:max-w-2xl' }"
             >
                 <template #body>
                     <div class="flex flex-col gap-4">
+                        <p class="text-sm text-muted">
+                            Vista previa calculada por la API con los datos vigentes; el router no se toca hasta confirmar.
+                        </p>
+                        <ProblemaAlerta
+                            v-if="problemaVista"
+                            :problema="problemaVista"
+                            :reintentar="cargarVistaPrevia"
+                            :reintentando="cargandoVista"
+                            data-prueba="vista-error"
+                        />
+                        <div
+                            v-else-if="cargandoVista || !vistaPrevia"
+                            class="flex flex-col gap-2"
+                            data-prueba="vista-cargando"
+                        >
+                            <USkeleton class="h-16 w-full" />
+                            <USkeleton class="h-32 w-full" />
+                        </div>
+                        <RouterVistaPreviaControl
+                            v-else
+                            :vista="vistaPrevia"
+                        />
                         <UAlert
                             color="warning"
                             variant="subtle"
                             icon="i-lucide-triangle-alert"
-                            title="Qué implica"
+                            title="Qué implica el modo nuevo"
                         >
                             <template #description>
                                 <ul class="mt-1 flex list-disc flex-col gap-1 pl-4">
@@ -350,7 +394,7 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                         <ProblemaAlerta
                             v-if="problemaCambio"
                             :problema="problemaCambio"
-                            :reintentar="problemaCambio.status === 409 ? recargarRouter : undefined"
+                            :reintentar="problemaCambio.status === 409 ? recargarCambio : undefined"
                             data-prueba="cambio-error"
                         />
                     </div>
@@ -368,6 +412,7 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                             :label="CONTROLES_VELOCIDAD[otro].cambiarA"
                             color="warning"
                             :loading="cambiando"
+                            :disabled="!vistaPrevia || cargandoVista"
                             data-prueba="confirmar-cambio-control"
                             @click="cambiar"
                         />
