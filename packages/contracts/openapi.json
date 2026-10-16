@@ -5382,6 +5382,58 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/bancos": {
+      "get": {
+        "operationId": "libroBancos",
+        "summary": "Bancos del libro (origen de los egresos con metodo banco)",
+        "description": "Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos del libro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BancoLibro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/cuentas": {
       "get": {
         "operationId": "libroCuentas",
@@ -18279,6 +18331,62 @@
           },
           "activo": {
             "type": "boolean"
+          }
+        }
+      },
+      "BancoLibro": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "banco_id",
+          "banco",
+          "numero_enmascarado",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "banco_id que acepta POST /egresos con metodo banco"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Banco del catálogo (GET /bancos), si se conoce"
+          },
+          "banco": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del banco del catálogo"
+          },
+          "numero_enmascarado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de cuenta con solo los últimos 4 caracteres visibles"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "Cuenta contable del plan (1.1.02.xx)"
+          },
+          "cuenta_nombre": {
+            "type": "string"
           }
         }
       },

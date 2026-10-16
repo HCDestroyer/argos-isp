@@ -780,6 +780,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/bancos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bancos del libro (origen de los egresos con metodo banco)
+         * @description Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.
+         */
+        get: operations["libroBancos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/cuentas": {
         parameters: {
             query?: never;
@@ -2637,6 +2657,21 @@ export interface components {
             id: number;
             nombre: string;
             activo: boolean;
+        };
+        BancoLibro: {
+            /** @description banco_id que acepta POST /egresos con metodo banco */
+            id: number;
+            nombre: string;
+            /** @description Banco del catálogo (GET /bancos), si se conoce */
+            banco_id: number | null;
+            /** @description Nombre del banco del catálogo */
+            banco: string | null;
+            /** @description Número de cuenta con solo los últimos 4 caracteres visibles */
+            numero_enmascarado: string | null;
+            cuenta_id: number;
+            /** @description Cuenta contable del plan (1.1.02.xx) */
+            cuenta_codigo: string;
+            cuenta_nombre: string;
         };
         Caja: {
             id: number;
@@ -7594,6 +7629,44 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroBancos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bancos del libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BancoLibro"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

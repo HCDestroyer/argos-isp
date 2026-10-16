@@ -8,6 +8,7 @@ import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
 import {
     Asiento,
+    BancoLibro,
     Caja,
     CajaTurno,
     CategoriaEgreso,
@@ -24,6 +25,7 @@ import { cajaPrincipalId } from '#billing/pagos'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import AnularEgreso from '#ledger/actions/anular_egreso'
 import { libroDiario, libroMayor, listarCuentas } from '#ledger/consultas'
+import { listarBancosLibro } from '#ledger/bancos'
 import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { exigirAlcance } from '#core/acl'
 import AbrirCaja from '#ledger/actions/abrir_caja'
@@ -110,6 +112,18 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(Cuenta) },
         handler: () => listarCuentas(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/bancos',
+        operacion: 'libroBancos',
+        resumen: 'Bancos del libro (origen de los egresos con metodo banco)',
+        etiqueta: 'libro',
+        permiso: 'egresos.ver',
+        descripcion:
+            'Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.',
+        respuesta: { status: 200, descripcion: 'Bancos del libro', esquema: lista(BancoLibro) },
+        handler: () => listarBancosLibro(),
     }),
     definirRuta({
         metodo: 'get',

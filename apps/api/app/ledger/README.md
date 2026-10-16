@@ -88,6 +88,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 | GET    | `/api/v1/libro/cuentas`                                               | `libro.ver`    |
 | GET    | `/api/v1/libro/diario?desde&hasta&origen_tipo&origen_id&cursor&limit` | `libro.ver`    |
 | GET    | `/api/v1/libro/mayor?cuenta_id&cliente_id&desde&hasta&cursor&limit`   | `libro.ver`    |
+| GET    | `/api/v1/libro/bancos` (origen `banco_id` de los egresos)             | `egresos.ver`  |
 | GET    | `/api/v1/cajas`                                                       | `cajas.ver`    |
 | POST   | `/api/v1/cajas/:id/abrir`                                             | `cajas.abrir`  |
 | POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
