@@ -174,15 +174,27 @@ export function acotarAlPanel(
     panel: Colocacion,
     punto: { x: number; y: number },
     zoom: number,
-    holgura = HOLGURA_BORDE
+    holgura = HOLGURA_BORDE,
+    /** Holgura extra arriba: bajo el título de sección se tapa la captura, así que se deja bajar. */
+    holguraArriba = HOLGURA_ARRIBA
 ): { x: number; y: number } {
-    const acotar = (valor: number, tamano: number, mitadPantalla: number) => {
-        const mitad = (mitadPantalla - holgura) / (zoom * panel.escala)
-        if (mitad * 2 >= tamano) return tamano / 2
-        return Math.min(Math.max(valor, mitad), tamano - mitad)
+    const z = zoom * panel.escala
+    // Rango del centro: el borde inicial puede quedar a lo más a `antes` px del
+    // borde del cuadro y el final a `despues` px.
+    const acotar = (valor: number, tamano: number, pantalla: number, antes: number, despues: number) => {
+        const min = (pantalla / 2 - antes) / z
+        const max = tamano - (pantalla / 2 - despues) / z
+        if (min >= max) return Math.min(Math.max(tamano / 2, max), min)
+        return Math.min(Math.max(valor, min), max)
     }
-    return { x: acotar(punto.x, panel.ancho, ANCHO_CUADRO / 2), y: acotar(punto.y, panel.alto, ALTO_CUADRO / 2) }
+    return {
+        x: acotar(punto.x, panel.ancho, ANCHO_CUADRO, holgura, holgura),
+        y: acotar(punto.y, panel.alto, ALTO_CUADRO, holguraArriba, holgura),
+    }
 }
+
+/** Alto aproximado del título de sección (con su velo) que tapa la parte de arriba del cuadro. */
+export const HOLGURA_ARRIBA = 290
 
 const ANCHO_CUADRO = 1920
 const ALTO_CUADRO = 1080

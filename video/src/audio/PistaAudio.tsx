@@ -2,7 +2,7 @@ import { Html5Audio, Sequence, interpolate, staticFile } from 'remotion'
 import { DURACION_TOTAL, FPS, FRAMES_TRANSICION, LINEA_DE_TIEMPO, type NombreSonido, frameDeEfecto } from '../guion'
 
 /** Volumen base de la música (antes del ducking). */
-const VOLUMEN_MUSICA = 0.5
+const VOLUMEN_MUSICA = 0.68
 
 const VOLUMEN_EFECTO: Record<NombreSonido, number> = {
     whoosh: 0.55,
