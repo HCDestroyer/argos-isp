@@ -77,7 +77,7 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 ## Cron de corte y worker (tarea 7)
 
-`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora) y `corte` (cada minuto). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte` corre un cron y termina.
+`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto) y `promesas` (cada minuto, `incumplirPromesas`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
 
 `actions/ejecutar_corte.ts` (`servicios.corte`): procesa cada hora de corte del día que ya llegó (de la plantilla, o la excepción `hora_corte` del servicio) y no está en `billing.cortes_ejecutados`; primero vence lo pendiente y luego evalúa cada servicio con `evaluarEstadoServicio`. `POST /facturas/corte { servicio_id?, ignorar_hora? }` es el corte manual del laboratorio (no registra `cortes_ejecutados`).
 
@@ -94,6 +94,25 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 - `pago.registrado` y, en la misma transacción, `evaluarEstadoServicio` de cada servicio afectado: la reactivación (`servicio.estado_cambiado`) sale con el pago. La respuesta trae `servicios[]` con cómo quedó cada uno.
 - Anular: estado `anulado` con quién/cuándo/motivo, `RevertirAsiento` de cada asiento del pago (cobro y aplicaciones de su anticipo), descuenta lo aplicado (las facturas que ya habían vencido vuelven a `vencida`), `pago.anulado` y re-evaluación.
 - Concurrencia: advisory lock por cliente (`bloquearCliente`) en toda acción que aplica dinero.
+
+## Promesas de pago (tarea 10)
+
+| Acción                        | Archivo                               | Quién la llama                                         |
+| ----------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| `promesas.crear`              | `actions/crear_promesa_pago.ts`       | `POST /promesas`; el portal (A5) directo, canal portal |
+| `promesas.aprobar`            | `actions/aprobar_promesa.ts`          | `POST /promesas/:id/aprobar` (supervisor)              |
+| `promesas.cumplir`            | `actions/cumplir_promesa.ts`          | `promesas.revisar_cliente` (evento `pago.registrado`)  |
+| `promesas.revisar_cliente`    | `actions/revisar_promesas_cliente.ts` | `ConsumidorBilling` (grupo `billing`, `consumidor.ts`) |
+| `promesas.incumplir`          | `actions/incumplir_promesa.ts`        | `promesas.incumplir_vencidas`                          |
+| `promesas.incumplir_vencidas` | `actions/incumplir_promesas.ts`       | cron `promesas` (cada minuto, con lock)                |
+
+- `crearPromesaPago` evalúa las `reglas_promesa` efectivas (plantilla + excepción `reglas_promesa` del servicio) con `evaluarReglas` (`promesas.ts`, pura) en este orden y se detiene en la primera que falla: `habilitadas`, `canal_permitido`, `sin_deuda`, `plazo_max_dias`, `no_exceder_siguiente_facturacion`, `deuda_maxima` (deuda vencida), `abono_inicial_pct` (lo pagado de las facturas pendientes), `antiguedad_minima_dias`, `cumplimiento_minimo_pct` (últimas `historial_ventana` promesas resueltas), `bloqueo_tras_incumplida_dias`, `max_por_periodo` (promesas creadas en el periodo de facturación actual; con cumplimiento ≥ `buen_historial_pct`, `max_por_periodo_buen_historial`). Los límites no nulos del canal reemplazan al general; `requiere_aprobacion` deja la promesa `pendiente_aprobacion`.
+- Siempre guarda la promesa (también la rechazada) con `reglas_snapshot` y `resultado_evaluacion` = `{ resultado, regla, motivo, canal, evaluada_en, reglas[] (regla, ok, valor, limite, origen, detalle), deuda, historial, siguiente_facturacion }`. Al aprobar se agrega `aprobacion`; al cerrar, `cierre`.
+- Aprobada → `activa`, `promesa.creada` y `evaluarEstadoServicio` anidada (reactiva en la misma transacción). La respuesta trae `servicio` (opcional). Una suspensión manual se respeta: la promesa queda activa y el servicio sigue suspendido.
+- 409 `promesa_abierta` si el servicio ya tiene una promesa activa o pendiente; 422 si `vence_en` no es futura, el monto no es > 0 o supera la deuda pendiente del servicio, o el servicio está retirado o sin plantilla.
+- Canal en `POST /promesas`: el del cuerpo, o `portal`/`ia` según `X-Canal`, o `operador`. `supervisor` exige el permiso `promesas.aprobar` (403).
+- Cumplida: lo pagado a las facturas del servicio desde la creación de la promesa llega a su monto, o el servicio ya no tiene deuda vencida. Se revisa con cada `pago.registrado` y otra vez al vencer. Al cumplirse: `promesa.cumplida` y re-evaluación (una promesa parcial puede volver a limitar o cortar).
+- Vencida sin cumplir → `incumplida`, `promesa.incumplida` y re-evaluación (corta con la hora de corte). Pendiente de aprobación vencida → `cancelada`.
 
 ## Estado de cuenta (tarea 11)
 
@@ -115,4 +134,6 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`. Próximas tareas: `factura.anulada`, `promesa.*`. Consume (A1): `servicio.creado`, `servicio.estado_cambiado`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`. Próximas tareas: `factura.anulada`.
+
+Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

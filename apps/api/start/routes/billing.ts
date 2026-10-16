@@ -17,9 +17,16 @@ import AnularPago from '#billing/actions/anular_pago'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
+import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
-import { exigirAlcance } from '#core/acl'
+import { alcanceDePermiso, exigirAlcance } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Prohibido } from '#shared/errores'
+import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas } from '#billing/promesas'
+import type { CanalPromesa } from '#billing/reglas_promesa'
+import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import AprobarPromesa from '#billing/actions/aprobar_promesa'
 import {
     EstadoCuenta,
     Factura,
@@ -234,6 +241,7 @@ const promesas: Ruta[] = [
         permiso: 'promesas.ver',
         query: v.listarPromesasValidator,
         respuesta: { status: 200, descripcion: 'Página de promesas', esquema: pagina(Promesa) },
+        handler: (ctx, { query }) => listarPromesas(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -244,7 +252,17 @@ const promesas: Ruta[] = [
         permiso: 'promesas.crear',
         cuerpo: v.crearPromesaValidator,
         idempotente: true,
+        descripcion:
+            'Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(cuerpo.servicio_id))
+            const canal = await canalPromesa(ctx, cuerpo.canal)
+            return new CrearPromesaPago().execute(
+                { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, monto: cuerpo.monto, canal },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -256,8 +274,31 @@ const promesas: Ruta[] = [
         cuerpo: v.aprobarPromesaValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Promesa aprobada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            return new AprobarPromesa().execute({ promesa_id: id, nota: cuerpo.nota }, ctx.contextoAccion())
+        },
     }),
 ]
+
+/**
+ * Canal de la promesa: el pedido, o `portal`/`ia` según el canal de la petición (`X-Canal`), o
+ * `operador`. `supervisor` (límites más amplios) solo con el permiso `promesas.aprobar`.
+ */
+async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<CanalPromesa> {
+    const canalPeticion = ctx.contextoAccion().canal
+    const canal: CanalPromesa =
+        pedido ?? (canalPeticion === 'portal' || canalPeticion === 'ia' ? canalPeticion : 'operador')
+    if (canal === 'supervisor') {
+        const usuario = ctx.auth.user
+        const permiso = usuario
+            ? await alcanceDePermiso(usuario.id, 'promesas.aprobar', alcancesDelToken(ctx))
+            : null
+        if (!permiso) throw new Prohibido('El canal supervisor requiere el permiso promesas.aprobar')
+    }
+    return canal
+}
 
 const estadoCuenta: Ruta[] = [
     definirRuta({

@@ -30,15 +30,15 @@ test.group('ACL y endpoints sin implementar', () => {
         client,
         assert,
     }) => {
-        const { token } = await usuarioConRoles(['cajero'])
+        const { token } = await usuarioConRoles(['soporte'])
 
-        const respuesta = await estado(client.get('/api/v1/promesas').bearerToken(token), 501)
+        const respuesta = await estado(client.get('/api/v1/sesiones').bearerToken(token), 501)
         assert.equal(respuesta.header('content-type'), PROBLEM_JSON)
         assert.deepEqual(respuesta.body(), {
             type: 'urn:argosisp:problema:no_implementado',
             title: 'No implementado',
             status: 501,
-            detail: 'La operación promesasListar aún no está implementada',
+            detail: 'La operación sesionesListar aún no está implementada',
         })
     })
 

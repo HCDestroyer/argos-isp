@@ -210,25 +210,37 @@ export const Pago = definirEsquema(
 
 export const Promesa = definirEsquema(
     'Promesa',
-    objeto({
-        id,
-        servicio_id: id,
-        cliente_id: id,
-        vence_en: instante,
-        monto: Dinero,
-        estado: enumerado([
-            'activa',
-            'cumplida',
-            'incumplida',
-            'cancelada',
-            'pendiente_aprobacion',
-            'rechazada',
-        ]),
-        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
-        aprobada_por: nulable(id),
-        resultado_evaluacion: nulable(jsonLibre),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            servicio_id: id,
+            cliente_id: id,
+            vence_en: instante,
+            monto: Dinero,
+            estado: enumerado([
+                'activa',
+                'cumplida',
+                'incumplida',
+                'cancelada',
+                'pendiente_aprobacion',
+                'rechazada',
+            ]),
+            canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+            aprobada_por: nulable(id),
+            resultado_evaluacion: {
+                ...nulable(jsonLibre),
+                description:
+                    'resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar',
+            },
+            servicio: {
+                ...ServicioEvaluado,
+                description:
+                    'Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación)',
+            },
+            ...auditable,
+        },
+        ['servicio'],
+    ),
 )
 
 export const MovimientoEstadoCuenta = definirEsquema(

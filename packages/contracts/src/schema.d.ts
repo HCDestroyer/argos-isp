@@ -737,7 +737,10 @@ export interface paths {
         /** Listar promesas de pago */
         get: operations["promesasListar"];
         put?: never;
-        /** Crear promesa de pago (aprobada, rechazada o pendiente de aprobación) */
+        /**
+         * Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)
+         * @description Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
+         */
         post: operations["promesasCrear"];
         delete?: never;
         options?: never;
@@ -1732,9 +1735,12 @@ export interface components {
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
             aprobada_por: number | null;
+            /** @description resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar */
             resultado_evaluacion: {
                 [key: string]: unknown;
             } | null;
+            /** @description Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación) */
+            servicio?: components["schemas"]["ServicioEvaluado"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -5141,15 +5147,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     promesasCrear: {
@@ -5217,15 +5214,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5302,15 +5290,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
