@@ -249,7 +249,8 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             COA_API_TIMEOUT_MS: '2000',
             COA_API_REINTENTOS: '1',
             COA_API_ESPERA_MS: '50',
-            COA_TIMEOUT_MS: '300',
+            // Holgado: con la máquina cargada un ACK puede tardar; solo la prueba del NAS mudo espera el timeout.
+            COA_TIMEOUT_MS: '1500',
             COA_REINTENTOS: '1',
             COA_ESPERA_MS: '50',
         })

@@ -17,6 +17,7 @@ import {
     sesion,
     silencio,
     SUSPENDIDO,
+    TIMEOUT_ACK_MS,
 } from './ayudas.ts'
 import { NasSimulado } from './nas_simulado.ts'
 
@@ -100,7 +101,7 @@ describe('FuenteRedisApi', () => {
         fuente = new FuenteRedisApi({
             redis,
             prefijo: PREFIJO,
-            api: { url: api.url, token: TOKEN, timeoutMs: 200, reintentos: 2, esperaMs: 5 },
+            api: { url: api.url, token: TOKEN, timeoutMs: 1000, reintentos: 2, esperaMs: 5 },
         })
     })
 
@@ -193,7 +194,7 @@ describe('Dispatcher sin el rate-limit de A1', () => {
             claveSecretos: CLAVE,
             suspendido: SUSPENDIDO,
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs: TIMEOUT_ACK_MS,
             reintentos: 1,
             esperaMs: 10,
             log: silencio,

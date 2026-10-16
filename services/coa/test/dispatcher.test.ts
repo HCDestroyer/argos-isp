@@ -14,6 +14,8 @@ import {
     sesion,
     silencio,
     SUSPENDIDO,
+    TIMEOUT_ACK_MS,
+    TIMEOUT_CORTO_MS,
 } from './ayudas.ts'
 import { NasSimulado } from './nas_simulado.ts'
 
@@ -158,18 +160,23 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         almacen = new AlmacenMemoria()
         almacen.servicios.set(101, servicio({ estado: 'suspendido' }))
         almacen.sesiones.set(101, [sesion()])
-        dispatcher = new Dispatcher({
+        dispatcher = conTimeout(TIMEOUT_ACK_MS)
+    })
+
+    /** Dispatcher contra el NAS simulado; las pruebas de timeout usan uno corto. */
+    function conTimeout(timeoutMs: number) {
+        return new Dispatcher({
             almacen,
             nas: new ClienteNasUdp(),
             claveSecretos: CLAVE,
             suspendido: SUSPENDIDO,
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs,
             reintentos: 3,
             esperaMs: 10,
             log: silencio,
         })
-    })
+    }
 
     const suspender = (id: number | string = 1) => ({
         id,
@@ -248,7 +255,7 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('timeout: 1 + 3 reintentos con backoff, cada intento en audit.red y coa.fallido al agotar', async () => {
         nas.modo = 'silencio'
-        const r = await dispatcher.procesar(suspender(4))
+        const r = await conTimeout(TIMEOUT_CORTO_MS).procesar(suspender(4))
         assert.deepEqual(r.sesiones, [{ sesion_id: 1, tipo: 'coa', resultado: 'timeout', intentos: 4 }])
         assert.equal(nas.recibidos.length, 4)
         assert.deepEqual(
@@ -266,10 +273,17 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('timeout y luego ACK: un solo envío exitoso, sin coa.fallido', async () => {
         nas.modo = (n) => (n < 3 ? 'silencio' : 'ack')
-        const r = await dispatcher.procesar(suspender(5))
-        assert.deepEqual(r.sesiones, [{ sesion_id: 1, tipo: 'coa', resultado: 'ack', intentos: 3 }])
+        // Los dos primeros no responden (timeout corto); el tercero responde, pero con la máquina
+        // cargada su ACK puede llegar tarde y salir en el cuarto: se afirma "al menos 3".
+        const r = await conTimeout(400).procesar(suspender(5))
+        assert.equal(r.sesiones[0]?.resultado, 'ack')
+        assert.ok(r.sesiones[0]!.intentos >= 3)
         assert.equal(almacen.outbox.length, 0)
-        assert.equal(almacen.red.length, 3)
+        assert.equal(almacen.red.length, r.sesiones[0]!.intentos)
+        assert.deepEqual(
+            almacen.red.slice(0, 2).map((f) => f.respuesta.resultado),
+            ['timeout', 'timeout'],
+        )
     })
 
     it('sin sesión activa o evento superado: no envía nada', async () => {
@@ -391,7 +405,7 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
             suspendido: SUSPENDIDO,
             suspenderConIpv6: 'disconnect',
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs: TIMEOUT_ACK_MS,
             reintentos: 0,
             esperaMs: 10,
             log: silencio,

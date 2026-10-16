@@ -10,6 +10,14 @@ export const SECRET = 'secreto-del-router'
 export const RATE_ACTIVO = '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k'
 export const RATE_LIMITADO = '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k'
 
+/**
+ * Timeout del NAS simulado en las pruebas que esperan ACK: holgado para una máquina cargada (CI con
+ * varias suites a la vez). Solo las pruebas de timeout y reintentos usan uno corto, y solo ellas
+ * afirman el número exacto de intentos.
+ */
+export const TIMEOUT_ACK_MS = 2000
+export const TIMEOUT_CORTO_MS = 150
+
 export const SUSPENDIDO = { rateLimit: '256k/256k', addressList: 'suspendidos', filterId: 'argos-corte.in' }
 
 export const silencio: Log = { info: () => {}, warn: () => {}, error: () => {} }
