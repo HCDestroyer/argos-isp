@@ -3,6 +3,9 @@ import { Img, staticFile } from 'remotion'
 import type { Captura } from '../guion'
 import { COLOR, FUENTE } from '../estilo/tema'
 
+/** Fondo del panel real (tema oscuro): se ve mientras carga o en los bordes. */
+const FONDO_CAPTURA = '#0f172b'
+
 /** Ruta pública de una captura. */
 export const rutaCaptura = (captura: Captura) => staticFile(`capturas/${captura.archivo}`)
 
@@ -27,7 +30,8 @@ export function PanelVentana({ capas, children }: { capas: Capa[]; children?: Re
                 width: base.ancho,
                 height: base.alto,
                 borderRadius: '0 0 14px 14px',
-                background: '#ffffff',
+                background: FONDO_CAPTURA,
+                outline: '1px solid rgba(255, 255, 255, 0.08)',
                 boxShadow: '0 40px 90px rgba(0, 0, 0, 0.55), 0 12px 30px rgba(0, 0, 0, 0.35)',
             }}
         >
@@ -119,7 +123,7 @@ export function PanelMovil({ capas, children }: { capas: Capa[]; children?: Reac
 
 function Contenido({ capas, radio }: { capas: Capa[]; radio: string }) {
     return (
-        <div style={{ position: 'absolute', inset: 0, borderRadius: radio, overflow: 'hidden', background: '#f4f6fa' }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: radio, overflow: 'hidden', background: FONDO_CAPTURA }}>
             {capas.map(({ captura, opacidad }) =>
                 opacidad > 0 ? (
                     <Img

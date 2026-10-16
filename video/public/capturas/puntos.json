@@ -1,1 +1,378 @@
-[]
+[
+    {
+        "archivo": "clientes-filtros.png",
+        "x": 397,
+        "y": 102,
+        "etiqueta": "Chip \"Cortados\": clientes con el servicio suspendido",
+        "ancho": 96,
+        "alto": 28
+    },
+    {
+        "archivo": "clientes-filtros.png",
+        "x": 385,
+        "y": 233,
+        "etiqueta": "Filtro aplicado: estado del servicio",
+        "ancho": 222,
+        "alto": 32
+    },
+    {
+        "archivo": "clientes-filtros.png",
+        "x": 760,
+        "y": 500,
+        "etiqueta": "Clientes cortados por deuda vencida",
+        "ancho": 992,
+        "alto": 244
+    },
+    {
+        "archivo": "servicio-ficha.png",
+        "x": 392,
+        "y": 102,
+        "etiqueta": "Estado del servicio: activo tras el pago",
+        "ancho": 72,
+        "alto": 22
+    },
+    {
+        "archivo": "servicio-ficha.png",
+        "x": 600,
+        "y": 180,
+        "etiqueta": "Acciones explícitas con motivo",
+        "ancho": 676,
+        "alto": 34
+    },
+    {
+        "archivo": "servicio-ficha.png",
+        "x": 323,
+        "y": 180,
+        "etiqueta": "Suspender",
+        "ancho": 118,
+        "alto": 32
+    },
+    {
+        "archivo": "servicio-ficha.png",
+        "x": 1004,
+        "y": 360,
+        "etiqueta": "IPv4 y prefijos IPv6 asignados",
+        "ancho": 480,
+        "alto": 100
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 556,
+        "y": 190,
+        "etiqueta": "Facturas vencidas marcadas",
+        "ancho": 584,
+        "alto": 248
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 556,
+        "y": 358,
+        "etiqueta": "Facturas del dependiente, cargadas solas",
+        "ancho": 584,
+        "alto": 56
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 1064,
+        "y": 228,
+        "etiqueta": "Monto = suma de lo marcado de los dos clientes",
+        "ancho": 336,
+        "alto": 42
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 1064,
+        "y": 362,
+        "etiqueta": "Método de pago",
+        "ancho": 336,
+        "alto": 32
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 1064,
+        "y": 488,
+        "etiqueta": "Transferencia: banco de origen y cuenta de destino",
+        "ancho": 352,
+        "alto": 190
+    },
+    {
+        "archivo": "cobro-facturas.png",
+        "x": 971,
+        "y": 760,
+        "etiqueta": "Registrar pago",
+        "ancho": 150,
+        "alto": 36
+    },
+    {
+        "archivo": "cobro-recibo.png",
+        "x": 1064,
+        "y": 635,
+        "etiqueta": "Recibo: \"Servicio reactivado\" de cada cliente",
+        "ancho": 364,
+        "alto": 52
+    },
+    {
+        "archivo": "cobro-recibo.png",
+        "x": 1064,
+        "y": 454,
+        "etiqueta": "Facturas del dependiente: \"pagado por Rosa Elena Batz\"",
+        "ancho": 364,
+        "alto": 150
+    },
+    {
+        "archivo": "cobro-recibo.png",
+        "x": 403,
+        "y": 277,
+        "etiqueta": "Reactivación inmediata, sin esperar al cron",
+        "ancho": 124,
+        "alto": 22
+    },
+    {
+        "archivo": "caja.png",
+        "x": 360,
+        "y": 210,
+        "etiqueta": "Turno abierto con fondo inicial",
+        "ancho": 156,
+        "alto": 26
+    },
+    {
+        "archivo": "caja.png",
+        "x": 1055,
+        "y": 278,
+        "etiqueta": "Esperado: fondo + efectivo cobrado",
+        "ancho": 124,
+        "alto": 42
+    },
+    {
+        "archivo": "caja.png",
+        "x": 760,
+        "y": 522,
+        "etiqueta": "Cobros en efectivo del turno",
+        "ancho": 992,
+        "alto": 136
+    },
+    {
+        "archivo": "promesas.png",
+        "x": 471,
+        "y": 252,
+        "etiqueta": "Resultado de la evaluación de la plantilla",
+        "ancho": 94,
+        "alto": 26
+    },
+    {
+        "archivo": "promesas.png",
+        "x": 593,
+        "y": 396,
+        "etiqueta": "Regla que aplicó: plazo máximo del canal",
+        "ancho": 340,
+        "alto": 22
+    },
+    {
+        "archivo": "promesas.png",
+        "x": 640,
+        "y": 550,
+        "etiqueta": "Deuda e historial con los que se evaluó",
+        "ancho": 446,
+        "alto": 74
+    },
+    {
+        "archivo": "facturas.png",
+        "x": 1193,
+        "y": 227,
+        "etiqueta": "Estado de cada aviso de cobro",
+        "ancho": 54,
+        "alto": 20
+    },
+    {
+        "archivo": "facturas.png",
+        "x": 1192,
+        "y": 665,
+        "etiqueta": "Pagada al registrar el cobro",
+        "ancho": 52,
+        "alto": 20
+    },
+    {
+        "archivo": "facturas.png",
+        "x": 337,
+        "y": 246,
+        "etiqueta": "Recargo por mora generado al vencer",
+        "ancho": 118,
+        "alto": 22
+    },
+    {
+        "archivo": "libro.png",
+        "x": 1012,
+        "y": 242,
+        "etiqueta": "Debe = Haber: el diario cuadra",
+        "ancho": 476,
+        "alto": 32
+    },
+    {
+        "archivo": "libro.png",
+        "x": 760,
+        "y": 160,
+        "etiqueta": "Filtros por cuenta, periodo y origen",
+        "ancho": 992,
+        "alto": 34
+    },
+    {
+        "archivo": "libro.png",
+        "x": 509,
+        "y": 404,
+        "etiqueta": "Asiento de doble partida de cada cobro",
+        "ancho": 490,
+        "alto": 256
+    },
+    {
+        "archivo": "bitacora.png",
+        "x": 760,
+        "y": 691,
+        "etiqueta": "Cada acción con actor, canal y resultado",
+        "ancho": 992,
+        "alto": 76
+    },
+    {
+        "archivo": "bitacora.png",
+        "x": 760,
+        "y": 160,
+        "etiqueta": "Filtros por actor, canal, acción, entidad y fecha",
+        "ancho": 992,
+        "alto": 34
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 100,
+        "y": 245,
+        "etiqueta": "Monto pendiente identificado por la IP, sin login",
+        "ancho": 150,
+        "alto": 56
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 316,
+        "etiqueta": "Facturas vencidas: cantidad y total",
+        "ancho": 342,
+        "alto": 30
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 462,
+        "etiqueta": "Cuentas para depositar",
+        "ancho": 358,
+        "alto": 40
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 510,
+        "etiqueta": "Subir la foto del comprobante",
+        "ancho": 358,
+        "alto": 40
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 558,
+        "etiqueta": "Promesa de pago: reactiva al instante",
+        "ancho": 358,
+        "alto": 40
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 215,
+        "etiqueta": "Saldo total pendiente del cliente",
+        "ancho": 488,
+        "alto": 70
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 297,
+        "etiqueta": "Servicio, estado y pedir promesa",
+        "ancho": 464,
+        "alto": 40
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 536,
+        "etiqueta": "Facturas con total y saldo",
+        "ancho": 514,
+        "alto": 166
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 492,
+        "y": 588,
+        "etiqueta": "PDF del aviso de cobro",
+        "ancho": 186,
+        "alto": 30
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 577,
+        "y": 426,
+        "etiqueta": "Pagos y comprobantes enviados",
+        "ancho": 84,
+        "alto": 30
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 835,
+        "y": 74,
+        "etiqueta": "Aviso de cobro generado desde la plantilla editable",
+        "ancho": 112,
+        "alto": 22
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 449,
+        "y": 178,
+        "etiqueta": "Datos del cliente ({{cliente.nombre}})",
+        "ancho": 120,
+        "alto": 52
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 842,
+        "y": 115,
+        "etiqueta": "Fecha de vencimiento ({{factura.vence}})",
+        "ancho": 92,
+        "alto": 16
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 768,
+        "y": 351,
+        "etiqueta": "Saldo a pagar del aviso",
+        "ancho": 244,
+        "alto": 26
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 172,
+        "etiqueta": "Promesa aprobada: servicio reactivado en segundos",
+        "ancho": 340,
+        "alto": 120
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 335,
+        "etiqueta": "Monto y fecha que el cliente prometió",
+        "ancho": 358,
+        "alto": 112
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 429,
+        "etiqueta": "Vuelve a navegar",
+        "ancho": 358,
+        "alto": 40
+    }
+]

@@ -1,0 +1,104 @@
+[
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 100,
+        "y": 255,
+        "etiqueta": "Monto pendiente identificado por la IP, sin login"
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 316,
+        "etiqueta": "Facturas vencidas: cantidad y total"
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 462,
+        "etiqueta": "Cuentas para depositar"
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 510,
+        "etiqueta": "Subir la foto del comprobante"
+    },
+    {
+        "archivo": "portal-corte-movil.png",
+        "x": 195,
+        "y": 558,
+        "etiqueta": "Promesa de pago: reactiva al instante"
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 227,
+        "etiqueta": "Saldo total pendiente del cliente"
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 290,
+        "etiqueta": "Servicio, estado y pedir promesa"
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 640,
+        "y": 536,
+        "etiqueta": "Facturas con total y saldo"
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 492,
+        "y": 588,
+        "etiqueta": "PDF del aviso de cobro"
+    },
+    {
+        "archivo": "portal-cuenta.png",
+        "x": 577,
+        "y": 426,
+        "etiqueta": "Pagos y comprobantes enviados"
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 805,
+        "y": 76,
+        "etiqueta": "Aviso de cobro generado desde la plantilla editable"
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 417,
+        "y": 173,
+        "etiqueta": "Datos del cliente ({{cliente.nombre}})"
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 818,
+        "y": 117,
+        "etiqueta": "Fecha de vencimiento ({{factura.vence}})"
+    },
+    {
+        "archivo": "portal-pdf.png",
+        "x": 718,
+        "y": 353,
+        "etiqueta": "Saldo a pagar del aviso"
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 201,
+        "etiqueta": "Promesa aprobada: servicio reactivado en segundos"
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 335,
+        "etiqueta": "Monto y fecha que el cliente prometió"
+    },
+    {
+        "archivo": "portal-promesa.png",
+        "x": 195,
+        "y": 429,
+        "etiqueta": "Vuelve a navegar"
+    }
+]

@@ -10,11 +10,11 @@ import { type PropsEscena, camaraDeEscena, colocar, useEscena } from './comun'
 
 /** Paneles del montaje, en orden, con su punto de interés y la clave de su texto. */
 const PANELES: { id: IdCaptura; punto: PuntoInteres; texto: string; color: string }[] = [
-    { id: 'caja', punto: CAPTURAS.caja.puntos.diferencia, texto: 'caja', color: COLOR.cian },
+    { id: 'caja', punto: CAPTURAS.caja.puntos.esperado, texto: 'caja', color: COLOR.cian },
     { id: 'promesas', punto: CAPTURAS.promesas.puntos.aprobada, texto: 'promesas', color: COLOR.violeta },
-    { id: 'facturas', punto: CAPTURAS.facturas.puntos.vencida, texto: 'facturas', color: COLOR.magenta },
+    { id: 'facturas', punto: CAPTURAS.facturas.puntos.recargo, texto: 'facturas', color: COLOR.magenta },
     { id: 'libro', punto: CAPTURAS.libro.puntos.cuadre, texto: 'libro', color: COLOR.cian },
-    { id: 'bitacora', punto: CAPTURAS.bitacora.puntos.coa, texto: 'bitacora', color: COLOR.violeta },
+    { id: 'bitacora', punto: CAPTURAS.bitacora.puntos.fila, texto: 'bitacora', color: COLOR.violeta },
 ]
 
 /** Los paneles van sobre un arco cóncavo (radio R, centro delante) mirando a su centro. */

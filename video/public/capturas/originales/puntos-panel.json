@@ -1,0 +1,158 @@
+[
+  {
+    "archivo": "clientes-filtros.png",
+    "x": 397,
+    "y": 102,
+    "etiqueta": "Chip \"Cortados\": clientes con el servicio suspendido"
+  },
+  {
+    "archivo": "clientes-filtros.png",
+    "x": 385,
+    "y": 233,
+    "etiqueta": "Filtro aplicado: estado del servicio"
+  },
+  {
+    "archivo": "clientes-filtros.png",
+    "x": 460,
+    "y": 410,
+    "etiqueta": "Clientes cortados por deuda vencida"
+  },
+  {
+    "archivo": "servicio-ficha.png",
+    "x": 306,
+    "y": 102,
+    "etiqueta": "Estado del servicio: activo tras el pago"
+  },
+  {
+    "archivo": "servicio-ficha.png",
+    "x": 760,
+    "y": 180,
+    "etiqueta": "Acciones explícitas con motivo"
+  },
+  {
+    "archivo": "servicio-ficha.png",
+    "x": 1110,
+    "y": 385,
+    "etiqueta": "IPv4 y prefijos IPv6 asignados"
+  },
+  {
+    "archivo": "cobro-facturas.png",
+    "x": 409,
+    "y": 350,
+    "etiqueta": "Facturas del dependiente, cargadas solas"
+  },
+  {
+    "archivo": "cobro-facturas.png",
+    "x": 1064,
+    "y": 228,
+    "etiqueta": "Monto = suma de lo marcado de los dos clientes"
+  },
+  {
+    "archivo": "cobro-facturas.png",
+    "x": 1064,
+    "y": 454,
+    "etiqueta": "Transferencia: banco de origen y cuenta de destino"
+  },
+  {
+    "archivo": "cobro-recibo.png",
+    "x": 1064,
+    "y": 636,
+    "etiqueta": "Recibo: \"Servicio reactivado\" de cada cliente"
+  },
+  {
+    "archivo": "cobro-recibo.png",
+    "x": 1064,
+    "y": 455,
+    "etiqueta": "Facturas del dependiente: \"pagado por Rosa Elena Batz\""
+  },
+  {
+    "archivo": "cobro-recibo.png",
+    "x": 411,
+    "y": 277,
+    "etiqueta": "Reactivación inmediata, sin esperar al cron"
+  },
+  {
+    "archivo": "caja.png",
+    "x": 371,
+    "y": 210,
+    "etiqueta": "Turno abierto con fondo inicial"
+  },
+  {
+    "archivo": "caja.png",
+    "x": 1055,
+    "y": 278,
+    "etiqueta": "Esperado: fondo + efectivo cobrado"
+  },
+  {
+    "archivo": "caja.png",
+    "x": 660,
+    "y": 520,
+    "etiqueta": "Cobros en efectivo del turno"
+  },
+  {
+    "archivo": "promesas.png",
+    "x": 471,
+    "y": 252,
+    "etiqueta": "Resultado de la evaluación de la plantilla"
+  },
+  {
+    "archivo": "promesas.png",
+    "x": 593,
+    "y": 396,
+    "etiqueta": "Regla que aplicó: plazo máximo del canal"
+  },
+  {
+    "archivo": "promesas.png",
+    "x": 531,
+    "y": 518,
+    "etiqueta": "Deuda e historial con los que se evaluó"
+  },
+  {
+    "archivo": "facturas.png",
+    "x": 1193,
+    "y": 227,
+    "etiqueta": "Estado de cada aviso de cobro"
+  },
+  {
+    "archivo": "facturas.png",
+    "x": 1192,
+    "y": 665,
+    "etiqueta": "Pagada al registrar el cobro"
+  },
+  {
+    "archivo": "facturas.png",
+    "x": 345,
+    "y": 246,
+    "etiqueta": "Recargo por mora generado al vencer"
+  },
+  {
+    "archivo": "libro.png",
+    "x": 1221,
+    "y": 242,
+    "etiqueta": "Debe = Haber: el diario cuadra"
+  },
+  {
+    "archivo": "libro.png",
+    "x": 384,
+    "y": 160,
+    "etiqueta": "Filtros por cuenta, periodo y origen"
+  },
+  {
+    "archivo": "libro.png",
+    "x": 508,
+    "y": 420,
+    "etiqueta": "Asiento de doble partida de cada cobro"
+  },
+  {
+    "archivo": "bitacora.png",
+    "x": 620,
+    "y": 378,
+    "etiqueta": "Cada acción con actor, canal y resultado"
+  },
+  {
+    "archivo": "bitacora.png",
+    "x": 384,
+    "y": 160,
+    "etiqueta": "Filtros por actor, canal, acción, entidad y fecha"
+  }
+]
