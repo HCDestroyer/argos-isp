@@ -2861,6 +2861,8 @@ export interface components {
             monto: components["schemas"]["Dinero"];
             /** @description Resultado en palabras del cliente (nunca el código de la regla) */
             motivo: string;
+            /** @description Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto */
+            corregible: boolean;
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
         };

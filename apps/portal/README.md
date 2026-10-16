@@ -91,6 +91,29 @@ Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos person
 
 Dependencia nueva: `zod` (misma versión que `apps/web`) para los esquemas de `UForm`.
 
+### Telegram en "Mis datos" (semana 2)
+
+Contrato de A6 en `.claude/integration/contratos/telegram.md`. "Vincular Telegram" pide el código
+(`POST /portal/telegram/vincular`), ofrece "Abrir Telegram" (`t.me/<bot>?start=<código>`) y de respaldo
+`/start <código>`, y consulta `GET /portal/telegram` cada 3 s hasta ver "Vinculado" o hasta que venza.
+Tras recargar sigue esperando (solo `vence_en` en `sessionStorage`, nunca el código). Desvincular pide
+confirmación. Telegram como canal preferido solo se habilita con el chat vinculado.
+
+### Promesa rechazada
+
+"Cambiar fecha o monto" aparece solo si `corregible` (la regla fue el plazo o la próxima factura); por
+cupo, historial o deuda se ofrece "Contactar a la oficina".
+
+## Accesibilidad
+
+- Controles de al menos 44 × 44 px: `min-h-11 min-w-11` en `UButton`, `min-h-11` en `UInput`, `USelect`
+  y `USelectMenu`, casillas del código de 44 px (`app.config.ts`); el logo y el enlace del pie también.
+- Contraste 4.5:1 en claro y oscuro: en claro los colores semánticos usan el tono 700 (verde 800) y
+  `text-dimmed` el slate-500; en oscuro, los 400 (`assets/css/main.css`).
+- Foco visible: el anillo de Nuxt UI en controles y un `outline` del color primario en enlaces.
+- Revisión automática con Playwright (tamaño de toque, nombre accesible, contraste de texto y foco con
+  Tab) en `/corte`, `/entrar`, el paso del código y los modales de promesa, depósito y comprobante.
+
 ## Datos de la empresa y contacto (configurables desde el panel)
 
 | Pieza | Dónde |

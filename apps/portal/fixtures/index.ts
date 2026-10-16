@@ -26,7 +26,7 @@ import {
     condicionesConPromesaFixture,
     condicionesFixture,
     promesaSolicitadaFixture,
-    type ResultadoPromesaFixture,
+    type EscenarioResultadoFixture,
 } from './promesas'
 
 /**
@@ -42,12 +42,12 @@ function escenarioCorte(): EscenarioCorte {
 let consultasEstado = 0
 
 /**
- * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|pendiente_aprobacion|con_promesa` en la
+ * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|rechazada_fecha|pendiente_aprobacion|con_promesa` en la
  * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
  * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
  */
-type EscenarioPromesa = ResultadoPromesaFixture | 'con_promesa'
-const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'pendiente_aprobacion', 'con_promesa']
+type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa']
 const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
 
 export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {

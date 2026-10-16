@@ -17814,6 +17814,7 @@
           "vence_en",
           "monto",
           "motivo",
+          "corregible",
           "servicio_estado"
         ],
         "properties": {
@@ -17839,6 +17840,10 @@
           "motivo": {
             "type": "string",
             "description": "Resultado en palabras del cliente (nunca el código de la regla)"
+          },
+          "corregible": {
+            "type": "boolean",
+            "description": "Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto"
           },
           "servicio_estado": {
             "anyOf": [

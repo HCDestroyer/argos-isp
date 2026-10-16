@@ -271,6 +271,12 @@ export const PortalPromesaSolicitada = definirEsquema(
         vence_en: instante,
         monto: Dinero,
         motivo: { ...texto, description: 'Resultado en palabras del cliente (nunca el código de la regla)' },
+        corregible: {
+            ...booleano,
+            description:
+                'Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, ' +
+                'cambiar fecha o monto no sirve: el portal ofrece el contacto',
+        },
         servicio_estado: {
             ...nulable(EstadoServicio),
             description: 'Estado del servicio tras la promesa (solo si quedó aprobada)',

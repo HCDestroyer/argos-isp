@@ -10,11 +10,12 @@ const anio = new Date().getFullYear()
             <UContainer class="flex h-14 items-center justify-between gap-3">
                 <NuxtLink
                     to="/"
-                    class="flex min-w-0 items-center gap-2 font-semibold text-highlighted"
+                    class="flex min-h-11 min-w-0 items-center gap-2 font-semibold text-highlighted"
                 >
                     <UIcon
                         name="i-lucide-wifi"
                         class="size-6 shrink-0 text-primary"
+                        aria-hidden="true"
                     />
                     <span class="truncate">{{ nombre }}</span>
                 </NuxtLink>
@@ -34,7 +35,7 @@ const anio = new Date().getFullYear()
                 <span>© {{ anio }} {{ nombre }}</span>
                 <ULink
                     to="/contacto"
-                    class="text-muted hover:text-default"
+                    class="inline-flex min-h-11 items-center px-2 text-muted hover:text-default"
                 >
                     {{ empresa?.telefono ? `Soporte: ${empresa.telefono}` : 'Contacto' }}
                 </ULink>
