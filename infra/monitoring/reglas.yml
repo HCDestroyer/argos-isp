@@ -1,6 +1,7 @@
 # Reglas de alerta de Prometheus. Las alertas de negocio que el equipo debe ver en Telegram las
 # manda notify (aaa caído, CoA fallido, caja con diferencia, crons atrasados); estas cubren lo que
-# notify no puede ver de sí mismo (la API o Redis caídos, colas atascadas).
+# notify no puede ver de sí mismo (la API o Redis caídos, colas atascadas) y las envía Alertmanager
+# (alertmanager/, receptor telegram_configs) al mismo chat del equipo.
 groups:
   - name: argosisp
     rules:

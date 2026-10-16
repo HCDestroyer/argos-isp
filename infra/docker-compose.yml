@@ -50,6 +50,8 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Raíz de la Bot API (vacío = https://api.telegram.org); la misma usa alertmanager
+  TELEGRAM_API_ROOT: ${TELEGRAM_API_ROOT:-}
   # Bot (POST /api/v1/telegram/webhook, contratos/telegram.md): usuario del bot sin @, secreto del
   # header X-Telegram-Bot-Api-Secret-Token y URL pública HTTPS para `node ace telegram:webhook`.
   TELEGRAM_BOT_NOMBRE: ${TELEGRAM_BOT_NOMBRE:-}
@@ -590,6 +592,32 @@ services:
       timeout: 3s
       retries: 5
 
+  # Perfil monitoreo: Alertmanager manda las alertas de Prometheus al chat del equipo por Telegram
+  # (receptor nativo telegram_configs, no la API: debe avisar justo cuando la API o Redis se caen).
+  # Mismo bot (TELEGRAM_BOT_TOKEN) y chat (TELEGRAM_CHAT_EQUIPO) que las alertas de negocio de notify.
+  # Configuración en infra/monitoring/alertmanager/; prueba de punta a punta: infra/monitoring/probar-alertas.sh
+  alertmanager:
+    profiles: [monitoreo]
+    # Imagen oficial en quay.io (el mismo build que prom/alertmanager, sin el límite de Docker Hub)
+    image: quay.io/prometheus/alertmanager:v0.28.1
+    restart: unless-stopped
+    entrypoint: [/bin/sh, /etc/alertmanager/entrypoint.sh]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+      TELEGRAM_API_ROOT: ${TELEGRAM_API_ROOT:-}
+      ALERTMANAGER_RETENCION: ${ALERTMANAGER_RETENCION:-120h}
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - amdata:/alertmanager
+    ports:
+      - 127.0.0.1:${ALERTMANAGER_PORT_HOST:-9093}:9093
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9093/-/ready']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 # Red por defecto con subred fija: PORTAL_PROXIES_CONFIABLES de la API la usa para confiar en el
 # X-Forwarded-For que agrega el portal. IPv6 en la red: COMPOSE_IPV6=true (perfil lab, ver infra/README.md).
 networks:
@@ -604,5 +632,6 @@ volumes:
   pgdata:
   redisdata:
   promdata:
+  amdata:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:

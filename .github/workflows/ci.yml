@@ -143,7 +143,7 @@ jobs:
   infra:
     name: docker compose y FreeRADIUS
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -157,6 +157,13 @@ jobs:
         run: |
           docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 check rules /m/reglas.yml
           docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+
+      - name: Alertmanager (amtool check-config)
+        run: infra/ci/alertmanager-check.sh
+
+      # Criterio de la semana 3: Prometheus → Alertmanager → Telegram (simulado) en menos de un minuto
+      - name: Alertas de punta a punta (Telegram simulado)
+        run: infra/monitoring/probar-alertas.sh
 
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.

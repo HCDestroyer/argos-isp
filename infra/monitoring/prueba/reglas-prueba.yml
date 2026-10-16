@@ -1,0 +1,9 @@
+# Regla que dispara siempre, para la prueba de punta a punta (probar-alertas.sh). El texto lleva
+# "<" y "&" para comprobar que la plantilla de Telegram los escapa (si no, Telegram rechaza el HTML).
+groups:
+  - name: prueba
+    rules:
+      - alert: AlertaDePrueba
+        expr: vector(1)
+        annotations:
+          summary: 'Alerta de prueba de punta a punta: debe llegar en < 1 min & sin romper el HTML'
