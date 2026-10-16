@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 
+const { puede, destinoPermitido } = usePermisos()
+
 definePageMeta({ permiso: 'clientes.editar' })
 
 const route = useRoute()
@@ -16,6 +18,11 @@ const generacion = ref(0)
 useHead(() => ({ title: `Editar ${cliente.value?.nombre ?? 'cliente'} · ArgosIsp` }))
 
 async function cargar() {
+    if (!puede('clientes.ver')) {
+        cargando.value = false
+        problema.value = problemaSinPermiso('clientes.ver')
+        return
+    }
     cargando.value = true
     const resultado = await useClientes().ver(clienteId.value)
     cargando.value = false
@@ -31,7 +38,7 @@ async function cargar() {
 
 async function alGuardar(actualizado: Cliente) {
     toast.add({ title: 'Cambios guardados', description: actualizado.nombre, color: 'success', icon: 'i-lucide-circle-check' })
-    await navigateTo(`/clientes/${actualizado.id}`)
+    await navigateTo(destinoPermitido(`/clientes/${actualizado.id}`))
 }
 
 onMounted(cargar)
@@ -62,7 +69,7 @@ onMounted(cargar)
             :key="generacion"
             :cliente="cliente"
             @guardado="alGuardar"
-            @cancelar="navigateTo(`/clientes/${clienteId}`)"
+            @cancelar="navigateTo(destinoPermitido(`/clientes/${clienteId}`))"
             @recargar="cargar"
         />
     </PanelPagina>

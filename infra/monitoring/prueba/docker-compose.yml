@@ -1,0 +1,63 @@
+# Prueba de punta a punta de las alertas (infra/monitoring/probar-alertas.sh), en un proyecto aparte
+# (argosisp-prueba-alertas) y sin internet: Prometheus → Alertmanager → Bot API de Telegram simulada.
+#
+# alertmanager y prometheus extienden los servicios reales de infra/docker-compose.yml (misma
+# imagen, entrypoint, plantilla y prometheus.yml); solo cambian el destino de Telegram (el falso),
+# las reglas (una que siempre dispara) y que no publican puertos.
+name: argosisp-prueba-alertas
+
+services:
+  telegram-falso:
+    image: node:22-alpine
+    command: [node, /prueba/telegram-falso.mjs]
+    environment:
+      PORT: '8080'
+    volumes:
+      - ./telegram-falso.mjs:/prueba/telegram-falso.mjs:ro
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8080/salud').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  alertmanager:
+    extends:
+      file: ../../docker-compose.yml
+      service: alertmanager
+    profiles: !reset []
+    restart: 'no'
+    environment:
+      TELEGRAM_BOT_TOKEN: '123456:token-de-prueba'
+      TELEGRAM_CHAT_EQUIPO: '-1001234567890'
+      TELEGRAM_API_ROOT: http://telegram-falso:8080
+    ports: !reset []
+    healthcheck:
+      interval: 2s
+      retries: 15
+    depends_on:
+      telegram-falso:
+        condition: service_healthy
+
+  prometheus:
+    extends:
+      file: ../../docker-compose.yml
+      service: prometheus
+    profiles: !reset []
+    restart: 'no'
+    environment:
+      METRICS_TOKEN: prueba
+    volumes:
+      # prometheus.yml real (intervalos y alerting); solo cambian las reglas
+      - ../prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./reglas-prueba.yml:/etc/prometheus/reglas.yml:ro
+    ports: !reset []
+    healthcheck:
+      interval: 2s
+      retries: 15
+    depends_on: !reset
+      alertmanager:
+        condition: service_healthy
+
+volumes:
+  promdata:
+  amdata:

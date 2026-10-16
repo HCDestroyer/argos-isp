@@ -1,0 +1,24 @@
+# Override del ensayo de restauración (infra/backups/ensayo.sh): mismo compose que producción, en
+# un proyecto aparte (volúmenes propios y vacíos), sin puertos publicados salvo la API en
+# 127.0.0.1:${ENSAYO_API_PORT} para el smoke test. El respaldo se lee de ENSAYO_BACKUP_DIR.
+services:
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  api:
+    ports: !override
+      - 127.0.0.1:${ENSAYO_API_PORT:-3399}:3333
+    # Comprobantes siempre en el volumen del proyecto (aunque infra/.env tenga COMPROBANTES_HOST_DIR)
+    volumes: !override
+      - comprobantes:/comprobantes
+  comprobantes-permisos:
+    volumes: !override
+      - comprobantes:/comprobantes
+  backup:
+    volumes: !override
+      - ${ENSAYO_BACKUP_DIR:?ENSAYO_BACKUP_DIR}:/backups
+      - comprobantes:/comprobantes
+      - ${BACKUP_CONFIG_DIR:-./backups/config}:/config:ro

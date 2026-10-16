@@ -8,7 +8,7 @@ import type { Problem } from '@argosisp/contracts'
 definePageMeta({ permiso: 'comprobantes.ver' })
 
 const route = useRoute()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 
 const comprobanteId = computed(() => Number(route.params.id))
@@ -139,7 +139,7 @@ onMounted(cargar)
                     <p class="text-sm text-muted">
                         {{ ETIQUETAS_METODO[comprobante.metodo] }} ·
                         <ULink
-                            :to="`/clientes/${comprobante.cliente_id}?tab=cuenta`"
+                            :to="enlace(`/clientes/${comprobante.cliente_id}?tab=cuenta`)"
                             class="text-default hover:text-primary"
                         >
                             {{ comprobante.cliente_nombre }}
@@ -260,7 +260,7 @@ onMounted(cargar)
                             class="col-span-2"
                         >
                             <ULink
-                                :to="`/clientes/${comprobante.cliente_id}?tab=cuenta`"
+                                :to="enlace(`/clientes/${comprobante.cliente_id}?tab=cuenta`)"
                                 class="text-highlighted hover:text-primary"
                             >
                                 {{ comprobante.cliente_nombre }}

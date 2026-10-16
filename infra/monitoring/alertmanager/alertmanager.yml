@@ -1,0 +1,38 @@
+# Alertmanager de ArgosIsp (servicio `alertmanager`, perfil `monitoreo`). infra/monitoring/README.md
+#
+# Plantilla: Alertmanager no expande variables de entorno, así que entrypoint.sh copia este archivo
+# a /tmp/alertmanager.yml reemplazando __TELEGRAM_API_URL__ y __TELEGRAM_CHAT_EQUIPO__, y escribe el
+# token del bot en /tmp/telegram_token. El token nunca queda en el repositorio ni en este archivo.
+#
+# Receptor nativo `telegram_configs` (no un webhook a la API): las alertas que importan son
+# justamente "la API no responde", "Redis caído" o "colas atascadas"; si el aviso pasara por la API
+# o por el worker de notify, se caería con lo que avisa.
+global:
+  resolve_timeout: 5m
+
+templates:
+  - /etc/alertmanager/telegram.tmpl
+
+route:
+  receiver: telegram-equipo
+  group_by: [alertname]
+  # Primer aviso de un grupo a los 10 s: con la evaluación de Prometheus cada 30 s, una alerta llega
+  # al chat en menos de un minuto desde que la condición se cumple (y pasa su `for`).
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: telegram-equipo
+    telegram_configs:
+      - api_url: __TELEGRAM_API_URL__
+        bot_token_file: /tmp/telegram_token
+        chat_id: __TELEGRAM_CHAT_EQUIPO__
+        parse_mode: HTML
+        send_resolved: true
+        message: '{{ template "argosisp.telegram.mensaje" . }}'
+
+# Si una alerta de la API ya está disparada, no repetir las que dependen de ella.
+inhibit_rules:
+  - source_matchers: [alertname = ApiSinMetricas]
+    target_matchers: [alertname =~ "SeccionDeMetricasFallando|ColaAtascada|GrupoDeEventosAtrasado|OutboxSinPublicar|Cron.*Atrasado"]

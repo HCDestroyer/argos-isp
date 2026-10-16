@@ -44,6 +44,98 @@ middleware `server/middleware/portal-cautivo.ts` (lógica pura en `server/utils/
 Las redirecciones llevan `Cache-Control: no-store` para que el navegador no las recuerde tras la reactivación.
 HTTPS no se puede redirigir (el certificado no coincide): el MikroTik corta 443 y el sistema operativo cae a la prueba HTTP.
 
+### Sondas de portal cautivo
+
+Cada sistema operativo pide una URL conocida y, si recibe exactamente la respuesta "de éxito", cree
+que hay Internet y no avisa. A un suspendido el portal **nunca** le da esa respuesta: responde 302 a
+`/corte` (absoluto con `NUXT_PORTAL_URL_PUBLICA`, relativo sin ella), con GET o HEAD, con o sin query,
+con el Host de la sonda o con el del portal (IPv4, `[portalV6]:80` o nombre). El teléfono muestra
+"Iniciar sesión en la red" y al tocarlo abre `/corte`. Catálogo en `SONDAS` de `server/utils/portalCautivo.ts`.
+
+| Sistema | Sonda | Espera con Internet | El portal responde |
+| --- | --- | --- | --- |
+| Android, ChromeOS, Chrome | `connectivitycheck.gstatic.com/generate_204`, `clients3.google.com/generate_204` | 204 sin cuerpo | 302 → `/corte` |
+| Android (Google) | `www.google.com/gen_204` | 204 | 302 → `/corte` |
+| Samsung, Xiaomi, Huawei | `connect.rom.miui.com/generate_204` y equivalentes | 204 | 302 → `/corte` |
+| Huawei / Honor antiguos | `/mobile/status.php` | 204 | 302 → `/corte` |
+| iOS, iPadOS, macOS | `captive.apple.com/hotspot-detect.html`, `www.apple.com/library/test/success.html` | 200 con `<TITLE>Success</TITLE>` | 302 → `/corte` |
+| Windows 10 / 11 | `www.msftconnecttest.com/connecttest.txt` | 200 `Microsoft Connect Test` | 302 → `/corte` |
+| Windows 10 / 11 (abre el navegador) | `www.msftconnecttest.com/redirect` | 200 | 302 → `/corte` |
+| Windows 7 / 8 | `www.msftncsi.com/ncsi.txt` | 200 `Microsoft NCSI` | 302 → `/corte` |
+| Firefox | `detectportal.firefox.com/success.txt`, `/canonical.html` | 200 `success` | 302 → `/corte` |
+| GNOME / NetworkManager | `nmcheck.gnome.org/check_network_status.txt` | 200 `NetworkManager is online` | 302 → `/corte` |
+| Fedora | `fedoraproject.org/static/hotspot.txt` | 200 `OK` | 302 → `/corte` |
+| Ubuntu | `connectivity-check.ubuntu.com/` y `/connectivity-check.html` | 204 | 302 → `/corte` |
+| KDE | `networkcheck.kde.org/` | 200 `OK` | 302 → `/corte` (Host ajeno) |
+| Kindle | `/kindle-wifi/wifistub.html`, `/kindle-wifi/wifiredirect.html` | 200 | 302 → `/corte` |
+| Cualquier otra URL HTTP de un suspendido | | | 302 → `/corte` (Host ajeno) |
+
+`/corte` responde 200 con HTML y no contiene ninguno de esos textos de éxito.
+
+Para A6: ningún dominio de esta tabla puede estar en el walled garden; si lo estuviera, la sonda
+llegaría al sitio real, recibiría su respuesta de éxito y el teléfono no avisaría.
+
+Pruebas: `tests/nuxt/portal-cautivo.test.ts` (reglas puras, cada sonda) y
+`tests/servidor/portal.test.ts` (servidor Nitro de producción: cada sonda con GET y HEAD,
+con y sin URL pública).
+
+## Cuando algo falla (piloto)
+
+Regla: error claro con "Reintentar" y nunca montos, saldos ni estados calculados sobre datos que
+no se pudieron leer. Pruebas en `tests/nuxt/robustez.test.ts` (fallas simuladas con
+`fijarFallaFixture(ruta, respuesta | 'sin_conexion')`).
+
+| Situación | Qué ve el cliente |
+| --- | --- |
+| La API no responde (el proxy de Nitro devuelve 502, o 504 a los 15 s) | problem+json en español ("No pudimos contactar al sistema…"), nunca el error genérico de h3 ni la URL interna |
+| `quien-soy` falla (sin red, 5xx, 429) | "No pudimos consultar tu servicio" con el detalle (el 429 dice cuántos segundos esperar) y "Reintentar"; sin montos ni estado. Siguen "Ver datos de depósito" y el contacto (si `/portal/empresa` tampoco responde, "Contacta a soporte" lleva a `/contacto`) |
+| Un error que no es problem+json (HTML de otro proxy) | Texto según el status (`aProblema`), no "Error inesperado" a secas |
+| `/portal/estado` falla durante el estado en vivo | Sigue intentando cada 5 s; desde el 2.º fallo seguido avisa "No logramos consultar tu servicio"; al agotarse los 2 min dice "No pudimos consultar el estado de tu servicio" con "Reintentar", nunca "Aún no vemos tu servicio activo" |
+| Seguimiento del pago en línea sin respuesta | Igual: no dice "Aún no recibimos la confirmación" si no se pudo leer |
+| `quien-soy` con `monto_adeudado` o `facturas_vencidas` nulos | "No disponible"; nunca "Q 0.00" ni "Sin facturas vencidas" |
+| Promesa, comprobante, pago y cuenta | Ya mostraban el `detail` y "Reintentar"; ahora el 502 del proxy llega con texto en español |
+
+**IP no identificada** (otra red, datos móviles, IP fuera de `network.sesiones` y asignaciones):
+"No pudimos identificar tu servicio", la IP de conexión, "Entrar con mi NIT o usuario" (`/entrar`),
+datos de depósito y contacto. No se ofrecen "Pagar en línea", "Subir comprobante" ni "Solicitar
+promesa": por IP la API respondería 422 `no_identificado` después de llenar el formulario. Con la
+sesión se hacen desde `/cuenta`.
+
+**Varios servicios**: por IP la página de corte muestra solo el servicio de esa IP y su deuda (lo
+que hay que pagar para reactivarlo). En `/cuenta` cada servicio muestra su saldo; "Pagar en línea"
+cobra un servicio, así que con dos o más servicios con saldo el cliente elige cuál en un selector
+(con su monto). Pruebas de la API en `apps/api/tests/portal/varios_servicios.spec.ts`.
+
+## Seguridad
+
+Checklist completo en `docs/seguridad/portal.md`. En el portal:
+
+| Pieza | Dónde |
+| --- | --- |
+| CSP por página con el hash de cada script en línea (sin `unsafe-inline` ni `unsafe-eval` en scripts, nada externo, `frame-ancestors 'none'`); sin `X-Powered-By` | `server/plugins/seguridad.ts`, `server/utils/cabecerasSeguridad.ts` |
+| `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` en toda respuesta (también redirecciones y proxy) | `server/middleware/0-seguridad.ts` |
+| El proxy no sale de `/api/v1/portal/` (`../` y `%2e%2e` → 404) | `destinoReenvio` en `server/utils/reenvioApi.ts` |
+| POST/PUT/DELETE solo desde el mismo origen (`Origin` y `Sec-Fetch-Site`; si no, 403) | `origenPermitido` en `server/utils/reenvioApi.ts` |
+| zod sin JIT (`new Function`), para no chocar con la CSP | `app/plugins/zod.ts` |
+
+En desarrollo (`nuxt dev`) no se pone CSP: Vite necesita scripts propios.
+
+## Guía para el ISP
+
+`docs/piloto/portal-cliente.md`: qué ve un cliente cortado, promesa, comprobante, Telegram y dudas
+frecuentes, con capturas a 390 px en `docs/piloto/img/` (build de producción con fixtures,
+Chromium, PNG de 128 colores; menos de 60 KB cada una).
+
+Los modales dejan margen a la derecha del título (`modal.slots.wrapper` en `app.config.ts`): a 390 px
+la descripción pasaba por debajo del botón de cerrar.
+
+## Pruebas
+
+`pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y
+composables contra los fixtures) y `vitest.servidor.config.ts` (`tests/servidor/`, entorno node:
+compila el portal en `.nuxt/test/servidor` y lo levanta con una API falsa; unos 40 s).
+`pnpm test:servidor` corre solo la segunda.
+
 ## Walled garden
 
 La página de corte se abre con el servicio suspendido, así que todo sale de este servidor:

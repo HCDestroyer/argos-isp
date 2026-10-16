@@ -2,6 +2,8 @@ import type { Schema } from '@argosisp/contracts'
 
 const creado = '2026-09-01T15:00:00.000Z'
 const meta = { version: 1, created_at: creado, updated_at: creado }
+// Conexión de la API REST de RouterOS (semana 3): los valores por defecto de la API.
+const conexion = { api_url: null, api_tls_verificar: true, api_ca: null, dhcp_servidor: null, interfaz_clientes: null }
 
 export const routers: Schema<'Router'>[] = [
     {
@@ -18,6 +20,7 @@ export const routers: Schema<'Router'>[] = [
         capacidad_subida_kbps: null,
         modo_velocidad: 'simple',
         activo: true,
+        ...conexion,
         ...meta,
     },
     {
@@ -34,6 +37,7 @@ export const routers: Schema<'Router'>[] = [
         capacidad_subida_kbps: 500_000,
         modo_velocidad: 'pcq',
         activo: true,
+        ...conexion,
         ...meta,
     },
     {
@@ -50,6 +54,7 @@ export const routers: Schema<'Router'>[] = [
         capacidad_subida_kbps: null,
         modo_velocidad: 'simple',
         activo: false,
+        ...conexion,
         ...meta,
     },
 ]

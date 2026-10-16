@@ -79,11 +79,19 @@ export function cuerpoRest(
 
 /** API interna simulada de A1 (`GET /internal/aaa/servicio`). */
 export class ApiFalsa {
-    readonly llamadas: { url: string; auth: string | undefined }[] = []
+    readonly llamadas: { url: string; auth: string | undefined; requestId?: string }[] = []
     respuestas = new Map<string, { status: number; cuerpo?: unknown }>()
+    /** true: acepta la conexión y nunca responde (API colgada → timeout de `FuenteApi`). */
+    colgada = false
     private servidor: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+        if (this.colgada) return
         const url = new URL(req.url ?? '/', 'http://x')
-        this.llamadas.push({ url: url.pathname + url.search, auth: req.headers.authorization })
+        const requestId = req.headers['x-request-id']
+        this.llamadas.push({
+            url: url.pathname + url.search,
+            auth: req.headers.authorization,
+            ...(typeof requestId === 'string' ? { requestId } : {}),
+        })
         const r = this.respuestas.get(url.searchParams.get('user_ppp') ?? '') ?? { status: 404 }
         res.writeHead(r.status, { 'content-type': 'application/json' })
         res.end(r.cuerpo === undefined ? '' : JSON.stringify(r.cuerpo))
@@ -96,6 +104,7 @@ export class ApiFalsa {
     }
 
     async cerrar(): Promise<void> {
+        this.servidor.closeAllConnections()
         await new Promise<void>((resolve) => this.servidor.close(() => resolve()))
     }
 }

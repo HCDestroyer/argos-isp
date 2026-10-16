@@ -57,6 +57,8 @@ interface BaseFixtures {
      * responda ese status (como hoy la API real). Ver `simularFalla()` en `fixtures/index.ts`.
      */
     fallas: Record<string, number>
+    /** Tokens revocados con `POST /auth/logout` (los fixtures siguen aceptando el login de nuevo). */
+    sesionesCerradas: string[]
 }
 
 function inicial(): BaseFixtures {
@@ -90,6 +92,7 @@ function inicial(): BaseFixtures {
         clavesPpp: {},
         idempotencia: {},
         fallas: {},
+        sesionesCerradas: [],
     })
 }
 

@@ -50,6 +50,22 @@ const servicioComprobante = computed(() => {
     return (servicios.find(s => new Decimal(s.monto_adeudado).greaterThan(0)) ?? servicios[0])?.id
 })
 
+/**
+ * Pagar en línea cobra lo de UN servicio (`POST /portal/pagos/iniciar` con `servicio_id`). Con
+ * varios servicios con saldo, el cliente elige cuál; si no, el total de arriba no coincidiría con
+ * lo que se cobra.
+ */
+const serviciosConSaldo = computed(() => (cuenta.value?.servicios ?? [])
+    .filter(s => new Decimal(s.monto_adeudado).greaterThan(0)))
+const opcionesPago = computed(() => serviciosConSaldo.value.map(s => ({
+    label: `${s.plan ?? 'Servicio de internet'}${s.direccion ? ` · ${s.direccion}` : ''} · ${formatearQuetzales(s.monto_adeudado)}`,
+    value: s.id,
+})))
+const servicioElegido = ref<number | undefined>(undefined)
+const servicioPago = computed(() => serviciosConSaldo.value.some(s => s.id === servicioElegido.value)
+    ? servicioElegido.value
+    : serviciosConSaldo.value[0]?.id)
+
 const verPromesa = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -148,6 +164,13 @@ async function salir() {
                             :estado="servicio.estado"
                             size="sm"
                         />
+                        <span
+                            v-if="cuenta.servicios.length > 1"
+                            class="text-sm font-medium tabular-nums text-highlighted"
+                            data-testid="saldo-servicio"
+                        >
+                            {{ formatearQuetzales(servicio.monto_adeudado) }}
+                        </span>
                         <UButton
                             v-if="admitePromesa(servicio)"
                             label="Pedir promesa"
@@ -161,9 +184,22 @@ async function salir() {
                         />
                     </div>
                 </div>
+                <UFormField
+                    v-if="opcionesPago.length > 1"
+                    label="¿Qué servicio quieres pagar en línea?"
+                    class="mt-3"
+                >
+                    <USelect
+                        :model-value="servicioPago"
+                        :items="opcionesPago"
+                        class="w-full"
+                        data-testid="servicio-a-pagar"
+                        @update:model-value="servicioElegido = Number($event)"
+                    />
+                </UFormField>
                 <PagoEnLinea
-                    v-if="new Decimal(cuenta.monto_adeudado).greaterThan(0)"
-                    :servicio-id="servicioComprobante"
+                    v-if="servicioPago !== undefined"
+                    :servicio-id="servicioPago"
                     id-ayuda="pagar-en-linea-ayuda-cuenta"
                     class="mt-3"
                 />

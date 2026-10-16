@@ -58,6 +58,11 @@ watch(clienteId, async (id) => {
     if (!id) {
         return
     }
+    if (!puede('servicios.ver')) {
+        servicios.value = []
+        problemaServicios.value = problemaSinPermiso('servicios.ver')
+        return
+    }
     const resultado = await useServicios().listar({ cliente_id: id })
     servicios.value = resultado.ok ? resultado.data.data : []
     problemaServicios.value = resultado.ok ? null : resultado.problema

@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
     cargando: false,
 })
 
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 /** Solo para el precio del plan; los nombres vienen en cada `Servicio`. */
 const planes = ref(new Map<number, Plan>())
@@ -47,7 +47,7 @@ onMounted(async () => {
         <template #user_ppp-cell="{ row }">
             <div class="flex min-w-36 flex-col">
                 <ULink
-                    :to="`/servicios/${row.original.id}`"
+                    :to="enlace(`/servicios/${row.original.id}`)"
                     class="font-mono text-sm font-medium text-highlighted hover:text-primary"
                 >
                     {{ etiquetaServicio(row.original) }}

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import type { ModoDegradado } from './fuentes.ts'
 import type { PerfilSuspendido } from './perfil.ts'
 
 /** Configuración del servicio desde el entorno. Documentada en `.env.example`. */
@@ -15,6 +16,15 @@ export interface Config {
     claveSecretos: string | undefined
     suspendido: PerfilSuspendido
     interimSegundos: number
+    /** Modo degradado (Redis y API sin respuesta): `README.md`, "Modo degradado". */
+    degradado: {
+        modo: ModoDegradado
+        /** Archivo del último perfil conocido; vacío = solo en memoria. */
+        ruta: string | undefined
+        /** Cada cuántos segundos se copia `aaa:user:*` (0 = nunca, solo lo visto al autorizar). */
+        espejoSegundos: number
+        max: number
+    }
 }
 
 function numero(valor: string | undefined, porDefecto: number): number {
@@ -27,6 +37,9 @@ function numero(valor: string | undefined, porDefecto: number): number {
 export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const respaldo = env.AAA_RESPALDO ?? 'api'
     if (respaldo !== 'api' && respaldo !== 'fixtures') throw new Error('AAA_RESPALDO debe ser api o fixtures')
+    const modoDegradado = env.AAA_DEGRADADO || 'aceptar'
+    if (modoDegradado !== 'aceptar' && modoDegradado !== 'rechazar')
+        throw new Error('AAA_DEGRADADO debe ser aceptar o rechazar')
     return {
         port: numero(env.PORT, 3100),
         host: env.HOST ?? '0.0.0.0',
@@ -56,5 +69,11 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             filterId: env.AAA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',
         },
         interimSegundos: numero(env.AAA_INTERIM_SEGUNDOS, 300),
+        degradado: {
+            modo: modoDegradado,
+            ruta: env.AAA_DEGRADADO_RUTA || undefined,
+            espejoSegundos: numero(env.AAA_DEGRADADO_ESPEJO_S, 300),
+            max: numero(env.AAA_DEGRADADO_MAX, 200_000),
+        },
     }
 }

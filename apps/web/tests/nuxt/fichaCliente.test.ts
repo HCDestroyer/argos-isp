@@ -81,6 +81,7 @@ describe('ficha del cliente · composables', () => {
         const comun = {
             actor_tipo: 'usuario' as const,
             actor_id: 1,
+            actor_nombre: 'Ana Administradora',
             canal: 'panel',
             entidad_tipo: 'servicio',
             entidad_id: 4,
@@ -103,6 +104,7 @@ describe('ficha del cliente · composables', () => {
         expect(etiquetaAccion('algo.nuevo')).toBe('algo.nuevo')
         const base = {
             id: 1,
+            actor_nombre: null,
             canal: 'cron',
             accion: 'servicios.suspender',
             entidad_tipo: 'servicio',

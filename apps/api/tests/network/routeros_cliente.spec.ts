@@ -13,7 +13,7 @@ import {
     RouterOSSolicitud,
 } from '#network/routeros/errores'
 import { diferencias, normalizarValor } from '#network/routeros/normalizar'
-import { clienteDeRouter, RouterSinCredenciales } from '#network/routeros/router'
+import { clienteDeRouter, RouterSinCredenciales, type RouterApi } from '#network/routeros/router'
 import { RouterOSFalso } from '#network/routeros/falso'
 
 /**
@@ -311,12 +311,15 @@ test.group('RouterOS: credenciales del router (v1) y HTTPS', (group) => {
         }
     })
 
-    const router = (extra: Record<string, unknown> = {}) => ({
+    // Mismos valores por defecto que la columna (`api_tls_verificar` NOT NULL DEFAULT true).
+    const router = (extra: Partial<RouterApi> = {}): RouterApi => ({
         id: 9,
         host: 'ignorado',
         api_url: falso.url,
         api_usuario: falso.usuario,
         api_password: cifrar(falso.password, CLAVE),
+        api_tls_verificar: true,
+        api_ca: null,
         ...extra,
     })
 

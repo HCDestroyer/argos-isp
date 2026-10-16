@@ -28,6 +28,13 @@ export default defineAppConfig({
                 base: 'min-h-11',
             },
         },
+        modal: {
+            slots: {
+                // El botón de cerrar mide 44 px (`absolute end-4`): sin este margen, a 390 px el
+                // título y la descripción del modal pasaban por debajo de la X.
+                wrapper: 'min-w-0 pe-12',
+            },
+        },
         pinInput: {
             variants: {
                 size: {

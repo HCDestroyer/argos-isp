@@ -16,7 +16,7 @@
 const { seguirNavegandoUrl } = useRuntimeConfig().public
 const route = useRoute()
 const router = useRouter()
-const { data: corte, status, refresh } = useCorte()
+const { data: corte, status, error, refresh } = useCorte()
 // Contacto, instrucciones y cuentas de depósito: configuración del panel (tarea 9).
 const { empresa, nombre: nombreEmpresa } = useEmpresa()
 
@@ -45,7 +45,7 @@ const puedePedirPromesa = computed(() => identificado.value
     && corte.value?.estado !== 'activo'
     && promesa.value === null)
 
-const { activo: servicioActivo, vigilando, agotado, vigilar, detener } = useEstadoServicio()
+const { activo: servicioActivo, vigilando, agotado, sinRespuesta, vigilar, detener } = useEstadoServicio()
 /** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
 const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
 
@@ -94,6 +94,7 @@ const enVivo = computed(() => ({
     pagoEnCurso: pagoId.value !== null,
     pago: pago.value,
     pagoNoEncontrado: seguimiento.problema.value !== null,
+    sinRespuesta: sinRespuesta.value || seguimiento.sinRespuesta.value,
 }))
 
 function descartarPago() {
@@ -158,15 +159,39 @@ const hayDatosDeposito = computed(() => !empresa.value
             <USkeleton class="h-12 w-full" />
         </template>
 
-        <UAlert
-            v-else-if="status === 'error' || !corte || !mensaje"
-            color="error"
-            variant="subtle"
-            icon="i-lucide-cloud-off"
-            title="No pudimos consultar tu servicio"
-            description="Revisa tu conexión e intenta de nuevo en unos segundos."
-            :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => refresh() }]"
-        />
+        <template v-else-if="status === 'error' || !corte || !mensaje">
+            <UAlert
+                color="error"
+                variant="subtle"
+                icon="i-lucide-cloud-off"
+                title="No pudimos consultar tu servicio"
+                :description="mensajeProblema(problemaDeCorte(error))"
+                :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => refresh() }]"
+                role="alert"
+                data-testid="corte-error"
+            />
+            <!-- Sin el estado no se muestran montos ni acciones del servicio, pero sí cómo pagar y a quién llamar. -->
+            <UButton
+                v-if="hayDatosDeposito"
+                label="Ver datos de depósito"
+                icon="i-lucide-landmark"
+                color="neutral"
+                variant="outline"
+                size="xl"
+                block
+                @click="verDeposito = true"
+            />
+            <UButton
+                data-testid="contacto-corte"
+                :label="contacto.label"
+                :icon="contacto.icon"
+                :to="contacto.to"
+                color="neutral"
+                variant="ghost"
+                size="lg"
+                block
+            />
+        </template>
 
         <CorteServicioReactivado
             v-else-if="reactivado"
@@ -233,7 +258,34 @@ const hayDatosDeposito = computed(() => !empresa.value
             />
 
             <div
-                v-if="!retirado"
+                v-if="!identificado"
+                class="flex flex-col gap-2"
+                data-testid="corte-no-identificado"
+            >
+                <UButton
+                    label="Entrar con mi NIT o usuario"
+                    icon="i-lucide-log-in"
+                    size="xl"
+                    to="/entrar"
+                    block
+                />
+                <p class="-mt-1 text-center text-xs text-muted">
+                    Para pagar en línea, subir un comprobante o pedir una promesa de pago necesitamos saber cuál es tu servicio.
+                </p>
+                <UButton
+                    v-if="hayDatosDeposito"
+                    label="Ver datos de depósito"
+                    icon="i-lucide-landmark"
+                    color="neutral"
+                    variant="outline"
+                    size="xl"
+                    block
+                    @click="verDeposito = true"
+                />
+            </div>
+
+            <div
+                v-else-if="!retirado"
                 class="flex flex-col gap-2"
             >
                 <PagoEnLinea v-if="!pagoEnCamino" />

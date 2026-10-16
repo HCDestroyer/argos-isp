@@ -2,6 +2,8 @@
 
 Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabilizar sesiones PPPoE. Dueño: A2 (`.claude/agents/a2-radius.md`). Servidor HTTP con Fastify 5 (antes `node:http`; ver "Dependencias").
 
+Diagnóstico y operación técnica (métricas, logs, `radtest`, repoblado, modo degradado): [`RUNBOOK.md`](RUNBOOK.md). Runbook de operador: `docs/runbooks/aaa-caido.md` (A6).
+
 | Ruta                   | Llamada desde                     | Estado                       |
 | ---------------------- | --------------------------------- | ---------------------------- |
 | `GET /health`          | healthcheck de compose            | hecho (incluye estado Redis) |
@@ -26,7 +28,8 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 | `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `256k/256k`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in`    |
 | `retirado`                 | 401  | reject → Reject       | —                                                                                                                                                |
 | inexistente o lápida       | 404  | notfound → Reject     | —                                                                                                                                                |
-| Redis y respaldo sin datos | 503  | fail → Reject         | —                                                                                                                                                |
+| Redis y respaldo sin datos | —    | modo degradado        | último perfil conocido: mismo estado y atributos que la última vez (ver "Modo degradado")                                                        |
+| … y sin perfil conocido    | 503  | fail → Reject         | —                                                                                                                                                |
 | `pass_ppp` no descifrable  | 500  | fail → Reject         | —                                                                                                                                                |
 
 Además, en todo Accept:
@@ -52,6 +55,38 @@ En `arbol_pcq` (`control_velocidad` del registro) el activo y el limitado no rec
 
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
 
+## Modo degradado (semana 3, piloto)
+
+Cuando **Redis y la API fallan a la vez** para un usuario (Redis caído o sin la clave, y la API con error, caída o sin responder en `AAA_API_TIMEOUT_MS`), `aaa` responde con el **último perfil conocido** de ese usuario (`src/ultimo_conocido.ts`) en vez de 503.
+
+**Decisión: aceptar con el último perfil conocido; rechazar solo si no hay perfil.** Por qué:
+
+- Una caída corta de Redis o de la API no debe dejar sin servicio a clientes al día. Con 503 → Reject, un reinicio del router durante la caída deja a toda su base sin internet hasta que vuelva el backend, y RouterOS no cae a los secrets locales tras un Reject.
+- No se decide ningún estado (CLAUDE.md: lo decide billing): se repite el último que dijo A1. Un suspendido sigue entrando con el perfil de corte, un retirado o una lápida siguen rechazados, y la contraseña es la misma (PAP/CHAP siguen verificándose).
+- El riesgo es acotado y conocido: un cambio hecho durante la caída (suspender, reactivar, cambiar plan o IP) no se ve hasta que vuelva Redis o la API; al volver, el CoA de `coa` lo aplica a las sesiones vivas. Un usuario creado durante la caída, o que este nodo nunca vio, se rechaza (no hay contraseña contra la cual verificar).
+- `AAA_DEGRADADO=rechazar` devuelve el comportamiento anterior (503 → Reject) si el PM lo prefiere.
+
+De dónde sale el último perfil conocido, por nodo:
+
+1. Cada autorización normal (Redis o API) guarda lo que obtuvo; un 404 de la API lo borra.
+2. Un espejo de `aaa:user:*` cada `AAA_DEGRADADO_ESPEJO_S` (300 s): SCAN + MGET, solo agrega o reemplaza, nunca borra (si Redis se vacía no se pierde la copia). Cubre a los clientes que llevan semanas conectados y reconectarían todos a la vez si el router se reinicia durante la caída.
+3. El archivo `AAA_DEGRADADO_RUTA` (en la imagen, `/var/lib/argosisp-aaa/ultimo-conocido.json`): se reescribe tras cada espejo y al apagar, y se carga al arrancar. `pass_ppp` va cifrada (v1) y el archivo es 0600.
+
+En modo normal nunca se lee: no es una caché de consistencia (regla 5). Accounting no tiene modo degradado: sin Redis responde 503 y el NAS reintenta.
+
+Cómo se ve:
+
+| Señal                                                                                             | Valor                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Log `error` `modo degradado: inicio`                                                              | una vez, con la primera autorización degradada (`error` = qué falló de Redis y de la API)                                                    |
+| Log `warn` `authorize: modo degradado, último perfil conocido`                                    | cada autorización degradada: `usuario`, `nas`, `perfil_visto_en`, `perfil_edad_s`, `error` (y la línea `authorize` con `origen = degradado`) |
+| Log `error` `authorize: sin Redis ni API y sin último perfil conocido; se rechaza`                | sin perfil: 503                                                                                                                              |
+| Log `warn` `modo degradado: fin`                                                                  | primera autorización normal después: `desde`, `duracion_s`, `atendidas`                                                                      |
+| `argosisp_aaa_degradado`                                                                          | 1 desde el inicio hasta el fin                                                                                                               |
+| `argosisp_aaa_degradado_total{resultado}`                                                         | `perfil`, `sin_perfil`, `desactivado`                                                                                                        |
+| `argosisp_aaa_ultimo_conocido_registros`, `argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds` | tamaño de la copia y último espejo                                                                                                           |
+| `GET /health`                                                                                     | sigue en 200 (aaa responde); `modo: degradado` y `ultimo_conocido` en el JSON                                                                |
+
 ## `/aaa/accounting`
 
 1. Normaliza el paquete (`src/accounting.ts`): `Acct-Status-Type` (`Start`, `Interim-Update`, `Stop`, `Accounting-On`, `Accounting-Off`), NAS, sesión, usuario, `Framed-IP-Address`, `Framed-IPv6-Prefix`, `Delegated-IPv6-Prefix` si viene, octetos con gigawords, duración, causa y el instante (`Event-Timestamp` o recepción − `Acct-Delay-Time`).
@@ -76,7 +111,14 @@ El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la pá
 | `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                 |
 | `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                       |
 
-Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (el `X-Request-Id` de la petición o un UUID nuevo; se devuelve en la respuesta).
+Modo degradado: `argosisp_aaa_degradado`, `argosisp_aaa_degradado_total{resultado}`, `argosisp_aaa_ultimo_conocido_registros` y `argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds` (ver "Modo degradado").
+
+Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (`src/request_id.ts`, semana 3):
+
+- FreeRADIUS manda `X-Request-Id` en authorize, post-auth y accounting (`control:REST-HTTP-Header` en `sites-enabled/default`): `rad-` + md5(`<NAS-IP>|<Acct-Session-Id>`), o md5(`<NAS-IP>|u:<User-Name>`) si el paquete no trae sesión.
+- Si no llega (otra config, pruebas), `aaa` calcula el mismo valor del cuerpo. Es estable, no al azar: el authorize y todo el accounting de una sesión PPPoE comparten id, y un reintento del NAS también.
+- Se propaga a la consulta de respaldo (`X-Request-Id` en `GET /internal/aaa/servicio`, que la API usa en su log de acceso) y al job de accounting (`request_id`), que el worker usa en `audit.*` y en `sesion.iniciada` / `sesion.terminada`.
+- `/health` y `/metrics`: UUID nuevo. Se devuelve siempre en la respuesta.
 
 ## Comandos
 

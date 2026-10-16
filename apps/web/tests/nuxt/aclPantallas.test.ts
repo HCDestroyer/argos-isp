@@ -1,0 +1,218 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+/**
+ * Revisión de seguridad del panel (semana 3, tarea 3; checklist en `docs/seguridad/acl-panel.md`).
+ * Lee las fuentes de `apps/web/app` y el OpenAPI de `packages/contracts` y comprueba que:
+ *
+ * 1. cada página declara su permiso y el menú pide el mismo;
+ * 2. cada llamada a la API de una pantalla está cubierta por el permiso exacto del endpoint
+ *    (`x-permiso`): el de la página, un `puede('…')` en el archivo o, en componentes que solo se
+ *    abren desde otra pantalla, un `puede('…')` en cada archivo que los usa;
+ * 3. cada enlace a otra sección se oculta sin el permiso de la página destino.
+ */
+
+const WEB = [process.cwd(), resolve(process.cwd(), 'apps/web')].find(ruta => existsSync(join(ruta, 'app/pages'))) ?? process.cwd()
+const OPENAPI = resolve(WEB, '../../packages/contracts/openapi.json')
+
+function leer(ruta: string): string {
+    return readFileSync(ruta, 'utf8')
+}
+
+function vues(directorio: string): string[] {
+    return (readdirSync(join(WEB, directorio), { recursive: true }) as string[])
+        .filter(nombre => nombre.endsWith('.vue'))
+        .map(nombre => join(WEB, directorio, nombre))
+}
+
+const PAGINAS = vues('app/pages')
+const COMPONENTES = vues('app/components')
+const ARCHIVOS = [...PAGINAS, ...COMPONENTES, ...vues('app/layouts')]
+
+function relativo(ruta: string): string {
+    return relative(WEB, ruta)
+}
+
+function permisoDePagina(texto: string): string | undefined {
+    return texto.match(/definePageMeta\(\{[^}]*permiso: '([^']+)'/)?.[1]
+}
+
+function comprobados(texto: string): Set<string> {
+    return new Set([...texto.matchAll(/puede\w*\(\s*'([a-z_0-9.]+)'/g)].map(m => m[1] ?? ''))
+}
+
+/** `METODO /ruta` → permiso (`x-permiso` del OpenAPI). */
+function permisosApi(): Map<string, string> {
+    const spec = JSON.parse(leer(OPENAPI)) as { paths: Record<string, Record<string, { 'x-permiso'?: string }>> }
+    const mapa = new Map<string, string>()
+    for (const [ruta, operaciones] of Object.entries(spec.paths)) {
+        for (const [metodo, operacion] of Object.entries(operaciones)) {
+            if (operacion['x-permiso']) {
+                mapa.set(`${metodo.toUpperCase()} ${ruta}`, operacion['x-permiso'])
+            }
+        }
+    }
+    return mapa
+}
+
+/** `useX` → función → endpoints que llama (`api.GET('/api/v1/…')`). */
+function endpointsDeComposables(): Map<string, Map<string, string[]>> {
+    const mapa = new Map<string, Map<string, string[]>>()
+    for (const archivo of readdirSync(join(WEB, 'app/composables'))) {
+        const funciones = new Map<string, string[]>()
+        for (const parte of leer(join(WEB, 'app/composables', archivo)).split(/\n {4}(?:async )?function /).slice(1)) {
+            const nombre = parte.match(/^(\w+)/)?.[1]
+            if (nombre) {
+                funciones.set(nombre, [...parte.matchAll(/api\.(GET|POST|PUT|DELETE)\('([^']+)'/g)].map(m => `${m[1]} ${m[2]}`))
+            }
+        }
+        mapa.set(archivo.replace(/\.ts$/, ''), funciones)
+    }
+    return mapa
+}
+
+/** Llamadas `useX().f(` y `const { f } = useX()` de un archivo. */
+function llamadas(texto: string): [string, string][] {
+    const lista: [string, string][] = []
+    for (const m of texto.matchAll(/(use[A-Z]\w*)\(\)\.(\w+)\(/g)) {
+        lista.push([m[1] ?? '', m[2] ?? ''])
+    }
+    for (const m of texto.matchAll(/const \{([^}]+)\} = (use[A-Z]\w*)\(\)/g)) {
+        for (const nombre of (m[1] ?? '').split(',').map(s => s.trim().split(':')[0]?.trim() ?? '')) {
+            lista.push([m[2] ?? '', nombre])
+        }
+    }
+    return lista
+}
+
+/** Permiso de la página a la que lleva un enlace (`/clientes/${id}?tab=cuenta` → `clientes.ver`). */
+function permisoDeEnlace(destino: string, paginas: Map<string, string>): string | undefined {
+    const ruta = destino.replace(/^[`'"]/, '').split(/[?#`'"]/)[0]?.replace(/\$\{[^}]+\}/g, ':id') ?? ''
+    const partes = ruta.split('/').filter(Boolean)
+    for (const [patron, permiso] of paginas) {
+        const p = patron.split('/').filter(Boolean)
+        if (p.length === partes.length && p.every((segmento, i) => segmento.startsWith(':') || segmento === partes[i] || (partes[i] === ':id' && segmento.startsWith(':')))) {
+            return permiso
+        }
+    }
+    return undefined
+}
+
+/** Ruta de cada página con su permiso (`app/pages/clientes/[id]/editar.vue` → `/clientes/:id/editar`). */
+function rutasDePaginas(): Map<string, string> {
+    const mapa = new Map<string, string>()
+    // Las rutas fijas primero, para que `/clientes/nuevo` no caiga en `/clientes/:id`.
+    const ordenadas = [...PAGINAS].sort((a, b) => Number(a.includes('[')) - Number(b.includes('[')))
+    for (const archivo of ordenadas) {
+        const permiso = permisoDePagina(leer(archivo))
+        if (!permiso) {
+            continue
+        }
+        const ruta = '/' + relative(join(WEB, 'app/pages'), archivo).replace(/\.vue$/, '').replace(/(^|\/)index$/, '').replace(/\[(\w+)\]/g, ':$1')
+        mapa.set(ruta.replace(/\/$/, '') || '/', permiso)
+    }
+    return mapa
+}
+
+/**
+ * Componentes que llaman acciones pero no deciden si se muestran: los abre otra pantalla, que
+ * debe comprobar el permiso antes. Para cada uno, el permiso y quién lo abre.
+ */
+const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
+    'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
+    'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
+    'ClienteEstadoCuenta.vue': { permisos: ['clientes.estado_cuenta'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClienteResponsablePago.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ComprobanteAprobarModal.vue': { permisos: ['comprobantes.aprobar'], desde: ['pages/comprobantes/[id].vue'] },
+    'ComprobanteArchivo.vue': { permisos: ['comprobantes.ver'], desde: ['pages/comprobantes/[id].vue'] },
+    'CuentaBancariaFormulario.vue': { permisos: ['cuentas_bancarias.editar'], desde: ['pages/configuracion/cuentas-bancarias.vue'] },
+    'EgresoRegistrarModal.vue': { permisos: ['egresos.registrar'], desde: ['pages/egresos/index.vue'] },
+    'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
+    'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar'], desde: ['pages/planes/index.vue'] },
+    'PromesaAprobarModal.vue': { permisos: ['promesas.aprobar'], desde: ['pages/promesas/index.vue'] },
+    'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id].vue'] },
+    'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
+    'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },
+    'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+}
+
+describe('semana 3 · ACL por pantalla (revisión estática)', () => {
+    const rutas = rutasDePaginas()
+
+    it('cada página declara su permiso; el menú pide el mismo que la página', () => {
+        const sinPermiso = PAGINAS
+            .filter(archivo => !/\/(login|sin-permiso|index)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
+            .filter(archivo => !permisoDePagina(leer(archivo)))
+            .map(relativo)
+        expect(sinPermiso).toEqual([])
+        for (const seccion of SECCIONES_PANEL) {
+            expect([seccion.ruta, rutas.get(seccion.ruta)]).toEqual([seccion.ruta, seccion.permiso])
+        }
+    })
+
+    it('cada llamada a la API está cubierta por el permiso exacto de su endpoint', () => {
+        const api = permisosApi()
+        const composables = endpointsDeComposables()
+        const huecos: string[] = []
+        for (const archivo of ARCHIVOS) {
+            const texto = leer(archivo)
+            const pagina = permisoDePagina(texto)
+            const vistos = comprobados(texto)
+            const componente = ABIERTOS_DESDE[archivo.split('/').at(-1) ?? '']
+            for (const [composable, funcion] of llamadas(texto)) {
+                for (const endpoint of composables.get(composable)?.get(funcion) ?? []) {
+                    const permiso = api.get(endpoint)
+                    if (!permiso || permiso === pagina || vistos.has(permiso) || componente?.permisos.includes(permiso)) {
+                        continue
+                    }
+                    huecos.push(`${relativo(archivo)}: ${composable}().${funcion} → ${endpoint} pide ${permiso}`)
+                }
+            }
+        }
+        expect(huecos.join('\n')).toBe('')
+    })
+
+    it('los componentes de acción solo se abren desde pantallas que comprueban su permiso', () => {
+        const huecos: string[] = []
+        for (const [componente, { permisos, desde }] of Object.entries(ABIERTOS_DESDE)) {
+            const nombre = componente.replace(/\.vue$/, '')
+            const usuarios = ARCHIVOS.filter(archivo => leer(archivo).includes(`<${nombre}`)).map(archivo => relativo(archivo).replace(/^app\//, ''))
+            for (const archivo of usuarios) {
+                const texto = leer(join(WEB, 'app', archivo))
+                const pagina = permisoDePagina(texto)
+                for (const permiso of permisos) {
+                    if (permiso !== pagina && !comprobados(texto).has(permiso)) {
+                        huecos.push(`${archivo} abre ${componente} sin comprobar ${permiso}`)
+                    }
+                }
+            }
+            for (const archivo of desde) {
+                expect(usuarios, `${componente} debería abrirse desde ${archivo}`).toContain(archivo)
+            }
+        }
+        expect(huecos.join('\n')).toBe('')
+    })
+
+    it('cada enlace a otra sección se oculta sin el permiso de la página destino', () => {
+        const huecos: string[] = []
+        for (const archivo of ARCHIVOS) {
+            const texto = leer(archivo)
+            const pagina = permisoDePagina(texto)
+            const vistos = comprobados(texto)
+            const lineas = texto.split('\n')
+            for (const m of texto.matchAll(/(?::to="|\bto="|\bto: |navigateTo\()\s*([`'"]?\/[^"\s,)]*)/g)) {
+                const permiso = permisoDeEnlace(m[1] ?? '', rutas)
+                const linea = texto.slice(0, m.index).split('\n').length
+                const conGuardia = /enlace\(|puedeAbrir\(|destinoPermitido\(/.test(lineas[linea - 1] ?? '')
+                if (!permiso || permiso === pagina || vistos.has(permiso) || conGuardia) {
+                    continue
+                }
+                huecos.push(`${relativo(archivo)}:${linea} enlaza ${m[1]} (pide ${permiso})`)
+            }
+        }
+        expect(huecos.join('\n')).toBe('')
+    })
+})

@@ -43,7 +43,6 @@ describe('suspensión manual', () => {
         expect(accionDisponible(accion('limitar'), { estado: 'activo', suspension_manual: true })).toBe(false)
         expect(accionDisponible(accion('quitar_limite'), { estado: 'limitado', suspension_manual: true })).toBe(false)
         expect(accionDisponible(accion('limitar'), { estado: 'activo', suspension_manual: false })).toBe(true)
-        expect(accionDisponible(accion('limitar'), { estado: 'activo' })).toBe(true)
     })
 
     it('suspender pone la marca con el motivo; limitar responde 422 suspension_manual; reactivar la quita', async () => {

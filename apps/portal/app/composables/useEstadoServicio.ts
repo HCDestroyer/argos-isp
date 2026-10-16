@@ -15,8 +15,10 @@ export interface OpcionesEstadoServicio {
  * luego cada 5 s hasta ver `activo` o hasta que pasen 2 min. Se llama después de cualquier acción
  * del cliente (pago, comprobante, promesa) y cuando la pestaña vuelve a estar visible.
  *
- * Llamar `vigilar()` mientras ya se vigila solo reinicia el plazo de 2 min. Un error de red o un
- * 429 no detiene la vigilancia: se reintenta en el siguiente ciclo.
+ * Llamar `vigilar()` mientras ya se vigila solo reinicia el plazo de 2 min. Un error de red, un
+ * 5xx o un 429 no detiene la vigilancia: se reintenta en el siguiente ciclo. `sinRespuesta` avisa
+ * que las dos últimas consultas fallaron, para no decir "aún no vemos tu servicio activo" sin
+ * haberlo podido leer.
  */
 export function useEstadoServicio(opciones: OpcionesEstadoServicio = {}) {
     const api = useApi()
@@ -29,6 +31,9 @@ export function useEstadoServicio(opciones: OpcionesEstadoServicio = {}) {
     /** Pasaron los 2 min sin ver `activo`. */
     const agotado = ref(false)
     const activo = computed(() => ultimo.value?.estado === 'activo')
+    /** Consultas seguidas que fallaron (se reinicia con una respuesta válida). */
+    const fallos = ref(0)
+    const sinRespuesta = computed(() => fallos.value >= 2)
 
     let temporizador: ReturnType<typeof setTimeout> | undefined
     let limite = 0
@@ -36,14 +41,14 @@ export function useEstadoServicio(opciones: OpcionesEstadoServicio = {}) {
     let generacion = 0
 
     async function consultar(): Promise<void> {
-        try {
-            const { data } = await api.GET('/api/v1/portal/estado', { headers: { 'X-Canal': 'portal' } })
-            if (data) {
-                ultimo.value = data
-            }
+        const leido = await resolver(api.GET('/api/v1/portal/estado', { headers: { 'X-Canal': 'portal' } }))
+        if (leido.ok) {
+            ultimo.value = leido.data
+            fallos.value = 0
         }
-        catch {
-            // Sin red: se reintenta en el siguiente ciclo.
+        else {
+            // Sin red, API caída o 429: se reintenta en el siguiente ciclo.
+            fallos.value += 1
         }
     }
 
@@ -71,6 +76,9 @@ export function useEstadoServicio(opciones: OpcionesEstadoServicio = {}) {
         }
         limite = Date.now() + duracionMs
         agotado.value = false
+        if (!vigilando.value) {
+            fallos.value = 0
+        }
         if (vigilando.value) {
             return
         }
@@ -89,5 +97,5 @@ export function useEstadoServicio(opciones: OpcionesEstadoServicio = {}) {
 
     onScopeDispose(detener)
 
-    return { ultimo, activo, vigilando, agotado, vigilar, detener }
+    return { ultimo, activo, vigilando, agotado, sinRespuesta, vigilar, detener }
 }

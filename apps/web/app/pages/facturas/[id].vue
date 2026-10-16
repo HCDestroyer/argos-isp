@@ -6,7 +6,7 @@ import Decimal from 'decimal.js'
 definePageMeta({ permiso: 'facturas.ver' })
 
 const route = useRoute()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 const nombres = useNombresClientes()
 
@@ -226,7 +226,7 @@ onMounted(cargar)
                     <p class="text-sm text-muted">
                         {{ etiquetaPeriodo(factura.periodo) }} ·
                         <ULink
-                            :to="`/clientes/${factura.cliente_id}?tab=cuenta`"
+                            :to="enlace(`/clientes/${factura.cliente_id}?tab=cuenta`)"
                             class="text-default hover:text-primary"
                         >
                             {{ nombres.nombre(factura.cliente_id) }}
@@ -234,7 +234,7 @@ onMounted(cargar)
                         <template v-if="factura.servicio_id">
                             ·
                             <ULink
-                                :to="`/servicios/${factura.servicio_id}`"
+                                :to="enlace(`/servicios/${factura.servicio_id}`)"
                                 class="text-default hover:text-primary"
                             >
                                 servicio {{ factura.servicio_id }}

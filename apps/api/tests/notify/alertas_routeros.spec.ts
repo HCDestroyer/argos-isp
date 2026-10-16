@@ -144,4 +144,65 @@ test.group('notify · alertas · routeros.fallido', (group) => {
         assert.notInclude(envio!.cuerpo, 'Servicio:')
         assert.include(envio!.cuerpo, 'Error: 401 Unauthorized')
     })
+
+    test('validar velocidad: incidente propio, no se agrupa con el de router caído (a2.md)', async ({
+        assert,
+    }) => {
+        const consumidor = new ConsumidorAlertas(new ColaFalsa())
+        const nombre = unico('Torre Este')
+        const routerId = await crearRouter(nombre)
+        const fallo = (servicio: number | null, operacion: string, error: string) =>
+            evento({ servicio_id: servicio, router_id: routerId, operacion, error })
+
+        // Router caído primero: abre routeros:<id>
+        await consumidor.procesar(fallo(21, 'queue/simple add', 'ETIMEDOUT tras 3 reintentos'))
+        // Validaciones de velocidad del mismo router: no suman al incidente de caída
+        await consumidor.procesar(
+            fallo(
+                22,
+                'validar velocidad (limit_at_hijos)',
+                'La suma de limit-at de los hijos supera el padre',
+            ),
+        )
+        await consumidor.procesar(
+            fallo(
+                23,
+                'validar velocidad (limit_at_hijos)',
+                'La suma de limit-at de los hijos supera el padre',
+            ),
+        )
+        await consumidor.procesar(fallo(null, 'validar velocidad (ipv6)', 'Sin prefijo IPv6 para la cola'))
+
+        const caida = await incidente(`routeros:${routerId}`, 'abierto')
+        assert.equal(caida!.eventos, 1)
+        assert.lengthOf(await enviosDe(caida!.id), 1)
+
+        const hijos = await incidente(`routeros-velocidad:${routerId}:limit_at_hijos`, 'abierto')
+        assert.equal(hijos!.tipo, 'routeros_velocidad')
+        assert.equal(hijos!.eventos, 2)
+        const [aviso] = await enviosDe(hijos!.id)
+        assert.equal(aviso!.evento, 'alerta.routeros.velocidad')
+        assert.include(aviso!.cuerpo, `Configuración de velocidad inválida en el router ${nombre} (`)
+        assert.include(aviso!.cuerpo, 'Validación: limit_at_hijos')
+        assert.include(aviso!.cuerpo, 'Servicio: 22')
+        assert.include(aviso!.cuerpo, 'Detalle: La suma de limit-at de los hijos supera el padre')
+        assert.notInclude(aviso!.cuerpo, 'no aceptó cambios')
+
+        const ipv6 = await incidente(`routeros-velocidad:${routerId}:ipv6`, 'abierto')
+        const [avisoIpv6] = await enviosDe(ipv6!.id)
+        assert.notInclude(avisoIpv6!.cuerpo, 'Servicio:')
+
+        // Solo validaciones (router sano): no abre el incidente de caída
+        const sano = await crearRouter(unico('Torre Oeste'))
+        await consumidor.procesar(
+            evento({
+                servicio_id: 30,
+                router_id: sano,
+                operacion: 'validar velocidad (limit_at_global)',
+                error: 'x',
+            }),
+        )
+        assert.isNull(await incidente(`routeros:${sano}`))
+        assert.isNotNull(await incidente(`routeros-velocidad:${sano}:limit_at_global`, 'abierto'))
+    })
 })

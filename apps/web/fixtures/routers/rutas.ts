@@ -2,6 +2,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
+import { vistaPreviaControl } from './vistaPrevia'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -66,6 +67,19 @@ export const rutasRouters: RutasFixture = {
         })
         registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, cuerpo)
         return { status: 200, cuerpo: router }
+    }),
+
+    /** Como `vistaPreviaControl` (A2): mismo permiso que la acción, 422 si `a` no es válido, 404 sin router. */
+    'GET /api/v1/routers/:id/vista-previa-control': conPermiso('routers.cambiar_control_velocidad', (solicitud) => {
+        const router = bd.routers.find(r => r.id === idDe(solicitud))
+        if (!router) {
+            return noEncontrado('el router')
+        }
+        const a = solicitud.query.get('a')
+        if (a !== 'simple' && a !== 'arbol_pcq') {
+            return datosInvalidos([{ field: 'a', message: 'El valor de a no es válido', rule: 'enum' }])
+        }
+        return { status: 200, cuerpo: vistaPreviaControl(router, a) }
     }),
 
     /** Como `CambiarControlVelocidad` (A1, solo admin): 409 por versión; `modo_velocidad` derivado. */

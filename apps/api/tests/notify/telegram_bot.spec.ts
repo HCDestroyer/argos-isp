@@ -6,6 +6,7 @@ import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { CanalTelegram } from '#notify/canales/telegram'
 import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
 import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
+import AnularCodigosTelegram from '#notify/actions/anular_codigos_telegram'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import { hashCodigoVinculacion, normalizarCodigo } from '#notify/telegram/config'
 import { registrarWebhook } from '#notify/telegram/webhook'
@@ -355,8 +356,12 @@ test.group('notify · Telegram · webhook del bot', (group) => {
             200,
         )
         assert.isNull(await chatDe(clienteId))
-        const accion = await db.from('audit.acciones').where('request_id', requestId).firstOrFail()
-        assert.equal(accion.accion, 'clientes.desvincular_telegram')
+        // Desvincular anula también los códigos pendientes (otra acción con el mismo request_id)
+        const acciones = await db.from('audit.acciones').where('request_id', requestId).select('accion')
+        assert.include(
+            acciones.map((a) => a.accion),
+            'clientes.desvincular_telegram',
+        )
         await estado(webhook(client, actualizacion(chat, '/estado')), 200)
         assert.match(bot.mensajes()[0]!.text, /^Listo\. Este chat ya no recibirá avisos/)
         assert.match(bot.mensajes()[1]!.text, /^Este chat no está vinculado/)
@@ -383,6 +388,37 @@ test.group('notify · Telegram · webhook del bot', (group) => {
         const chat = chatUnico()
         await estado(webhook(client, actualizacion(chat, `/start ${nuevo.codigo}`)), 200)
         assert.equal(await chatDe(clienteId), String(chat))
+    })
+
+    test('/desvincular en el bot deja los códigos pendientes en anulado (AnularCodigosTelegram)', async ({
+        client,
+        assert,
+    }) => {
+        botApiFalsa()
+        const chat = chatUnico()
+        const clienteId = await crearCliente({ telegram_chat_id: String(chat) })
+        const { codigo } = await codigoPara(clienteId)
+        const requestId = unico('req')
+        await estado(
+            webhook(client, actualizacion(chat, '/desvincular')).header('X-Request-Id', requestId),
+            200,
+        )
+        const fila = await db
+            .from('notify.telegram_codigos')
+            .where('codigo_hash', hashCodigoVinculacion(normalizarCodigo(codigo)!))
+            .firstOrFail()
+        assert.equal(fila.estado, 'anulado')
+        const acciones = await db.from('audit.acciones').where('request_id', requestId).orderBy('id')
+        assert.deepEqual(
+            acciones.map((a) => a.accion),
+            ['clientes.desvincular_telegram', 'notificaciones.telegram_anular_codigos'],
+        )
+        // Idempotente: sin pendientes no cambia nada
+        const r = await new AnularCodigosTelegram().execute(
+            { cliente_id: clienteId },
+            contextoSistema('portal'),
+        )
+        assert.equal(r.anulados, 0)
     })
 
     test('código ya usado: tras /desvincular, reenviar el mismo /start no vuelve a vincular', async ({

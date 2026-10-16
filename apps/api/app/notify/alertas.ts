@@ -211,7 +211,7 @@ export async function crearAlerta(
         clienteId: null,
         canal: 'telegram',
         destino: chat ?? '-',
-        variables: { evento: datos.evento, empresa: variablesEmpresa(), alerta: datos.alerta },
+        variables: { evento: datos.evento, empresa: await variablesEmpresa(trx), alerta: datos.alerta },
         plantilla,
         requestId: datos.requestId,
         error,

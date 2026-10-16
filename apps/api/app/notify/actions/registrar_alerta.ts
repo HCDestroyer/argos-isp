@@ -61,6 +61,7 @@ function texto(valor: unknown): string {
  * | `aaa.recuperado` | cierra `aaa:<nodo>` | "resuelto", si había uno abierto |
  * | `coa.fallido` | `coa:<nas_ip>`, termina tras 30 min sin fallos | al abrir |
  * | `routeros.fallido` | `routeros:<router_id>`, termina tras 30 min sin fallos | al abrir |
+ * | `routeros.fallido` con `operacion = validar velocidad (...)` | `routeros-velocidad:<router_id>:<validación>`, aparte del de caída | al abrir |
  * | `caja.cerrada` con diferencia ≠ 0 | `caja:<caja_id>`, puntual | siempre |
  *
  * Idempotente por `origen`: un evento entregado dos veces no suma ni avisa otra vez (devuelve los
@@ -188,6 +189,33 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             case 'routeros.fallido': {
                 // contratos/routeros.md: { servicio_id, router_id, operacion, error } tras 3 reintentos
                 const routerId = texto(p.router_id) || 'desconocido'
+                const operacion = texto(p.operacion)
+                // `validar velocidad (limit_at_hijos|limit_at_global|ipv6)` (a2.md): configuración de
+                // velocidad inválida, no un router caído. Incidente propio por router y validación,
+                // para que no se esconda dentro (ni abra) el de caída `routeros:<router_id>`.
+                if (esValidacionVelocidad(operacion)) {
+                    const validacion = /\(([^)]+)\)/.exec(operacion)?.[1]?.trim() || 'velocidad'
+                    const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                        clave: `routeros-velocidad:${routerId}:${validacion}`,
+                        tipo: 'routeros_velocidad',
+                        detalle: {
+                            router_id: p.router_id ?? null,
+                            primer_servicio_id: p.servicio_id ?? null,
+                            operacion,
+                        },
+                        ahora,
+                        ventanaMin: VENTANA_ROUTEROS_MIN,
+                    })
+                    if (!nuevo) return sinAlerta(incidente)
+                    return avisar(incidente, 'abierto', 'alerta.routeros.velocidad', {
+                        router_id: routerId,
+                        router: await nombreRouter(t, p.router_id),
+                        servicio_id: texto(p.servicio_id),
+                        validacion,
+                        error: texto(p.error),
+                        ventana_min: VENTANA_ROUTEROS_MIN,
+                    })
+                }
                 const { incidente, nuevo } = await abrirIncidente(t.trx, {
                     clave: `routeros:${routerId}`,
                     tipo: 'routeros',
@@ -234,6 +262,11 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             }
         }
     }
+}
+
+/** `routeros.fallido` por una validación de velocidad (configuración inválida, no router caído). */
+export function esValidacionVelocidad(operacion: string): boolean {
+    return /^validar velocidad\b/i.test(operacion.trim())
 }
 
 /** "Torre Norte (10.0.0.1)" o, si no existe, "#<id>". Solo para el texto de la alerta. */

@@ -24,7 +24,8 @@ Lo expone A2 (los dos extremos son suyos). Interesa a A6 (compose) y a quien lea
   "bytes_out": "0",
   "duracion_s": null,
   "causa_fin": null,
-  "evento_en": "2026-10-15T20:00:00.000Z"
+  "evento_en": "2026-10-15T20:00:00.000Z",
+  "request_id": "rad-3f2a0c9e5b7d41a6b8c0e1f2a3b4c5d6"
 }
 ```
 
@@ -40,3 +41,4 @@ Lo expone A2 (los dos extremos son suyos). Interesa a A6 (compose) y a quien lea
 | `duracion_s` | `Acct-Session-Time` |
 | `causa_fin` | `Acct-Terminate-Cause` (solo Stop) |
 | `evento_en` | `Event-Timestamp`, o recepción en `aaa` − `Acct-Delay-Time` (ISO 8601 UTC) |
+| `request_id` | Opcional (semana 3). `X-Request-Id` de FreeRADIUS o el derivado por `aaa` (`services/aaa/src/request_id.ts`): estable por NAS + `Acct-Session-Id`. El worker lo usa como `requestId` de las acciones (`audit.*`, outbox); si falta o no cumple `^[A-Za-z0-9._:-]{1,128}$`, usa `accounting-<job>-<intento>` |

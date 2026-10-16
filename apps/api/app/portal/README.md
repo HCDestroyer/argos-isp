@@ -39,7 +39,7 @@ Reglas:
   de notify (`SMTP_*`, `TELEGRAM_BOT_TOKEN`). No usa `ProgramarNotificacion` porque guardaría el texto
   con el código en `notify.envios`. Si el canal falla: 503 `envio_codigo_fallido` y el código no queda.
 - **Sesión.** `core.portal_sesiones`: token `pcs_…` (solo su SHA-256) en la cookie `argos_portal`
-  (`HttpOnly`, `SameSite=Lax`, `Path=/api/v1/portal`, `Secure` detrás de HTTPS). Inactividad
+  (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/portal`, `Secure` con HTTPS o `PORTAL_COOKIE_SEGURA=siempre`). Inactividad
   `PORTAL_SESION_INACTIVIDAD_S` (1800), máximo `PORTAL_SESION_MAX_S` (14400). Alcance: un cliente;
   todas las lecturas filtran por el `clienteId` de la sesión (`acceso/sesion.ts`).
 - **Actor.** No hay tipo de actor "cliente" todavía: las acciones del portal se auditan con actor

@@ -60,6 +60,10 @@ export default defineNuxtConfig({
     typescript: {
         strict: true,
         typeCheck: false,
+        // Pruebas contra el servidor de producción (entorno node, vitest.servidor.config.ts).
+        nodeTsConfig: {
+            include: ['../tests/servidor/**/*', '../vitest.servidor.config.ts'],
+        },
     },
 
     eslint: {

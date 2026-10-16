@@ -9,6 +9,7 @@
  */
 export function usePermisos() {
     const usuario = useUsuarioActual()
+    const router = useRouter()
 
     const permisos = computed(() => new Set(usuario.value?.permisos ?? []))
 
@@ -24,5 +25,25 @@ export function usePermisos() {
         return lista.every(puede)
     }
 
-    return { permisos, puede, puedeAlguno, puedeTodos }
+    /**
+     * Si el usuario puede abrir una ruta del panel: lee el `permiso` de su `definePageMeta`, el
+     * mismo que valida `02.permiso.global.ts`. Para enlaces entre secciones (de una factura al
+     * cliente, de un pago a la caja…): sin permiso el enlace no se muestra o queda como texto.
+     */
+    function puedeAbrir(ruta: string): boolean {
+        const permiso = router.resolve(ruta).meta.permiso
+        return !permiso || puede(permiso)
+    }
+
+    /** `ruta` si el usuario puede abrirla, o `undefined` para que `ULink`/`UButton` no enlacen. */
+    function enlace(ruta: string): string | undefined {
+        return puedeAbrir(ruta) ? ruta : undefined
+    }
+
+    /** Destino de una navegación después de guardar: `ruta` si se puede abrir, si no `alterna`. */
+    function destinoPermitido(ruta: string, alterna = '/'): string {
+        return puedeAbrir(ruta) ? ruta : alterna
+    }
+
+    return { permisos, puede, puedeAlguno, puedeTodos, puedeAbrir, enlace, destinoPermitido }
 }

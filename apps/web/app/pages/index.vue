@@ -2,7 +2,7 @@
 import type { Problem } from '@argosisp/contracts'
 
 const { usuario } = useAuth()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 const secciones = computed(() => SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)))
 const hoy = formatearFecha(new Date())
@@ -124,7 +124,7 @@ onMounted(cargar)
                                 :key="item.estado"
                             >
                                 <ULink
-                                    :to="`/servicios?estado=${item.estado}`"
+                                    :to="enlace(`/servicios?estado=${item.estado}`)"
                                     class="flex flex-col gap-1.5 rounded-md p-2 hover:bg-elevated/60"
                                     :data-prueba="`servicios-${item.estado}`"
                                 >
@@ -147,7 +147,7 @@ onMounted(cargar)
                             etiqueta="Facturado del mes"
                             :valor="formatearQuetzales(resumen.mes.facturado)"
                             icono="i-lucide-receipt-text"
-                            to="/facturas"
+                            :to="enlace('/facturas')"
                             data-prueba="kpi-mes"
                         >
                             <span class="flex flex-col gap-1.5">
@@ -168,7 +168,7 @@ onMounted(cargar)
                             etiqueta="Cartera vencida"
                             :valor="formatearQuetzales(resumen.cartera_vencida.monto)"
                             icono="i-lucide-alarm-clock"
-                            to="/facturas?estado=vencida"
+                            :to="enlace('/facturas?estado=vencida')"
                             :detalle="`${plural(resumen.cartera_vencida.facturas, 'factura', 'facturas')} · ${plural(resumen.cartera_vencida.clientes, 'cliente', 'clientes')} · por cobrar en total ${formatearQuetzales(resumen.cartera_vencida.pendiente_total)}`"
                             data-prueba="kpi-cartera"
                         />
@@ -176,7 +176,7 @@ onMounted(cargar)
                             etiqueta="Cobros de hoy"
                             :valor="formatearQuetzales(resumen.hoy.cobrado)"
                             icono="i-lucide-hand-coins"
-                            :to="`/pagos?desde=${resumen.hoy.fecha}&hasta=${resumen.hoy.fecha}`"
+                            :to="enlace(`/pagos?desde=${resumen.hoy.fecha}&hasta=${resumen.hoy.fecha}`)"
                             :detalle="`${plural(resumen.hoy.pagos, 'pago', 'pagos')} · ${formatearFecha(resumen.hoy.fecha)}`"
                             data-prueba="kpi-hoy"
                         />
@@ -184,7 +184,7 @@ onMounted(cargar)
                             etiqueta="Promesas activas"
                             :valor="resumen.promesas_activas.cantidad.toLocaleString('es-GT')"
                             icono="i-lucide-calendar-clock"
-                            to="/promesas?estado=activa"
+                            :to="enlace('/promesas?estado=activa')"
                             :detalle="`${formatearQuetzales(resumen.promesas_activas.monto)} prometidos`"
                             data-prueba="kpi-promesas"
                         />

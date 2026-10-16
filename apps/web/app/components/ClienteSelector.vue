@@ -46,10 +46,17 @@ const items = computed<InputMenuItem[]>(() => {
     }))
 })
 
+/** Sin `clientes.ver` el buscador queda deshabilitado y no llama a la API (revisión de ACL, semana 3). */
+const { puede } = usePermisos()
+const puedeBuscar = computed(() => puede('clientes.ver'))
+
 let temporizador: ReturnType<typeof setTimeout> | undefined
 let solicitud = 0
 
 async function buscar(q: string) {
+    if (!puedeBuscar.value) {
+        return
+    }
     const actual = ++solicitud
     buscando.value = true
     const resultado = await useClientes().listar({ q, limit: 10 })
@@ -91,8 +98,9 @@ onBeforeUnmount(() => clearTimeout(temporizador))
         value-key="value"
         ignore-filter
         :loading="buscando"
+        :disabled="!puedeBuscar"
         icon="i-lucide-search"
-        :placeholder="placeholder"
+        :placeholder="puedeBuscar ? placeholder : 'Sin permiso para buscar clientes (clientes.ver)'"
         class="w-full"
     >
         <template #empty>

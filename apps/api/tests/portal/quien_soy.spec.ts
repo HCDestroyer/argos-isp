@@ -33,9 +33,9 @@ test.group('Portal: quien-soy por IP', (group) => {
             delete process.env.PORTAL_REDIS_PREFIJO
             process.env.PORTAL_PROXIES_CONFIABLES = previo.PORTAL_PROXIES_CONFIABLES
             if (previo.PORTAL_PROXIES_CONFIABLES === undefined) delete process.env.PORTAL_PROXIES_CONFIABLES
-            if (previo.PORTAL_CABECERA_IP !== undefined) {
-                process.env.PORTAL_CABECERA_IP = previo.PORTAL_CABECERA_IP
-            }
+            // Sin esto, `X-Real-IP` de "cabecera configurable" quedaba para los archivos siguientes.
+            if (previo.PORTAL_CABECERA_IP === undefined) delete process.env.PORTAL_CABECERA_IP
+            else process.env.PORTAL_CABECERA_IP = previo.PORTAL_CABECERA_IP
         }
     })
 

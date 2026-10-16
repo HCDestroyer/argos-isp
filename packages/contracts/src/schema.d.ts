@@ -13,7 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Iniciar sesión */
+        /**
+         * Iniciar sesión
+         * @description Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
+         */
         post: operations["authLogin"];
         delete?: never;
         options?: never;
@@ -745,6 +748,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/aaa/servicios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registros de autorización RADIUS por lotes (servicio aaa)
+         * @description Mismo JSON que `GET /internal/aaa/servicio`, varios a la vez. Con `user_ppp` o `servicio_ids` (hasta 100, uno de los dos) devuelve los que existen en el orden pedido (`nextCursor: null`). Sin lista, pagina todos los servicios `pppoe` (también retirados) por `servicio_id` ascendente con `cursor`/`limit` (por defecto 50). No escribe en Redis.
+         */
+        post: operations["internoAaaServicios"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ip/{ip}": {
         parameters: {
             query?: never;
@@ -1313,6 +1336,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/planes/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa del rate-limit de un plan (no guarda)
+         * @description Calcula con `app/network/velocidad.ts` (la misma función que usan aaa y el dispatcher) el `Mikrotik-Rate-Limit` activo y limitado y los límites de la cola padre con `activos` servicios. 422 por campo con las mismas reglas que crear el plan (`validarVelocidad`).
+         */
+        post: operations["planesVistaPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plantillas-facturacion": {
         parameters: {
             query?: never;
@@ -1398,7 +1441,7 @@ export interface paths {
         };
         /**
          * Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Incluye el motivo cuando se rechazó.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Incluye el motivo cuando se rechazó.
          */
         get: operations["portalComprobantes"];
         put?: never;
@@ -1423,7 +1466,7 @@ export interface paths {
         get?: never;
         /**
          * El cliente edita su correo, teléfonos y canal preferido
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
          */
         put: operations["portalEditarContacto"];
         post?: never;
@@ -1442,7 +1485,7 @@ export interface paths {
         };
         /**
          * Datos de contacto, servicios y saldo del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalCuenta"];
         put?: never;
@@ -1502,7 +1545,7 @@ export interface paths {
         };
         /**
          * Facturas (avisos de cobro) del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalFacturas"];
         put?: never;
@@ -1522,7 +1565,7 @@ export interface paths {
         };
         /**
          * Detalle de una factura del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404.
          */
         get: operations["portalFactura"];
         put?: never;
@@ -1542,7 +1585,7 @@ export interface paths {
         };
         /**
          * PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404. Responde application/pdf.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404. Responde application/pdf.
          */
         get: operations["portalFacturaPdf"];
         put?: never;
@@ -1562,7 +1605,7 @@ export interface paths {
         };
         /**
          * Pagos del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalPagos"];
         put?: never;
@@ -1622,7 +1665,7 @@ export interface paths {
         };
         /**
          * Promesas de pago del cliente de la sesión (solo lectura)
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalPromesas"];
         put?: never;
@@ -1688,7 +1731,7 @@ export interface paths {
         put?: never;
         /**
          * Cierra la sesión del portal
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         post: operations["portalSalir"];
         delete?: never;
@@ -1706,7 +1749,7 @@ export interface paths {
         };
         /**
          * Estado de la vinculación de Telegram del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         get: operations["portalTelegram"];
         put?: never;
@@ -1728,7 +1771,7 @@ export interface paths {
         put?: never;
         /**
          * Quita el chat de Telegram del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
          */
         post: operations["portalDesvincularTelegram"];
         delete?: never;
@@ -1748,7 +1791,7 @@ export interface paths {
         put?: never;
         /**
          * Genera el código de un solo uso y el enlace al bot para vincular Telegram
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         post: operations["portalVincularTelegram"];
         delete?: never;
@@ -1768,7 +1811,7 @@ export interface paths {
         put?: never;
         /**
          * Verifica el código y abre la sesión del portal (cookie httpOnly)
-         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Strict, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalVerificarCodigo"];
         delete?: never;
@@ -2634,10 +2677,10 @@ export interface components {
         AccionAuditoria: {
             id: number;
             /** @enum {string} */
-            actor_tipo: "usuario" | "token" | "agente" | "sistema";
+            actor_tipo: "usuario" | "token" | "agente" | "sistema" | "cliente";
             actor_id: number | null;
-            /** @description Nombre del usuario (null para el sistema) */
-            actor_nombre?: string | null;
+            /** @description Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema) */
+            actor_nombre: string | null;
             canal: string;
             accion: string;
             entidad_tipo: string | null;
@@ -2759,10 +2802,10 @@ export interface components {
             antes: unknown;
             despues: unknown;
             /** @enum {string|null} */
-            actor_tipo: "usuario" | "token" | "agente" | "sistema" | null;
+            actor_tipo: "usuario" | "token" | "agente" | "sistema" | "cliente" | null;
             actor_id: number | null;
-            /** @description Nombre del usuario (null para el sistema) */
-            actor_nombre?: string | null;
+            /** @description Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema) */
+            actor_nombre: string | null;
             request_id: string | null;
             /** Format: date-time */
             created_at: string;
@@ -3437,17 +3480,17 @@ export interface components {
             subida_limitada_kbps: number;
             reuso: number;
             /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description burst-limit de bajada; null = sin ráfaga */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description burst-limit de subida; null = sin ráfaga */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description burst-threshold como % del MIR */
-            rafaga_umbral_pct?: number;
+            rafaga_umbral_pct: number;
             /** @description burst-time en segundos */
-            rafaga_segundos?: number;
+            rafaga_segundos: number;
             /** @description 1 (alta) a 8 (baja) */
-            prioridad?: number;
+            prioridad: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3472,17 +3515,17 @@ export interface components {
             /** @description Reuso efectivo en el router */
             reuso: number;
             /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description burst-limit de bajada; null = sin ráfaga */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description burst-limit de subida; null = sin ráfaga */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description burst-threshold como % del MIR */
-            rafaga_umbral_pct?: number;
+            rafaga_umbral_pct: number;
             /** @description burst-time en segundos */
-            rafaga_segundos?: number;
+            rafaga_segundos: number;
             /** @description 1 (alta) a 8 (baja) */
-            prioridad?: number;
+            prioridad: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3520,19 +3563,19 @@ export interface components {
             no_crear_reglas: boolean;
             rate_limit_override: string | null;
             /** @description null = hereda del plan */
-            reuso?: number | null;
+            reuso: number | null;
             /** @description null = hereda del plan */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description null = hereda del plan */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description null = hereda del plan */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description null = hereda del plan */
-            rafaga_umbral_pct?: number | null;
+            rafaga_umbral_pct: number | null;
             /** @description null = hereda del plan */
-            rafaga_segundos?: number | null;
+            rafaga_segundos: number | null;
             /** @description null = hereda del plan */
-            prioridad?: number | null;
+            prioridad: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -4431,11 +4474,21 @@ export interface components {
              * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
              * @enum {string}
              */
-            control_velocidad?: "simple" | "arbol_pcq";
+            control_velocidad: "simple" | "arbol_pcq";
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
-            capacidad_bajada_kbps?: number | null;
+            capacidad_bajada_kbps: number | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
-            capacidad_subida_kbps?: number | null;
+            capacidad_subida_kbps: number | null;
+            /** @description https://host:puerto de la API REST; null = https://<host> */
+            api_url: string | null;
+            /** @description Verificar el certificado TLS del router */
+            api_tls_verificar: boolean;
+            /** @description CA en PEM para routers con certificado propio */
+            api_ca: string | null;
+            /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+            dhcp_servidor: string | null;
+            /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES */
+            interfaz_clientes: string | null;
             /**
              * @deprecated
              * @description Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad
@@ -4460,17 +4513,17 @@ export interface components {
             /** @description Bandera: hay una promesa de pago activa */
             promesa_activa: boolean;
             /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
-            suspension_manual?: boolean;
-            suspension_manual_motivo?: string | null;
+            suspension_manual: boolean;
+            suspension_manual_motivo: string | null;
             /**
              * @description pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS
              * @enum {string}
              */
-            tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
             /** @description null fuera de pppoe */
             user_ppp: string | null;
             /** @description ARP estático IP-MAC en el router (solo sin PPPoE) */
-            amarre_ip_mac?: boolean;
+            amarre_ip_mac: boolean;
             mac: string | null;
             direccion: string | null;
             coordenadas: string | null;
@@ -4484,10 +4537,10 @@ export interface components {
             /** @enum {string} */
             ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
             ipv6_duid: string | null;
-            cliente_nombre?: string;
-            plan_nombre?: string;
-            router_nombre?: string;
-            zona_nombre?: string | null;
+            cliente_nombre: string;
+            plan_nombre: string;
+            router_nombre: string;
+            zona_nombre: string | null;
             excepciones: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -4693,6 +4746,36 @@ export interface components {
                 nombre: string | null;
             }[];
         };
+        VistaPreviaVelocidad: {
+            /** @description Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override) */
+            rate_limit: string;
+            /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
+            rate_limit_limitado: string;
+            /** @description garantizado_pct o 100 / reuso, con 2 decimales hacia abajo */
+            garantizado_pct_efectivo: number;
+            /** @description CIR (limit-at) de cada servicio */
+            limit_at_servicio_kbps: {
+                subida: number;
+                bajada: number;
+            };
+            padre: {
+                /** @description max-limit subida/bajada: MIR × activos / reuso, hacia arriba */
+                max_limit: string;
+                /** @description limit-at subida/bajada: CIR × activos */
+                limit_at: string;
+                prioridad: number;
+                max_limit_kbps: {
+                    subida: number;
+                    bajada: number;
+                };
+                limit_at_kbps: {
+                    subida: number;
+                    bajada: number;
+                };
+                /** @description Con 0 se calcula como 1 */
+                activos: number;
+            };
+        };
         Zona: {
             id: number;
             nombre: string;
@@ -4740,6 +4823,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7602,6 +7694,60 @@ export interface operations {
             };
         };
     };
+    internoAaaServicios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Hasta 100 user_ppp; los inexistentes se omiten */
+                    user_ppp?: string[];
+                    /** @description Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten */
+                    servicio_ids?: number[];
+                    /** @description Cursor opaco de la página anterior */
+                    cursor?: string;
+                    /** @description Tamaño de página (por defecto 50) */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Registros de autorización */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AaaServicio"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     ipResolver: {
         parameters: {
             query?: never;
@@ -9699,6 +9845,80 @@ export interface operations {
             };
         };
     };
+    planesVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    bajada_kbps: number;
+                    subida_kbps: number;
+                    bajada_limitada_kbps: number;
+                    subida_limitada_kbps: number;
+                    /** @description N de 1:N (1 = dedicado) */
+                    reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
+                    /** @description Como en planes_routers: reemplaza la cadena de estado activo */
+                    rate_limit_override?: string | null;
+                    /** @description Servicios activos del plan en el router para la cola padre (por defecto 1) */
+                    activos?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaVelocidad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     plantillasListar: {
         parameters: {
             query?: never;
@@ -10196,6 +10416,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalSubirComprobante: {
@@ -10319,6 +10548,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalCuenta: {
@@ -10337,6 +10575,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalCuenta"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -10434,6 +10681,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalFactura: {
@@ -10458,6 +10714,15 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10496,6 +10761,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalPagos: {
@@ -10526,6 +10800,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10662,6 +10945,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10821,6 +11113,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalTelegram: {
@@ -10841,6 +11142,15 @@ export interface operations {
                     "application/json": components["schemas"]["PortalTelegram"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalDesvincularTelegram: {
@@ -10859,6 +11169,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -12141,6 +12460,16 @@ export interface operations {
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_subida_kbps?: number | null;
+                    /** @description https://host:puerto de la API REST; null = https://<host> */
+                    api_url?: string | null;
+                    /** @description Verificar el certificado TLS del router (por defecto true) */
+                    api_tls_verificar?: boolean;
+                    /** @description CA en PEM para routers con certificado propio; en auditoría se registra como *** */
+                    api_ca?: string | null;
+                    /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+                    dhcp_servidor?: string | null;
+                    /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP) */
+                    interfaz_clientes?: string | null;
                     activo?: boolean;
                 };
             };
@@ -12260,6 +12589,16 @@ export interface operations {
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_subida_kbps?: number | null;
+                    /** @description https://host:puerto de la API REST; null = https://<host> */
+                    api_url?: string | null;
+                    /** @description Verificar el certificado TLS del router (por defecto true) */
+                    api_tls_verificar?: boolean;
+                    /** @description CA en PEM para routers con certificado propio; en auditoría se registra como *** */
+                    api_ca?: string | null;
+                    /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+                    dhcp_servidor?: string | null;
+                    /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP) */
+                    interfaz_clientes?: string | null;
                     activo?: boolean;
                 };
             };
@@ -12828,7 +13167,7 @@ export interface operations {
                     tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
                     amarre_ip_mac?: boolean;
-                    /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
+                    /** @description Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
                     /** @description Solo pppoe; se genera si no viene */
                     user_ppp?: string;
