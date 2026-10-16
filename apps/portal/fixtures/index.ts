@@ -22,6 +22,7 @@ import {
 } from './cuenta'
 import { EMPRESA_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
+import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import {
     condicionesConPromesaFixture,
     condicionesFixture,
@@ -93,6 +94,41 @@ function escenarioComprobante(): EscenarioComprobante {
     return pedido === 'duplicada' || pedido === 'archivo' ? pedido : 'recibido'
 }
 
+/**
+ * Pago en línea en fixtures: `fijarPagoFixture` en pruebas o `?pago_fixture=pagado|fallido|expirado|pendiente|sin_pasarela`
+ * en la URL (solo desarrollo). Por defecto `pagado`: el cobro responde `pendiente` en la primera
+ * consulta y `pagado` desde la segunda, y entonces `/portal/estado` responde `activo` (el webhook
+ * reactivó). `url_pago` de los fixtures vuelve a `/corte?pago=<id>` (no hay pasarela).
+ */
+type EscenarioPago = 'pagado' | 'fallido' | 'expirado' | 'pendiente' | 'sin_pasarela'
+const ESCENARIOS_PAGO: readonly EscenarioPago[] = ['pagado', 'fallido', 'expirado', 'pendiente', 'sin_pasarela']
+const pagos: { escenario: EscenarioPago | null, consultas: number, pagado: boolean, iniciados: number } = {
+    escenario: null,
+    consultas: 0,
+    pagado: false,
+    iniciados: 0,
+}
+
+export function fijarPagoFixture(escenario: EscenarioPago | null): void {
+    pagos.escenario = escenario
+    pagos.consultas = 0
+    pagos.pagado = false
+    pagos.iniciados = 0
+}
+
+/** Pruebas: cuántas veces se llamó `POST /portal/pagos/iniciar`. */
+export function pagosIniciadosFixture(): number {
+    return pagos.iniciados
+}
+
+function escenarioPago(): EscenarioPago {
+    if (pagos.escenario) {
+        return pagos.escenario
+    }
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('pago_fixture')
+    return ESCENARIOS_PAGO.find(e => e === pedido) ?? 'pagado'
+}
+
 /** Sesión del portal simulada. */
 const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
 
@@ -157,7 +193,7 @@ export const rutasFixture: RutasFixture = {
     'GET /api/v1/portal/estado': () => {
         consultasEstado += 1
         const escenario = escenarioCorte()
-        if (promesa.aprobada || (escenario === 'reactivacion' && consultasEstado >= 2)) {
+        if (promesa.aprobada || pagos.pagado || (escenario === 'reactivacion' && consultasEstado >= 2)) {
             return { status: 200, cuerpo: ESTADO_REACTIVADO }
         }
         return { status: 200, cuerpo: estadoDe(ESCENARIOS_CORTE[escenario]) }
@@ -248,6 +284,41 @@ export const rutasFixture: RutasFixture = {
             status: 201,
             cuerpo: promesaSolicitadaFixture(escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
         }
+    },
+    'POST /api/v1/portal/pagos/iniciar': ({ cuerpo }) => {
+        const datos = (cuerpo ?? {}) as { servicio_id?: number }
+        if (datos.servicio_id !== undefined && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        pagos.iniciados += 1
+        if (escenarioPago() === 'sin_pasarela') {
+            return problema(
+                503,
+                'pasarela_no_configurada',
+                'Pago en línea no disponible',
+                'El pago en línea no está disponible en este momento. Paga por depósito o en nuestra oficina.',
+            )
+        }
+        pagos.consultas = 0
+        return {
+            status: 201,
+            cuerpo: pagoEnLineaFixture({ url_pago: `/corte?pago=${PAGO_EN_LINEA_ID_FIXTURE}&pago_fixture=${escenarioPago()}` }),
+        }
+    },
+    'GET /api/v1/portal/pagos/en-linea/:id': ({ params }) => {
+        if (Number(params.id) !== PAGO_EN_LINEA_ID_FIXTURE) {
+            return problema(404, 'no_encontrado', 'No encontrado', 'No encontramos ese pago en línea')
+        }
+        pagos.consultas += 1
+        const escenario = escenarioPago()
+        if (escenario === 'pendiente' || escenario === 'sin_pasarela' || pagos.consultas < 2) {
+            return { status: 200, cuerpo: pagoEnLineaFixture() }
+        }
+        if (escenario === 'pagado') {
+            pagos.pagado = true
+            return { status: 200, cuerpo: pagoEnLineaFixture({ estado: 'pagado', url_pago: null, pagado_en: '2026-10-16T18:05:00.000Z' }) }
+        }
+        return { status: 200, cuerpo: pagoEnLineaFixture({ estado: escenario, url_pago: null }) }
     },
     'GET /api/v1/portal/bancos': () => ({ status: 200, cuerpo: BANCOS_FIXTURE }),
     'GET /api/v1/portal/comprobantes': conSesion(() => pagina([...comprobantes.recibidos, ...COMPROBANTES_FIXTURE])),

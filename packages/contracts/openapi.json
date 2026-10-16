@@ -10407,6 +10407,155 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/pagos/en-linea/{id}": {
+      "get": {
+        "operationId": "portalPagoEnLinea",
+        "summary": "Estado de un pago en línea (página de retorno `/corte?pago=<id>`)",
+        "description": "Solo lectura: `pendiente` hasta que llegue el webhook, luego `pagado`, `fallido` o `expirado`. Responde solo si el cobro es del cliente de la sesión del portal o del servicio de la IP de origen; cualquier otro, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pago en línea",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalPagoEnLinea"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/pagos/iniciar": {
+      "post": {
+        "operationId": "portalIniciarPago",
+        "summary": "Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor",
+        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a `/corte?pago=<id>`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo con la sesión del portal; sin él se identifica por la IP de origen"
+                  },
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Facturas concretas del cliente (solo con la sesión del portal)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cobro creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalPagoEnLinea"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/promesas": {
       "get": {
         "operationId": "portalPromesas",
@@ -19713,7 +19862,8 @@
           "correo",
           "horario",
           "instrucciones_pago",
-          "cuentas_deposito"
+          "cuentas_deposito",
+          "pago_en_linea"
         ],
         "properties": {
           "nombre": {
@@ -19776,6 +19926,10 @@
               "$ref": "#/components/schemas/CuentaDeposito"
             },
             "description": "Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran"
+          },
+          "pago_en_linea": {
+            "type": "boolean",
+            "description": "Hay pasarela de pago en línea configurada (el botón \"Pagar en línea\" se habilita)"
           }
         }
       },
@@ -21957,6 +22111,57 @@
                 }
               }
             }
+          }
+        }
+      },
+      "PortalPagoEnLinea": {
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "monto",
+          "url_pago",
+          "expira_en",
+          "pagado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Cobro en línea; el retorno es `/corte?pago=<id>`"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "pagado",
+              "fallido",
+              "expirado"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "url_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Página de pago del proveedor (solo mientras el cobro está pendiente)"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pagado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },

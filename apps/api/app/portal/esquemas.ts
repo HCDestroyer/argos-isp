@@ -334,6 +334,10 @@ export const EmpresaPublica = definirEsquema(
             description:
                 'Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran',
         },
+        pago_en_linea: {
+            ...booleano,
+            description: 'Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita)',
+        },
     }),
 )
 
@@ -399,5 +403,26 @@ export const PortalComprobante = definirEsquema(
         motivo_rechazo: { ...nulable(texto), description: 'Por qué se rechazó (lo escribe quien lo revisó)' },
         created_at: instante,
         verificado_en: nulable(instante),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Pago en línea (semana 2)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalPagoEnLinea = definirEsquema(
+    'PortalPagoEnLinea',
+    objeto({
+        id: { ...id, description: 'Cobro en línea; el retorno es `/corte?pago=<id>`' },
+        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+        monto: Dinero,
+        url_pago: {
+            ...nulable(texto),
+            description: 'Página de pago del proveedor (solo mientras el cobro está pendiente)',
+        },
+        expira_en: nulable(instante),
+        pagado_en: nulable(instante),
     }),
 )

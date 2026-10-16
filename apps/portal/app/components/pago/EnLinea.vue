@@ -1,19 +1,57 @@
 <script setup lang="ts">
 /**
- * Botón "Pagar en línea" de `/corte` y `/cuenta` (semana 2, tarea 2).
+ * Botón "Pagar en línea" de `/corte` y `/cuenta` (semana 2).
  *
- * Apagado y con "Pronto" mientras A3 no publique el contrato de la pasarela (`POST /pasarela/cobros`
- * no está en `main` ni en `agente/a3-facturacion` al 16/10; pedido en `.claude/integration/a5.md`).
- * Se ve apagado (neutro, sin el azul primario) y explica qué hacer mientras tanto. Cuando exista el
- * contrato, este es el único lugar que cambia: elegir facturas o monto, ir a la página del
- * proveedor y volver a `/corte` con el estado en vivo.
+ * `POST /portal/pagos/iniciar` crea el cobro en la pasarela (A3) por lo vencido del servicio (o lo
+ * pendiente si nada está vencido) y devuelve la página de pago del proveedor. Antes de ir, la URL
+ * pasa a `/corte?pago=<id>`: al volver, el estado en vivo espera la confirmación del webhook.
+ *
+ * Habilitado solo si `GET /portal/empresa` dice `pago_en_linea` (hay pasarela). Mientras carga se
+ * ve deshabilitado; sin pasarela, apagado con la alternativa (oficina o depósito).
+ *
+ * `Idempotency-Key`: la misma clave en los reintentos de un intento que no llegó (sin conexión);
+ * una nueva cuando la API respondió.
  */
 const props = withDefaults(defineProps<{
+    /** Con la sesión del portal (`/cuenta`); sin él, el servicio de la IP de origen (`/corte`). */
+    servicioId?: number
     /** id único del texto de ayuda (hay un botón en `/corte` y otro en `/cuenta`) */
     idAyuda?: string
 }>(), {
-    idAyuda: 'pagar-en-linea-pronto',
+    servicioId: undefined,
+    idAyuda: 'pagar-en-linea-ayuda',
 })
+
+const { empresa, cargando } = useEmpresa()
+const { iniciar } = usePagoEnLinea()
+
+const disponible = computed(() => empresa.value?.pago_en_linea === true)
+const yendo = ref(false)
+const error = ref<string | null>(null)
+let clave = claveIdempotencia()
+
+async function pagar() {
+    yendo.value = true
+    error.value = null
+    const respuesta = await iniciar(props.servicioId ? { servicio_id: props.servicioId } : {}, clave)
+    if (!respuesta.ok) {
+        yendo.value = false
+        if (respuesta.problema.status !== 0) {
+            clave = claveIdempotencia()
+        }
+        error.value = mensajeProblema(respuesta.problema)
+        return
+    }
+    const { id, url_pago: url } = respuesta.data
+    if (!url) {
+        yendo.value = false
+        clave = claveIdempotencia()
+        error.value = 'No pudimos abrir la página de pago. Intenta de nuevo en unos minutos.'
+        return
+    }
+    // Se queda "cargando" hasta que el navegador cambie de página.
+    salirALaPasarela({ id, url_pago: url })
+}
 </script>
 
 <template>
@@ -22,28 +60,35 @@ const props = withDefaults(defineProps<{
             data-testid="pagar-en-linea"
             label="Pagar en línea"
             icon="i-lucide-credit-card"
-            color="neutral"
-            variant="soft"
+            :color="disponible || cargando ? 'primary' : 'neutral'"
+            :variant="disponible || cargando ? 'solid' : 'soft'"
             size="xl"
             block
-            disabled
+            :disabled="!disponible"
+            :loading="yendo"
             :aria-describedby="props.idAyuda"
-        >
-            <template #trailing>
-                <UBadge
-                    label="Pronto"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    class="ms-auto"
-                />
-            </template>
-        </UButton>
+            @click="pagar"
+        />
         <p
             :id="props.idAyuda"
             class="-mt-1 text-center text-xs text-muted"
         >
-            El pago en línea llega pronto. Mientras tanto, paga en nuestra oficina o por depósito.
+            <template v-if="disponible || cargando">
+                Con tarjeta, en la página segura de nuestro proveedor de pagos.
+            </template>
+            <template v-else>
+                El pago en línea no está disponible ahora. Paga en nuestra oficina o por depósito.
+            </template>
         </p>
+        <UAlert
+            v-if="error"
+            color="error"
+            variant="subtle"
+            icon="i-lucide-circle-alert"
+            title="No pudimos iniciar el pago"
+            :description="error"
+            role="alert"
+            data-testid="pagar-en-linea-error"
+        />
     </div>
 </template>

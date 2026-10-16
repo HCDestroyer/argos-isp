@@ -178,6 +178,18 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 | `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
 | `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1; si el canal preferido era Telegram pasa a correo (`clientes.editar`). Idempotente |
 
+### Pago en línea desde el portal (semana 2)
+
+Contrato en `.claude/integration/contratos/pago-en-linea.md`. El cobro, el webhook firmado, el pago y la
+reactivación son de A3; el portal solo identifica al pagador, elige las facturas y lee el estado.
+
+| Ruta | Acción | Qué hace |
+| --- | --- | --- |
+| `POST /api/v1/portal/pagos/iniciar` (IP o sesión, límite por IP, `Idempotency-Key`) | `CrearCobroPasarela` de A3 (`pasarela.crear_cobro`, canal portal, actor sistema) | Sin `facturas`: las vencidas con saldo del servicio (o todo lo pendiente del servicio). Con `facturas` (sesión): deben ser del cliente (404). 201 `PortalPagoEnLinea` con `url_pago`; 422 `sin_deuda` / `no_identificado` / `facturas.<i>`; 503 `pasarela_no_configurada` en palabras del cliente |
+| `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP) | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3) | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente |
+
+`GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
+
 ### Auditoría una vez por ventana
 
 Cada visita a `/corte` y cada consulta del estado en vivo (cada 5 s) escribían una fila y llenaban la
@@ -241,7 +253,8 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos
-(`promesa.creada`, `comprobante.recibido`).
+(`promesa.creada`, `comprobante.recibido`; el webhook de la pasarela emite `pago.registrado` y
+`servicio.estado_cambiado`).
 
 ## Pruebas
 
