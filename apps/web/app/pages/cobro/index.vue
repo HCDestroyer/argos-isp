@@ -952,6 +952,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 title="Registrar pago"
                 icon="i-lucide-banknote"
                 variant="outline"
+                class="lg:sticky lg:top-0"
             >
                 <UForm
                     ref="formulario"

@@ -112,6 +112,8 @@ onMounted(() => {
                 v-if="puede('cuentas_bancarias.editar')"
                 label="Nueva cuenta"
                 icon="i-lucide-plus"
+                aria-label="Nueva cuenta"
+                :ui="{ label: 'hidden sm:inline' }"
                 @click="nueva"
             />
         </template>
