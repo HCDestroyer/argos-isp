@@ -2,6 +2,8 @@
 
 Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabilizar sesiones PPPoE. Dueño: A2 (`.claude/agents/a2-radius.md`). Servidor HTTP con Fastify 5 (antes `node:http`; ver "Dependencias").
 
+Diagnóstico y operación técnica (métricas, logs, `radtest`, repoblado, modo degradado): [`RUNBOOK.md`](RUNBOOK.md). Runbook de operador: `docs/runbooks/aaa-caido.md` (A6).
+
 | Ruta                   | Llamada desde                     | Estado                       |
 | ---------------------- | --------------------------------- | ---------------------------- |
 | `GET /health`          | healthcheck de compose            | hecho (incluye estado Redis) |
@@ -74,16 +76,16 @@ En modo normal nunca se lee: no es una caché de consistencia (regla 5). Account
 
 Cómo se ve:
 
-| Señal | Valor |
-| --- | --- |
-| Log `error` `modo degradado: inicio` | una vez, con la primera autorización degradada (`error` = qué falló de Redis y de la API) |
-| Log `warn` `authorize: modo degradado, último perfil conocido` | cada autorización degradada: `usuario`, `nas`, `perfil_visto_en`, `perfil_edad_s`, `error` (y la línea `authorize` con `origen = degradado`) |
-| Log `error` `authorize: sin Redis ni API y sin último perfil conocido; se rechaza` | sin perfil: 503 |
-| Log `warn` `modo degradado: fin` | primera autorización normal después: `desde`, `duracion_s`, `atendidas` |
-| `argosisp_aaa_degradado` | 1 desde el inicio hasta el fin |
-| `argosisp_aaa_degradado_total{resultado}` | `perfil`, `sin_perfil`, `desactivado` |
-| `argosisp_aaa_ultimo_conocido_registros`, `argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds` | tamaño de la copia y último espejo |
-| `GET /health` | sigue en 200 (aaa responde); `modo: degradado` y `ultimo_conocido` en el JSON |
+| Señal                                                                                             | Valor                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Log `error` `modo degradado: inicio`                                                              | una vez, con la primera autorización degradada (`error` = qué falló de Redis y de la API)                                                    |
+| Log `warn` `authorize: modo degradado, último perfil conocido`                                    | cada autorización degradada: `usuario`, `nas`, `perfil_visto_en`, `perfil_edad_s`, `error` (y la línea `authorize` con `origen = degradado`) |
+| Log `error` `authorize: sin Redis ni API y sin último perfil conocido; se rechaza`                | sin perfil: 503                                                                                                                              |
+| Log `warn` `modo degradado: fin`                                                                  | primera autorización normal después: `desde`, `duracion_s`, `atendidas`                                                                      |
+| `argosisp_aaa_degradado`                                                                          | 1 desde el inicio hasta el fin                                                                                                               |
+| `argosisp_aaa_degradado_total{resultado}`                                                         | `perfil`, `sin_perfil`, `desactivado`                                                                                                        |
+| `argosisp_aaa_ultimo_conocido_registros`, `argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds` | tamaño de la copia y último espejo                                                                                                           |
+| `GET /health`                                                                                     | sigue en 200 (aaa responde); `modo: degradado` y `ultimo_conocido` en el JSON                                                                |
 
 ## `/aaa/accounting`
 
