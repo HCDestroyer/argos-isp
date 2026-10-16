@@ -37,9 +37,17 @@ import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
 import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
 import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
+import AsignarResponsablePago from '#core/actions/asignar_responsable_pago'
+import QuitarResponsablePago from '#core/actions/quitar_responsable_pago'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
-import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
+import {
+    buscarClientes,
+    dimensionesDeCliente,
+    listarDependientes,
+    listarZonas,
+    verCliente,
+} from '#core/consultas/clientes'
 import { NoEncontrado, Problema } from '#shared/errores'
 import { construirRegistroAaa } from '#core/aaa'
 import { resolverIp } from '#network/consultas/ip'
@@ -52,6 +60,7 @@ import {
     CambioAuditoria,
     Cliente,
     ConfiguracionEfectivaServicio,
+    DependientePago,
     CredencialesPpp,
     Me,
     Permiso,
@@ -339,6 +348,67 @@ const clientes: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
             return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/responsable-pago',
+        operacion: 'clientesAsignarResponsablePago',
+        resumen: 'Asignar el responsable de pago del cliente',
+        descripcion:
+            'Fija el cliente que paga por este. Un solo nivel: el responsable no puede tener ' +
+            'responsable y un cliente con dependientes no puede tenerlo. 422 si es él mismo, si el ' +
+            'responsable no existe o si se formaría un ciclo o un segundo nivel. Solo sugiere en el ' +
+            'cobro: cualquiera puede pagar cualquier factura.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.asignar_responsable_pago',
+        cuerpo: v.asignarResponsablePagoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente con su responsable de pago', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            // el responsable también debe estar en el alcance; si no existe, la acción responde 422
+            const delResponsable = await dimensionesDeCliente(cuerpo.responsable_id).catch((e: unknown) => {
+                if (e instanceof NoEncontrado) return null
+                throw e
+            })
+            if (delResponsable) exigirAlcance(ctx.alcance, delResponsable)
+            return new AsignarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/quitar-responsable-pago',
+        operacion: 'clientesQuitarResponsablePago',
+        resumen: 'Quitar el responsable de pago del cliente',
+        etiqueta: 'clientes',
+        permiso: 'clientes.quitar_responsable_pago',
+        cuerpo: v.quitarResponsablePagoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente sin responsable de pago', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new QuitarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/dependientes',
+        operacion: 'clientesDependientes',
+        resumen: 'Clientes de los que es responsable de pago',
+        descripcion:
+            'Dependientes con su número de servicios no retirados y el estado resumido. ' +
+            'El cobro (A4) muestra sus facturas debajo del pagador.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.listarDependientesValidator,
+        respuesta: { status: 200, descripcion: 'Página de dependientes', esquema: pagina(DependientePago) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return listarDependientes(id, query, ctx.alcance)
         },
     }),
     definirRuta({

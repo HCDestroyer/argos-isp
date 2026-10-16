@@ -1064,6 +1064,16 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "responsable_pago_id",
+            "in": "query",
+            "required": false,
+            "description": "Dependientes de este responsable de pago",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -1616,6 +1626,125 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/dependientes": {
+      "get": {
+        "operationId": "clientesDependientes",
+        "summary": "Clientes de los que es responsable de pago",
+        "description": "Dependientes con su número de servicios no retirados y el estado resumido. El cobro (A4) muestra sus facturas debajo del pagador.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de dependientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DependientePago"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/desvincular-telegram": {
       "post": {
         "operationId": "clientesDesvincularTelegram",
@@ -1782,6 +1911,252 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/quitar-responsable-pago": {
+      "post": {
+        "operationId": "clientesQuitarResponsablePago",
+        "summary": "Quitar el responsable de pago del cliente",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente sin responsable de pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.quitar_responsable_pago",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.quitar_responsable_pago",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/responsable-pago": {
+      "post": {
+        "operationId": "clientesAsignarResponsablePago",
+        "summary": "Asignar el responsable de pago del cliente",
+        "description": "Fija el cliente que paga por este. Un solo nivel: el responsable no puede tener responsable y un cliente con dependientes no puede tenerlo. 422 si es él mismo, si el responsable no existe o si se formaría un ciclo o un segundo nivel. Solo sugiere en el cobro: cualquiera puede pagar cualquier factura.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "responsable_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Cliente que paga por este"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "responsable_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente con su responsable de pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.asignar_responsable_pago",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.asignar_responsable_pago",
         "x-implementado": true
       }
     },
@@ -6487,10 +6862,12 @@
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.ver",
+                        "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
+                        "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
                         "facturas.anular",
@@ -6655,10 +7032,12 @@
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.ver",
+                        "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
+                        "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
                         "facturas.anular",
@@ -9964,10 +10343,12 @@
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.ver",
+                            "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
                             "clientes.editar",
                             "clientes.estado_cuenta",
+                            "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
                             "facturas.anular",
@@ -11627,6 +12008,21 @@
               "null"
             ]
           },
+          "responsable_pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cliente que paga por este (responsable de pago); null si paga él mismo"
+          },
+          "responsable_pago_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del responsable de pago (solo lectura)"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -11858,6 +12254,49 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DependientePago": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "nit_cui",
+          "servicios",
+          "estado_servicio"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "nit_cui": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicios": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Servicios no retirados"
+          },
+          "estado_servicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ],
+            "description": "Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios"
           }
         }
       },
