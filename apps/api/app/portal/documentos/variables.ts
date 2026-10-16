@@ -56,6 +56,7 @@ export const VARIABLES_AVISO_COBRO: ReadonlyArray<{ nombre: string; descripcion:
     { nombre: 'empresa.nit', descripcion: 'NIT de la empresa' },
     { nombre: 'empresa.direccion', descripcion: 'Dirección de la empresa' },
     { nombre: 'empresa.telefono', descripcion: 'Teléfono de atención' },
+    { nombre: 'empresa.telefono_alterno', descripcion: 'Segundo teléfono' },
     { nombre: 'empresa.whatsapp', descripcion: 'WhatsApp de atención' },
     { nombre: 'empresa.correo', descripcion: 'Correo de atención' },
     { nombre: 'empresa.horario', descripcion: 'Horario de atención' },

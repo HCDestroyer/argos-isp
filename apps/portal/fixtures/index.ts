@@ -19,6 +19,7 @@ import {
     SOLICITUD_FIXTURE,
     SOLICITUD_POR_IP_FIXTURE,
 } from './cuenta'
+import { EMPRESA_FIXTURE } from './empresa'
 
 /**
  * Escenario de `/corte` en fixtures: `?fixture=activo|suspendido|desconocido` en la URL del
@@ -31,6 +32,13 @@ function escenarioCorte(): EscenarioCorte {
 }
 
 let consultasEstado = 0
+
+/** Pruebas: qué responde `GET /portal/empresa` (o un 500 con `null`). */
+const empresa: { respuesta: Schema<'EmpresaPublica'> | null } = { respuesta: EMPRESA_FIXTURE }
+
+export function fijarEmpresaFixture(respuesta: Schema<'EmpresaPublica'> | null): void {
+    empresa.respuesta = respuesta
+}
 
 /** Sesión del portal simulada. */
 const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
@@ -74,6 +82,10 @@ export const rutasFixture: RutasFixture = {
         }
         return { status: 200, cuerpo: estadoDe(ESCENARIOS_CORTE[escenario]) }
     },
+
+    'GET /api/v1/portal/empresa': () => empresa.respuesta
+        ? { status: 200, cuerpo: empresa.respuesta }
+        : problema(500, 'interno', 'Error interno', 'No se pudo leer la configuración.'),
 
     'POST /api/v1/portal/codigo': ({ cuerpo }) => {
         const datos = (cuerpo ?? {}) as { identificador?: string, por_ip?: boolean }

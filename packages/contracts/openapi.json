@@ -30,6 +30,9 @@
       "name": "documentos"
     },
     {
+      "name": "empresa"
+    },
+    {
       "name": "facturacion"
     },
     {
@@ -2050,6 +2053,207 @@
           }
         },
         "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresa": {
+      "get": {
+        "operationId": "empresaVer",
+        "summary": "Configuración de la empresa (panel)",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Empresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresa.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresa.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "empresaEditar",
+        "summary": "Edita la configuración de la empresa",
+        "description": "Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "nit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20
+                  },
+                  "direccion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "telefono_alterno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "whatsapp": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "correo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "email",
+                    "maxLength": 200
+                  },
+                  "horario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "instrucciones_pago": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Empresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresa.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresa.editar",
         "x-implementado": true
       }
     },
@@ -6259,6 +6463,39 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/empresa": {
+      "get": {
+        "operationId": "portalEmpresa",
+        "summary": "Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)",
+        "description": "Sin login: es información pública de la empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaPublica"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/estado": {
       "get": {
         "operationId": "portalEstado",
@@ -7223,6 +7460,8 @@
                         "clientes.ver",
                         "documentos.editar",
                         "documentos.ver",
+                        "empresa.editar",
+                        "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -7391,6 +7630,8 @@
                         "clientes.ver",
                         "documentos.editar",
                         "documentos.ver",
+                        "empresa.editar",
+                        "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -10261,6 +10502,8 @@
                             "clientes.ver",
                             "documentos.editar",
                             "documentos.ver",
+                            "empresa.editar",
+                            "empresa.ver",
                             "facturas.anular",
                             "facturas.generar",
                             "facturas.ver",
@@ -12022,6 +12265,34 @@
           }
         }
       },
+      "CuentaDeposito": {
+        "type": "object",
+        "required": [
+          "banco",
+          "alias",
+          "numero",
+          "moneda"
+        ],
+        "properties": {
+          "banco": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string",
+            "description": "Nombre visible de la cuenta (p. ej. \"Monetaria ArgosIsp\")"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ",
+              "USD"
+            ]
+          }
+        }
+      },
       "Dinero": {
         "type": "string",
         "pattern": "^-?\\d{1,12}\\.\\d{2}$",
@@ -12029,6 +12300,160 @@
         "examples": [
           "150.00"
         ]
+      },
+      "Empresa": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "nit",
+          "direccion",
+          "telefono",
+          "telefono_alterno",
+          "whatsapp",
+          "correo",
+          "horario",
+          "instrucciones_pago",
+          "version"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono_alterno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de WhatsApp tal como se marca (p. ej. \"5555-1234\")"
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto libre: \"Lunes a viernes de 8:00 a 17:00\""
+          },
+          "instrucciones_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto que acompaña los datos de depósito"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = valores por defecto (nunca se guardó). Envíala al editar (409 si cambió)"
+          }
+        }
+      },
+      "EmpresaPublica": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "nit",
+          "direccion",
+          "telefono",
+          "telefono_alterno",
+          "whatsapp",
+          "correo",
+          "horario",
+          "instrucciones_pago",
+          "cuentas_deposito"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono_alterno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de WhatsApp tal como se marca (p. ej. \"5555-1234\")"
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto libre: \"Lunes a viernes de 8:00 a 17:00\""
+          },
+          "instrucciones_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto que acompaña los datos de depósito"
+          },
+          "cuentas_deposito": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CuentaDeposito"
+            },
+            "description": "Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran"
+          }
+        }
       },
       "EnvioNotificacion": {
         "type": "object",

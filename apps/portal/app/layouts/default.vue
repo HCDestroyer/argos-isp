@@ -1,5 +1,6 @@
 <script setup lang="ts">
-const { empresa } = useRuntimeConfig().public
+/** Encabezado y pie con los datos de la empresa configurados en el panel (`useEmpresa`). */
+const { empresa, nombre } = useEmpresa()
 const anio = new Date().getFullYear()
 </script>
 
@@ -15,7 +16,7 @@ const anio = new Date().getFullYear()
                         name="i-lucide-wifi"
                         class="size-6 shrink-0 text-primary"
                     />
-                    <span class="truncate">{{ empresa.nombre }}</span>
+                    <span class="truncate">{{ nombre }}</span>
                 </NuxtLink>
 
                 <UColorModeButton />
@@ -30,8 +31,13 @@ const anio = new Date().getFullYear()
 
         <footer class="border-t border-default py-4">
             <UContainer class="flex flex-col items-center gap-1 text-center text-xs text-muted sm:flex-row sm:justify-between">
-                <span>© {{ anio }} {{ empresa.nombre }}</span>
-                <span v-if="empresa.telefono">Soporte: {{ empresa.telefono }}</span>
+                <span>© {{ anio }} {{ nombre }}</span>
+                <ULink
+                    to="/contacto"
+                    class="text-muted hover:text-default"
+                >
+                    {{ empresa?.telefono ? `Soporte: ${empresa.telefono}` : 'Contacto' }}
+                </ULink>
             </UContainer>
         </footer>
     </div>

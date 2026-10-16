@@ -12,11 +12,11 @@ import { z } from 'zod'
  * Por identificador la API responde igual exista o no el cliente: el texto nunca confirma que
  * el NIT sea de alguien.
  */
-const { empresa } = useRuntimeConfig().public
+const { nombre: nombreEmpresa } = useEmpresa()
 const route = useRoute()
 const acceso = useAccesoPortal()
 
-useHead({ title: `Entrar · ${empresa.nombre}` })
+useHead({ title: computed(() => `Entrar · ${nombreEmpresa.value}`) })
 
 const porIp = computed(() => route.query.por_ip === '1')
 const paso = ref<'pedir' | 'verificar'>('pedir')

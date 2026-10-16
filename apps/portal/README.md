@@ -11,7 +11,7 @@ pnpm --filter @argosisp/portal lint | typecheck | test | build
 docker build -f apps/portal/Dockerfile -t argosisp/portal .        # desde la raíz
 ```
 
-Variables en `.env.example` (empresa, cuentas de depósito, URL interna de la API).
+Variables en `.env.example` (nombre de la empresa mientras carga, URL interna de la API, portal cautivo).
 
 ## Acceso a la API: proxy en el mismo origen
 
@@ -60,7 +60,7 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Identificación por IP: `GET /api/v1/portal/quien-soy` (`Schema<'QuienSoy'>` del contrato), solo en el navegador | `app/composables/useCorte.ts` |
 | Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
-| Datos de depósito (`NUXT_PUBLIC_DEPOSITO_*`; pasa al panel en la tarea 9) | `app/components/corte/DatosDeposito.vue` |
+| Datos de depósito: cuentas de A3 e instrucciones de pago del panel (`GET /portal/empresa`) | `app/components/corte/DatosDeposito.vue` |
 | Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante y promesa (día 4) deshabilitadas; contacto por teléfono o correo | `app/pages/corte.vue` |
 | Estado en vivo: `GET /api/v1/portal/estado` cada 5 s hasta 2 min, tras una acción del cliente ("Ya pagué: revisar mi servicio"; luego comprobante, promesa y pago), al volver a la pestaña o con promesa activa. Al ver `activo`: "Ya tienes servicio" y "Seguir navegando" (`NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL`) | `app/composables/useEstadoServicio.ts`, `app/components/corte/EstadoEnVivo.vue`, `app/components/corte/ServicioReactivado.vue` |
 | Fixtures tipados contra el contrato (`?fixture=reactivacion` simula la reactivación) | `fixtures/corte.ts` |
@@ -80,6 +80,19 @@ Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos person
 | Fixtures: el código correcto es `123456`; la sesión es un estado en memoria (`fijarSesionFixture` en pruebas) | `fixtures/cuenta.ts`, `fixtures/index.ts` |
 
 Dependencia nueva: `zod` (misma versión que `apps/web`) para los esquemas de `UForm`.
+
+## Datos de la empresa y contacto (configurables desde el panel)
+
+| Pieza | Dónde |
+| --- | --- |
+| `GET /api/v1/portal/empresa` una sola vez (clave `portal:empresa`), solo en el navegador; el nombre de `NUXT_PUBLIC_EMPRESA_NOMBRE` solo mientras carga | `app/composables/useEmpresa.ts` |
+| Encabezado y pie con el nombre y el teléfono; el pie lleva a `/contacto` | `app/layouts/default.vue` |
+| `/contacto`: teléfonos (`tel:`), WhatsApp (`wa.me`, no funciona con el servicio suspendido), correo, horario y oficina; error con "Reintentar" | `app/pages/contacto.vue`, `app/utils/contacto.ts` |
+| `/corte`: "Llamar a soporte" con el teléfono configurado (si no hay, a `/contacto`); "Ver datos de depósito" se oculta si no hay cuentas ni instrucciones | `app/pages/corte.vue` |
+| Datos de depósito: cuentas activas de `billing.cuentas_bancarias` (A3) e instrucciones de pago; sin cuentas no hay sección | `app/components/corte/DatosDeposito.vue` |
+| Fixtures | `fixtures/empresa.ts` (`fijarEmpresaFixture` en pruebas) |
+
+`NUXT_PUBLIC_EMPRESA_TELEFONO`, `NUXT_PUBLIC_EMPRESA_CORREO` y `NUXT_PUBLIC_DEPOSITO_*` ya no existen.
 
 ## Lo que deja el día 1
 

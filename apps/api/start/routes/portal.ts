@@ -9,6 +9,8 @@ import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { pagina } from '#shared/openapi/esquemas'
 import {
     ArchivoPdf,
+    Empresa,
+    EmpresaPublica,
     EstadoPortal,
     PlantillaDocumento,
     PortalContacto,
@@ -23,6 +25,7 @@ import {
 } from '#portal/esquemas'
 import {
     editarContactoValidator,
+    editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
@@ -45,6 +48,9 @@ import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
 import EditarContactoPortal from '#portal/actions/editar_contacto'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
+import EditarEmpresa from '#portal/actions/editar_empresa'
+import { leerEmpresa, verEmpresa } from '#portal/empresa'
+import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
 import {
     avisoCobroPdf,
     pdfDesdePlantilla,
@@ -390,6 +396,51 @@ const documentos: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas, ...documentos]
+const empresa: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/empresa',
+        operacion: 'portalEmpresa',
+        resumen: 'Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)',
+        descripcion: `Sin login: es información pública de la empresa. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaPublica },
+        handler: async (ctx) => {
+            await ipDelCliente(ctx, 'empresa')
+            const datos = await leerEmpresa()
+            return { ...datos, cuentas_deposito: await fuenteCuentasDeposito().activas() }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresa',
+        operacion: 'empresaVer',
+        resumen: 'Configuración de la empresa (panel)',
+        etiqueta: 'empresa',
+        permiso: 'empresa.ver',
+        respuesta: { status: 200, descripcion: 'Empresa', esquema: Empresa },
+        handler: async () => verEmpresa(),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/empresa',
+        operacion: 'empresaEditar',
+        resumen: 'Edita la configuración de la empresa',
+        descripcion:
+            'Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 ' +
+            'la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).',
+        etiqueta: 'empresa',
+        permiso: 'empresa.editar',
+        versionada: true,
+        cuerpo: editarEmpresaValidator,
+        respuesta: { status: 200, descripcion: 'Empresa guardada', esquema: Empresa },
+        handler: async (ctx, { cuerpo }) => new EditarEmpresa().execute(cuerpo, ctx.contextoAccion()),
+    }),
+]
+
+const portal: Ruta[] = [...publicas, ...autenticadas, ...documentos, ...empresa]
 
 export default portal

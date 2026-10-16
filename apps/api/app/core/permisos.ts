@@ -61,6 +61,8 @@ export const PERMISOS = {
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
 
+    'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
+    'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
     'documentos.editar': 'Editar plantillas de documentos (aviso de cobro)',
 

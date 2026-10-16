@@ -11,10 +11,12 @@
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
  * 2 min; al ver `activo` muestra "Ya tienes servicio".
  */
-const { empresa, seguirNavegandoUrl } = useRuntimeConfig().public
+const { seguirNavegandoUrl } = useRuntimeConfig().public
 const { data: corte, status, refresh } = useCorte()
+// Contacto, instrucciones y cuentas de depósito: configuración del panel (tarea 9).
+const { empresa, nombre: nombreEmpresa } = useEmpresa()
 
-useHead({ title: `Estado del servicio · ${empresa.nombre}` })
+useHead({ title: computed(() => `Estado del servicio · ${nombreEmpresa.value}`) })
 
 const cargando = computed(() => status.value === 'idle' || status.value === 'pending')
 const mensaje = computed(() => corte.value ? mensajeCorte(corte.value) : null)
@@ -51,15 +53,21 @@ watch(() => corte.value?.promesa_activa, (promesa) => {
 onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad))
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', alCambiarVisibilidad))
 
+/** Llamar es lo que funciona con el servicio suspendido; si no hay teléfono, la página de contacto. */
 const contacto = computed(() => {
-    if (empresa.telefono) {
-        return { label: `Llamar a soporte: ${empresa.telefono}`, icon: 'i-lucide-phone', to: `tel:${empresa.telefono}` }
-    }
-    if (empresa.correo) {
-        return { label: `Escribir a ${empresa.correo}`, icon: 'i-lucide-mail', to: `mailto:${empresa.correo}` }
-    }
-    return null
+    const telefono = enlacesContacto(empresa.value).find(enlace => enlace.tipo === 'telefono')
+    return telefono
+        ? { label: `Llamar a soporte: ${telefono.valor}`, icon: telefono.icon, to: telefono.to }
+        : { label: 'Contacta a soporte', icon: 'i-lucide-headset', to: '/contacto' }
 })
+
+/**
+ * "Ver datos de depósito" se oculta solo cuando la configuración se leyó y no hay ni cuentas ni
+ * instrucciones (nada que mostrar). Si aún carga o falló, el modal muestra el estado o el error.
+ */
+const hayDatosDeposito = computed(() => !empresa.value
+    || empresa.value.cuentas_deposito.length > 0
+    || Boolean(empresa.value.instrucciones_pago))
 </script>
 
 <template>
@@ -138,9 +146,10 @@ const contacto = computed(() => {
                     id="pagar-en-linea-pronto"
                     class="-mt-1 text-center text-xs text-muted"
                 >
-                    El pago en línea llega pronto. Mientras tanto, paga por depósito y sube tu comprobante.
+                    El pago en línea llega pronto. Mientras tanto, paga en nuestra oficina o por depósito.
                 </p>
                 <UButton
+                    v-if="hayDatosDeposito"
                     label="Ver datos de depósito"
                     icon="i-lucide-landmark"
                     size="xl"
@@ -191,14 +200,23 @@ const contacto = computed(() => {
             />
 
             <UButton
-                :label="contacto?.label ?? 'Contacta a soporte'"
-                :icon="contacto?.icon ?? 'i-lucide-phone'"
-                :to="contacto?.to"
-                :disabled="!contacto"
+                data-testid="contacto-corte"
+                :label="contacto.label"
+                :icon="contacto.icon"
+                :to="contacto.to"
                 color="neutral"
                 variant="ghost"
                 size="lg"
                 block
+            />
+            <UButton
+                v-if="contacto.to !== '/contacto'"
+                label="Más formas de contacto y horario"
+                color="neutral"
+                variant="link"
+                size="sm"
+                to="/contacto"
+                class="-mt-3 self-center"
             />
 
             <p

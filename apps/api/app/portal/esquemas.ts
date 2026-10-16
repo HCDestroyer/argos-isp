@@ -205,6 +205,58 @@ export const PortalPromesa = definirEsquema(
 
 /*
 |--------------------------------------------------------------------------
+| Configuración de empresa (tarea 9)
+|--------------------------------------------------------------------------
+*/
+
+const camposEmpresa = {
+    nombre: texto,
+    nit: nulable(texto),
+    direccion: nulable(texto),
+    telefono: nulable(texto),
+    telefono_alterno: nulable(texto),
+    whatsapp: { ...nulable(texto), description: 'Número de WhatsApp tal como se marca (p. ej. "5555-1234")' },
+    correo: nulable(texto),
+    horario: { ...nulable(texto), description: 'Texto libre: "Lunes a viernes de 8:00 a 17:00"' },
+    instrucciones_pago: { ...nulable(texto), description: 'Texto que acompaña los datos de depósito' },
+}
+
+export const Empresa = definirEsquema(
+    'Empresa',
+    objeto({
+        ...camposEmpresa,
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 = valores por defecto (nunca se guardó). Envíala al editar (409 si cambió)',
+        },
+    }),
+)
+
+export const CuentaDeposito = definirEsquema(
+    'CuentaDeposito',
+    objeto({
+        banco: texto,
+        alias: { ...texto, description: 'Nombre visible de la cuenta (p. ej. "Monetaria ArgosIsp")' },
+        numero: texto,
+        moneda: enumerado(['GTQ', 'USD']),
+    }),
+)
+
+export const EmpresaPublica = definirEsquema(
+    'EmpresaPublica',
+    objeto({
+        ...camposEmpresa,
+        cuentas_deposito: {
+            ...lista(CuentaDeposito),
+            description:
+                'Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran',
+        },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
 | Documentos (tarea 8)
 |--------------------------------------------------------------------------
 */

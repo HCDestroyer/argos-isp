@@ -6,11 +6,11 @@ import type { TabsItem } from '@nuxt/ui'
  * Sin sesión (401) manda a `/entrar`. Si la cuenta no se puede leer, muestra el error con
  * "Reintentar" y ningún monto.
  */
-const { empresa } = useRuntimeConfig().public
+const { nombre: nombreEmpresa } = useEmpresa()
 const { data: resultado, status, refresh } = useCuenta()
 const acceso = useAccesoPortal()
 
-useHead({ title: `Mi cuenta · ${empresa.nombre}` })
+useHead({ title: computed(() => `Mi cuenta · ${nombreEmpresa.value}`) })
 
 const cargando = computed(() => status.value === 'idle' || status.value === 'pending')
 const cuenta = computed(() => resultado.value?.ok ? resultado.value.data : null)

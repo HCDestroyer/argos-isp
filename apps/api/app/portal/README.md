@@ -98,6 +98,22 @@ bordes) y `sin-borde`. `style` admite `text-align`, `font-weight`, `font-style`,
 (`#rgb`). Imágenes, CSS externo y scripts se ignoran. Página carta con márgenes de 48 pt; las tablas
 largas siguen en otra página.
 
+### Configuración de empresa (tarea 9)
+
+| Endpoint | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/empresa` | público (límite por IP) | `EmpresaPublica`: contacto, horario, instrucciones de pago y `cuentas_deposito` |
+| `GET /api/v1/empresa` | `empresa.ver` | `Empresa` con `version` (0 = nunca se guardó) |
+| `PUT /api/v1/empresa` | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id 1) |
+
+- `core.empresa` es una sola fila (`id = 1`). Sin fila: `nombre` de `NOTIFY_EMPRESA_NOMBRE`, `telefono` de
+  `NOTIFY_EMPRESA_TELEFONO`, lo demás vacío. Un campo `null` o vacío se borra (salvo `nombre`).
+- La usan `/corte`, `/contacto`, el encabezado del portal, el mensaje del código de acceso y `{{empresa.*}}`
+  de los documentos (`empresa.ts`).
+- **Cuentas para depósito**: no se guardan aquí. Su fuente única es `billing.cuentas_bancarias` (A3);
+  el portal las lee por el puerto `cuentas_deposito.ts` (solo banco, alias, número y moneda). Hasta que la
+  consulta de A3 esté en `main` el puerto devuelve `[]` y `/corte` no muestra cuentas (nunca inventadas).
+
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
 `{ ip }`) porque son públicas y revelan información de un cliente.
@@ -179,6 +195,10 @@ datos, PDF del portal con datos, montos y fechas de Guatemala, factura ajena 404
 PDF del panel con y sin `facturas.ver`, plantilla editable (versión 0, diff, 409, el PDF usa la nueva),
 Mustache inválido y triple bigote (422), vista previa y 403 sin `documentos.editar`. Con
 `PDF_SALIDA=/ruta` deja los PDF para revisarlos.
+
+`tests/portal/empresa.spec.ts`: valores por defecto con versión 0 y sin cuentas, guardado con auditoría
+y diff, lectura pública con las cuentas de la fuente (falsa), documentos con `{{empresa.*}}`, borrar
+campos, 409, 422 y 403.
 
 `tests/portal/auditoria_unica.spec.ts`: misma IP y servicio auditan una vez (quien-soy y estado por
 separado), otra IP u otro servicio se auditan, IP sin servicio, fin de la ventana, ventana `0`, Redis

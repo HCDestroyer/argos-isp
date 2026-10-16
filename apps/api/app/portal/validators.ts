@@ -43,6 +43,28 @@ const telefono = () =>
         .maxLength(30)
         .regex(/^\+?[\d\s()-]{7,30}$/)
 
+/** Texto opcional de la configuración de empresa: `null` o vacío lo borra. */
+const textoEmpresa = (maximo: number) => vine.string().trim().maxLength(maximo).nullable().optional()
+
+export const editarEmpresaValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+        nombre: vine.string().trim().minLength(1).maxLength(200).optional(),
+        nit: textoEmpresa(20),
+        direccion: textoEmpresa(300),
+        telefono: telefono().nullable().optional(),
+        telefono_alterno: telefono().nullable().optional(),
+        whatsapp: telefono().nullable().optional(),
+        correo: vine.string().trim().email().maxLength(200).nullable().optional(),
+        horario: textoEmpresa(200),
+        instrucciones_pago: textoEmpresa(1000),
+    }),
+)
+
 export const editarPlantillaDocumentoValidator = vine.compile(
     vine.object({
         html: vine.string().minLength(1).maxLength(100_000),
