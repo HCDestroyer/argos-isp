@@ -17,19 +17,26 @@ export interface SesionActiva {
     router_id: number | null
     /** `network.routers.radius_secret` cifrado (v1) o null si el NAS no está dado de alta */
     radius_secret: string | null
+    prefijo_enlace_v6: string | null
+    prefijo_delegado_v6: string | null
+}
+
+/** Sesión abierta buscada por id (desconexión manual); puede no tener servicio conocido. */
+export interface SesionPorId extends SesionActiva {
+    servicio_id: number | null
 }
 
 export interface FilaRed {
     tipo: TipoPaquete
     router_id: number | null
-    servicio_id: number
+    servicio_id: number | null
     comando: Record<string, unknown>
     respuesta: Record<string, unknown>
     ok: boolean
 }
 
 export interface CoaFallido {
-    servicio_id: number
+    servicio_id: number | null
     nas_ip: string
     tipo: TipoPaquete
     error: string
@@ -38,8 +45,10 @@ export interface CoaFallido {
 export interface Almacen {
     servicio(servicioId: number): Promise<ServicioActual | null>
     sesionesActivas(servicioId: number): Promise<SesionActiva[]>
+    /** La sesión si sigue abierta (sin `fin`); null si no existe o ya terminó. */
+    sesionAbierta(sesionId: number): Promise<SesionPorId | null>
     /** true si el evento ya terminó para esa sesión (ACK, NAK o reintentos agotados). */
-    yaProcesado(eventoId: string, servicioId: number, sesionId: number): Promise<boolean>
+    yaProcesado(eventoId: string, servicioId: number | null, sesionId: number): Promise<boolean>
     /** Registra un envío; con `fallido`, además emite `coa.fallido` en la misma transacción. */
     registrar(fila: FilaRed, fallido?: { payload: CoaFallido; requestId: string | null }): Promise<void>
 }
@@ -78,7 +87,9 @@ export class AlmacenPg implements Almacen {
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {
         const { rows } = await this.pool.query<SesionActiva>(
             `SELECT ses.id::int AS id, host(ses.nas_ip) AS nas_ip, ses.acct_session_id, ses.user_ppp,
-                    r.id::int AS router_id, r.radius_secret
+                    r.id::int AS router_id, r.radius_secret,
+                    ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
+                    ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
              FROM network.sesiones ses
              LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
              WHERE ses.servicio_id = $1 AND ses.fin IS NULL
@@ -88,13 +99,29 @@ export class AlmacenPg implements Almacen {
         return rows
     }
 
-    async yaProcesado(eventoId: string, servicioId: number, sesionId: number): Promise<boolean> {
+    async sesionAbierta(sesionId: number): Promise<SesionPorId | null> {
+        const { rows } = await this.pool.query<SesionPorId>(
+            `SELECT ses.id::int AS id, ses.servicio_id::int AS servicio_id, host(ses.nas_ip) AS nas_ip,
+                    ses.acct_session_id, ses.user_ppp, r.id::int AS router_id, r.radius_secret,
+                    ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
+                    ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
+             FROM network.sesiones ses
+             LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
+             WHERE ses.id = $1 AND ses.fin IS NULL`,
+            [sesionId],
+        )
+        return rows[0] ?? null
+    }
+
+    async yaProcesado(eventoId: string, servicioId: number | null, sesionId: number): Promise<boolean> {
+        // `servicio_id = $3` usa el índice `red_servicio`; null solo en desconexiones manuales.
+        const servicio = servicioId === null ? 'servicio_id IS NULL' : 'servicio_id = $3'
         const { rowCount } = await this.pool.query(
             `SELECT 1 FROM audit.red
-             WHERE servicio_id = $1 AND comando->>'evento_id' = $2 AND (comando->>'sesion_id')::bigint = $3
+             WHERE ${servicio} AND comando->>'evento_id' = $1 AND (comando->>'sesion_id')::bigint = $2
                AND (ok OR (respuesta->>'final')::boolean)
              LIMIT 1`,
-            [servicioId, eventoId, sesionId],
+            servicioId === null ? [eventoId, sesionId] : [eventoId, sesionId, servicioId],
         )
         return (rowCount ?? 0) > 0
     }

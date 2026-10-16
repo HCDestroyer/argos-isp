@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Almacen, CoaFallido, FilaRed, SesionActiva } from '../src/almacen.ts'
+import type { Almacen, CoaFallido, FilaRed, SesionActiva, SesionPorId } from '../src/almacen.ts'
 import { cifrar } from '../src/cifrado.ts'
 import type { ServicioActual } from '../src/decision.ts'
 import type { Log } from '../src/dispatcher.ts'
@@ -32,6 +32,8 @@ export function sesion(parcial: Partial<SesionActiva> = {}): SesionActiva {
         user_ppp: 'cliente-101',
         router_id: 1,
         radius_secret: cifrar(SECRET, CLAVE),
+        prefijo_enlace_v6: null,
+        prefijo_delegado_v6: null,
         ...parcial,
     }
 }
@@ -40,6 +42,8 @@ export function sesion(parcial: Partial<SesionActiva> = {}): SesionActiva {
 export class AlmacenMemoria implements Almacen {
     servicios = new Map<number, ServicioActual>()
     sesiones = new Map<number, SesionActiva[]>()
+    /** sesiones abiertas por id (desconexión manual) */
+    abiertas = new Map<number, SesionPorId>()
     readonly red: FilaRed[] = []
     readonly outbox: Array<{ payload: CoaFallido; requestId: string | null }> = []
 
@@ -51,7 +55,11 @@ export class AlmacenMemoria implements Almacen {
         return this.sesiones.get(id) ?? []
     }
 
-    async yaProcesado(eventoId: string, servicioId: number, sesionId: number) {
+    async sesionAbierta(id: number) {
+        return this.abiertas.get(id) ?? null
+    }
+
+    async yaProcesado(eventoId: string, servicioId: number | null, sesionId: number) {
         return this.red.some(
             (f) =>
                 f.servicio_id === servicioId &&

@@ -14,6 +14,10 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import type { EsquemaJson } from '#shared/openapi/esquemas'
+import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
+import { ReglasPromesa } from '#billing/esquemas'
+import { PlanEfectivo } from '#network/esquemas'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -114,6 +118,35 @@ export const EstadoServicio = definirEsquema(
     enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
 )
 
+const horaCorte: EsquemaJson = {
+    type: 'string',
+    pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+    description: 'HH:MM hora de Guatemala',
+}
+
+/** Tipo de cada campo exceptuable (la lista y la validación son de A3: `app/billing/excepciones.ts`). */
+export const TIPOS_EXCEPCION: Record<CampoExcepcion, EsquemaJson> = {
+    dia: { type: 'integer', minimum: 1, maximum: 28 },
+    prorrateo: booleano,
+    dias_gracia: { type: 'integer', minimum: 0 },
+    facturas_para_limitar: { type: 'integer', minimum: 0 },
+    facturas_para_cortar: { type: 'integer', minimum: 1 },
+    mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+    mora_valor: Dinero,
+    mora_recurrente: booleano,
+    hora_corte: horaCorte,
+    certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+    reglas_promesa: { ...jsonLibre, description: 'Parcial: se combina clave a clave sobre la plantilla' },
+}
+
+/** `{ campo: valor }` de `core.servicios_excepciones`; solo trae los campos exceptuados. */
+export const ExcepcionesServicio = definirEsquema('ExcepcionesServicio', {
+    type: 'object',
+    description: 'Excepciones a la plantilla de facturación del servicio',
+    properties: Object.fromEntries(CAMPOS_EXCEPCION.map((campo) => [campo, TIPOS_EXCEPCION[campo]])),
+    additionalProperties: false,
+})
+
 export const Servicio = definirEsquema(
     'Servicio',
     objeto(
@@ -147,9 +180,12 @@ export const Servicio = definirEsquema(
             plan_nombre: texto,
             router_nombre: texto,
             zona_nombre: nulable(texto),
+            // aditivo (día 4): la API siempre lo envía
+            excepciones: ExcepcionesServicio,
             ...auditable,
         },
         [
+            'excepciones',
             'cliente_nombre',
             'plan_nombre',
             'router_nombre',
@@ -158,6 +194,39 @@ export const Servicio = definirEsquema(
             'suspension_manual_motivo',
         ],
     ),
+)
+
+/** Plantilla de facturación con las excepciones del servicio aplicadas (`aplicarExcepciones`). */
+export const ConfiguracionFacturacion = definirEsquema(
+    'ConfiguracionFacturacion',
+    objeto({
+        plantilla_id: id,
+        nombre: texto,
+        ciclo: enumerado(['dia_fijo', 'aniversario']),
+        dia: nulable(entero),
+        prorrateo: booleano,
+        dias_gracia: entero,
+        facturas_para_limitar: entero,
+        facturas_para_cortar: entero,
+        mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+        mora_valor: Dinero,
+        mora_recurrente: booleano,
+        hora_corte: horaCorte,
+        certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+        reglas_promesa: ReglasPromesa,
+        excepciones: { ...lista(texto), description: 'Campos que vienen de una excepción del servicio' },
+    }),
+)
+
+export const ConfiguracionEfectivaServicio = definirEsquema(
+    'ConfiguracionEfectivaServicio',
+    objeto({
+        servicio_id: id,
+        plantilla_facturacion_id: nulable(id),
+        plan: PlanEfectivo,
+        facturacion: nulable(ConfiguracionFacturacion),
+        excepciones: ExcepcionesServicio,
+    }),
 )
 
 export const CredencialesPpp = definirEsquema(

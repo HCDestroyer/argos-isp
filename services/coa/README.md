@@ -8,6 +8,7 @@ coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configurac
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `servicio.estado_cambiado`                  | `coa.fallido` `{servicio_id, nas_ip, tipo: coa\|disconnect, error}` cuando una sesión no recibe ACK |
 | `servicio.config_cambiada`                  |                                                                                                     |
+| `sesion.desconexion_solicitada`             | (mismo `coa.fallido`; `servicio_id` null si la sesión no tiene servicio)                            |
 
 Consumo según `.claude/integration/contratos/eventos.md`: `XREADGROUP` + `XACK`; si el proceso cae relee sus pendientes al arrancar; lo que lleva 60 s sin confirmar se reclama con `XAUTOCLAIM`. Un evento que falla por Postgres no se confirma y se reintenta; los siguientes del mismo servicio esperan detrás de él. Un payload ilegible o fuera del catálogo se confirma y se descarta.
 
@@ -24,7 +25,9 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 | → `retirado`                                     | Disconnect | — (al reconectar `aaa` lo rechaza)                                                                     |
 | config con `ips`, `prefijo_v6` o `router`        | Disconnect | — (al reconectar trae la IP, el prefijo o el NAS nuevos)                                               |
 | config solo con `plan`                           | CoA        | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido (se aplica al reactivar)              |
+| `sesion.desconexion_solicitada` (panel o API)    | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`   |
 
+- Suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` (por defecto) manda el CoA de la tabla; `disconnect` manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
 - Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).
 - Velocidades: mismas reglas que `services/aaa/src/perfil.ts` (velocidad limitada en 0 → la del plan).

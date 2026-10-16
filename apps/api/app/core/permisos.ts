@@ -10,6 +10,8 @@ export const PERMISOS = {
     'clientes.crear': 'Crear clientes',
     'clientes.editar': 'Editar datos de clientes',
     'clientes.estado_cuenta': 'Ver el estado de cuenta de un cliente',
+    'clientes.vincular_telegram': 'Vincular el chat de Telegram de un cliente',
+    'clientes.desvincular_telegram': 'Quitar el chat de Telegram de un cliente',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -96,6 +98,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
+            'zonas.ver',
             'servicios.ver',
             'planes.ver',
             'facturas.ver',
@@ -115,6 +118,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.crear',
             'clientes.editar',
             'clientes.estado_cuenta',
+            'clientes.vincular_telegram',
+            'clientes.desvincular_telegram',
             'zonas.ver',
             'servicios.ver',
             'servicios.crear',
@@ -169,6 +174,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
+            'zonas.ver',
             'servicios.ver',
             'planes.ver',
             'plantillas.ver',

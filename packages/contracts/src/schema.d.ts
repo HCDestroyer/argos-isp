@@ -179,6 +179,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{id}/desvincular-telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quitar el chat de Telegram del cliente */
+        post: operations["clientesDesvincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{id}/estado-cuenta": {
         parameters: {
             query?: never;
@@ -190,6 +207,26 @@ export interface paths {
         get: operations["clientesEstadoCuenta"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{id}/vincular-telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vincular el chat de Telegram del cliente
+         * @description Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.
+         */
+        post: operations["clientesVincularTelegram"];
         delete?: never;
         options?: never;
         head?: never;
@@ -922,6 +959,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/asignaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historial de router, plan, IPv4 y prefijos IPv6 del servicio
+         * @description Tramos del más reciente al más viejo; el vigente tiene `fin: null`. Cada cambio de router, plan, IPv4 o prefijos cierra un tramo y abre otro.
+         */
+        get: operations["serviciosAsignaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/configuracion-efectiva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configuración efectiva: plan en su router y plantilla con excepciones aplicadas */
+        get: operations["serviciosConfiguracionEfectiva"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/credenciales": {
         parameters: {
             query?: never;
@@ -948,7 +1022,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Desconectar la sesión PPPoE */
+        /** Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa) */
         post: operations["serviciosDesconectar"];
         delete?: never;
         options?: never;
@@ -1067,7 +1141,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Desconectar sesión (Disconnect-Request al NAS) */
+        /**
+         * Desconectar sesión (Disconnect-Request al NAS)
+         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
+         */
         post: operations["sesionesDesconectar"];
         delete?: never;
         options?: never;
@@ -1346,6 +1423,35 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ConfiguracionEfectivaServicio: {
+            servicio_id: number;
+            plantilla_facturacion_id: number | null;
+            plan: components["schemas"]["PlanEfectivo"];
+            facturacion: components["schemas"]["ConfiguracionFacturacion"] | null;
+            excepciones: components["schemas"]["ExcepcionesServicio"];
+        };
+        ConfiguracionFacturacion: {
+            plantilla_id: number;
+            nombre: string;
+            /** @enum {string} */
+            ciclo: "dia_fijo" | "aniversario";
+            dia: number | null;
+            prorrateo: boolean;
+            dias_gracia: number;
+            facturas_para_limitar: number;
+            facturas_para_cortar: number;
+            /** @enum {string} */
+            mora_tipo: "ninguna" | "fija" | "porcentaje";
+            mora_valor: components["schemas"]["Dinero"];
+            mora_recurrente: boolean;
+            /** @description HH:MM hora de Guatemala */
+            hora_corte: string;
+            /** @enum {string} */
+            certificar_al: "emitir" | "pagar" | "nunca";
+            reglas_promesa: components["schemas"]["ReglasPromesa"];
+            /** @description Campos que vienen de una excepción del servicio */
+            excepciones: string[];
+        };
         CredencialesPpp: {
             servicio_id: number;
             user_ppp: string;
@@ -1421,6 +1527,26 @@ export interface components {
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        /** @description Excepciones a la plantilla de facturación del servicio */
+        ExcepcionesServicio: {
+            dia?: number;
+            prorrateo?: boolean;
+            dias_gracia?: number;
+            facturas_para_limitar?: number;
+            facturas_para_cortar?: number;
+            /** @enum {string} */
+            mora_tipo?: "ninguna" | "fija" | "porcentaje";
+            mora_valor?: components["schemas"]["Dinero"];
+            mora_recurrente?: boolean;
+            /** @description HH:MM hora de Guatemala */
+            hora_corte?: string;
+            /** @enum {string} */
+            certificar_al?: "emitir" | "pagar" | "nunca";
+            /** @description Parcial: se combina clave a clave sobre la plantilla */
+            reglas_promesa?: {
+                [key: string]: unknown;
+            };
+        };
         Factura: {
             id: number;
             cliente_id: number;
@@ -1933,6 +2059,7 @@ export interface components {
             plan_nombre?: string;
             router_nombre?: string;
             zona_nombre?: string | null;
+            excepciones?: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1990,6 +2117,26 @@ export interface components {
             /** @description Se muestra una sola vez */
             token: string;
             datos: components["schemas"]["TokenApi"];
+        };
+        TramoAsignacion: {
+            id: number;
+            servicio_id: number;
+            router_id: number | null;
+            router_nombre: string | null;
+            plan_id: number | null;
+            plan_nombre: string | null;
+            ipv4: string | null;
+            prefijo_enlace_v6: string | null;
+            prefijo_delegado_v6: string | null;
+            /** Format: date-time */
+            inicio: string;
+            /**
+             * Format: date-time
+             * @description null = tramo vigente
+             */
+            fin: string | null;
+            /** @description alta, edicion: <campos>, retiro: <motivo> o inicial (migración) */
+            motivo: string | null;
         };
         Usuario: {
             id: number;
@@ -2810,6 +2957,76 @@ export interface operations {
             };
         };
     };
+    clientesDesvincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cliente sin chat de Telegram */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.desvincular_telegram */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     clientesEstadoCuenta: {
         parameters: {
             query?: never;
@@ -2850,6 +3067,83 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesVincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description chat id de Telegram (entero con signo, como texto) */
+                    chat_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Cliente con el chat vinculado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.vincular_telegram */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5370,7 +5664,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -5428,7 +5722,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -6109,6 +6403,7 @@ export interface operations {
                     cliente_id: number;
                     router_id: number;
                     plan_id: number;
+                    /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
                     /** @description Se genera si no viene */
                     user_ppp?: string;
@@ -6131,11 +6426,31 @@ export interface operations {
                      * @description IP fija; si no viene se asigna de las redes del router
                      */
                     ipv4?: string;
+                    /** @description Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena) */
+                    red_ipv4_id?: number;
                     /** @enum {string} */
                     ipv6_modo?: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
                     ipv6_duid?: string | null;
                     /** @description Solo modo estatico */
                     prefijo_delegado_v6?: string;
+                    /** @description Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa */
+                    excepciones?: {
+                        dia?: number | null;
+                        prorrateo?: boolean | null;
+                        dias_gracia?: number | null;
+                        facturas_para_limitar?: number | null;
+                        facturas_para_cortar?: number | null;
+                        mora_tipo?: ("ninguna" | "fija" | "porcentaje") | null;
+                        mora_valor?: components["schemas"]["Dinero"] | null;
+                        mora_recurrente?: boolean | null;
+                        hora_corte?: string | null;
+                        certificar_al?: ("emitir" | "pagar" | "nunca") | null;
+                        reglas_promesa?: {
+                            [key: string]: unknown;
+                        } | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -6273,6 +6588,24 @@ export interface operations {
                     ipv6_duid?: string | null;
                     /** @description Prefijo IPv6 en notación CIDR */
                     prefijo_delegado_v6?: string;
+                    /** @description Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa */
+                    excepciones?: {
+                        dia?: number | null;
+                        prorrateo?: boolean | null;
+                        dias_gracia?: number | null;
+                        facturas_para_limitar?: number | null;
+                        facturas_para_cortar?: number | null;
+                        mora_tipo?: ("ninguna" | "fija" | "porcentaje") | null;
+                        mora_valor?: components["schemas"]["Dinero"] | null;
+                        mora_recurrente?: boolean | null;
+                        hora_corte?: string | null;
+                        certificar_al?: ("emitir" | "pagar" | "nunca") | null;
+                        reglas_promesa?: {
+                            [key: string]: unknown;
+                        } | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -6324,6 +6657,121 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosAsignaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de tramos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TramoAsignacion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosConfiguracionEfectiva: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan efectivo y facturación efectiva del servicio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionEfectivaServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6449,15 +6897,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6903,15 +7342,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     sesionesDesconectar: {
@@ -6981,15 +7411,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7069,7 +7490,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

@@ -44,6 +44,13 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** Stream de Redis del bus de eventos (contrato). Por defecto `argos:eventos`. */
     EVENTOS_STREAM: Env.schema.string.optional(),
 
+    /** Vigía de `aaa` (A2, `node ace aaa:vigilar`): nodos `nombre=url` separados por coma. */
+    AAA_SALUD_NODOS: Env.schema.string.optional(),
+    /** ms sin responder antes de emitir `aaa.caido` (por defecto 60000) */
+    AAA_CAIDO_TRAS_MS: Env.schema.number.optional(),
+    /** ms entre health checks (por defecto 5000) */
+    AAA_SALUD_CADA_MS: Env.schema.number.optional(),
+
     /*
     |----------------------------------------------------------
     | Notificaciones (A6): correo SMTP, Telegram y datos de la empresa en plantillas
