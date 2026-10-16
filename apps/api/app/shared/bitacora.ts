@@ -84,22 +84,24 @@ export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<F
 
 export async function listarCambios(filtros: FiltrosCambios): Promise<Pagina<Fila>> {
     const consulta = db
-        .from('audit.cambios')
+        .from('audit.cambios as c')
+        .leftJoin('core.usuarios as u_c', 'u_c.id', 'c.actor_id')
         .select(
-            'id',
-            'entidad_tipo',
-            'entidad_id',
-            'campo',
-            'antes',
-            'despues',
-            'actor_tipo',
-            'actor_id',
-            'request_id',
-            'created_at',
+            'c.id',
+            'c.entidad_tipo',
+            'c.entidad_id',
+            'c.campo',
+            'c.antes',
+            'c.despues',
+            'c.actor_tipo',
+            'c.actor_id',
+            'u_c.nombre as actor_nombre',
+            'c.request_id',
+            'c.created_at',
         )
-        .if(filtros.entidad_tipo, (q) => q.where('entidad_tipo', filtros.entidad_tipo!))
-        .if(filtros.entidad_id, (q) => q.where('entidad_id', filtros.entidad_id!))
-        .if(filtros.request_id, (q) => q.where('request_id', filtros.request_id!))
+        .if(filtros.entidad_tipo, (q) => q.where('c.entidad_tipo', filtros.entidad_tipo!))
+        .if(filtros.entidad_id, (q) => q.where('c.entidad_id', filtros.entidad_id!))
+        .if(filtros.request_id, (q) => q.where('c.request_id', filtros.request_id!))
 
-    return paginar<Fila>(consulta, filtros)
+    return paginar<Fila>(consulta, filtros, { columna: 'c.id' })
 }
