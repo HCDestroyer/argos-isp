@@ -17,3 +17,7 @@ test-results/
 
 # worktrees temporales de agentes de Claude Code
 .claude/worktrees/
+
+# video (Remotion): dependencias y renders locales
+video/node_modules/
+video/out/

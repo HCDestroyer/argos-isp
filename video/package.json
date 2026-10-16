@@ -1,0 +1,29 @@
+{
+    "name": "argosisp-video",
+    "private": true,
+    "version": "0.1.0",
+    "description": "Video promocional y tour del producto ArgosIsp, hecho con Remotion",
+    "type": "module",
+    "scripts": {
+        "studio": "remotion studio src/index.ts",
+        "audio": "node scripts/generar-audio.mjs",
+        "fuentes": "node scripts/descargar-fuentes.mjs",
+        "capturas:relleno": "node scripts/generar-capturas.mjs",
+        "render": "remotion render src/index.ts Tour out/tour.mp4 --codec=h264 --crf=18",
+        "render:prueba": "remotion render src/index.ts Tour out/tour-prueba.mp4 --codec=h264 --scale=0.5 --crf=30 --x264-preset=veryfast",
+        "stills": "node scripts/generar-stills.mjs",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@remotion/cli": "4.0.535",
+        "@remotion/google-fonts": "4.0.535",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+        "remotion": "4.0.535"
+    },
+    "devDependencies": {
+        "@types/node": "22.19.1",
+        "@types/react": "19.2.2",
+        "typescript": "5.9.3"
+    }
+}
