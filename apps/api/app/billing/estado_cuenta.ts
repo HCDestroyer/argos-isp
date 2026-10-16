@@ -77,6 +77,7 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
             'a.origen_tipo',
             'a.origen_id',
             'a.descripcion',
+            'p.id',
             'p.cliente_id',
             'pagador.nombre',
         )
@@ -89,6 +90,7 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
             db.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
             'a.origen_tipo',
             'a.origen_id',
+            db.raw('case when p.cliente_id <> ? then p.id else null end as pago_tercero_id', [clienteId]),
             db.raw(
                 "case when p.cliente_id is not null and p.cliente_id <> ? then a.descripcion || ' · pagado por ' || pagador.nombre else a.descripcion end as descripcion",
                 [clienteId],
@@ -100,11 +102,16 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
         fecha: string
         origen_tipo: string
         origen_id: number | null
+        pago_tercero_id: number | null
         descripcion: string
         cargo: string
         abono: string
     }>
 
+    const propias = await facturasPropiasDePagos(
+        clienteId,
+        filas.map((f) => f.pago_tercero_id).filter((id): id is number => id !== null),
+    )
     let acumulado = CERO
     const movimientos = filas.map((fila) => {
         acumulado = acumulado.plus(dec(fila.cargo)).minus(dec(fila.abono))
@@ -112,7 +119,10 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
             fecha: fila.fecha,
             tipo: TIPOS[fila.origen_tipo] ?? 'ajuste',
             referencia_id: fila.origen_id ?? fila.id,
-            descripcion: fila.descripcion,
+            descripcion:
+                fila.pago_tercero_id === null
+                    ? fila.descripcion
+                    : soloFacturasPropias(fila.descripcion, propias.get(fila.pago_tercero_id) ?? []),
             cargo: aTexto(fila.cargo),
             abono: aTexto(fila.abono),
             saldo: aTexto(acumulado),
@@ -126,4 +136,32 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
         facturas_pendientes: facturas,
         movimientos,
     }
+}
+
+/**
+ * Pago de terceros: en el estado de cuenta del dueño, la descripción del pago lista solo SUS
+ * facturas (el asiento del pago nombra todas, también las del pagador).
+ */
+async function facturasPropiasDePagos(clienteId: number, pagos: number[]): Promise<Map<number, number[]>> {
+    const mapa = new Map<number, number[]>()
+    if (pagos.length === 0) return mapa
+    const filas = (await db
+        .from('billing.pagos_aplicaciones as a')
+        .join('billing.facturas as f', 'f.id', 'a.factura_id')
+        .whereIn('a.pago_id', [...new Set(pagos)])
+        .where('f.cliente_id', clienteId)
+        .groupBy('a.pago_id', 'a.factura_id')
+        .orderBy([
+            { column: 'a.pago_id', order: 'asc' },
+            { column: 'a.factura_id', order: 'asc' },
+        ])
+        .select('a.pago_id', 'a.factura_id')) as Array<{ pago_id: number; factura_id: number }>
+    for (const fila of filas) mapa.set(fila.pago_id, [...(mapa.get(fila.pago_id) ?? []), fila.factura_id])
+    return mapa
+}
+
+export function soloFacturasPropias(descripcion: string, facturas: number[]): string {
+    if (facturas.length === 0) return descripcion
+    const texto = facturas.length === 1 ? `factura ${facturas[0]}` : `facturas ${facturas.join(', ')}`
+    return descripcion.replace(/facturas? \d+(?:, \d+)*/, texto)
 }

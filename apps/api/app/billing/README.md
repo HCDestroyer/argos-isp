@@ -13,6 +13,8 @@ Campos: `ciclo` (`dia_fijo` con `dia` 1–28, o `aniversario` = día de instalac
 
 Coherencia (`plantillas.ts`, 422 con el campo exacto): `dia_fijo` exige `dia`; `facturas_para_limitar ≤ facturas_para_cortar`; mora `ninguna` ⇒ 0, `fija`/`porcentaje` ⇒ > 0, porcentaje ≤ 100; máximo de promesas con buen historial ≥ máximo base.
 
+`por_defecto` (a lo sumo una, índice único parcial): la plantilla de los servicios creados sin `plantilla_facturacion_id`. Marcar otra (al crear o editar) desmarca la anterior, con su `version` y `audit.cambios`. `plantillaPorDefectoId()` la devuelve (la usa A1).
+
 Las facturas ya emitidas no cambian al editar la plantilla: cada una guarda `reglas_snapshot`. Cada cambio queda en `audit.cambios` (`entidad_tipo = plantilla_facturacion`).
 
 ### Reglas de promesa (`reglas_promesa.ts`)
@@ -92,7 +94,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 ## Cron de corte y worker (tarea 7)
 
-`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto) y `promesas` (cada minuto, `incumplirPromesas`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
+`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto), `promesas` (cada minuto, `incumplirPromesas`) y `conciliar` (06:30 Guatemala, `ConciliarPasarela`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
 
 `cortes.ts`: `horasDeCorte(hasta, cliente?)` (pública, solo lectura) da las horas de corte distintas (HH:MM de Guatemala) de los servicios vigentes que ya llegaron; es la misma consulta que usa el corte y la que vigila A6 (`VigilarCrons`).
 
@@ -143,6 +145,21 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
 - Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
 
+## Pasarela en línea (semana 2, `pasarelas/`)
+
+Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). El adaptador real se agrega al registro de `pasarela.ts` cuando el PM entregue credenciales; nada más cambia.
+
+| Acción                      | Archivo                                | Quién la llama                                                                                              |
+| --------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pasarela.crear_cobro`      | `actions/crear_cobro_pasarela.ts`      | `POST /pasarela/cobros` (`pagos.registrar`); el portal (A5) directo                                         |
+| `pasarela.procesar_webhook` | `actions/procesar_webhook_pasarela.ts` | `POST /pasarela/webhook/:proveedor` (público, firmado)                                                      |
+| `pasarela.conciliar`        | `actions/conciliar_pasarela.ts`        | cron `conciliar` (06:30 Guatemala, día anterior, con lock); `POST /pasarela/conciliar` (`facturas.generar`) |
+
+- Cobro: `monto` por defecto = lo pendiente de las `facturas` pedidas o de todo el cliente (422 `sin_deuda`). Devuelve `url_pago`. No mueve dinero.
+- Webhook: el adaptador verifica HMAC-SHA256 y la ventana de ±5 min (401 `firma_invalida`); solo el proveedor configurado. Idempotente por id del evento (`billing.pasarela_eventos`, `ON CONFLICT DO NOTHING`): repetido o simultáneo responde `duplicado: true` sin otro pago; además `referencia` = id del cobro en el proveedor (única por método). Pagado → `RegistrarPago` anidada con `metodo: pasarela`, `comision` y las facturas del cobro: asiento `1.1.02.01 Banco principal (neto) + 5.1.02 Comisiones / CxC`, `pago.registrado` y reactivación en la misma transacción.
+- Conciliación: compara cobros y pagos `pasarela` del día con `consultar` y guarda la corrida (`billing.pasarela_conciliaciones`) con diferencias `pago_sin_registrar`, `pago_sin_cobro_en_proveedor`, `monto_distinto`, `pago_anulado`, `pago_sin_cobro`, `error_consulta`. Solo reporta; los que cuadran quedan con `conciliado_en`.
+- Pasarela falsa (`pasarelas/falsa.ts`, laboratorio y pruebas): guarda su lado en `billing.pasarela_falsa`, comisión simulada 3.5 %, firma `X-Pasarela-Firma: t=<unix>,v1=<hex>` sobre `"<t>.<cuerpo>"` con `PASARELA_FALSA_SECRETO`. `GET /pasarela/falsa/:cobro` (página con "Pagar (simulado)") y `POST /pasarela/falsa/:cobro/pagar { estado?, monto?, notificar? }` procesan el webhook firmado por el mismo camino que uno real (`notificar: false` simula un webhook perdido). Ambas responden 404 si la falsa no es la configurada.
+
 ## Promesas de pago (tarea 10)
 
 | Acción                        | Archivo                               | Quién la llama                                         |
@@ -153,8 +170,8 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 | `promesas.revisar_cliente`    | `actions/revisar_promesas_cliente.ts` | `ConsumidorBilling` (grupo `billing`, `consumidor.ts`) |
 | `promesas.incumplir`          | `actions/incumplir_promesa.ts`        | `promesas.incumplir_vencidas`                          |
 | `promesas.incumplir_vencidas` | `actions/incumplir_promesas.ts`       | cron `promesas` (cada minuto, con lock)                |
-| `promesas.rechazar` | `actions/rechazar_promesa.ts` | `POST /promesas/:id/rechazar { motivo }` (supervisor) |
-| `promesas.cancelar` | `actions/cancelar_promesa.ts` | `POST /promesas/:id/cancelar { motivo }` (supervisor) |
+| `promesas.rechazar`           | `actions/rechazar_promesa.ts`         | `POST /promesas/:id/rechazar { motivo }` (supervisor)  |
+| `promesas.cancelar`           | `actions/cancelar_promesa.ts`         | `POST /promesas/:id/cancelar { motivo }` (supervisor)  |
 
 - `crearPromesaPago` evalúa las `reglas_promesa` efectivas (plantilla + excepción `reglas_promesa` del servicio) con `evaluarReglas` (`promesas.ts`, pura) en este orden y se detiene en la primera que falla: `habilitadas`, `canal_permitido`, `sin_deuda`, `plazo_max_dias`, `no_exceder_siguiente_facturacion`, `deuda_maxima` (deuda vencida), `abono_inicial_pct` (lo pagado de las facturas pendientes), `antiguedad_minima_dias`, `cumplimiento_minimo_pct` (últimas `historial_ventana` promesas resueltas), `bloqueo_tras_incumplida_dias`, `max_por_periodo` (promesas creadas en el periodo de facturación actual; con cumplimiento ≥ `buen_historial_pct`, `max_por_periodo_buen_historial`). Los límites no nulos del canal reemplazan al general; `requiere_aprobacion` deja la promesa `pendiente_aprobacion`.
 - Siempre guarda la promesa (también la rechazada) con `reglas_snapshot` y `resultado_evaluacion` = `{ resultado, regla, motivo, canal, evaluada_en, reglas[] (regla, ok, valor, limite, origen, detalle), deuda, historial, siguiente_facturacion }`. Al aprobar se agrega `aprobacion`; al cerrar, `cierre`.
@@ -165,6 +182,14 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Vencida sin cumplir → `incumplida`, `promesa.incumplida` y re-evaluación (corta con la hora de corte). Pendiente de aprobación vencida → `cancelada`.
 - Supervisor (`admin`, `contabilidad`): rechazar una `pendiente_aprobacion` → `rechazada`; cancelar una `activa` o `pendiente_aprobacion` → `cancelada` (si estaba activa, re-evaluación en la misma transacción: puede volver a cortarse). Motivo y quién en `resultado_evaluacion.cierre`; 409 `promesa_no_pendiente` en otro estado. Sin evento (el catálogo no tiene `promesa.rechazada` ni `promesa.cancelada`).
 
+## Vistas de lectura
+
+`Factura`, `Pago` (pagador) y `Promesa` traen `cliente_nombre`. Filtros: `GET /facturas?tipo=servicio|mora`, `GET /pagos?factura_id=` (pagos aplicados a esa factura). `POST /pagos/:id/anular` responde `servicios[]` como el registro.
+
+### Simulador (semana 2, `simulador_promesas.ts`)
+
+`POST /promesas/simular { servicio_id, canal?, vence_en?, monto?, evaluar_en? }` (`promesas.ver`): la misma evaluación que crear (`datosEvaluacion` + `evaluarReglas` en modo `completo`), sin guardar nada ni auditar. Devuelve todas las reglas con `ok`, `aplica`, `valor`, `limite`, `origen` y `detalle`; `resultado`/`regla` iguales a los de crear con esos datos; `validaciones` (monto, vencimiento futuro, promesa abierta) y `resultado_creacion` (`error` si crear respondería 422/409); `limites` del canal (plazo, fecha máxima, abono, deuda, cupo). Por defecto vence mañana al final del día y el monto es la deuda pendiente. `limitesPromesa(servicioId, canal)` da solo los límites (portal). Contrato: `.claude/integration/contratos/promesas.md`.
+
 ## Estado de cuenta (tarea 11)
 
 `estado_cuenta.ts`: `GET /clientes/:id/estado-cuenta` (permiso `clientes.estado_cuenta`, alcance por zona/router del cliente). Es el **auxiliar CxC** del libro:
@@ -173,6 +198,31 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - `saldo_a_favor` (aditivo): anticipos sin aplicar.
 - `facturas_pendientes`: `emitida`/`parcial`/`vencida` (servicio y mora), la más antigua primero.
 - `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
+- Pago de terceros: en el estado de cuenta del dueño, la descripción nombra solo sus facturas y termina en "· pagado por <pagador>".
+
+## Reportes y dashboard (semana 2, `reportes/`)
+
+`GET /api/v1/reportes/<nombre>` con permiso `reportes.ver`, filtros por query y `formato=json|csv|xlsx`. Cada reporte declara sus columnas tipadas (`definicion.ts`): de ahí salen el schema del OpenAPI (`Reporte*`), el CSV y el XLSX. Respuesta `{ reporte, titulo, filtros, columnas, filas, totales, generado_en }`; los totales suman dinero (decimal.js) y enteros.
+
+| Reporte                | Filtros                                                                    | Cuadra con el libro                                                      |
+| ---------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                         |
+| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), cliente, zona             | Σ monto = débitos a Caja, Bancos y Comisiones de los asientos de pago    |
+| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, cliente, zona, router, plan                      | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC     |
+| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                |
+| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)              |
+| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado) = `iva_libro` (2.1.02)  |
+| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)           |
+| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado` |
+| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes             |
+
+Rango por defecto: los últimos 12 meses (cobranza y cierres: el mes en curso). Alcance ACL por zona/router (o caja en cobranza, cierres y egresos).
+
+Exportación sin dependencias (`exportar.ts`): CSV con BOM UTF-8, comillas y fórmulas neutralizadas; XLSX mínimo (ZIP STORE con CRC-32 de `node:zlib`, una hoja, encabezado en negrita y congelado, dinero `#,##0.00`, fila de totales). Se probó que LibreOffice lo abre.
+
+### Dashboard (`resumenes.ts`)
+
+`GET /dashboard/resumen` (`reportes.ver`): servicios y clientes por estado, facturado y cobrado del mes, cartera vencida, cobros de hoy, promesas activas, series de 12 meses y `actualizado_en` por vista. Lee **solo** vistas materializadas `billing.resumen_*` que se refrescan **por evento**: `ConsumidorResumenes` (grupo `billing` en `node ace billing:worker`) refresca las vistas que cada evento puede cambiar (`factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado`) con `REFRESH MATERIALIZED VIEW CONCURRENTLY` vía `billing.refrescar_resumen(vista)` (SECURITY DEFINER: la app no es dueña de las vistas). Recalcular desde las tablas fuente es idempotente: repetir un evento deja lo mismo. `billing.resumenes_refrescos` guarda el último refresco y el último evento.
 
 ## Pruebas (tarea 12)
 
@@ -191,33 +241,40 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 
 ## Endpoints
 
-| Método   | Ruta                                            | Permiso                    |
-| -------- | ----------------------------------------------- | -------------------------- |
-| GET      | `/api/v1/plantillas-facturacion`                | `plantillas.ver`           |
-| POST     | `/api/v1/plantillas-facturacion`                | `plantillas.crear`         |
-| GET      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.ver`           |
-| PUT      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.editar`        |
-| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`      | `facturas.ver`             |
-| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte` | `facturas.generar`         |
-| POST     | `/api/v1/facturas/:id/anular`                   | `facturas.anular`          |
-| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`            | `pagos.ver`                |
-| POST     | `/api/v1/pagos`                                 | `pagos.registrar`          |
-| POST     | `/api/v1/pagos/:id/anular`                      | `pagos.anular`             |
-| GET      | `/api/v1/promesas`                              | `promesas.ver`             |
-| POST     | `/api/v1/promesas`                              | `promesas.crear`           |
-| POST     | `/api/v1/promesas/:id/aprobar`                  | `promesas.aprobar`         |
-| POST     | `/api/v1/promesas/:id/rechazar`                 | `promesas.rechazar`        |
-| POST     | `/api/v1/promesas/:id/cancelar`                 | `promesas.cancelar`        |
-| GET      | `/api/v1/bancos`                                | sesión (sin permiso)       |
-| GET      | `/api/v1/cuentas-bancarias`, `/:id`             | `cuentas_bancarias.ver`    |
-| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`               | `cuentas_bancarias.editar` |
-| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`  | `comprobantes.ver`         |
-| POST     | `/api/v1/comprobantes/:id/aprobar`              | `comprobantes.aprobar`     |
-| POST     | `/api/v1/comprobantes/:id/rechazar`             | `comprobantes.rechazar`    |
-| GET      | `/api/v1/clientes/:id/estado-cuenta`            | `clientes.estado_cuenta`   |
+| Método   | Ruta                                              | Permiso                    |
+| -------- | ------------------------------------------------- | -------------------------- |
+| GET      | `/api/v1/plantillas-facturacion`                  | `plantillas.ver`           |
+| POST     | `/api/v1/plantillas-facturacion`                  | `plantillas.crear`         |
+| GET      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.ver`           |
+| PUT      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.editar`        |
+| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`        | `facturas.ver`             |
+| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
+| POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
+| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
+| POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |
+| POST     | `/api/v1/pagos/:id/anular`                        | `pagos.anular`             |
+| GET      | `/api/v1/promesas`                                | `promesas.ver`             |
+| POST     | `/api/v1/promesas`                                | `promesas.crear`           |
+| POST     | `/api/v1/promesas/:id/aprobar`                    | `promesas.aprobar`         |
+| POST     | `/api/v1/promesas/:id/rechazar`                   | `promesas.rechazar`        |
+| POST     | `/api/v1/promesas/:id/cancelar`                   | `promesas.cancelar`        |
+| GET      | `/api/v1/bancos`                                  | sesión (sin permiso)       |
+| GET      | `/api/v1/cuentas-bancarias`, `/:id`               | `cuentas_bancarias.ver`    |
+| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`                 | `cuentas_bancarias.editar` |
+| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`    | `comprobantes.ver`         |
+| POST     | `/api/v1/comprobantes/:id/aprobar`                | `comprobantes.aprobar`     |
+| POST     | `/api/v1/comprobantes/:id/rechazar`               | `comprobantes.rechazar`    |
+| GET      | `/api/v1/clientes/:id/estado-cuenta`              | `clientes.estado_cuenta`   |
+| POST     | `/api/v1/pasarela/cobros`                         | `pagos.registrar`          |
+| GET      | `/api/v1/pasarela/cobros`, `/:id`                 | `pagos.ver`                |
+| POST     | `/api/v1/pasarela/webhook/:proveedor`             | público (firma HMAC)       |
+| POST     | `/api/v1/pasarela/conciliar`                      | `facturas.generar`         |
+| GET      | `/api/v1/pasarela/conciliaciones`                 | `pagos.ver`                |
+| GET/POST | `/api/v1/pasarela/falsa/:cobro[/pagar]`           | público, solo laboratorio  |
+| GET      | `/api/v1/reportes/*`, `/api/v1/dashboard/resumen` | `reportes.ver`             |
 
 ## Eventos
 
 Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`.
 
-Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
+Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

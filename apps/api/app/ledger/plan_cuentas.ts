@@ -181,14 +181,17 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
 ]
 
 /** Categorías de egreso y la cuenta de gasto a la que van. */
-export const CATEGORIAS_EGRESO: ReadonlyArray<{ nombre: string; cuenta: CodigoCuenta }> = [
-    { nombre: 'Energía', cuenta: CUENTAS.GASTO_ENERGIA },
-    { nombre: 'Tránsito', cuenta: CUENTAS.GASTO_TRANSITO },
-    { nombre: 'Nómina', cuenta: CUENTAS.GASTO_NOMINA },
-    { nombre: 'Vehículos', cuenta: CUENTAS.GASTO_VEHICULOS },
-    { nombre: 'Alquileres', cuenta: CUENTAS.GASTO_ALQUILERES },
-    { nombre: 'Otros', cuenta: CUENTAS.GASTO_OTROS },
-]
+export const CATEGORIAS_EGRESO = [
+    { clave: 'energia', nombre: 'Energía', cuenta: CUENTAS.GASTO_ENERGIA },
+    { clave: 'transito', nombre: 'Tránsito', cuenta: CUENTAS.GASTO_TRANSITO },
+    { clave: 'nomina', nombre: 'Nómina', cuenta: CUENTAS.GASTO_NOMINA },
+    { clave: 'vehiculos', nombre: 'Vehículos', cuenta: CUENTAS.GASTO_VEHICULOS },
+    { clave: 'alquileres', nombre: 'Alquileres', cuenta: CUENTAS.GASTO_ALQUILERES },
+    { clave: 'otros', nombre: 'Otros', cuenta: CUENTAS.GASTO_OTROS },
+] as const satisfies ReadonlyArray<{ clave: string; nombre: string; cuenta: CodigoCuenta }>
+
+export type ClaveCategoriaEgreso = (typeof CATEGORIAS_EGRESO)[number]['clave']
+export const CLAVES_CATEGORIA_EGRESO = CATEGORIAS_EGRESO.map((c) => c.clave)
 
 /** Caja y banco iniciales (cada uno con su cuenta del plan). */
 export const CAJA_INICIAL = { nombre: 'Caja principal', cuenta: CUENTAS.CAJA_PRINCIPAL } as const
@@ -230,7 +233,11 @@ export async function sembrarPlanCuentas(cliente: QueryClientContract): Promise<
         await cliente
             .knexQuery()
             .table('ledger.egresos_categorias')
-            .insert({ nombre: categoria.nombre, cuenta_id: ids.get(categoria.cuenta)! })
+            .insert({
+                clave: categoria.clave,
+                nombre: categoria.nombre,
+                cuenta_id: ids.get(categoria.cuenta)!,
+            })
             .onConflict('nombre')
             .ignore()
     }

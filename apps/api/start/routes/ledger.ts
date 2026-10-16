@@ -6,9 +6,25 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
-import { Asiento, Caja, CajaTurno, Cuenta, Mayor } from '#ledger/esquemas'
+import {
+    Asiento,
+    Caja,
+    CajaTurno,
+    CategoriaEgreso,
+    CierrePeriodo,
+    Cuenta,
+    Egreso,
+    Mayor,
+} from '#ledger/esquemas'
+import { listarCierres } from '#ledger/cierres'
+import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
+import { dimensionesDeEgreso, listarCategoriasEgreso, listarEgresos, verEgreso } from '#ledger/egresos'
+import { cajaPrincipalId } from '#billing/pagos'
+import RegistrarEgreso from '#ledger/actions/registrar_egreso'
+import AnularEgreso from '#ledger/actions/anular_egreso'
 import { libroDiario, libroMayor, listarCuentas } from '#ledger/consultas'
-import { existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
+import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { exigirAlcance } from '#core/acl'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
@@ -119,4 +135,124 @@ const libro: Ruta[] = [
     }),
 ]
 
-export default [...cajas, ...libro]
+const egresos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/egresos/categorias',
+        operacion: 'egresosCategorias',
+        resumen: 'Categorías de egreso con su cuenta de gasto',
+        etiqueta: 'egresos',
+        permiso: 'egresos.ver',
+        respuesta: { status: 200, descripcion: 'Categorías', esquema: lista(CategoriaEgreso) },
+        handler: () => listarCategoriasEgreso(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/egresos',
+        operacion: 'egresosListar',
+        resumen: 'Listar egresos',
+        etiqueta: 'egresos',
+        permiso: 'egresos.ver',
+        query: v.listarEgresosValidator,
+        respuesta: { status: 200, descripcion: 'Página de egresos', esquema: pagina(Egreso) },
+        handler: (ctx, { query }) => listarEgresos(query, ctx.alcance),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/egresos/:id',
+        operacion: 'egresosVer',
+        resumen: 'Ver egreso',
+        etiqueta: 'egresos',
+        permiso: 'egresos.ver',
+        respuesta: { status: 200, descripcion: 'Egreso', esquema: Egreso },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeEgreso(id))
+            return verEgreso(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/egresos',
+        operacion: 'egresosRegistrar',
+        resumen: 'Registrar egreso (asiento Gasto / Caja o Banco)',
+        etiqueta: 'egresos',
+        permiso: 'egresos.registrar',
+        cuerpo: v.registrarEgresoValidator,
+        idempotente: true,
+        descripcion:
+            'La categoría decide la cuenta de gasto. Con metodo caja el efectivo sale del turno abierto de la caja (baja el esperado del cierre); sin caja_id, la caja del turno abierto del usuario o la principal. 422 con un error por campo (no_aplica si se manda el origen de otro método).',
+        respuesta: { status: 201, descripcion: 'Egreso registrado', esquema: Egreso },
+        handler: async (ctx, { cuerpo }) => {
+            const cajaId =
+                cuerpo.metodo === 'caja'
+                    ? (cuerpo.caja_id ??
+                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance)) ??
+                      (await cajaPrincipalId()))
+                    : cuerpo.caja_id
+            if (cuerpo.metodo === 'caja' && cajaId) exigirAlcance(ctx.alcance, { caja: [cajaId] })
+            return new RegistrarEgreso().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/egresos/:id/anular',
+        operacion: 'egresosAnular',
+        resumen: 'Anular egreso (asiento de reverso)',
+        etiqueta: 'egresos',
+        permiso: 'egresos.anular',
+        cuerpo: v.anularEgresoValidator,
+        idempotente: true,
+        descripcion: 'El reverso va con fecha de hoy (periodo abierto). 409 egreso_anulado si ya lo estaba.',
+        respuesta: { status: 200, descripcion: 'Egreso anulado', esquema: Egreso },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeEgreso(id))
+            return new AnularEgreso().execute({ egreso_id: id, motivo: cuerpo.motivo }, ctx.contextoAccion())
+        },
+    }),
+]
+
+const periodos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/periodos',
+        operacion: 'libroPeriodos',
+        resumen: 'Cierres mensuales y reaperturas (el más reciente primero)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.listarCierresValidator,
+        respuesta: { status: 200, descripcion: 'Página de cierres', esquema: pagina(CierrePeriodo) },
+        handler: (_ctx, { query }) => listarCierres(query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/periodos/cerrar',
+        operacion: 'libroCerrarPeriodo',
+        resumen: 'Cerrar un mes del libro',
+        etiqueta: 'libro',
+        permiso: 'libro.cerrar_periodo',
+        cuerpo: v.cerrarPeriodoValidator,
+        idempotente: true,
+        descripcion:
+            'Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.',
+        respuesta: { status: 201, descripcion: 'Mes cerrado', esquema: CierrePeriodo },
+        handler: (ctx, { cuerpo }) => new CerrarPeriodo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/periodos/reabrir',
+        operacion: 'libroReabrirPeriodo',
+        resumen: 'Reabrir un mes cerrado (con motivo)',
+        etiqueta: 'libro',
+        permiso: 'libro.reabrir_periodo',
+        cuerpo: v.reabrirPeriodoValidator,
+        idempotente: true,
+        descripcion:
+            'No borra el cierre: registra la reapertura con motivo (auditada). Se puede volver a cerrar. 409 periodo_abierto si el mes no está cerrado.',
+        respuesta: { status: 200, descripcion: 'Mes reabierto', esquema: CierrePeriodo },
+        handler: (ctx, { cuerpo }) => new ReabrirPeriodo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+]
+
+export default [...cajas, ...libro, ...egresos, ...periodos]

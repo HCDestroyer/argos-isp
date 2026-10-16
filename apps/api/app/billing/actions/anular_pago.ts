@@ -13,6 +13,7 @@ import {
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 
 /**
  * `pagos.anular` (`POST /pagos/:id/anular`, permiso `pagos.anular`, con motivo).
@@ -33,10 +34,13 @@ export interface EntradaAnularPago {
     motivo: string
 }
 
-export default class AnularPago extends DomainAction<EntradaAnularPago, PagoVista> {
+/** El pago anulado y cómo quedó cada servicio re-evaluado (puede volver a limitarse o cortarse). */
+export type ResultadoAnularPago = PagoVista & Pick<ResultadoRegistrarPago, 'servicios'>
+
+export default class AnularPago extends DomainAction<EntradaAnularPago, ResultadoAnularPago> {
     readonly nombre = 'pagos.anular'
 
-    protected async handle(input: EntradaAnularPago, t: Transaccion): Promise<PagoVista> {
+    protected async handle(input: EntradaAnularPago, t: Transaccion): Promise<ResultadoAnularPago> {
         t.fijarEntidad('pago', input.pago_id)
         const previo = await t.trx
             .from('billing.pagos')
@@ -128,9 +132,19 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, PagoVist
         })
 
         const otras = await aplicarAnticipos(t, pago.cliente_id)
+        const servicios: ResultadoAnularPago['servicios'] = []
         for (const servicioId of serviciosDe([...facturas, ...otras])) {
-            await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, { trx: t.trx })
+            const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, {
+                trx: t.trx,
+            })
+            servicios.push({
+                servicio_id: r.servicio_id,
+                estado: r.estado,
+                de: r.de,
+                cambiado: r.cambiado,
+                motivo: r.motivo,
+            })
         }
-        return verPago(pago.id, t.trx)
+        return { ...(await verPago(pago.id, t.trx)), servicios }
     }
 }

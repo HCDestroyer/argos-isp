@@ -7,9 +7,10 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * (servicio `billing-worker` del docker-compose, A6). Lógica en `app/billing` (acciones).
  *
  * Además consume el grupo `billing` del bus de eventos (`pago.registrado` → cumplir promesas,
- * `ConsumidorBilling`); `--sin-eventos` lo apaga.
+ * `ConsumidorBilling`; `factura.*`, `pago.*`, `promesa.*` y `servicio.estado_cambiado` →
+ * refrescar los resúmenes del dashboard, `ConsumidorResumenes`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte` o `promesas`) y termina:
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas` o `conciliar`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -22,7 +23,9 @@ export default class BillingWorker extends BaseCommand {
         staysAlive: true,
     }
 
-    @flags.string({ description: 'Ejecuta un solo cron (generar, vencer, corte, promesas) y termina' })
+    @flags.string({
+        description: 'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar) y termina',
+    })
     declare unaVez?: string
 
     @flags.boolean({ description: 'No consume el grupo billing del bus de eventos' })
@@ -47,7 +50,12 @@ export default class BillingWorker extends BaseCommand {
         if (!this.sinEventos) {
             const { EjecutorGrupo } = await import('#shared/eventos_bus')
             const { ConsumidorBilling } = await import('#billing/consumidor')
-            const grupo = new EjecutorGrupo({ grupo: 'billing', consumidores: [new ConsumidorBilling()] })
+            const { ConsumidorResumenes } = await import('#billing/reportes/resumenes')
+            // promesas primero (pueden cambiar estados) y después los resúmenes del dashboard
+            const grupo = new EjecutorGrupo({
+                grupo: 'billing',
+                consumidores: [new ConsumidorBilling(), new ConsumidorResumenes()],
+            })
             grupo.iniciar()
             ejecutor = grupo
             this.logger.info(`billing:worker consumiendo el grupo billing de ${grupo.stream}`)
