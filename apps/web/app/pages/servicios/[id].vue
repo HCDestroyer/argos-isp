@@ -34,7 +34,21 @@ const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
 const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
 const historialAsignaciones = useTemplateRef<{ recargar: () => Promise<void> }>('asignaciones')
 
-useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` }))
+useHead(() => ({ title: `${servicio.value ? etiquetaServicio(servicio.value) : 'Servicio'} · ArgosIsp` }))
+
+const editando = ref(false)
+const puedeEditar = computed(() => puede('servicios.editar') && servicio.value !== null && servicio.value.estado !== 'retirado')
+/** Sin PPPoE (WISP) no hay credenciales ni sesión RADIUS. */
+const conPppoe = computed(() => servicio.value !== null && esPppoe(servicio.value))
+
+function alEditar(actualizado: Servicio) {
+    servicio.value = actualizado
+    toast.add({ title: 'Servicio actualizado', description: `${TIPOS_CONEXION[tipoConexionDe(actualizado)].corta} · ${etiquetaServicio(actualizado)}`, icon: 'i-lucide-circle-check', color: 'success' })
+    void cargarRelacionados(actualizado)
+    void cargarSesion()
+    void lineaTiempo.value?.recargar()
+    void historialAsignaciones.value?.recargar()
+}
 
 /**
  * Botones de acción: solo los que el usuario puede (permiso con el mismo nombre de la acción) y
@@ -43,6 +57,8 @@ useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` 
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
 
 const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const puedeSimular = computed(() => puede('promesas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const simuladorAbierto = ref(false)
 
 const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value }))
 
@@ -64,7 +80,8 @@ function abrirAccion(accion: PresentacionAccionServicio) {
 }
 
 async function cargarSesion() {
-    if (!puede('sesiones.ver')) {
+    if (!puede('sesiones.ver') || !conPppoe.value) {
+        sesion.value = null
         return
     }
     cargandoSesion.value = true
@@ -146,7 +163,7 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
     servicio.value = actualizado
     toast.add({
         title: accion.hecho,
-        description: `${actualizado.user_ppp} · ${ESTADOS_SERVICIO[actualizado.estado].etiqueta}`,
+        description: `${etiquetaServicio(actualizado)} · ${ESTADOS_SERVICIO[actualizado.estado].etiqueta}`,
         icon: accion.icono,
         color: 'success',
     })
@@ -165,10 +182,19 @@ onMounted(cargar)
 <template>
     <PanelPagina
         id="servicio"
-        :titulo="servicio?.user_ppp ?? 'Servicio'"
+        :titulo="servicio ? etiquetaServicio(servicio) : 'Servicio'"
         icono="i-lucide-wifi"
     >
         <template #acciones>
+            <UButton
+                v-if="puedeEditar"
+                label="Editar"
+                icon="i-lucide-pencil"
+                color="neutral"
+                variant="outline"
+                data-prueba="editar-servicio"
+                @click="editando = true"
+            />
             <UButton
                 to="/servicios"
                 icon="i-lucide-arrow-left"
@@ -210,9 +236,16 @@ onMounted(cargar)
             <div class="flex flex-col gap-1">
                 <div class="flex flex-wrap items-center gap-2">
                     <h2 class="break-all font-mono text-xl font-semibold text-highlighted">
-                        {{ servicio.user_ppp }}
+                        {{ etiquetaServicio(servicio) }}
                     </h2>
                     <EstadoServicioBadge :estado="servicio.estado" />
+                    <UBadge
+                        :label="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
+                        :icon="TIPOS_CONEXION[tipoConexionDe(servicio)].icono"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="tipo-conexion"
+                    />
                     <UBadge
                         v-if="servicio.promesa_activa"
                         label="Promesa activa"
@@ -257,7 +290,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedePromesa"
+                v-if="acciones.length || puedePromesa || puedeSimular"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -278,6 +311,15 @@ onMounted(cargar)
                     color="info"
                     variant="outline"
                     @click="abrirPromesa"
+                />
+                <UButton
+                    v-if="puedeSimular"
+                    label="Simular promesa"
+                    icon="i-lucide-flask-conical"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-simulador"
+                    @click="simuladorAbierto = true"
                 />
             </div>
             <p
@@ -334,6 +376,15 @@ onMounted(cargar)
                             :valor="nombreRouter(servicio)"
                         />
                         <DatoFicha
+                            etiqueta="Tipo de conexión"
+                            :valor="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
+                        />
+                        <DatoFicha
+                            v-if="!conPppoe"
+                            etiqueta="Amarre IP-MAC"
+                            :valor="servicio.amarre_ip_mac ? 'Sí (ARP estático)' : 'No'"
+                        />
+                        <DatoFicha
                             etiqueta="IPv4"
                             :valor="servicio.ipv4 ?? 'Sin IPv4'"
                             mono
@@ -371,6 +422,7 @@ onMounted(cargar)
                 </UPageCard>
 
                 <UPageCard
+                    v-if="conPppoe"
                     title="Credenciales PPPoE"
                     icon="i-lucide-key-round"
                     variant="subtle"
@@ -382,7 +434,7 @@ onMounted(cargar)
                 </UPageCard>
 
                 <UPageCard
-                    v-if="puede('sesiones.ver')"
+                    v-if="puede('sesiones.ver') && conPppoe"
                     title="Sesión activa"
                     icon="i-lucide-activity"
                     variant="subtle"
@@ -556,6 +608,18 @@ onMounted(cargar)
                     etiqueta="Historial del servicio"
                 />
             </section>
+
+            <ServicioEditar
+                v-model:open="editando"
+                :servicio="servicio"
+                @guardado="alEditar"
+            />
+
+            <PromesaSimularModal
+                v-model:open="simuladorAbierto"
+                :servicio="servicio"
+                @creada="alCrearPromesa"
+            />
 
             <PromesaCrearModal
                 v-model:open="promesaAbierta"

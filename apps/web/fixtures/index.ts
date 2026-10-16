@@ -17,13 +17,17 @@ import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
 import { rutasClientes } from './clientes/rutas'
+import { rutasComprobantes } from './comprobantes/rutas'
 import { rutasDocumentos } from './documentos/rutas'
+import { rutasEgresos } from './egresos/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasLibro } from './libro/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
+import { rutasSimulador } from './promesas/simulador'
+import { rutasReportes } from './reportes/rutas'
 import { rutasRouters } from './routers/rutas'
 import { rutasAsignaciones } from './servicios/asignaciones'
 import { rutasServicios } from './servicios/rutas'
@@ -114,8 +118,12 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasFacturacion,
     ...rutasLibro,
     ...rutasCajas,
+    ...rutasComprobantes,
+    ...rutasSimulador,
     ...rutasPromesas,
     ...rutasUsuarios,
     ...rutasBancos,
     ...rutasDocumentos,
+    ...rutasReportes,
+    ...rutasEgresos,
 })

@@ -82,7 +82,7 @@ function periodo(facturaId: number): string {
         return `Aviso #${facturaId}`
     }
     const servicio = props.servicios.find(s => s.id === factura.servicio_id)
-    return `Aviso #${facturaId} · ${formatearFecha(factura.periodo).slice(3)}${servicio ? ` · ${servicio.user_ppp}` : ''}`
+    return `Aviso #${facturaId} · ${formatearFecha(factura.periodo).slice(3)}${servicio ? ` · ${etiquetaServicio(servicio)}` : ''}`
 }
 </script>
 
@@ -246,7 +246,7 @@ function periodo(facturaId: number): string {
                             name="i-lucide-circle-check"
                             class="size-4 shrink-0"
                         />
-                        <span>Servicio <span class="font-mono">{{ servicio.user_ppp }}</span> reactivado<template v-if="grupo.clienteId !== cliente.id && grupo.nombre"> · {{ grupo.nombre }}</template></span>
+                        <span>Servicio <span class="font-mono">{{ etiquetaServicio(servicio) }}</span> reactivado<template v-if="grupo.clienteId !== cliente.id && grupo.nombre"> · {{ grupo.nombre }}</template></span>
                     </p>
                 </template>
                 <p
@@ -255,7 +255,7 @@ function periodo(facturaId: number): string {
                     class="text-xs text-highlighted"
                     data-prueba="recibo-suspension-manual"
                 >
-                    El servicio <span class="font-mono">{{ servicio.user_ppp }}</span> está suspendido manualmente: este pago no lo
+                    El servicio <span class="font-mono">{{ etiquetaServicio(servicio) }}</span> está suspendido manualmente: este pago no lo
                     reactiva. Para reactivarlo, comuníquese con la oficina.
                 </p>
             </div>

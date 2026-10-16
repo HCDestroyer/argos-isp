@@ -15,6 +15,7 @@ import {
     numeroQuery,
     paginar,
     registrarAccion,
+    versionCambiada,
 } from '../comun'
 
 type Servicio = Schema<'Servicio'>
@@ -64,8 +65,66 @@ function texto(valor: unknown): string | null {
     return typeof valor === 'string' && valor.trim() ? valor.trim() : null
 }
 
+const TIPOS = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const
+const PATRON_MAC_FIXTURE = /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/
+
+function tipoDe(valor: unknown): Servicio['tipo_conexion'] | null {
+    return typeof valor === 'string' && (TIPOS as readonly string[]).includes(valor) ? (valor as Servicio['tipo_conexion']) : null
+}
+
+/**
+ * Como `validarTipoConexion` (A1): sin PPPoE no hay credenciales ni IPv6 por RADIUS ni plan solo
+ * IPv6; `dhcp_fija` y el amarre exigen MAC; el amarre es solo sin PPPoE.
+ */
+function validarTipo(tipo: Servicio['tipo_conexion'], datos: { modo: string, mac: string | null, amarre: boolean, planV6: boolean, conUsuario: boolean, conClave: boolean }): Errores {
+    const errores: Errores = []
+    if (tipo !== 'pppoe') {
+        if (datos.conUsuario) {
+            errores.push({ field: 'user_ppp', message: 'Solo los servicios pppoe tienen user_ppp', rule: 'tipo_conexion' })
+        }
+        if (datos.conClave) {
+            errores.push({ field: 'pass_ppp', message: 'Solo los servicios pppoe tienen pass_ppp', rule: 'tipo_conexion' })
+        }
+        if (datos.modo === 'radius_servicio' || datos.modo === 'radius_pool') {
+            errores.push({ field: 'ipv6_modo', message: 'Sin PPPoE no hay RADIUS: el modo IPv6 debe ser duid, estatico o ninguno', rule: 'tipo_conexion' })
+        }
+        if (datos.planV6) {
+            errores.push({ field: 'tipo_conexion', message: 'Un servicio sin PPPoE necesita IPv4 y el plan es solo IPv6', rule: 'plan' })
+        }
+    }
+    if (datos.mac !== null && !PATRON_MAC_FIXTURE.test(datos.mac)) {
+        errores.push({ field: 'mac', message: 'MAC inválida', rule: 'regex' })
+    }
+    if (tipo === 'dhcp_fija' && !datos.mac) {
+        errores.push({ field: 'mac', message: 'dhcp_fija requiere la MAC del equipo', rule: 'required' })
+    }
+    if (datos.amarre) {
+        if (tipo === 'pppoe') {
+            errores.push({ field: 'amarre_ip_mac', message: 'El amarre IP-MAC es solo para servicios sin PPPoE', rule: 'tipo_conexion' })
+        }
+        else if (!datos.mac) {
+            errores.push({ field: 'mac', message: 'El amarre IP-MAC requiere la MAC del equipo', rule: 'required' })
+        }
+    }
+    return errores
+}
+
 function validarAlta(cuerpo: Record<string, unknown>): Errores {
     const errores: Errores = []
+    const tipo = cuerpo.tipo_conexion === undefined ? 'pppoe' : tipoDe(cuerpo.tipo_conexion)
+    if (!tipo) {
+        errores.push({ field: 'tipo_conexion', message: 'Debe ser pppoe, ip_estatica o dhcp_fija', rule: 'enum' })
+    }
+    else {
+        errores.push(...validarTipo(tipo, {
+            modo: typeof cuerpo.ipv6_modo === 'string' ? cuerpo.ipv6_modo : 'radius_servicio',
+            mac: texto(cuerpo.mac),
+            amarre: cuerpo.amarre_ip_mac === true,
+            planV6: bd.planes.find(p => p.id === cuerpo.plan_id)?.dual_stack === 'v6',
+            conUsuario: cuerpo.user_ppp !== undefined,
+            conClave: cuerpo.pass_ppp !== undefined,
+        }))
+    }
     const { cliente_id: clienteId, router_id: routerId, plan_id: planId, user_ppp: usuario, ipv4 } = cuerpo
     if (!bd.clientes.some(c => c.id === clienteId)) {
         errores.push({ field: 'cliente_id', message: 'El cliente no existe', rule: 'exists' })
@@ -112,7 +171,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     const id = siguienteId(bd.servicios)
     const cliente = bd.clientes.find(c => c.id === cuerpo.cliente_id)
     const plan = bd.planes.find(p => p.id === cuerpo.plan_id)
-    const modo = (cuerpo.ipv6_modo as Servicio['ipv6_modo'] | undefined) ?? 'radius_servicio'
+    const tipo = tipoDe(cuerpo.tipo_conexion) ?? 'pppoe'
+    const modo = (cuerpo.ipv6_modo as Servicio['ipv6_modo'] | undefined) ?? (tipo === 'pppoe' ? 'radius_servicio' : 'ninguno')
     const conV6 = modo === 'radius_servicio' && plan?.dual_stack !== 'v4' && bd.ipv6Bloques.some(b => b.router_id === routerId)
     const momento = ahora()
     return {
@@ -125,7 +185,9 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
             : (bd.plantillas[0]?.id ?? null),
         estado: 'activo',
         promesa_activa: false,
-        user_ppp: texto(cuerpo.user_ppp) ?? `cliente${cliente?.id ?? id}.${id}`,
+        tipo_conexion: tipo,
+        amarre_ip_mac: tipo !== 'pppoe' && cuerpo.amarre_ip_mac === true,
+        user_ppp: tipo === 'pppoe' ? (texto(cuerpo.user_ppp) ?? `cliente${cliente?.id ?? id}.${id}`) : null,
         mac: texto(cuerpo.mac),
         direccion: texto(cuerpo.direccion),
         coordenadas: texto(cuerpo.coordenadas),
@@ -289,7 +351,9 @@ export const rutasServicios: RutasFixture = {
         const estado = solicitud.query.get('estado')
         const zona = numeroQuery(solicitud, 'zona_id')
         const deuda = solicitud.query.get('con_deuda_vencida')
+        const tipo = solicitud.query.get('tipo_conexion')
         const filas = bd.servicios
+            .filter(s => !tipo || (s.tipo_conexion ?? 'pppoe') === tipo)
             .filter(s => zona === undefined || bd.clientes.find(c => c.id === s.cliente_id)?.zona_id === zona)
             .filter(s => deuda === null || bd.facturas.some(f => f.servicio_id === s.id && f.estado === 'vencida') === (deuda === 'true'))
             .filter(s => cliente === undefined || s.cliente_id === cliente)
@@ -319,10 +383,77 @@ export const rutasServicios: RutasFixture = {
         }
         bd.servicios.push(resultado)
         const { pass_ppp: clave, ...entrada } = cuerpoObjeto(solicitud)
-        bd.clavesPpp[resultado.id] = typeof clave === 'string' && clave ? clave : claveGenerada(resultado.id)
+        if (resultado.tipo_conexion === 'pppoe') {
+            bd.clavesPpp[resultado.id] = typeof clave === 'string' && clave ? clave : claveGenerada(resultado.id)
+        }
         registrarAccion(solicitud, 'servicios.crear', { tipo: 'servicio', id: resultado.id }, { ...entrada, pass_ppp: '***' })
         return { status: 201, cuerpo: resultado }
     })),
+
+    /**
+     * Como `EditarServicio` (A1): 409 por versión; `validarTipoConexion` sobre el resultado; pasar
+     * a PPPoE genera credenciales y salir de PPPoE las borra.
+     */
+    'PUT /api/v1/servicios/:id': conPermiso('servicios.editar', (solicitud) => {
+        const indice = bd.servicios.findIndex(s => s.id === idDe(solicitud))
+        const actual = bd.servicios[indice]
+        if (!actual) {
+            return noEncontrado('el servicio')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        if (cuerpo.version !== actual.version) {
+            return versionCambiada()
+        }
+        const tipoAntes = actual.tipo_conexion ?? 'pppoe'
+        const tipo = cuerpo.tipo_conexion === undefined ? tipoAntes : tipoDe(cuerpo.tipo_conexion)
+        if (!tipo) {
+            return datosInvalidos([{ field: 'tipo_conexion', message: 'Debe ser pppoe, ip_estatica o dhcp_fija', rule: 'enum' }])
+        }
+        const mac = 'mac' in cuerpo ? texto(cuerpo.mac) : actual.mac
+        const modo = typeof cuerpo.ipv6_modo === 'string' ? (cuerpo.ipv6_modo as Servicio['ipv6_modo']) : actual.ipv6_modo
+        const amarre = tipo !== 'pppoe' && (typeof cuerpo.amarre_ip_mac === 'boolean' ? cuerpo.amarre_ip_mac : (actual.amarre_ip_mac ?? false))
+        const planId = typeof cuerpo.plan_id === 'number' ? cuerpo.plan_id : actual.plan_id
+        const errores = validarTipo(tipo, {
+            modo,
+            mac,
+            amarre: cuerpo.amarre_ip_mac === true || amarre,
+            planV6: bd.planes.find(p => p.id === planId)?.dual_stack === 'v6',
+            conUsuario: false,
+            conClave: false,
+        })
+        if (!(bd.planesPorRouter[actual.router_id] ?? []).includes(planId)) {
+            errores.push({ field: 'plan_id', message: 'El plan no está implementado en ese router', rule: 'plan_router' })
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        const actualizado: Servicio = {
+            ...actual,
+            plan_id: planId,
+            tipo_conexion: tipo,
+            amarre_ip_mac: amarre,
+            user_ppp: tipo === 'pppoe' ? (actual.user_ppp ?? texto(cuerpo.user_ppp) ?? `cliente${actual.cliente_id}.${actual.id}`) : null,
+            mac,
+            ipv6_modo: modo,
+            ipv6_duid: 'ipv6_duid' in cuerpo ? texto(cuerpo.ipv6_duid) : actual.ipv6_duid,
+            direccion: 'direccion' in cuerpo ? texto(cuerpo.direccion) : actual.direccion,
+            coordenadas: 'coordenadas' in cuerpo ? texto(cuerpo.coordenadas) : actual.coordenadas,
+            fecha_instalacion: 'fecha_instalacion' in cuerpo ? texto(cuerpo.fecha_instalacion) : actual.fecha_instalacion,
+            costo_override: 'costo_override' in cuerpo ? texto(cuerpo.costo_override) : actual.costo_override,
+            excluir_firewall: typeof cuerpo.excluir_firewall === 'boolean' ? cuerpo.excluir_firewall : actual.excluir_firewall,
+            version: actual.version + 1,
+            updated_at: ahora(),
+        }
+        if (tipo === 'pppoe' && tipoAntes !== 'pppoe') {
+            bd.clavesPpp[actual.id] = claveGenerada(actual.id)
+        }
+        if (tipo !== 'pppoe') {
+            bd.clavesPpp = Object.fromEntries(Object.entries(bd.clavesPpp).filter(([id]) => Number(id) !== actual.id))
+        }
+        bd.servicios[indice] = actualizado
+        registrarAccion(solicitud, 'servicios.editar', { tipo: 'servicio', id: actual.id }, cuerpo)
+        return { status: 200, cuerpo: vista(actualizado) }
+    }),
 
     'GET /api/v1/servicios/:id/credenciales': conPermiso('servicios.ver_credenciales', (solicitud) => {
         const servicio = bd.servicios.find(s => s.id === idDe(solicitud))

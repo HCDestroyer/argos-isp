@@ -8,8 +8,9 @@ export type LineaMayor = Schema<'LineaMayor'>
 export type OrigenAsiento = Asiento['origen_tipo']
 export type FiltrosDiario = Omit<NonNullable<paths['/api/v1/libro/diario']['get']['parameters']['query']>, 'cursor'>
 export type FiltrosMayor = Omit<paths['/api/v1/libro/mayor']['get']['parameters']['query'], 'cursor'>
+export type CierrePeriodo = Schema<'CierrePeriodo'>
 
-/** Libro contable (solo lectura): plan de cuentas, diario y mayor. */
+/** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
 export function useLibro() {
     const api = useApi()
 
@@ -60,5 +61,33 @@ export function useLibro() {
         return { ok: true, data: encontrados.sort((a, b) => a.id - b.id) }
     }
 
-    return { cuentas, diario, mayor, asientosDe }
+    /** `GET /libro/periodos`: meses cerrados y reabiertos, el más reciente primero. */
+    function periodos(cursor?: string): Promise<Resultado<Pagina<CierrePeriodo>>> {
+        const query: { limit: number, cursor?: string } = { limit: 24 }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/libro/periodos', { params: { query } }))
+    }
+
+    /**
+     * `POST /libro/periodos/cerrar` (`libro.cerrar_periodo`): ningún asiento podrá tener fecha en
+     * ese mes. 422 `periodo_en_curso` para el mes actual; 409 `periodo_cerrado`.
+     */
+    function cerrarPeriodo(periodo: string, claveIdempotencia: string): Promise<Resultado<CierrePeriodo>> {
+        return resolver(api.POST('/api/v1/libro/periodos/cerrar', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: anioMes(periodo),
+        }))
+    }
+
+    /** `POST /libro/periodos/reabrir` (`libro.reabrir_periodo`) con motivo; 409 `periodo_abierto`. */
+    function reabrirPeriodo(periodo: string, motivo: string, claveIdempotencia: string): Promise<Resultado<CierrePeriodo>> {
+        return resolver(api.POST('/api/v1/libro/periodos/reabrir', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { ...anioMes(periodo), motivo },
+        }))
+    }
+
+    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo }
 }

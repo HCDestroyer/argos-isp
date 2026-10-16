@@ -4,6 +4,10 @@ import * as z from 'zod'
 /**
  * Espejo de `crearServicioValidator` (apps/api/app/core/validators.ts) para el asistente de alta.
  *
+ * WISP (A1, semana 2): `tipo_conexion` `pppoe` | `ip_estatica` | `dhcp_fija`. Sin PPPoE no hay
+ * credenciales ni IPv6 por RADIUS; `dhcp_fija` y el amarre IP-MAC exigen la MAC (formato
+ * `PATRON_MAC`); la IPv4 es obligatoria (automática de una red del router o fija).
+ *
  * Campos solo de la pantalla: `asignacion` (automática o IP fija) y `red_id`. `red_id` se manda
  * como `red_ipv4_id` (A1, día 4): con IP fija es la red de esa IP; en automática es opcional y,
  * sin elegirla, la API toma la siguiente IP libre de cualquier red del router.
@@ -30,18 +34,17 @@ export const esquemaServicio = z.object({
     cliente_id: z.number('Elige el cliente').int().min(1, 'Elige el cliente'),
     router_id: z.number('Elige el router').int().min(1, 'Elige el router'),
     plan_id: z.number('Elige un plan disponible en el router').int().min(1, 'Elige un plan disponible en el router'),
+    tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
+    amarre_ip_mac: z.boolean(),
     asignacion: z.enum(['automatica', 'fija']),
     red_id: z.number().int().optional(),
     ipv4: z.string().trim(),
     ipv6_modo: z.enum(MODOS_IPV6),
     ipv6_duid: z.string().trim().max(130, 'Máximo 130 caracteres'),
     prefijo_delegado_v6: z.string().trim(),
-    user_ppp: z.string()
-        .trim()
-        .regex(PATRON_USUARIO_PPP, 'De 3 a 64 caracteres: letras, números, punto, guion, guion bajo o @'),
-    pass_ppp: z.string()
-        .min(6, 'Mínimo 6 caracteres')
-        .max(64, 'Máximo 64 caracteres'),
+    // Solo PPPoE: se validan abajo, según el tipo de conexión.
+    user_ppp: z.string().trim(),
+    pass_ppp: z.string(),
     plantilla_facturacion_id: z.number().int().min(1).nullable(),
     costo_override: conPatron(PATRON_DINERO, 'Monto con hasta 2 decimales, por ejemplo 150.00'),
     excluir_firewall: z.boolean(),
@@ -50,6 +53,26 @@ export const esquemaServicio = z.object({
     coordenadas: conPatron(PATRON_COORDENADAS, 'Latitud y longitud: 14.6349,-90.5069'),
     fecha_instalacion: conPatron(PATRON_FECHA, 'Fecha AAAA-MM-DD'),
 }).superRefine((datos, ctx) => {
+    if (datos.tipo_conexion === 'pppoe') {
+        if (!PATRON_USUARIO_PPP.test(datos.user_ppp)) {
+            ctx.addIssue({ code: 'custom', path: ['user_ppp'], message: 'De 3 a 64 caracteres: letras, números, punto, guion, guion bajo o @' })
+        }
+        if (datos.pass_ppp.length < 6 || datos.pass_ppp.length > 64) {
+            ctx.addIssue({ code: 'custom', path: ['pass_ppp'], message: 'De 6 a 64 caracteres' })
+        }
+        if (datos.amarre_ip_mac) {
+            ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
+        }
+    }
+    else if (modoIpv6PorRadius(datos.ipv6_modo)) {
+        ctx.addIssue({ code: 'custom', path: ['ipv6_modo'], message: 'Sin PPPoE no hay RADIUS: el modo IPv6 debe ser DUID, estático o sin IPv6' })
+    }
+    if (datos.tipo_conexion === 'dhcp_fija' && !datos.mac) {
+        ctx.addIssue({ code: 'custom', path: ['mac'], message: 'DHCP con IP fija necesita la MAC del equipo' })
+    }
+    if (datos.amarre_ip_mac && !datos.mac) {
+        ctx.addIssue({ code: 'custom', path: ['mac'], message: 'El amarre IP-MAC necesita la MAC del equipo' })
+    }
     if (datos.asignacion === 'fija') {
         if (!PATRON_IPV4.test(datos.ipv4)) {
             ctx.addIssue({ code: 'custom', path: ['ipv4'], message: 'Escribe una IPv4 válida' })
@@ -77,6 +100,8 @@ export function entradaServicioVacia(clienteId?: number): EntradaServicio {
         cliente_id: clienteId ?? 0,
         router_id: 0,
         plan_id: 0,
+        tipo_conexion: 'pppoe',
+        amarre_ip_mac: false,
         asignacion: 'automatica',
         red_id: undefined,
         ipv4: '',
@@ -109,8 +134,7 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
         cliente_id: datos.cliente_id,
         router_id: datos.router_id,
         plan_id: datos.plan_id,
-        user_ppp: datos.user_ppp,
-        pass_ppp: datos.pass_ppp,
+        tipo_conexion: datos.tipo_conexion,
         mac: datos.mac,
         direccion: datos.direccion,
         coordenadas: datos.coordenadas,
@@ -118,6 +142,15 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
         costo_override: datos.costo_override,
         excluir_firewall: datos.excluir_firewall,
         ipv6_modo: datos.ipv6_modo,
+    }
+    // Las credenciales solo existen en PPPoE (la API responde 422 si llegan en WISP) y el amarre
+    // solo sin PPPoE.
+    if (datos.tipo_conexion === 'pppoe') {
+        cuerpo.user_ppp = datos.user_ppp
+        cuerpo.pass_ppp = datos.pass_ppp
+    }
+    else {
+        cuerpo.amarre_ip_mac = datos.amarre_ip_mac
     }
     if (!opciones.omitirPlantilla) {
         cuerpo.plantilla_facturacion_id = datos.plantilla_facturacion_id
