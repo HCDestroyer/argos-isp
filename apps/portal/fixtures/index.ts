@@ -186,7 +186,59 @@ function pagina<T>(data: T[]): { status: number, cuerpo: { data: T[], nextCursor
     return { status: 200, cuerpo: { data, nextCursor: null } }
 }
 
-export const rutasFixture: RutasFixture = {
+/**
+ * Pruebas de robustez: una ruta (`'GET /api/v1/portal/estado'`) responde un error fijo
+ * (`RespuestaFixture`, p. ej. un 429 o un 502 del proxy) o `'sin_conexion'` (el `fetch` falla
+ * como sin red). `null` la devuelve a la normalidad; `limpiarFallasFixture()` las quita todas.
+ */
+export type FallaFixture = RespuestaFixture | 'sin_conexion'
+const fallas = new Map<string, FallaFixture>()
+
+export function fijarFallaFixture(ruta: string, falla: FallaFixture | null): void {
+    if (falla === null) {
+        fallas.delete(ruta)
+    }
+    else {
+        fallas.set(ruta, falla)
+    }
+}
+
+export function limpiarFallasFixture(): void {
+    fallas.clear()
+}
+
+/** Pruebas: cuenta del cliente de la sesión (p. ej. con varios servicios); `null` = la de siempre. */
+const cuentaFija: { respuesta: Schema<'PortalCuenta'> | null } = { respuesta: null }
+
+export function fijarCuentaFixture(respuesta: Schema<'PortalCuenta'> | null): void {
+    cuentaFija.respuesta = respuesta
+}
+
+/** Error del proxy de Nitro cuando la API no responde (`server/api/v1/portal/[...ruta].ts`). */
+export const API_CAIDA_FIXTURE: RespuestaFixture = {
+    status: 502,
+    cuerpo: {
+        type: 'urn:argosisp:problema:api_no_disponible',
+        title: 'Servicio no disponible',
+        status: 502,
+        detail: 'No pudimos contactar al sistema. Intenta de nuevo en unos segundos.',
+    } satisfies Problem,
+}
+
+function conFallas(rutas: RutasFixture): RutasFixture {
+    return Object.fromEntries(Object.entries(rutas).map(([clave, manejador]) => [
+        clave,
+        (solicitud: Parameters<typeof manejador>[0]) => {
+            const falla = fallas.get(clave)
+            if (falla === 'sin_conexion') {
+                throw new TypeError('Failed to fetch')
+            }
+            return falla ?? manejador(solicitud)
+        },
+    ]))
+}
+
+const rutasBase: RutasFixture = {
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0
         return { status: 200, cuerpo: ESCENARIOS_CORTE[escenarioCorte()] }
@@ -234,16 +286,18 @@ export const rutasFixture: RutasFixture = {
         sesion.abierta = false
         return { status: 204 }
     },
-    'GET /api/v1/portal/cuenta': conSesion(() => ({
-        status: 200,
-        cuerpo: {
-            ...CUENTA_FIXTURE,
-            cliente: sesion.contacto,
-            servicios: CUENTA_FIXTURE.servicios.map(servicio => promesa.aprobada
-                ? { ...servicio, estado: 'activo' as const, promesa_activa: true }
-                : servicio),
-        } satisfies Schema<'PortalCuenta'>,
-    })),
+    'GET /api/v1/portal/cuenta': conSesion(() => cuentaFija.respuesta
+        ? { status: 200, cuerpo: cuentaFija.respuesta }
+        : {
+                status: 200,
+                cuerpo: {
+                    ...CUENTA_FIXTURE,
+                    cliente: sesion.contacto,
+                    servicios: CUENTA_FIXTURE.servicios.map(servicio => promesa.aprobada
+                        ? { ...servicio, estado: 'activo' as const, promesa_activa: true }
+                        : servicio),
+                } satisfies Schema<'PortalCuenta'>,
+            }),
     'GET /api/v1/portal/facturas': conSesion(() => pagina(FACTURAS_FIXTURE)),
     'GET /api/v1/portal/pagos': conSesion(() => pagina(PAGOS_FIXTURE)),
     'GET /api/v1/portal/promesas': conSesion(() => pagina(PROMESAS_FIXTURE)),
@@ -429,3 +483,5 @@ export const rutasFixture: RutasFixture = {
         return { status: 200, cuerpo: sesion.contacto }
     },
 }
+
+export const rutasFixture: RutasFixture = conFallas(rutasBase)

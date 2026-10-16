@@ -1395,7 +1395,7 @@ export interface paths {
         };
         /**
          * Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Incluye el motivo cuando se rechazó.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Incluye el motivo cuando se rechazó.
          */
         get: operations["portalComprobantes"];
         put?: never;
@@ -1420,7 +1420,7 @@ export interface paths {
         get?: never;
         /**
          * El cliente edita su correo, teléfonos y canal preferido
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
          */
         put: operations["portalEditarContacto"];
         post?: never;
@@ -1439,7 +1439,7 @@ export interface paths {
         };
         /**
          * Datos de contacto, servicios y saldo del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalCuenta"];
         put?: never;
@@ -1499,7 +1499,7 @@ export interface paths {
         };
         /**
          * Facturas (avisos de cobro) del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalFacturas"];
         put?: never;
@@ -1519,7 +1519,7 @@ export interface paths {
         };
         /**
          * Detalle de una factura del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404.
          */
         get: operations["portalFactura"];
         put?: never;
@@ -1539,7 +1539,7 @@ export interface paths {
         };
         /**
          * PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404. Responde application/pdf.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404. Responde application/pdf.
          */
         get: operations["portalFacturaPdf"];
         put?: never;
@@ -1559,7 +1559,7 @@ export interface paths {
         };
         /**
          * Pagos del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalPagos"];
         put?: never;
@@ -1619,7 +1619,7 @@ export interface paths {
         };
         /**
          * Promesas de pago del cliente de la sesión (solo lectura)
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         get: operations["portalPromesas"];
         put?: never;
@@ -1685,7 +1685,7 @@ export interface paths {
         put?: never;
         /**
          * Cierra la sesión del portal
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         post: operations["portalSalir"];
         delete?: never;
@@ -1703,7 +1703,7 @@ export interface paths {
         };
         /**
          * Estado de la vinculación de Telegram del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         get: operations["portalTelegram"];
         put?: never;
@@ -1725,7 +1725,7 @@ export interface paths {
         put?: never;
         /**
          * Quita el chat de Telegram del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
          */
         post: operations["portalDesvincularTelegram"];
         delete?: never;
@@ -1745,7 +1745,7 @@ export interface paths {
         put?: never;
         /**
          * Genera el código de un solo uso y el enlace al bot para vincular Telegram
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         post: operations["portalVincularTelegram"];
         delete?: never;
@@ -1765,7 +1765,7 @@ export interface paths {
         put?: never;
         /**
          * Verifica el código y abre la sesión del portal (cookie httpOnly)
-         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Strict, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalVerificarCodigo"];
         delete?: never;
@@ -10155,6 +10155,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalSubirComprobante: {
@@ -10278,6 +10287,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalCuenta: {
@@ -10296,6 +10314,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalCuenta"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -10393,6 +10420,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalFactura: {
@@ -10417,6 +10453,15 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10455,6 +10500,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalPagos: {
@@ -10485,6 +10539,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10621,6 +10684,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10780,6 +10852,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalTelegram: {
@@ -10800,6 +10881,15 @@ export interface operations {
                     "application/json": components["schemas"]["PortalTelegram"];
                 };
             };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     portalDesvincularTelegram: {
@@ -10818,6 +10908,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
