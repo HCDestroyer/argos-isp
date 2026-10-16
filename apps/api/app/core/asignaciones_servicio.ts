@@ -4,7 +4,7 @@ import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { asignarIpv4, liberarIpv4 } from '#network/ipam_v4'
 import { asignarPrefijoEstatico, liberarPrefijos, prefijoVigente, reservarPrefijo } from '#network/ipam_v6'
 import type { PlanEfectivo } from '#network/actions/obtener_implementacion_plan'
-import type { ModoIpv6 } from '#core/consultas/servicios'
+import type { ModoIpv6, TipoConexion } from '#core/consultas/servicios'
 
 /**
  * Piezas comunes de `crearServicio`, `editarServicio` y `retirarServicio`: llevar las
@@ -36,9 +36,87 @@ export async function asignacionesVigentes(
     }
 }
 
-/** Modo IPv6 por defecto: sin IPv6 si el plan es solo v4; si no, prefijos por servicio. */
-export function modoIpv6PorDefecto(plan: PlanEfectivo): ModoIpv6 {
-    return plan.dual_stack === 'v4' ? 'ninguno' : 'radius_servicio'
+/**
+ * Modo IPv6 por defecto: sin IPv6 si el plan es solo v4 o el servicio no es PPPoE (los modos
+ * `radius_*` necesitan RADIUS); si no, prefijos por servicio.
+ */
+export function modoIpv6PorDefecto(plan: PlanEfectivo, tipo: TipoConexion = 'pppoe'): ModoIpv6 {
+    return plan.dual_stack === 'v4' || tipo !== 'pppoe' ? 'ninguno' : 'radius_servicio'
+}
+
+/** Los modos IPv6 que entrega RADIUS no aplican a un servicio sin PPPoE. */
+export function modoIpv6PorRadius(modo: ModoIpv6): boolean {
+    return modo === 'radius_servicio' || modo === 'radius_pool'
+}
+
+/**
+ * Reglas del tipo de conexión (`contratos/routeros.md`), 422 por campo:
+ * - fuera de `pppoe` no hay `user_ppp` ni `pass_ppp`, ni modos IPv6 por RADIUS, y el plan debe
+ *   llevar IPv4 (la cola, la address-list y el lease se identifican por la IPv4);
+ * - `dhcp_fija` exige `mac` (el lease se amarra a ella);
+ * - `amarre_ip_mac` solo sin PPPoE y con `mac`.
+ */
+export function validarTipoConexion(
+    plan: PlanEfectivo,
+    datos: {
+        tipo: TipoConexion
+        modo: ModoIpv6
+        mac: string | null | undefined
+        amarre: boolean
+        user_ppp?: string
+        pass_ppp?: string
+    },
+) {
+    const errores: Array<{ field: string; message: string; rule: string }> = []
+    if (datos.tipo !== 'pppoe') {
+        if (datos.user_ppp !== undefined) {
+            errores.push({
+                field: 'user_ppp',
+                message: 'Solo los servicios pppoe tienen user_ppp',
+                rule: 'tipo_conexion',
+            })
+        }
+        if (datos.pass_ppp !== undefined) {
+            errores.push({
+                field: 'pass_ppp',
+                message: 'Solo los servicios pppoe tienen pass_ppp',
+                rule: 'tipo_conexion',
+            })
+        }
+        if (modoIpv6PorRadius(datos.modo)) {
+            errores.push({
+                field: 'ipv6_modo',
+                message: 'Sin PPPoE no hay RADIUS: el modo IPv6 debe ser duid, estatico o ninguno',
+                rule: 'tipo_conexion',
+            })
+        }
+        if (plan.dual_stack === 'v6') {
+            errores.push({
+                field: 'tipo_conexion',
+                message: 'Un servicio sin PPPoE necesita IPv4 y el plan es solo IPv6',
+                rule: 'plan',
+            })
+        }
+    }
+    if (datos.tipo === 'dhcp_fija' && !datos.mac) {
+        errores.push({ field: 'mac', message: 'dhcp_fija requiere la MAC del equipo', rule: 'required' })
+    }
+    if (datos.amarre) {
+        if (datos.tipo === 'pppoe') {
+            errores.push({
+                field: 'amarre_ip_mac',
+                message: 'El amarre IP-MAC es solo para servicios sin PPPoE',
+                rule: 'tipo_conexion',
+            })
+        } else if (!datos.mac) {
+            errores.push({
+                field: 'mac',
+                message: 'El amarre IP-MAC requiere la MAC del equipo',
+                rule: 'required',
+            })
+        }
+    }
+    if (errores.length > 0) throw new ValidacionFallida(errores, errores[0]!.message)
 }
 
 /** Reglas de combinación de plan, modo IPv6, DUID y prefijo manual (422). */
@@ -90,6 +168,8 @@ export async function reconciliarAsignaciones(
         routerId: number
         plan: PlanEfectivo
         modo: ModoIpv6
+        /** sin PPPoE la IPv4 es obligatoria y sale de las redes del router (nunca de un pool) */
+        tipoConexion?: TipoConexion
         ipv4?: string | null
         /** red de la que tomar la IPv4 (debe ser del router) */
         redIpv4Id?: number | null
@@ -98,8 +178,23 @@ export async function reconciliarAsignaciones(
 ): Promise<Asignaciones> {
     const { servicioId, routerId, plan, modo } = entrada
 
+    const sinPppoe = (entrada.tipoConexion ?? 'pppoe') !== 'pppoe'
     if (plan.dual_stack === 'v6') {
         await liberarIpv4(trx, servicioId)
+    } else if (sinPppoe) {
+        const tieneRedes = await trx.from('network.redes_ipv4').where('router_id', routerId).first()
+        if (!tieneRedes && !entrada.ipv4 && !entrada.redIpv4Id) {
+            throw new ReglaNegocio(
+                'Un servicio sin PPPoE necesita una IPv4 de las redes del router y el router no tiene redes',
+                'sin_ipv4',
+            )
+        }
+        await asignarIpv4(trx, {
+            servicioId,
+            routerId,
+            ip: entrada.ipv4,
+            redId: entrada.redIpv4Id,
+        })
     } else if (entrada.ipv4 || entrada.redIpv4Id) {
         await asignarIpv4(trx, { servicioId, routerId, ip: entrada.ipv4, redId: entrada.redIpv4Id })
     } else {

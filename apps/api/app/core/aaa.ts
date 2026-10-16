@@ -93,9 +93,15 @@ interface FilaAaa {
     prefijo_delegado: string | null
 }
 
+/**
+ * Solo servicios `pppoe`: un servicio sin PPPoE (`ip_estatica`, `dhcp_fija`) no pasa por RADIUS,
+ * así que para `aaa` es inexistente (404 en el endpoint, nada en Redis). Al dejar de ser PPPoE,
+ * `EditarServicio` escribe la lápida (sin credenciales) en la clave del `user_ppp` viejo.
+ */
 function consultaBase(cliente: QueryClientContract) {
     return cliente
         .from('core.servicios as s')
+        .where('s.tipo_conexion', 'pppoe')
         .join('network.planes as p', 'p.id', 's.plan_id')
         .leftJoin('network.planes_routers as pr', (j) =>
             j.on('pr.plan_id', '=', 's.plan_id').andOn('pr.router_id', '=', 's.router_id'),

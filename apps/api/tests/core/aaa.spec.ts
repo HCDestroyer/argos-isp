@@ -2,14 +2,8 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { redis } from '#shared/redis'
-import {
-    claveAaa,
-    prefijoAaa,
-    escribirRegistrosAaa,
-    publicarAaa,
-    valorRedis,
-    type RegistroAaa,
-} from '#core/aaa'
+import { claveAaa, escribirRegistrosAaa, publicarAaa, valorRedis, type RegistroAaa } from '#core/aaa'
+import { limpiarClavesAaa } from '#tests/core/ayudas_aaa'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
@@ -48,17 +42,6 @@ async function crearServicioApi(client: any, token: string, extra: Record<string
 
 const internoGet = (client: any, userPpp: string) =>
     client.get('/api/v1/internal/aaa/servicio').qs({ user_ppp: userPpp }).bearerToken(TOKEN_INTERNO())
-
-/** La base de pruebas se recrea en cada corrida (ids y user_ppp se repiten): se limpia el prefijo. */
-export async function limpiarClavesAaa() {
-    const patron = `${prefijoAaa()}*`
-    let cursor = '0'
-    do {
-        const [siguiente, claves] = await redis().scan(cursor, 'MATCH', patron, 'COUNT', 500)
-        if (claves.length > 0) await redis().del(...claves)
-        cursor = siguiente
-    } while (cursor !== '0')
-}
 
 test.group('AAA · registro de autorización RADIUS', (group) => {
     group.setup(limpiarClavesAaa)

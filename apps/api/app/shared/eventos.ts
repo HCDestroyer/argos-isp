@@ -84,9 +84,13 @@ export interface CatalogoEventos {
         a: EstadoServicio
         motivo: string
     }
+    /**
+     * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
+     * recalcula el estado deseado del servicio y limpia lo del tipo anterior.
+     */
     'servicio.config_cambiada': {
         servicio_id: number
-        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router'>
+        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac'>
     }
     'asignacion.cambiada': {
         servicio_id: number

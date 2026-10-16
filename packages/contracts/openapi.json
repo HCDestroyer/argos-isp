@@ -10885,6 +10885,19 @@
             }
           },
           {
+            "name": "tipo_conexion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pppoe",
+                "ip_estatica",
+                "dhcp_fija"
+              ]
+            }
+          },
+          {
             "name": "zona_id",
             "in": "query",
             "required": false,
@@ -10969,7 +10982,7 @@
       },
       "post": {
         "operationId": "serviciosCrear",
-        "summary": "Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp)",
+        "summary": "Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)",
         "tags": [
           "servicios"
         ],
@@ -11010,6 +11023,19 @@
                     "type": "integer",
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Por defecto pppoe"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
                   "plantilla_facturacion_id": {
                     "type": [
                       "integer",
@@ -11021,13 +11047,13 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
                     "maxLength": 64,
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -11426,10 +11452,29 @@
                     ],
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
+                  "user_ppp": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._@-]{3,64}$",
+                    "description": "Solo al cambiar a pppoe; se genera si no viene"
+                  },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
-                    "maxLength": 64
+                    "maxLength": 64,
+                    "description": "Solo pppoe; al cambiar a pppoe se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -18628,8 +18673,25 @@
               "null"
             ]
           },
+          "tipo_conexion": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS"
+          },
           "user_ppp": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null fuera de pppoe"
+          },
+          "amarre_ip_mac": {
+            "type": "boolean",
+            "description": "ARP estático IP-MAC en el router (solo sin PPPoE)"
           },
           "mac": {
             "type": [
