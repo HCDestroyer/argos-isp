@@ -67,9 +67,15 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
         return { ...evento, saldo: dinero(saldo) }
     })
 
+    // Como `saldoAnticipos` de la API: lo que sobró de los pagos del cliente sin aplicar a facturas.
+    const aFavor = bd.pagos
+        .filter(p => p.cliente_id === clienteId && p.estado === 'registrado')
+        .reduce((total, p) => total.plus(p.monto).minus(p.aplicaciones.reduce((suma, a) => suma.plus(a.monto), new Decimal(0))), new Decimal(0))
+
     return {
         cliente_id: clienteId,
         saldo: dinero(saldo),
+        saldo_a_favor: dinero(Decimal.max(aFavor, 0)),
         facturas_pendientes: facturas.filter(factura => factura.estado !== 'pagada'),
         movimientos,
     }

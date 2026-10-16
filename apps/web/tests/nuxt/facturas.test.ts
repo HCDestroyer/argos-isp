@@ -65,7 +65,7 @@ describe('tarea 10 · facturas', () => {
         }
 
         const otraVez = await useFacturas().anular(210, 'Repetida', nuevaClaveIdempotencia())
-        expect(!otraVez.ok && otraVez.problema.status).toBe(422)
+        expect(!otraVez.ok && otraVez.problema.status).toBe(409)
     })
 
     it('una factura con pagos no se anula y el motivo es obligatorio (422)', async () => {

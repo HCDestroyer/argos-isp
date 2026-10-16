@@ -132,7 +132,11 @@ const columnasCambios: TableColumn<CambioAuditoria>[] = [
 const hayFiltros = computed(() => actor.value !== TODOS || canal.value !== TODOS || accion.value !== ''
     || entidadTipo.value !== TODOS || entidadId.value !== '' || desde.value !== '' || hasta.value !== '' || peticion.value !== '')
 
-function nombreActor(tipo: string | null, id: number | null): string {
+/** Actor de un cambio: `actor_nombre` de la API (A1, día 4); si falta, el de `GET /usuarios`. */
+function nombreActor(tipo: string | null, id: number | null, nombre?: string | null): string {
+    if (nombre) {
+        return nombre
+    }
     if (id === null) {
         return tipo === 'sistema' || tipo === null ? 'Sistema' : tipo
     }
@@ -420,7 +424,7 @@ onMounted(async () => {
                     </template>
                     <template #campo-cell="{ row }">
                         <div class="flex flex-col">
-                            <span class="font-mono text-sm text-highlighted">{{ row.original.campo }}</span>
+                            <span class="font-mono text-sm text-highlighted">{{ nombreCampoCambio(row.original.campo) }}</span>
                             <span class="text-xs text-muted">
                                 <ULink
                                     v-if="rutaEntidad(row.original.entidad_tipo, row.original.entidad_id)"
@@ -443,13 +447,13 @@ onMounted(async () => {
                             <span
                                 class="font-mono text-xs break-all whitespace-normal"
                                 :class="row.original.despues === null ? 'text-dimmed' : 'text-highlighted'"
-                                :data-campo="row.original.campo"
+                                :data-campo="nombreCampoCambio(row.original.campo)"
                             >{{ valorCambio(row.original.despues) }}</span>
                             <span class="font-mono text-xs text-muted sm:hidden">antes: {{ valorCambio(row.original.antes) }}</span>
                         </div>
                     </template>
                     <template #actor_id-cell="{ row }">
-                        <span class="text-sm">{{ nombreActor(row.original.actor_tipo, row.original.actor_id) }}</span>
+                        <span class="text-sm">{{ nombreActor(row.original.actor_tipo, row.original.actor_id, row.original.actor_nombre) }}</span>
                     </template>
                     <template #empty>
                         <UEmpty

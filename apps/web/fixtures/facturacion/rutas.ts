@@ -44,6 +44,12 @@ function usuarioDe(solicitud: SolicitudFixture): number | null {
 }
 
 /** Como `ReglaNegocio` de la API: 422 con `type` `urn:argosisp:problema:<codigo>`. */
+/** Como `Conflicto` de la API (`anularFactura`): 409 con `type` `urn:argosisp:problema:<codigo>`. */
+function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: titulo, status: 409, detail: detalle }
+    return { status: 409, cuerpo }
+}
+
 function reglaNegocio(codigo: string, detalle: string): RespuestaFixture {
     const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: 'Regla de negocio', status: 422, detail: detalle }
     return { status: 422, cuerpo }
@@ -446,8 +452,8 @@ export const rutasFacturacion: RutasFixture = {
     }),
 
     /**
-     * Hoy 501 en la API (A3, día 4). Aquí el camino feliz: una factura con pagos aplicados no se
-     * anula (422, primero se anulan los pagos); al anular se revierte su asiento.
+     * Como `anularFactura` (A3): una factura con pagos aplicados no se anula (409
+     * `factura_con_pagos`, primero se anula el pago); al anular se revierte su asiento.
      */
     'POST /api/v1/facturas/:id/anular': conPermiso('facturas.anular', conIdempotencia((solicitud) => {
         const factura = bd.facturas.find(f => f.id === idDe(solicitud))
@@ -459,13 +465,13 @@ export const rutasFacturacion: RutasFixture = {
             return datosInvalidos(motivo)
         }
         if (factura.estado === 'anulada') {
-            return reglaNegocio('factura_anulada', `La factura ${factura.id} ya está anulada`)
+            return conflicto('factura_anulada', 'Factura anulada', `La factura ${factura.id} ya está anulada`)
         }
         if (new Decimal(factura.pagado).gt(0)) {
-            return reglaNegocio('factura_con_pagos', `La factura ${factura.id} tiene pagos aplicados: anula primero esos pagos`)
+            return conflicto('factura_con_pagos', 'Factura con pagos', `La factura ${factura.id} tiene pagos aplicados (factura ${factura.id}: Q${factura.pagado}); anula primero el pago`)
         }
         const momento = ahora()
-        Object.assign(factura, { estado: 'anulada', version: factura.version + 1, updated_at: momento })
+        Object.assign(factura, { estado: 'anulada', anulada_en: momento, motivo_anulacion: motivo, version: factura.version + 1, updated_at: momento })
         const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
         if (original) {
             bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, momento, usuarioDe(solicitud)))

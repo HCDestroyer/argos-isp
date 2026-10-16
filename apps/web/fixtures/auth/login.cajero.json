@@ -23,7 +23,10 @@
       "cajas.cerrar",
       "cuentas_bancarias.ver",
       "promesas.ver",
-      "promesas.crear"
+      "promesas.crear",
+      "comprobantes.ver",
+      "comprobantes.aprobar",
+      "comprobantes.rechazar"
     ]
   }
 }
