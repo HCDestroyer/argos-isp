@@ -4273,6 +4273,16 @@ export interface components {
             capacidad_bajada_kbps?: number | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
             capacidad_subida_kbps?: number | null;
+            /** @description https://host:puerto de la API REST; null = https://<host> */
+            api_url?: string | null;
+            /** @description Verificar el certificado TLS del router */
+            api_tls_verificar?: boolean;
+            /** @description CA en PEM para routers con certificado propio */
+            api_ca?: string | null;
+            /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+            dhcp_servidor?: string | null;
+            /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES */
+            interfaz_clientes?: string | null;
             /**
              * @deprecated
              * @description Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad
@@ -11880,6 +11890,16 @@ export interface operations {
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_subida_kbps?: number | null;
+                    /** @description https://host:puerto de la API REST; null = https://<host> */
+                    api_url?: string | null;
+                    /** @description Verificar el certificado TLS del router (por defecto true) */
+                    api_tls_verificar?: boolean;
+                    /** @description CA en PEM para routers con certificado propio; en auditoría se registra como *** */
+                    api_ca?: string | null;
+                    /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+                    dhcp_servidor?: string | null;
+                    /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP) */
+                    interfaz_clientes?: string | null;
                     activo?: boolean;
                 };
             };
@@ -11999,6 +12019,16 @@ export interface operations {
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_subida_kbps?: number | null;
+                    /** @description https://host:puerto de la API REST; null = https://<host> */
+                    api_url?: string | null;
+                    /** @description Verificar el certificado TLS del router (por defecto true) */
+                    api_tls_verificar?: boolean;
+                    /** @description CA en PEM para routers con certificado propio; en auditoría se registra como *** */
+                    api_ca?: string | null;
+                    /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
+                    dhcp_servidor?: string | null;
+                    /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP) */
+                    interfaz_clientes?: string | null;
                     activo?: boolean;
                 };
             };

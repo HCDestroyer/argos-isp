@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { descifrar } from '#shared/cifrado'
 import { asignarIpv4, liberarIpv4 } from '#network/ipam_v4'
+import { routerDispatcher } from '#network/routeros/consultas'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearRouterFila, crearServicioFila, ipUnica, redUnica } from '#tests/core/fabricas'
 
@@ -85,6 +86,129 @@ test.group('Routers', () => {
                 .json({ nombre: unico('Dup'), host: 'x', nas_ip: nasIp }),
             409,
         )
+    })
+
+    test('conexión de la API REST: se guarda, sale en la vista, la lee el dispatcher y api_ca se audita como ***', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const ca = '-----BEGIN CERTIFICATE-----\nMIIBprueba\n-----END CERTIFICATE-----'
+        const sinConexion = await estado(
+            client
+                .post('/api/v1/routers')
+                .bearerToken(token)
+                .json({ nombre: unico('MK Sin API'), host: 'mk.lab', nas_ip: ipUnica() }),
+            201,
+        )
+        assert.containsSubset(sinConexion.body(), {
+            api_url: null,
+            api_tls_verificar: true,
+            api_ca: null,
+            dhcp_servidor: null,
+            interfaz_clientes: null,
+        })
+
+        const creado = await estado(
+            client
+                .post('/api/v1/routers')
+                .bearerToken(token)
+                .json({
+                    nombre: unico('MK API'),
+                    host: 'mk-api.lab',
+                    nas_ip: ipUnica(),
+                    api_usuario: 'argos',
+                    api_password: 'clave-api',
+                    api_url: 'https://10.0.0.1:8443',
+                    api_tls_verificar: false,
+                    api_ca: ca,
+                    dhcp_servidor: 'dhcp-clientes',
+                    interfaz_clientes: 'bridge-clientes',
+                }),
+            201,
+        )
+        const router = creado.body()
+        assert.containsSubset(router, {
+            api_url: 'https://10.0.0.1:8443',
+            api_tls_verificar: false,
+            api_ca: ca,
+            dhcp_servidor: 'dhcp-clientes',
+            interfaz_clientes: 'bridge-clientes',
+        })
+
+        const despachador = await routerDispatcher(router.id)
+        assert.containsSubset(despachador!.api, {
+            api_url: 'https://10.0.0.1:8443',
+            api_tls_verificar: false,
+            api_ca: ca,
+        })
+        assert.containsSubset(despachador!.red, {
+            dhcp_servidor: 'dhcp-clientes',
+            interfaz_clientes: 'bridge-clientes',
+        })
+
+        const alta = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'router', entidad_id: router.id, campo: 'api_ca' })
+            .firstOrFail()
+        assert.deepEqual([alta.antes, alta.despues], [null, '***'])
+        const accion = await db
+            .from('audit.acciones')
+            .where({ accion: 'routers.crear', entidad_tipo: 'router', entidad_id: router.id })
+            .firstOrFail()
+        assert.equal(accion.entrada.api_ca, '***')
+        assert.isFalse(JSON.stringify(accion).includes('MIIBprueba'))
+
+        const otraCa = '-----BEGIN CERTIFICATE-----\nMIIBotra\n-----END CERTIFICATE-----'
+        const editado = await estado(
+            client.put(`/api/v1/routers/${router.id}`).bearerToken(token).json({
+                version: 1,
+                api_ca: otraCa,
+                api_url: null,
+                api_tls_verificar: true,
+                dhcp_servidor: null,
+            }),
+            200,
+        )
+        assert.containsSubset(editado.body(), {
+            api_ca: otraCa,
+            api_url: null,
+            api_tls_verificar: true,
+            dhcp_servidor: null,
+            interfaz_clientes: 'bridge-clientes',
+        })
+        const cambios = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'router', entidad_id: router.id })
+            .whereNot('request_id', alta.request_id)
+            .orderBy('campo')
+        assert.deepEqual(
+            cambios.map((c) => [c.campo, c.antes, c.despues]),
+            [
+                ['api_ca', '***', '***'],
+                ['api_tls_verificar', false, true],
+                ['api_url', 'https://10.0.0.1:8443', null],
+                ['dhcp_servidor', 'dhcp-clientes', null],
+            ],
+        )
+        assert.isFalse(JSON.stringify(cambios).includes('MIIB'))
+
+        for (const malo of [
+            { api_url: 'ftp://10.0.0.1' },
+            { api_url: 'https://10.0.0.1/rest/x' },
+            { api_ca: 'no es un pem' },
+            { dhcp_servidor: 'x'.repeat(101) },
+            { api_tls_verificar: 'quizá' },
+        ]) {
+            const r = await estado(
+                client
+                    .post('/api/v1/routers')
+                    .bearerToken(token)
+                    .json({ nombre: unico('MK Malo'), host: 'x', nas_ip: ipUnica(), ...malo }),
+                422,
+            )
+            assert.equal(r.body().errors[0].field, Object.keys(malo)[0])
+        }
     })
 
     test('cajero no ve routers; alcance por router filtra la lista y el detalle', async ({

@@ -44,6 +44,20 @@ export const Router = definirEsquema(
             capacidad_subida_kbps: kbpsNulable(
                 'Capacidad del enlace (techo del padre global); null = sin techo',
             ),
+            api_url: {
+                ...nulable(texto),
+                description: 'https://host:puerto de la API REST; null = https://<host>',
+            },
+            api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
+            api_ca: { ...nulable(texto), description: 'CA en PEM para routers con certificado propio' },
+            dhcp_servidor: {
+                ...nulable(texto),
+                description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
+            },
+            interfaz_clientes: {
+                ...nulable(texto),
+                description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
+            },
             modo_velocidad: {
                 ...enumerado(['simple', 'pcq']),
                 deprecated: true,
@@ -54,7 +68,16 @@ export const Router = definirEsquema(
             ...auditable,
         },
         // aditivos (semana 2): la API siempre los envía
-        ['control_velocidad', 'capacidad_bajada_kbps', 'capacidad_subida_kbps'],
+        [
+            'control_velocidad',
+            'capacidad_bajada_kbps',
+            'capacidad_subida_kbps',
+            'api_url',
+            'api_tls_verificar',
+            'api_ca',
+            'dhcp_servidor',
+            'interfaz_clientes',
+        ],
     ),
 )
 
