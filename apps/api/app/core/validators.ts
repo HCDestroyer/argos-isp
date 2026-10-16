@@ -174,12 +174,24 @@ const excepciones = () =>
 */
 
 const modosIpv6 = ['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno'] as const
+const tiposConexion = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const
+
+const tipoConexion = () =>
+    vine.enum(tiposConexion).meta({
+        description:
+            'pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)',
+    })
+
+const amarreIpMac = () =>
+    vine.boolean().meta({ description: 'ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)' })
 
 export const crearServicioValidator = vine.compile(
     vine.object({
         cliente_id: idEntidad(),
         router_id: idEntidad(),
         plan_id: idEntidad(),
+        tipo_conexion: tipoConexion().optional().meta({ description: 'Por defecto pppoe' }),
+        amarre_ip_mac: amarreIpMac().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional().meta({
             description:
                 'Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla',
@@ -189,13 +201,13 @@ export const crearServicioValidator = vine.compile(
             .trim()
             .regex(/^[A-Za-z0-9._@-]{3,64}$/)
             .optional()
-            .meta({ description: 'Se genera si no viene' }),
+            .meta({ description: 'Solo pppoe; se genera si no viene' }),
         pass_ppp: vine
             .string()
             .minLength(6)
             .maxLength(64)
             .optional()
-            .meta({ description: 'Se genera si no viene' }),
+            .meta({ description: 'Solo pppoe; se genera si no viene' }),
         mac: vine
             .string()
             .trim()
@@ -226,7 +238,20 @@ export const editarServicioValidator = vine.compile(
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional(),
-        pass_ppp: vine.string().minLength(6).maxLength(64).optional(),
+        tipo_conexion: tipoConexion().optional(),
+        amarre_ip_mac: amarreIpMac().optional(),
+        user_ppp: vine
+            .string()
+            .trim()
+            .regex(/^[A-Za-z0-9._@-]{3,64}$/)
+            .optional()
+            .meta({ description: 'Solo al cambiar a pppoe; se genera si no viene' }),
+        pass_ppp: vine
+            .string()
+            .minLength(6)
+            .maxLength(64)
+            .optional()
+            .meta({ description: 'Solo pppoe; al cambiar a pppoe se genera si no viene' }),
         mac: vine
             .string()
             .trim()
@@ -259,6 +284,7 @@ export const listarServiciosValidator = vine.compile(
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
         estado: vine.enum(ESTADOS_SERVICIO).optional(),
+        tipo_conexion: vine.enum(tiposConexion).optional(),
         zona_id: idEntidad().optional().meta({ description: 'Zona del cliente' }),
         con_deuda_vencida: vine
             .boolean()

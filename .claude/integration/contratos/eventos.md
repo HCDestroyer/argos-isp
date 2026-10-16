@@ -60,6 +60,18 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 - `procesar` es **idempotente por `id`**: el mismo evento puede llegar dos veces. Si lanza, el worker no hace `XACK` y el evento se reintenta (reclamado con `XAUTOCLAIM` tras 60 s).
 - Los consumidores no deciden estados ni mueven dinero por su cuenta: llaman acciones de dominio (regla 1).
 
+## Payloads del núcleo (A1)
+
+`servicio.config_cambiada`: `{ servicio_id, campos[] }`. Valores de `campos`:
+
+| Campo | Cuándo |
+| --- | --- |
+| `plan`, `router`, `ips`, `prefijo_v6` | Cambió el plan, el router, la IPv4 o los prefijos/modo IPv6 (desde el día 2) |
+| `tipo_conexion` | Semana 2 (WISP, `contratos/routeros.md`): el servicio pasó entre `pppoe`, `ip_estatica` y `dhcp_fija`. El dispatcher limpia en el router lo del tipo anterior. Al dejar `pppoe`, `aaa:user:<user_ppp viejo>` queda con lápida |
+| `mac`, `amarre_ip_mac` | Semana 2: cambió la MAC (lease de `dhcp_fija`, ARP) o el amarre IP-MAC |
+
+Los consumidores no deben fallar con un campo que no conocen: el dispatcher recalcula el estado deseado completo del servicio con cualquier `servicio.config_cambiada`.
+
 ## Payloads de pagos (A3)
 
 `pago.registrado` y `pago.anulado`: `{ pago_id, cliente_id, monto, metodo, facturas[], clientes[] }`.

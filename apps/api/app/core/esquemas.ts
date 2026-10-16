@@ -191,7 +191,12 @@ export const Servicio = definirEsquema(
                 description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
             },
             suspension_manual_motivo: nulable(texto),
-            user_ppp: texto,
+            tipo_conexion: {
+                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
+            },
+            user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
+            amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
             mac: nulable(texto),
             direccion: nulable(texto),
             coordenadas: nulable(texto),
@@ -220,6 +225,9 @@ export const Servicio = definirEsquema(
             'zona_nombre',
             'suspension_manual',
             'suspension_manual_motivo',
+            // aditivos (semana 2): la API siempre los envía
+            'tipo_conexion',
+            'amarre_ip_mac',
         ],
     ),
 )

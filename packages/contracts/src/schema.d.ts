@@ -1556,7 +1556,7 @@ export interface paths {
         /** Listar servicios */
         get: operations["serviciosListar"];
         put?: never;
-        /** Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp) */
+        /** Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe) */
         post: operations["serviciosCrear"];
         delete?: never;
         options?: never;
@@ -3025,7 +3025,15 @@ export interface components {
             /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
             suspension_manual?: boolean;
             suspension_manual_motivo?: string | null;
-            user_ppp: string;
+            /**
+             * @description pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS
+             * @enum {string}
+             */
+            tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @description null fuera de pppoe */
+            user_ppp: string | null;
+            /** @description ARP estático IP-MAC en el router (solo sin PPPoE) */
+            amarre_ip_mac?: boolean;
             mac: string | null;
             direccion: string | null;
             coordenadas: string | null;
@@ -9187,6 +9195,7 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                 /** @description Zona del cliente */
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
@@ -9255,11 +9264,18 @@ export interface operations {
                     cliente_id: number;
                     router_id: number;
                     plan_id: number;
+                    /**
+                     * @description Por defecto pppoe
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
                     /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     user_ppp?: string;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -9420,6 +9436,16 @@ export interface operations {
                     router_id?: number;
                     plan_id?: number;
                     plantilla_facturacion_id?: number | null;
+                    /**
+                     * @description pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
+                    /** @description Solo al cambiar a pppoe; se genera si no viene */
+                    user_ppp?: string;
+                    /** @description Solo pppoe; al cambiar a pppoe se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;

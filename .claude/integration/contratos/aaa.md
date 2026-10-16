@@ -26,6 +26,7 @@ Redis `aaa:user:<user_ppp>` (sin TTL) y `GET /internal/aaa/servicio?user_ppp=<us
 }
 ```
 
+- **Solo servicios `pppoe`** (semana 2, `contratos/routeros.md`): un servicio `ip_estatica` o `dhcp_fija` no tiene `user_ppp` ni `pass_ppp` y es inexistente para `aaa` (no está en Redis; el endpoint no lo encuentra). Al cambiar un servicio de `pppoe` a otro tipo, la clave del `user_ppp` viejo recibe la lápida (`eliminado`, `user_ppp`, `servicio_id`, `version`), nunca credenciales.
 - `estado`: `activo` | `limitado` | `suspendido` | `retirado` (`core.servicios.estado` tal cual; `aaa` no decide estados).
 - `plan.*`: de `network.planes`; `rate_limit_override` y `profile_ppp` de `network.planes_routers` para el router del servicio (null si no hay fila o no está definido).
 - `ipv4`: `{"modo":"estatico","ip":"<ipv4>"}` con la asignación vigente de `network.ipv4_asignaciones`, `{"modo":"pool","pool":"<planes_routers.pool_ipv4>"}`, o `null`.
