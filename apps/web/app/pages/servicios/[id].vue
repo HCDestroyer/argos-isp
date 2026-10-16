@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
+import Decimal from 'decimal.js'
 
 definePageMeta({ permiso: 'servicios.ver' })
 
@@ -21,6 +22,13 @@ const sesion = shallowRef<Sesion | null>(null)
 const cargandoSesion = ref(false)
 const problemaSesion = ref<Problem | null>(null)
 
+const promesas = shallowRef<Promesa[]>([])
+const cargandoPromesas = ref(false)
+const problemaPromesas = ref<Problem | null>(null)
+const promesaAbierta = ref(false)
+/** Lo pendiente del servicio (estado de cuenta), para sugerir el monto de la promesa. */
+const pendienteServicio = ref<string | null>(null)
+
 const accionAbierta = ref(false)
 const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
 const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
@@ -32,6 +40,8 @@ useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` 
  * que aplican al estado actual; un botón deshabilitado se confundía con uno activo.
  */
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
+
+const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !== null && servicio.value.estado !== 'retirado')
 
 const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value }))
 
@@ -63,6 +73,49 @@ async function cargarSesion() {
     problemaSesion.value = resultado.ok ? null : resultado.problema
 }
 
+async function cargarPromesas() {
+    if (!puede('promesas.ver')) {
+        return
+    }
+    cargandoPromesas.value = true
+    const resultado = await usePromesas().listar({ servicio_id: servicioId.value, limit: 10 })
+    cargandoPromesas.value = false
+    promesas.value = resultado.ok ? resultado.data.data : []
+    problemaPromesas.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarPendiente(actual: Servicio) {
+    pendienteServicio.value = null
+    if (!puede('clientes.estado_cuenta')) {
+        return
+    }
+    const resultado = await useClientes().estadoCuenta(actual.cliente_id)
+    if (!resultado.ok) {
+        return
+    }
+    const pendiente = resultado.data.facturas_pendientes
+        .filter(f => f.servicio_id === actual.id)
+        .reduce((suma, f) => suma.plus(saldoFactura(f)), new Decimal(0))
+    pendienteServicio.value = pendiente.gt(0) ? pendiente.toFixed(2) : null
+}
+
+function abrirPromesa() {
+    if (servicio.value) {
+        void cargarPendiente(servicio.value)
+    }
+    promesaAbierta.value = true
+}
+
+async function alCrearPromesa() {
+    void cargarPromesas()
+    void lineaTiempo.value?.recargar()
+    // Una promesa activa puede reactivar el servicio (evaluarEstadoServicio).
+    const resultado = await useServicios().ver(servicioId.value)
+    if (resultado.ok) {
+        servicio.value = resultado.data
+    }
+}
+
 async function cargarRelacionados(actual: Servicio) {
     const [resultadoPlanes, resultadoPlantillas] = await Promise.all([
         puede('planes.ver') ? usePlanes().listar() : null,
@@ -85,6 +138,7 @@ async function cargar() {
     servicio.value = resultado.data
     void cargarRelacionados(resultado.data)
     void cargarSesion()
+    void cargarPromesas()
 }
 
 function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
@@ -200,7 +254,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length"
+                v-if="acciones.length || puedePromesa"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -213,6 +267,14 @@ onMounted(cargar)
                     :color="accion.color"
                     variant="outline"
                     @click="abrirAccion(accion)"
+                />
+                <UButton
+                    v-if="puedePromesa"
+                    label="Promesa de pago"
+                    icon="i-lucide-calendar-clock"
+                    color="info"
+                    variant="outline"
+                    @click="abrirPromesa"
                 />
             </div>
             <p
@@ -400,6 +462,72 @@ onMounted(cargar)
             </div>
 
             <section
+                v-if="puede('promesas.ver')"
+                class="flex flex-col gap-3"
+                aria-label="Promesas del servicio"
+            >
+                <div class="flex items-center justify-between gap-2">
+                    <h3 class="text-sm font-semibold text-highlighted">
+                        Promesas de pago
+                    </h3>
+                    <UButton
+                        :to="`/promesas?servicio=${servicio.id}`"
+                        label="Ver todas"
+                        color="neutral"
+                        variant="link"
+                        size="sm"
+                        trailing-icon="i-lucide-arrow-right"
+                    />
+                </div>
+                <ProblemaAlerta
+                    v-if="problemaPromesas"
+                    :problema="problemaPromesas"
+                    :reintentar="cargarPromesas"
+                    :reintentando="cargandoPromesas"
+                />
+                <USkeleton
+                    v-else-if="cargandoPromesas && !promesas.length"
+                    class="h-16 w-full"
+                />
+                <p
+                    v-else-if="!promesas.length"
+                    class="text-sm text-muted"
+                >
+                    Sin promesas de pago.
+                </p>
+                <ul
+                    v-else
+                    class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                >
+                    <li
+                        v-for="promesa in promesas"
+                        :key="promesa.id"
+                        class="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between"
+                        :data-promesa="promesa.id"
+                    >
+                        <div class="flex flex-col">
+                            <span class="text-sm font-medium text-highlighted">
+                                {{ formatearQuetzales(promesa.monto) }} · vence {{ formatearFechaHora(promesa.vence_en) }}
+                            </span>
+                            <span class="text-xs text-muted">Promesa #{{ promesa.id }} · {{ CANALES_PROMESA[promesa.canal] }} · {{ formatearFechaHora(promesa.created_at) }}</span>
+                            <EvaluacionPromesa
+                                :promesa="promesa"
+                                compacta
+                            />
+                        </div>
+                        <UBadge
+                            :label="ESTADOS_PROMESA[promesa.estado].etiqueta"
+                            :icon="ESTADOS_PROMESA[promesa.estado].icono"
+                            :color="ESTADOS_PROMESA[promesa.estado].color"
+                            variant="subtle"
+                            size="sm"
+                            class="self-start"
+                        />
+                    </li>
+                </ul>
+            </section>
+
+            <section
                 v-if="puede('bitacora.ver')"
                 class="flex flex-col gap-3"
             >
@@ -412,6 +540,13 @@ onMounted(cargar)
                     etiqueta="Historial del servicio"
                 />
             </section>
+
+            <PromesaCrearModal
+                v-model:open="promesaAbierta"
+                :servicio="servicio"
+                :sugerido="pendienteServicio"
+                @creada="alCrearPromesa"
+            />
 
             <ServicioAccionModal
                 v-model:open="accionAbierta"

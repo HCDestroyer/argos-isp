@@ -15,6 +15,8 @@ function delCliente(accion: Schema<'AccionAuditoria'>, clienteId: number): boole
             return bd.facturas.some(f => f.id === id && f.cliente_id === clienteId)
         case 'pago':
             return bd.pagos.some(p => p.id === id && p.cliente_id === clienteId)
+        case 'promesa':
+            return bd.promesas.some(p => p.id === id && p.cliente_id === clienteId)
         default:
             return false
     }
