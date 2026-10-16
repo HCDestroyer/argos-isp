@@ -60,7 +60,11 @@ const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !=
 const puedeSimular = computed(() => puede('promesas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const simuladorAbierto = ref(false)
 
-const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value }))
+/**
+ * Captura 07: sin `excluir_canal` una página de 50 podía venir llena de `portal.quien_soy` (una por
+ * visita a `/corte`) y el historial quedaba vacío con "Ver más". La API ya las deja fuera.
+ */
+const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value, excluir_canal: 'portal' }))
 
 const MODOS_IPV6: Record<ModoIpv6, string> = {
     radius_servicio: 'RADIUS (prefijos del servicio)',

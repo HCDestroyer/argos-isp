@@ -1,8 +1,14 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import type { Schema } from '@argosisp/contracts'
+import { UApp } from '#components'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { bd } from '~~/fixtures/bd'
+import PaginaServicio from '~/pages/servicios/[id].vue'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import LineaTiempoBitacora from '~/components/LineaTiempoBitacora.vue'
 import PaginacionCursor from '~/components/PaginacionCursor.vue'
@@ -81,6 +87,49 @@ describe('fallos de las capturas 06 y 07', () => {
         expect(texto).toContain('Servicio suspendido')
         expect(texto).not.toMatch(/servicios\.[a-z_]+/)
         expect(texto).toContain('Automático')
+    })
+
+    it('captura 07: toda acción que declara la API tiene texto en español', () => {
+        // Mismo criterio que scripts/verificar-permisos.mjs: se leen las fuentes de apps/api.
+        const raiz = [resolve(process.cwd(), '../api/app'), resolve(process.cwd(), 'apps/api/app')].find(ruta => existsSync(ruta)) ?? ''
+        const archivos = (readdirSync(raiz, { recursive: true }) as string[]).filter(f => f.endsWith('.ts'))
+        const declaradas = new Set<string>()
+        for (const archivo of archivos) {
+            const texto = readFileSync(join(raiz, archivo), 'utf8')
+            for (const [, nombre] of texto.matchAll(/(?:nombre|accion)\s*=\s*'([a-z_0-9]+\.[a-z_0-9]+)'/g)) {
+                if (nombre) {
+                    declaradas.add(nombre)
+                }
+            }
+        }
+        expect(declaradas.size).toBeGreaterThan(90)
+        const sinTexto = [...declaradas].filter(nombre => !ACCIONES_TRADUCIDAS.has(nombre)).sort()
+        expect(sinTexto).toEqual([])
+        for (const nombre of declaradas) {
+            expect(tituloAccion({ ...BASE, accion: nombre, entrada: {} })).not.toBe(nombre)
+        }
+    })
+
+    it('captura 07: la ficha del servicio no queda vacía con 60 visitas a /corte', async () => {
+        const suspendidos = await useServicios().listar({ estado: 'suspendido' })
+        const servicio = suspendidos.ok ? suspendidos.data.data[0] : undefined
+        expect(servicio).toBeDefined()
+        if (!servicio) {
+            return
+        }
+        // Más visitas que la página de la línea de tiempo (50): antes solo se veía "Ver más".
+        for (let visita = 0; visita < 60; visita++) {
+            bd.acciones.push({ ...BASE, id: 10_000 + visita, canal: 'portal', accion: 'portal.quien_soy', entidad_id: servicio.id, entrada: { ip: servicio.ipv4 }, created_at: '2026-10-16T12:00:00Z' })
+        }
+        useUsuarioActual().value = meAdmin
+        // La ficha usa `UTooltip`: necesita el `TooltipProvider` de `UApp`, como en la app real.
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaServicio) }) })
+        const wrapper = await mountSuspended(conApp, { route: `/servicios/${servicio.id}` })
+        await vi.waitFor(() => expect(wrapper.text()).toContain('Servicio creado'))
+        expect(wrapper.text()).not.toContain('Consulta desde la página de corte')
+        expect(wrapper.text()).not.toContain('portal.quien_soy')
+        wrapper.unmount()
+        useUsuarioActual().value = null
     })
 
     it('títulos, canal y visibilidad de la bitácora', () => {
