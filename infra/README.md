@@ -8,6 +8,7 @@
 | `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6)                                                                                    |
 | `ci/`                    | Verificaciones de CI de infraestructura (FreeRADIUS)                                                                                                                                  |
 | `postgres/`              | Inicialización de Postgres: base de pruebas (`init.sql`) y usuarios dueño y aplicación (`usuarios.sh`)                                                                                |
+| `backups/`               | Servicio `backup`: `pg_dump` diario con retención, cifrado (age) y copia remota (rclone) opcionales; `restaurar.sh` verificado por conteo de filas (ver "Respaldos")                  |
 
 ```sh
 cp infra/.env.example infra/.env        # completa los secretos
@@ -37,12 +38,12 @@ docker compose -f infra/docker-compose.yml up -d
 
 Cuatro servicios corren con la imagen de api (`argosisp/api`), sin puerto HTTP, cada uno con un solo comando de ace. Comparten el entorno de la API (`x-api-env`) y arrancan después de `migrate` (migraciones terminadas) con Postgres y Redis sanos.
 
-| Servicio          | Comando                    | Dueño | Qué hace                                                                                                                                                                                                    |
-| ----------------- | -------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `relay`           | `node ace eventos:relay`   | A1    | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md`    |
-| `billing-worker`  | `node ace billing:worker`  | A3    | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte                                                    |
-| `sesiones-worker` | `node ace sesiones:worker` | A2    | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada`                                                      |
-| `worker`          | `node ace notify:worker`   | A6    | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago y cron mensual de particiones de `audit` (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
+| Servicio          | Comando                    | Dueño | Qué hace                                                                                                                                                                                                                                                                             |
+| ----------------- | -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `relay`           | `node ace eventos:relay`   | A1    | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md`                                                                             |
+| `billing-worker`  | `node ace billing:worker`  | A3    | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte                                                                                                                             |
+| `sesiones-worker` | `node ace sesiones:worker` | A2    | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada`                                                                                                                               |
+| `worker`          | `node ace notify:worker`   | A6    | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago, cron mensual de particiones de `audit`, alertas internas al chat del equipo y vigilancia de los crons de billing (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
 
 - **Healthcheck por proceso vivo.** El contenedor ejecuta el comando con `exec`, así que el PID 1 es el propio proceso de ace; el healthcheck comprueba que `/proc/1/cmdline` sigue siendo ese comando. La imagen trae un `HEALTHCHECK` HTTP de la API que en estos procesos no aplica y se reemplaza.
 - **Varias réplicas.** Los crons de BullMQ y el relay toman lock, así que escalar (`docker compose up -d --scale billing-worker=2`) no duplica trabajo; los consumidores de streams reparten mensajes dentro de su grupo.
@@ -78,6 +79,58 @@ En el servidor del laboratorio:
 4. Si el host no puede desactivar `userland-proxy`, la alternativa es correr el portal con `network_mode: host`, en un archivo override solo del laboratorio. En ese caso el portal escucha directo en el host, `NUXT_API_BASE_INTERNAL` debe apuntar a la API publicada (`http://127.0.0.1:3333`) y `PORTAL_PROXIES_CONFIABLES` debe incluir `127.0.0.1` y `::1`.
 
 `COMPOSE_IPV6=false` es el valor por defecto porque `enable_ipv6` falla en hosts sin IPv6 en el kernel (por ejemplo, contenedores de CI).
+
+## Respaldos
+
+El servicio `backup` (imagen `infra/backups/Dockerfile`, `postgres:16.15-alpine` + `age` + `rclone`) hace un `pg_dump` diario de `argosisp`:
+
+| Variable (`infra/.env`) | Por defecto        | Qué hace                                                                                                                                                      |
+| ----------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BACKUP_HORA`           | `03:13`            | Hora UTC (21:13 en Guatemala). Si el contenedor estaba apagado a esa hora, respalda al volver; un fallo se reintenta cada 15 min                              |
+| `BACKUP_HOST_DIR`       | `./backups/datos`  | Directorio del host (relativo a `infra/`) montado en `/backups`. En producción, un disco externo o un NFS: nunca el mismo disco que el volumen de Postgres    |
+| `BACKUP_RETENCION_DIAS` | `14`               | Borra respaldos más viejos, local y remoto                                                                                                                    |
+| `BACKUP_AGE_RECIPIENTS` | vacío              | Claves públicas de [age](https://age-encryption.org) separadas por espacio. Con valor, el dump queda `.dump.age`. La clave privada **no** vive en el servidor |
+| `BACKUP_RCLONE_DESTINO` | vacío              | Copia remota con rclone (`s3:bucket/ruta`, `b2:...`, `sftp:...`), remoto definido en `BACKUP_CONFIG_DIR/rclone.conf`                                          |
+| `BACKUP_CONFIG_DIR`     | `./backups/config` | Montado en `/config` (solo lectura): `rclone.conf` y, solo para restaurar, `age.key`                                                                          |
+
+Cada respaldo deja `argosisp-<AAAAMMDDTHHMMSSZ>.dump[.age]`, su `.sha256` y un `.conteos` con las filas por tabla leídas del propio dump. El estado del último intento queda en `/backups/.estado` y el healthcheck del servicio falla si fue un error.
+
+```sh
+# Respaldo a mano (además del diario)
+docker compose -f infra/docker-compose.yml exec backup respaldar.sh
+# Clave para cifrar: generarla FUERA del servidor y guardar la privada en un gestor de secretos
+age-keygen -o age.key        # imprime la pública: va a BACKUP_AGE_RECIPIENTS
+```
+
+### Restaurar
+
+`restaurar.sh` restaura en una base **nueva** y comprueba que quedó completa: verifica el `.sha256`, descifra si es `.age`, crea la base con el dueño (`DB_OWNER_USER`) y zona UTC, corre `pg_restore --exit-on-error` (conserva dueños y permisos: los roles los crea `postgres/usuarios.sh`) y compara las filas de **cada tabla** con las del dump; cualquier diferencia termina con error y la lista de tablas. Con `--migrar` pone las migraciones al día con el código actual.
+
+Prueba sin tocar producción (base aparte, en el mismo servidor):
+
+```sh
+docker compose -f infra/docker-compose.yml run --rm backup \
+  restaurar.sh /backups/argosisp-20261016T031300Z.dump.age --base argosisp_prueba --comparar-con argosisp
+```
+
+**Desastre: entorno limpio** (servidor nuevo o volumen perdido). Copia el respaldo a `BACKUP_HOST_DIR` y la clave privada a `BACKUP_CONFIG_DIR/age.key`, y:
+
+```sh
+docker compose -f infra/docker-compose.yml up -d --wait postgres          # volumen nuevo: init.sql y usuarios.sh
+docker compose -f infra/docker-compose.yml run --rm --no-deps backup \
+  restaurar.sh /backups/argosisp-<marca>.dump.age --base argosisp --reemplazar
+docker compose -f infra/docker-compose.yml up -d --wait                   # migrate pone las migraciones al día
+rm infra/backups/config/age.key
+```
+
+Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a publicar lo que quedó en `audit.outbox` sin `publicado_en`, y los crons procesan lo pendiente hasta ahora). La caché `aaa:user:*` se repuebla por evento y con el respaldo de `aaa` a la API.
+
+**Probado (día 4):**
+
+- Local, contra la base de pruebas con datos de toda la suite (90 tablas, 4 191 filas, particiones de `audit` incluidas): respaldo cifrado → `restaurar.sh --comparar-con` = filas iguales al dump y al origen. Con una base a la que le faltaba la última migración: restauración + `--migrar` aplicó `notify_alertas`. Una comparación contra una base distinta termina con código 1 y lista las tablas.
+- Compose en entorno limpio (proyecto aparte): `pnpm demo:datos`, respaldo con el servicio `backup`, `down -v`, `up postgres`, `restaurar.sh --base argosisp --reemplazar`, `up --wait`: `migrate` "Already up to date", api, relay, billing-worker, worker y backup `healthy`, y la API devuelve los 8 clientes y 7 servicios con el login del admin restaurado.
+- Retención: un respaldo con fecha de hace 20 días se borra con `BACKUP_RETENCION_DIAS=14`.
+- CI: el paso "Respaldo y restauración" repite el ciclo sobre la base que dejan las pruebas.
 
 ## Walled garden
 

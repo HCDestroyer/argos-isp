@@ -1,0 +1,24 @@
+# Prometheus de ArgosIsp (servicio `prometheus`, perfil `monitoreo` del compose). infra/monitoring/README.md
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/reglas.yml
+
+scrape_configs:
+  # API: colas BullMQ, lag del stream argos:eventos, outbox, última corrida de cada cron, incidentes.
+  # El token (METRICS_TOKEN) lo escribe el entrypoint del servicio en /tmp/metrics_token.
+  - job_name: api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/metrics_token
+    static_configs:
+      - targets: ['api:3333']
+
+  # aaa y coa: cuando A2 exponga /metrics (pedido en .claude/integration/a6.md). Mientras tanto
+  # su salud la cubren los healthchecks del compose.
+  # - job_name: aaa
+  #   static_configs:
+  #     - targets: ['aaa:3100']

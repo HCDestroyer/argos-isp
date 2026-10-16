@@ -40,6 +40,8 @@ export interface ServicioVista {
     plan_nombre: string
     router_nombre: string
     zona_nombre: string | null
+    /** excepciones a la plantilla de facturación `{ campo: valor }` (tarea 11) */
+    excepciones: Record<string, unknown>
     version: number
     created_at: string
     updated_at: string
@@ -86,6 +88,9 @@ function columnas(cliente: QueryClientContract) {
         ),
         cliente.raw(
             `(SELECT z_n.nombre FROM core.clientes c_z JOIN core.zonas z_n ON z_n.id = c_z.zona_id WHERE c_z.id = s.cliente_id) AS zona_nombre`,
+        ),
+        cliente.raw(
+            `(SELECT coalesce(jsonb_object_agg(e.campo, e.valor ORDER BY e.campo), '{}'::jsonb) FROM core.servicios_excepciones e WHERE e.servicio_id = s.id) AS excepciones`,
         ),
         's.version',
         's.created_at',

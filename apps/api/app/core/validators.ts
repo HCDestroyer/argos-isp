@@ -13,6 +13,8 @@ import {
 } from '#shared/validadores'
 import { NOMBRES_PERMISOS } from '#core/permisos'
 import { CANALES } from '#shared/contexto'
+import { CAMPOS_EXCEPCION } from '#billing/excepciones'
+import { TIPOS_EXCEPCION } from '#core/esquemas'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -98,6 +100,34 @@ export const listarClientesValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: con alguna promesa de pago activa; false: sin ninguna' }),
+        responsable_pago_id: idEntidad()
+            .optional()
+            .meta({ description: 'Dependientes de este responsable de pago' }),
+    }),
+)
+
+/** `POST /clientes/:id/responsable-pago`. */
+export const asignarResponsablePagoValidator = vine.compile(
+    vine.object({
+        responsable_id: idEntidad().meta({ description: 'Cliente que paga por este' }),
+        motivo: motivo().optional(),
+    }),
+)
+
+/** `POST /clientes/:id/quitar-responsable-pago`. */
+export const quitarResponsablePagoValidator = vine.compile(vine.object({ motivo: motivo().optional() }))
+
+/** `GET /clientes/:id/dependientes`. */
+export const listarDependientesValidator = vine.compile(vine.object({ ...reglasPaginacion }))
+
+/** `POST /clientes/:id/vincular-telegram` (el bot de A6 llama la acción directamente). */
+export const vincularTelegramValidator = vine.compile(
+    vine.object({
+        chat_id: vine
+            .string()
+            .trim()
+            .regex(/^-?\d{1,20}$/)
+            .meta({ description: 'chat id de Telegram (entero con signo, como texto)' }),
     }),
 )
 
@@ -108,6 +138,34 @@ export const crearZonaValidator = vine.compile(
 export const editarZonaValidator = vine.compile(
     vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100), version: versionEsperada() }),
 )
+
+/**
+ * Excepciones a la plantilla de facturación del servicio: `{ campo: valor }`. Los campos y sus
+ * valores los define y valida A3 (`app/billing/excepciones.ts`, `validarExcepcion`); aquí solo se
+ * declaran para el OpenAPI. `null` borra la excepción; un campo desconocido responde 422.
+ */
+const excepciones = () =>
+    vine
+        .object(
+            Object.fromEntries(
+                CAMPOS_EXCEPCION.map((campo) => [
+                    campo,
+                    // el valor lo valida validarExcepcion; el tipo es solo para el OpenAPI
+                    vine
+                        .any()
+                        .nullable()
+                        .optional()
+                        .meta({ anyOf: [TIPOS_EXCEPCION[campo], { type: 'null' }] }),
+                ]),
+            ),
+        )
+        .allowUnknownProperties()
+        .optional()
+        .meta({
+            description:
+                'Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: ' +
+                CAMPOS_EXCEPCION.join(', '),
+        })
 
 /*
 |--------------------------------------------------------------------------
@@ -122,7 +180,10 @@ export const crearServicioValidator = vine.compile(
         cliente_id: idEntidad(),
         router_id: idEntidad(),
         plan_id: idEntidad(),
-        plantilla_facturacion_id: idEntidad().nullable().optional(),
+        plantilla_facturacion_id: idEntidad().nullable().optional().meta({
+            description:
+                'Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla',
+        }),
         user_ppp: vine
             .string()
             .trim()
@@ -149,9 +210,13 @@ export const crearServicioValidator = vine.compile(
         ipv4: ipv4()
             .optional()
             .meta({ description: 'IP fija; si no viene se asigna de las redes del router' }),
+        red_ipv4_id: idEntidad().optional().meta({
+            description: 'Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena)',
+        }),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional().meta({ description: 'Solo modo estatico' }),
+        excepciones: excepciones(),
     }),
 )
 
@@ -177,6 +242,7 @@ export const editarServicioValidator = vine.compile(
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional(),
+        excepciones: excepciones(),
     }),
 )
 

@@ -32,6 +32,7 @@
     "#portal/*": "./app/portal/*.js",
     "#notify/*": "./app/notify/*.js",
     "#importacion/*": "./app/importacion/*.js",
+    "#monitoreo/*": "./app/monitoreo/*.js",
     "#exceptions/*": "./app/exceptions/*.js",
     "#middleware/*": "./app/middleware/*.js",
     "#commands/*": "./commands/*.js",

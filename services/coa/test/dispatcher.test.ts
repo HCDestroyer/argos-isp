@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { decidir, EventoInvalido, leerEvento, type EventoServicio } from '../src/decision.ts'
+import { leerConfig } from '../src/config.ts'
 import { Dispatcher } from '../src/dispatcher.ts'
 import { ClienteNasUdp } from '../src/nas.ts'
 import { AlmacenMemoria, CLAVE, SECRET, servicio, sesion, silencio, SUSPENDIDO } from './ayudas.ts'
@@ -251,5 +252,125 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
             nas.recibidos.map((p) => p.atributos['Acct-Session-Id']),
             ['81a00003', '81a00004'],
         )
+    })
+
+    const desconexion = (id: number | string, sesionId = 5, servicioId: number | null = 101) => ({
+        id,
+        evento: 'sesion.desconexion_solicitada',
+        payload: {
+            sesion_id: sesionId,
+            servicio_id: servicioId,
+            nas_ip: '127.0.0.1',
+            acct_session_id: '81a00009',
+            user_ppp: 'cliente-101',
+            motivo: 'cliente pidió reiniciar',
+        },
+        requestId: 'req-d',
+    })
+
+    it('desconexión manual → Disconnect-Request a esa sesión; audit.red con el motivo', async () => {
+        almacen.abiertas.set(5, { ...sesion({ id: 5, acct_session_id: '81a00009' }), servicio_id: 101 })
+        assert.equal(dispatcher.acepta('sesion.desconexion_solicitada'), true)
+        const r = await dispatcher.procesar(desconexion(20))
+        assert.deepEqual(r.sesiones, [{ sesion_id: 5, tipo: 'disconnect', resultado: 'ack', intentos: 1 }])
+        assert.equal(nas.recibidos[0]?.codigo, 'Disconnect-Request')
+        assert.deepEqual(nas.recibidos[0]?.atributos, {
+            'User-Name': 'cliente-101',
+            'Acct-Session-Id': '81a00009',
+        })
+        const fila = almacen.red[0]!
+        assert.equal(fila.tipo, 'disconnect')
+        assert.equal(fila.servicio_id, 101)
+        assert.equal(fila.comando.razon, 'manual: cliente pidió reiniciar')
+        assert.equal(fila.comando.evento, 'sesion.desconexion_solicitada')
+        assert.equal(fila.respuesta.codigo, 'Disconnect-ACK')
+
+        // duplicado: no se vuelve a desconectar
+        const otra = await dispatcher.procesar(desconexion(20))
+        assert.equal(otra.sesiones[0]?.resultado, 'ya_procesado')
+        assert.equal(nas.recibidos.length, 1)
+    })
+
+    it('desconexión manual de una sesión ya cerrada: no envía nada', async () => {
+        const r = await dispatcher.procesar(desconexion(21, 99))
+        assert.equal(r.decision?.accion, 'nada')
+        assert.equal(nas.recibidos.length, 0)
+        assert.equal(almacen.red.length, 0)
+    })
+
+    it('desconexión manual con NAK y sin servicio conocido: coa.fallido con servicio_id null', async () => {
+        nas.modo = 'nak'
+        almacen.abiertas.set(6, { ...sesion({ id: 6 }), servicio_id: null })
+        const r = await dispatcher.procesar(desconexion(22, 6, null))
+        assert.equal(r.sesiones[0]?.resultado, 'nak')
+        assert.equal(almacen.red[0]?.servicio_id, null)
+        assert.equal(almacen.outbox[0]?.payload.servicio_id, null)
+        assert.equal(almacen.outbox[0]?.payload.tipo, 'disconnect')
+        assert.match(almacen.outbox[0]?.payload.error ?? '', /^Disconnect-NAK/)
+    })
+
+    it('desconexión con payload inválido: EventoInvalido (se descarta)', async () => {
+        await assert.rejects(
+            dispatcher.procesar({ id: 23, evento: 'sesion.desconexion_solicitada', payload: { sesion_id: 0 } }),
+            EventoInvalido,
+        )
+    })
+
+    it('suspender una sesión con IPv6: CoA por defecto; Disconnect con COA_SUSPENDER_CON_IPV6=disconnect', async () => {
+        const conV6 = sesion({ prefijo_enlace_v6: '2001:db8:101:1::/64', prefijo_delegado_v6: '2001:db8:300:100::/56' })
+        const soloV4 = sesion({ id: 2, acct_session_id: '81a00004' })
+        almacen.sesiones.set(101, [conV6, soloV4])
+
+        const porDefecto = await dispatcher.procesar(suspender(30))
+        assert.deepEqual(
+            porDefecto.sesiones.map((x) => x.tipo),
+            ['coa', 'coa'],
+        )
+
+        const conDisconnect = new Dispatcher({
+            almacen,
+            nas: new ClienteNasUdp(),
+            claveSecretos: CLAVE,
+            suspendido: SUSPENDIDO,
+            suspenderConIpv6: 'disconnect',
+            puertoNas: nas.puerto,
+            timeoutMs: 150,
+            reintentos: 0,
+            esperaMs: 10,
+            log: silencio,
+        })
+        nas.recibidos.length = 0
+        const r = await conDisconnect.procesar(suspender(31))
+        assert.deepEqual(
+            r.sesiones.map((x) => [x.sesion_id, x.tipo, x.resultado]),
+            [
+                [1, 'disconnect', 'ack'],
+                [2, 'coa', 'ack'],
+            ],
+        )
+        assert.deepEqual(
+            nas.recibidos.map((p) => p.codigo),
+            ['Disconnect-Request', 'CoA-Request'],
+        )
+        const fila = almacen.red.find((f) => f.comando.evento_id === '31' && f.tipo === 'disconnect')!
+        assert.match(String(fila.comando.razon), /sesión con IPv6/)
+
+        // reactivar o cambiar velocidad no se ve afectado por el modo
+        almacen.servicios.set(101, servicio({ estado: 'limitado' }))
+        const limitar = await conDisconnect.procesar({
+            id: 32,
+            evento: 'servicio.estado_cambiado',
+            payload: { servicio_id: 101, de: 'activo', a: 'limitado', motivo: 'mora' },
+        })
+        assert.deepEqual(
+            limitar.sesiones.map((x) => x.tipo),
+            ['coa', 'coa'],
+        )
+    })
+
+    it('leerConfig: COA_SUSPENDER_CON_IPV6 acepta coa | disconnect', () => {
+        assert.equal(leerConfig({}).suspenderConIpv6, 'coa')
+        assert.equal(leerConfig({ COA_SUSPENDER_CON_IPV6: 'disconnect' }).suspenderConIpv6, 'disconnect')
+        assert.throws(() => leerConfig({ COA_SUSPENDER_CON_IPV6: 'otro' }), /COA_SUSPENDER_CON_IPV6/)
     })
 })

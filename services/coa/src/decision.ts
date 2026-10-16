@@ -51,7 +51,13 @@ export interface ServicioActual {
 export type AtributosCoa = Record<string, string>
 
 export type Decision =
-    | { accion: 'coa'; atributos: AtributosCoa; razon: string }
+    | {
+          accion: 'coa'
+          atributos: AtributosCoa
+          razon: string
+          /** CoA de suspensión (perfil de corte); el dispatcher puede cambiarlo por Disconnect en IPv6 */
+          suspender?: true
+      }
     | { accion: 'disconnect'; razon: string }
     | { accion: 'nada'; razon: string }
 
@@ -94,6 +100,7 @@ export function decidir(
             return {
                 accion: 'coa',
                 razon: `suspender: ${evento.de} → suspendido`,
+                suspender: true,
                 atributos: {
                     'Mikrotik-Rate-Limit': suspendido.rateLimit,
                     'Mikrotik-Address-List': suspendido.addressList,
@@ -123,8 +130,46 @@ export function decidir(
     return { accion: 'coa', razon: 'cambió el plan', atributos: { 'Mikrotik-Rate-Limit': rate } }
 }
 
+/**
+ * Desconexión manual (`POST /sesiones/:id/desconectar`, `POST /servicios/:id/desconectar`): la
+ * acción de la API ya decidió; `coa` solo manda el Disconnect-Request a esa sesión si sigue abierta.
+ */
+export interface EventoDesconexion {
+    evento: 'sesion.desconexion_solicitada'
+    sesion_id: number
+    servicio_id: number | null
+    motivo: string
+}
+
+export const EVENTOS_COA = [
+    'servicio.estado_cambiado',
+    'servicio.config_cambiada',
+    'sesion.desconexion_solicitada',
+] as const
+
 /** Payload que no cumple el catálogo: el consumidor lo confirma y lo descarta (reintentar no sirve). */
 export class EventoInvalido extends Error {}
+
+function idPositivo(valor: unknown, campo: string): number {
+    const n = Number(valor)
+    if (!Number.isSafeInteger(n) || n <= 0) throw new EventoInvalido(`${campo} inválido`)
+    return n
+}
+
+/** Valida el payload de `sesion.desconexion_solicitada`. */
+export function leerDesconexion(payload: unknown): EventoDesconexion {
+    if (typeof payload !== 'object' || payload === null) throw new EventoInvalido('payload inválido')
+    const p = payload as Record<string, unknown>
+    return {
+        evento: 'sesion.desconexion_solicitada',
+        sesion_id: idPositivo(p.sesion_id, 'sesion_id'),
+        servicio_id:
+            p.servicio_id === null || p.servicio_id === undefined
+                ? null
+                : idPositivo(p.servicio_id, 'servicio_id'),
+        motivo: typeof p.motivo === 'string' ? p.motivo : '',
+    }
+}
 
 /** Valida el payload que llega por el stream. Devuelve null si el evento no es para `coa`. */
 export function leerEvento(nombre: string, payload: unknown): EventoServicio | null {

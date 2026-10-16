@@ -29,6 +29,8 @@ import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
 import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementacion_plan'
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
+import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
+import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 
 const routers: Ruta[] = [
     definirRuta({
@@ -271,17 +273,28 @@ const sesiones: Ruta[] = [
         permiso: 'sesiones.ver',
         query: v.listarSesionesValidator,
         respuesta: { status: 200, descripcion: 'Página de sesiones', esquema: pagina(Sesion) },
+        handler: (ctx, { query }) => listarSesiones(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
         ruta: '/sesiones/:id/desconectar',
         operacion: 'sesionesDesconectar',
         resumen: 'Desconectar sesión (Disconnect-Request al NAS)',
+        descripcion:
+            'Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y ' +
+            'registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. ' +
+            '404 si no existe, 409 si ya terminó.',
         etiqueta: 'sesiones',
         permiso: 'sesiones.desconectar',
         cuerpo: v.desconectarSesionValidator,
         idempotente: true,
         respuesta: { status: 202, descripcion: 'Desconexión solicitada', esquema: Sesion },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeSesion(id))
+            await new DesconectarSesion().execute({ id, motivo: cuerpo.motivo }, ctx.contextoAccion())
+            return verSesion(id)
+        },
     }),
 ]
 

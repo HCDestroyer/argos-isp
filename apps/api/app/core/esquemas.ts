@@ -14,6 +14,10 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import type { EsquemaJson } from '#shared/openapi/esquemas'
+import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
+import { ReglasPromesa } from '#billing/esquemas'
+import { PlanEfectivo } from '#network/esquemas'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -89,23 +93,51 @@ export const Zona = definirEsquema('Zona', objeto({ id, nombre: texto, ...audita
 
 export const Cliente = definirEsquema(
     'Cliente',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            tipo: enumerado(['persona', 'empresa']),
+            nit_cui: nulable(texto),
+            nombre_fiscal: nulable(texto),
+            direccion_fiscal: nulable(texto),
+            email: nulable(texto),
+            telefono: nulable(texto),
+            movil: nulable(texto),
+            direccion: nulable(texto),
+            coordenadas: nulable(texto),
+            zona_id: nulable(id),
+            campos_personalizados: jsonLibre,
+            canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
+            telegram_chat_id: nulable(texto),
+            responsable_pago_id: {
+                ...nulable(id),
+                description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
+            },
+            responsable_pago_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del responsable de pago (solo lectura)',
+            },
+            ...auditable,
+        },
+        ['responsable_pago_id', 'responsable_pago_nombre'],
+    ),
+)
+
+/** Fila de `GET /clientes/:id/dependientes`. */
+export const DependientePago = definirEsquema(
+    'DependientePago',
     objeto({
         id,
         nombre: texto,
-        tipo: enumerado(['persona', 'empresa']),
         nit_cui: nulable(texto),
-        nombre_fiscal: nulable(texto),
-        direccion_fiscal: nulable(texto),
-        email: nulable(texto),
-        telefono: nulable(texto),
-        movil: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        zona_id: nulable(id),
-        campos_personalizados: jsonLibre,
-        canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
-        telegram_chat_id: nulable(texto),
-        ...auditable,
+        servicios: { type: 'integer', minimum: 0, description: 'Servicios no retirados' },
+        estado_servicio: {
+            ...nulable(enumerado(['activo', 'limitado', 'suspendido', 'retirado'])),
+            description:
+                'Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); ' +
+                'retirado si todos lo están; null sin servicios',
+        },
     }),
 )
 
@@ -113,6 +145,35 @@ export const EstadoServicio = definirEsquema(
     'EstadoServicio',
     enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
 )
+
+const horaCorte: EsquemaJson = {
+    type: 'string',
+    pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+    description: 'HH:MM hora de Guatemala',
+}
+
+/** Tipo de cada campo exceptuable (la lista y la validación son de A3: `app/billing/excepciones.ts`). */
+export const TIPOS_EXCEPCION: Record<CampoExcepcion, EsquemaJson> = {
+    dia: { type: 'integer', minimum: 1, maximum: 28 },
+    prorrateo: booleano,
+    dias_gracia: { type: 'integer', minimum: 0 },
+    facturas_para_limitar: { type: 'integer', minimum: 0 },
+    facturas_para_cortar: { type: 'integer', minimum: 1 },
+    mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+    mora_valor: Dinero,
+    mora_recurrente: booleano,
+    hora_corte: horaCorte,
+    certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+    reglas_promesa: { ...jsonLibre, description: 'Parcial: se combina clave a clave sobre la plantilla' },
+}
+
+/** `{ campo: valor }` de `core.servicios_excepciones`; solo trae los campos exceptuados. */
+export const ExcepcionesServicio = definirEsquema('ExcepcionesServicio', {
+    type: 'object',
+    description: 'Excepciones a la plantilla de facturación del servicio',
+    properties: Object.fromEntries(CAMPOS_EXCEPCION.map((campo) => [campo, TIPOS_EXCEPCION[campo]])),
+    additionalProperties: false,
+})
 
 export const Servicio = definirEsquema(
     'Servicio',
@@ -147,9 +208,12 @@ export const Servicio = definirEsquema(
             plan_nombre: texto,
             router_nombre: texto,
             zona_nombre: nulable(texto),
+            // aditivo (día 4): la API siempre lo envía
+            excepciones: ExcepcionesServicio,
             ...auditable,
         },
         [
+            'excepciones',
             'cliente_nombre',
             'plan_nombre',
             'router_nombre',
@@ -158,6 +222,39 @@ export const Servicio = definirEsquema(
             'suspension_manual_motivo',
         ],
     ),
+)
+
+/** Plantilla de facturación con las excepciones del servicio aplicadas (`aplicarExcepciones`). */
+export const ConfiguracionFacturacion = definirEsquema(
+    'ConfiguracionFacturacion',
+    objeto({
+        plantilla_id: id,
+        nombre: texto,
+        ciclo: enumerado(['dia_fijo', 'aniversario']),
+        dia: nulable(entero),
+        prorrateo: booleano,
+        dias_gracia: entero,
+        facturas_para_limitar: entero,
+        facturas_para_cortar: entero,
+        mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+        mora_valor: Dinero,
+        mora_recurrente: booleano,
+        hora_corte: horaCorte,
+        certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+        reglas_promesa: ReglasPromesa,
+        excepciones: { ...lista(texto), description: 'Campos que vienen de una excepción del servicio' },
+    }),
+)
+
+export const ConfiguracionEfectivaServicio = definirEsquema(
+    'ConfiguracionEfectivaServicio',
+    objeto({
+        servicio_id: id,
+        plantilla_facturacion_id: nulable(id),
+        plan: PlanEfectivo,
+        facturacion: nulable(ConfiguracionFacturacion),
+        excepciones: ExcepcionesServicio,
+    }),
 )
 
 export const CredencialesPpp = definirEsquema(

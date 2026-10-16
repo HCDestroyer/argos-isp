@@ -14,6 +14,15 @@ import { PREFIJO_API, despachar, esParametroEntero, parametrosDeRuta } from '#sh
 
 router.get('/health', async () => ({ ok: true }))
 
+// Prometheus (A6, app/monitoreo): fuera de /api/v1 y del OpenAPI; Bearer METRICS_TOKEN, 404 sin él.
+router.get('/metrics', async ({ request, response }) => {
+    const { autorizarScrape, recolectarMetricas } = await import('#monitoreo/metricas')
+    const { TIPO_CONTENIDO } = await import('#monitoreo/prometheus')
+    const rechazo = autorizarScrape(request.header('authorization'))
+    if (rechazo) return response.status(rechazo).send('')
+    return response.header('content-type', TIPO_CONTENIDO).send(await recolectarMetricas())
+})
+
 for (const ruta of registroRutas) {
     const seguridad = ruta.seguridad ?? 'sesion'
     const cadena = []
