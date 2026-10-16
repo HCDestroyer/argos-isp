@@ -56,6 +56,15 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 `actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5.
 
+## Importación (para A6, sin endpoint)
+
+| Acción                             | Archivo                                 | Qué hace                                                                                                                                                                                                                                                                                    |
+| ---------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `facturas.importar_pendiente`      | `actions/importar_factura_pendiente.ts` | `{ clave_externa, servicio_id, periodo, total, vence_en?, concepto?, aplicar_mora? }` → factura pendiente del periodo (ocupa `clave_unica`), IVA desglosado, mora `ninguna` salvo `aplicar_mora`, `vencida` si `vence_en` ya pasó. Asiento `CxC / 2.9.01 Saldos de apertura`                |
+| `facturas.registrar_saldo_inicial` | `actions/registrar_saldo_inicial.ts`    | `{ clave_externa, cliente_id, monto (con signo), fecha?, descripcion? }`: > 0 → factura de apertura sin servicio (`apertura-<clave>`, vencida, no cuenta para el corte) con `CxC / 2.9.01`; < 0 → `2.9.01 / Anticipos` y se aplica a sus facturas (`billing.saldos_iniciales_aplicaciones`) |
+
+Ambas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
+
 ## Vencimiento y mora (tarea 5)
 
 | Acción                       | Archivo                      | Qué hace                                                                                                                                                  |
