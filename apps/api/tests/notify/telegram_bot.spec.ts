@@ -5,6 +5,7 @@ import db from '@adonisjs/lucid/services/db'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { CanalTelegram } from '#notify/canales/telegram'
 import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
+import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import { hashCodigoVinculacion, normalizarCodigo } from '#notify/telegram/config'
 import { registrarWebhook } from '#notify/telegram/webhook'
@@ -359,6 +360,75 @@ test.group('notify · Telegram · webhook del bot', (group) => {
         await estado(webhook(client, actualizacion(chat, '/estado')), 200)
         assert.match(bot.mensajes()[0]!.text, /^Listo\. Este chat ya no recibirá avisos/)
         assert.match(bot.mensajes()[1]!.text, /^Este chat no está vinculado/)
+    })
+
+    test('desvincular (portal, panel o bot) anula los códigos pendientes: un enlace viejo no vuelve a vincular', async ({
+        client,
+        assert,
+    }) => {
+        const bot = botApiFalsa()
+        const chatViejo = chatUnico()
+        const clienteId = await crearCliente({ telegram_chat_id: String(chatViejo) })
+        const { codigo } = await codigoPara(clienteId)
+        // el cliente se desvincula desde el portal (acción de A1) con el código aún vigente
+        await new DesvincularTelegramCliente().execute({ id: clienteId }, contextoSistema('portal'))
+
+        const intruso = chatUnico()
+        await estado(webhook(client, actualizacion(intruso, `/start ${codigo}`)), 200)
+        assert.isNull(await chatDe(clienteId))
+        assert.match(bot.mensajes()[0]!.text, /no es válido o ya venció/)
+
+        // un código pedido DESPUÉS de desvincular sí sirve
+        const nuevo = await codigoPara(clienteId)
+        const chat = chatUnico()
+        await estado(webhook(client, actualizacion(chat, `/start ${nuevo.codigo}`)), 200)
+        assert.equal(await chatDe(clienteId), String(chat))
+    })
+
+    test('código ya usado: tras /desvincular, reenviar el mismo /start no vuelve a vincular', async ({
+        client,
+        assert,
+    }) => {
+        const bot = botApiFalsa()
+        const clienteId = await crearCliente({ nombre: 'Rosa Díaz' })
+        const { codigo } = await codigoPara(clienteId)
+        const chat = chatUnico()
+        const inicio = actualizacion(chat, `/start ${codigo}`)
+        await estado(webhook(client, inicio), 200)
+        assert.equal(await chatDe(clienteId), String(chat))
+        await estado(webhook(client, actualizacion(chat, '/desvincular')), 200)
+        assert.isNull(await chatDe(clienteId))
+
+        await estado(webhook(client, inicio), 200) // el mismo enlace, otra vez
+        assert.isNull(await chatDe(clienteId))
+        const textos = bot.mensajes().map((m) => m.text)
+        assert.match(textos[0]!, /^Listo, Rosa\./)
+        assert.match(textos[2]!, /no es válido o ya venció/)
+    })
+
+    test('generar un código nuevo anula el anterior (pendiente → reemplazado)', async ({
+        client,
+        assert,
+    }) => {
+        const bot = botApiFalsa()
+        const clienteId = await crearCliente()
+        const viejo = await codigoPara(clienteId)
+        const nuevo = await codigoPara(clienteId)
+        const estados = await db
+            .from('notify.telegram_codigos')
+            .whereIn('codigo_hash', [
+                hashCodigoVinculacion(viejo.codigo),
+                hashCodigoVinculacion(nuevo.codigo),
+            ])
+            .orderBy('id')
+            .select('estado')
+        assert.deepEqual(
+            estados.map((e) => e.estado),
+            ['reemplazado', 'pendiente'],
+        )
+        await estado(webhook(client, actualizacion(chatUnico(), `/start ${viejo.codigo}`)), 200)
+        assert.isNull(await chatDe(clienteId))
+        assert.match(bot.mensajes()[0]!.text, /no es válido o ya venció/)
     })
 
     test('si la Bot API falla al responder, el webhook igual confirma (200) y la vinculación queda', async ({

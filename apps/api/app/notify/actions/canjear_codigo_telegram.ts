@@ -18,7 +18,10 @@ export interface ResultadoCanje {
     repetido: boolean
 }
 
-/** 422 `codigo_invalido`: no existe, venció, fue reemplazado o lo usó otro chat. */
+/**
+ * 422 `codigo_invalido`: no existe, venció, fue reemplazado, lo usó otro chat o el vínculo del
+ * cliente cambió después de emitirlo (desvinculación).
+ */
 export class CodigoTelegramInvalido extends ReglaNegocio {
     constructor() {
         super('El código de vinculación no es válido o ya venció', 'codigo_invalido')
@@ -56,7 +59,12 @@ export default class CanjearCodigoTelegram extends DomainAction<
         if (!fila) throw new CodigoTelegramInvalido()
         t.fijarEntidad('cliente', fila.cliente_id)
 
-        if (fila.estado === 'usado' && fila.chat_id === input.chat_id) {
+        // Reintento del mismo chat, salvo que el vínculo haya cambiado desde el canje (desvinculó).
+        if (
+            fila.estado === 'usado' &&
+            fila.chat_id === input.chat_id &&
+            !(await vinculoCambiadoDespues(t, fila, 'usado_en'))
+        ) {
             return {
                 cliente_id: fila.cliente_id,
                 nombre: await primerNombre(t, fila.cliente_id),
@@ -64,6 +72,12 @@ export default class CanjearCodigoTelegram extends DomainAction<
             }
         }
         if (fila.estado !== 'pendiente' || new Date(fila.vence_en).getTime() <= Date.now()) {
+            throw new CodigoTelegramInvalido()
+        }
+        // Un cambio de vínculo posterior al código (desvincular desde el portal, el panel o el bot,
+        // o vincular otro chat) lo anula: un enlace viejo no vuelve a vincular la cuenta.
+        // (Es la regla, no una marca: cubre cualquier camino de desvinculación sin depender de él.)
+        if (await vinculoCambiadoDespues(t, fila, 'created_at')) {
             throw new CodigoTelegramInvalido()
         }
 
@@ -85,6 +99,25 @@ export default class CanjearCodigoTelegram extends DomainAction<
             repetido: false,
         }
     }
+}
+
+/**
+ * ¿Cambió `telegram_chat_id` del cliente (audit.cambios) después de `desde` del código? Se compara
+ * en SQL: en JS el instante pierde los microsegundos y el cambio del propio canje parecería
+ * posterior.
+ */
+async function vinculoCambiadoDespues(
+    t: Transaccion,
+    fila: FilaCodigo,
+    desde: 'created_at' | 'usado_en',
+): Promise<boolean> {
+    const cambio = await t.trx
+        .from('audit.cambios')
+        .where({ entidad_tipo: 'cliente', entidad_id: fila.cliente_id, campo: 'telegram_chat_id' })
+        .whereRaw(`created_at > (SELECT ${desde} FROM notify.telegram_codigos WHERE id = ?)`, [fila.id])
+        .select('id')
+        .first()
+    return Boolean(cambio)
 }
 
 async function primerNombre(t: Transaccion, clienteId: number): Promise<string> {

@@ -35,6 +35,7 @@ const r = await new GenerarCodigoTelegram().execute({ cliente_id }, ctx.contexto
 
 - **Permiso y auditoría.** Nombre de la acción: `notificaciones.telegram_codigo` (queda en `audit.acciones` con `entidad = cliente`, sin el código). El portal la llama con la sesión del cliente, no por el ACL. Si el panel la expone algún día, A1 agrega el permiso con ese nombre.
 - **Un código pendiente por cliente.** Pedir otro marca el anterior `reemplazado`; el viejo ya no sirve.
+- **Desvincular anula los códigos.** Un código solo vale si `telegram_chat_id` del cliente no cambió (en `audit.cambios`) después de emitirlo; uno ya usado tampoco revincula si el cliente se desvinculó después del canje. Cubre cualquier camino (portal, panel, `/desvincular` del bot) sin que nadie tenga que avisar a notify: tras desvincular, el portal pide un código nuevo.
 - **Errores.** `503 telegram_no_configurado` (`TelegramNoConfigurado`) si faltan `TELEGRAM_BOT_TOKEN` o `TELEGRAM_BOT_NOMBRE`: la pantalla muestra el error, nunca un enlace inventado. `404` si el cliente no existe.
 - **Límite.** La ruta del portal debe ir `limitada` (el código es de ~49 bits y vence en 15 min, así que adivinarlo no es práctico, pero cada código nuevo invalida el anterior).
 - **Ver si ya quedó.** El portal consulta el contacto del cliente (`telegram_vinculado` de `app/portal/cuenta.ts`); puede preguntar cada 3 a 5 s mientras la pantalla de vinculación está abierta y el código no venció. No hay evento nuevo.
