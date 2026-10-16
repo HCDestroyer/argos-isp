@@ -10,7 +10,7 @@ export interface Config {
     /** Prefijo de BullMQ: el mismo `COLAS_PREFIJO` que el worker de `apps/api`. */
     colasPrefijo: string
     respaldo: 'api' | 'fixtures'
-    api: { url: string; token: string; timeoutMs: number }
+    api: { url: string; token: string; timeoutMs: number; conexiones: number }
     fixturesRuta: string
     claveSecretos: string | undefined
     suspendido: PerfilSuspendido
@@ -42,7 +42,9 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
         api: {
             url: env.API_INTERNAL_URL ?? 'http://localhost:3333/api/v1/',
             token: env.AAA_INTERNAL_TOKEN ?? '',
-            timeoutMs: numero(env.AAA_API_TIMEOUT_MS, 300),
+            // rlm_rest espera 0,8 s: 150 ms de Redis + 600 ms de API dejan margen para responder.
+            timeoutMs: numero(env.AAA_API_TIMEOUT_MS, 600),
+            conexiones: numero(env.AAA_API_CONEXIONES, 16),
         },
         fixturesRuta:
             env.AAA_FIXTURES_RUTA ?? fileURLToPath(new URL('../fixtures/servicios.json', import.meta.url)),

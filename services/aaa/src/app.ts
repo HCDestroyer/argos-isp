@@ -132,9 +132,18 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
     })
 
     app.post('/aaa/post-auth', async (req, reply) => {
-        // No bloqueante (sites-enabled/default). Solo registra; el Accept/Reject ya lo decidió authorize.
+        // Solo en Access-Reject (sites-enabled/default), no bloqueante: registra el rechazo. Un Accept
+        // no pasa por aquí (la línea `authorize` ya lo registra).
         const atributos = leerAtributos(req.body)
-        req.log.debug({ usuario: atributos.get('User-Name') }, 'post-auth')
+        req.log.info(
+            {
+                usuario: atributos.get('User-Name'),
+                nas: atributos.get('NAS-IP-Address') ?? atributos.get('NAS-IPv6-Address'),
+                resultado: 'rechazado',
+                causa: atributos.get('Module-Failure-Message') ?? null,
+            },
+            'post-auth',
+        )
         return reply.code(204).send()
     })
 

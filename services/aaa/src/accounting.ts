@@ -148,6 +148,12 @@ export class ColaAccountingBullmq implements ColaAccounting {
     readonly cola: Queue
     readonly #intentos: number
     readonly #esperaMs: number
+    /**
+     * Lote del tick actual. En una reconexión masiva llegan cientos de paquetes a la vez: en lugar
+     * de un `add` (script Lua + escritura al socket) por paquete, los del mismo tick salen juntos
+     * con `addBulk` (un pipeline). Cada paquete se responde solo cuando su job quedó en Redis.
+     */
+    #lote: Array<{ registro: RegistroAccounting; resolver: () => void; rechazar: (e: unknown) => void }> = []
 
     constructor(opciones: OpcionesColaBullmq) {
         this.cola = new Queue(NOMBRE_COLA_ACCOUNTING, {
@@ -160,13 +166,30 @@ export class ColaAccountingBullmq implements ColaAccounting {
         this.#esperaMs = opciones.esperaMs ?? 1000
     }
 
-    async encolar(registro: RegistroAccounting): Promise<void> {
-        await this.cola.add(registro.tipo, registro, {
+    encolar(registro: RegistroAccounting): Promise<void> {
+        return new Promise<void>((resolver, rechazar) => {
+            if (this.#lote.length === 0) setImmediate(() => void this.#vaciar())
+            this.#lote.push({ registro, resolver, rechazar })
+        })
+    }
+
+    async #vaciar(): Promise<void> {
+        const lote = this.#lote
+        this.#lote = []
+        const opts = {
             attempts: this.#intentos,
-            backoff: { type: 'exponential', delay: this.#esperaMs },
+            backoff: { type: 'exponential' as const, delay: this.#esperaMs },
             removeOnComplete: { age: 3600, count: 10_000 },
             removeOnFail: { age: 7 * 24 * 3600 },
-        })
+        }
+        try {
+            await this.cola.addBulk(
+                lote.map(({ registro }) => ({ name: registro.tipo, data: registro, opts })),
+            )
+            for (const p of lote) p.resolver()
+        } catch (e) {
+            for (const p of lote) p.rechazar(e)
+        }
     }
 
     async cerrar(): Promise<void> {
