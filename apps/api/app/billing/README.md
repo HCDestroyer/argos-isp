@@ -125,6 +125,21 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - `billing.cuentas_bancarias`: cuentas propias (banco, número, alias, moneda `GTQ`/`USD`, activa). **Fuente única** de las cuentas para depósito del panel y del portal. `cuentas_bancarias.crear` (`POST /cuentas-bancarias`) crea además su subcuenta `1.1.02.NN` en el libro; `cuentas_bancarias.editar` (`PUT /cuentas-bancarias/:id`, con `version`) renombra la subcuenta y nunca la desactiva. Ambas con permiso `cuentas_bancarias.editar`; `GET /cuentas-bancarias[?activa]` y `/:id` con `cuentas_bancarias.ver`. Cambios en `audit.cambios` (`cuenta_bancaria`).
 - Una cuenta inactiva o en USD no recibe pagos (422).
 
+## Comprobantes de depósito (`comprobantes.ts`, `comprobantes_archivos.ts`)
+
+| Acción                   | Archivo                            | Quién la llama                                                   |
+| ------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
+| `comprobantes.registrar` | `actions/registrar_comprobante.ts` | el portal (A5) directo, actor sistema y canal `portal`; el panel |
+| `comprobantes.aprobar`   | `actions/aprobar_comprobante.ts`   | `POST /comprobantes/:id/aprobar`                                 |
+| `comprobantes.rechazar`  | `actions/rechazar_comprobante.ts`  | `POST /comprobantes/:id/rechazar { motivo }`                     |
+
+- Un comprobante nace **antes** del pago: `pendiente` → `aprobado` (con `pago_id`) o `rechazado` (con `motivo_rechazo`). Registrarlo no mueve dinero ni cambia el servicio.
+- Métodos `deposito`, `transferencia`, `ach`, `remesa`, con los mismos datos obligatorios que `POST /pagos` (`DATOS_POR_METODO` y `validarDatosBancarios` en `datos_bancarios.ts`, compartidos con `RegistrarPago`): cuenta bancaria propia y referencia siempre; banco de origen con transferencia y ACH. También monto (> 0, 2 decimales), `fecha_deposito` (no futura) y `servicio_id` opcional (del mismo cliente).
+- Archivo: JPG, PNG, WebP o PDF de hasta 5 MB, con el tipo decidido por los primeros bytes (sin dependencias). Se guarda en `COMPROBANTES_DIR` (por defecto `apps/api/storage/comprobantes`, ruta `AAAA/MM/<uuid>.<ext>`), nunca en la base; la auditoría guarda nombre y tamaño, no el contenido. 422 `archivo` con `rule` `tipo`, `tamano` o `required`.
+- Referencia única: 409 `referencia_duplicada` si ya es un pago (mismo método y cuenta) o si otro comprobante pendiente la tiene (índice parcial `comprobantes_referencia_pendiente`). Uno rechazado la libera.
+- Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
+- Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
+
 ## Promesas de pago (tarea 10)
 
 | Acción                        | Archivo                               | Quién la llama                                         |
@@ -157,13 +172,14 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 Japa contra Postgres real; después de cada paso, el SELECT de control del libro (`afirmarLibroCuadrado`: ningún asiento descuadrado y total debe = total haber).
 
-| Archivo                                                                            | Qué cubre                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/billing/ciclo.spec.ts`                                                      | Emitir (dos veces sin duplicar) → vencer → limitar → cortar → pagar una (limitado) → pagar todo (activo); y promesa incumplida → corte, pago parcial y total en un turno de caja, anular pago, anular factura, cerrar caja con diferencia (motivo obligatorio y asiento) |
-| `tests/billing/pagos.spec.ts`, `pagos_bancarios.spec.ts`, `pagos_terceros.spec.ts` | Pago parcial, excedente a Anticipos, anulación con reverso, concurrencia; métodos bancarios con su subcuenta, 422 por campo y 409 por referencia; pago de terceros (un asiento, dos auxiliares, anulación)                                                               |
-| `tests/billing/promesas.spec.ts`                                                   | Aprobada (reactiva), rechazada con la regla exacta, límites por canal, suspensión manual, cumplida por evento, incumplida por cron, aprobación y cancelación, endpoints                                                                                                  |
-| `tests/billing/anular_factura.spec.ts`, `importacion.spec.ts`                      | Anular factura (y su mora), 409 con pagos; acciones del importador idempotentes                                                                                                                                                                                          |
-| `tests/ledger/cajas.spec.ts`                                                       | Alcance por caja, turnos, cierre exacto, faltante y sobrante                                                                                                                                                                                                             |
+| Archivo                                                                            | Qué cubre                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/billing/ciclo.spec.ts`                                                      | Emitir (dos veces sin duplicar) → vencer → limitar → cortar → pagar una (limitado) → pagar todo (activo); y promesa incumplida → corte, pago parcial y total en un turno de caja, anular pago, anular factura, cerrar caja con diferencia (motivo obligatorio y asiento)                                                                  |
+| `tests/billing/pagos.spec.ts`, `pagos_bancarios.spec.ts`, `pagos_terceros.spec.ts` | Pago parcial, excedente a Anticipos, anulación con reverso, concurrencia; métodos bancarios con su subcuenta, 422 por campo y 409 por referencia; pago de terceros (un asiento, dos auxiliares, anulación)                                                                                                                                |
+| `tests/billing/promesas.spec.ts`                                                   | Aprobada (reactiva), rechazada con la regla exacta, límites por canal, suspensión manual, cumplida por evento, incumplida por cron, aprobación y cancelación, endpoints                                                                                                                                                                   |
+| `tests/billing/anular_factura.spec.ts`, `importacion.spec.ts`                      | Anular factura (y su mora), 409 con pagos; acciones del importador idempotentes                                                                                                                                                                                                                                                           |
+| `tests/billing/comprobantes.spec.ts`                                               | Tipo por contenido; registrar desde el portal (archivo en disco, evento, auditoría sin contenido, cola y archivo del panel); aprobar (pago, asiento a la subcuenta, reactivación, 409 al repetir); `facturas[]` y excedente; rechazar (motivo, notificación, referencia libre); referencia duplicada; archivo inválido y datos por método |
+| `tests/ledger/cajas.spec.ts`                                                       | Alcance por caja, turnos, cierre exacto, faltante y sobrante                                                                                                                                                                                                                                                                              |
 
 Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace test --files tests/billing --files tests/ledger`.
 
@@ -187,10 +203,13 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 | GET      | `/api/v1/bancos`                                | sesión (sin permiso)       |
 | GET      | `/api/v1/cuentas-bancarias`, `/:id`             | `cuentas_bancarias.ver`    |
 | POST/PUT | `/api/v1/cuentas-bancarias[/:id]`               | `cuentas_bancarias.editar` |
+| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`  | `comprobantes.ver`         |
+| POST     | `/api/v1/comprobantes/:id/aprobar`              | `comprobantes.aprobar`     |
+| POST     | `/api/v1/comprobantes/:id/rechazar`             | `comprobantes.rechazar`    |
 | GET      | `/api/v1/clientes/:id/estado-cuenta`            | `clientes.estado_cuenta`   |
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`.
 
 Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

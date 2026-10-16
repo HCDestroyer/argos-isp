@@ -310,6 +310,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/comprobantes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cola de comprobantes de depósito (portal y panel) */
+        get: operations["comprobantesListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comprobantes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver comprobante de depósito */
+        get: operations["comprobantesVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comprobantes/{id}/aprobar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprobar comprobante: registra el pago con sus datos y reactiva
+         * @description Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.
+         */
+        post: operations["comprobantesAprobar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comprobantes/{id}/archivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Foto o PDF del comprobante
+         * @description Responde el archivo con su Content-Type (image/jpeg, image/png, image/webp o application/pdf) y `Content-Disposition: inline`. 404 si el archivo ya no está en el almacenamiento.
+         */
+        get: operations["comprobantesArchivo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comprobantes/{id}/rechazar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rechazar comprobante con motivo (se notifica al cliente)
+         * @description Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.
+         */
+        post: operations["comprobantesRechazar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cuentas-bancarias": {
         parameters: {
             query?: never;
@@ -1853,6 +1947,52 @@ export interface components {
             responsable_pago_id?: number | null;
             /** @description Nombre del responsable de pago (solo lectura) */
             responsable_pago_nombre?: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Comprobante: {
+            id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            servicio_id: number | null;
+            /** @enum {string} */
+            metodo: "deposito" | "transferencia" | "ach" | "remesa";
+            /** @description Cuenta bancaria propia de destino */
+            cuenta_bancaria_id: number;
+            /** @description Banco y alias de la cuenta de destino */
+            cuenta_bancaria_nombre: string;
+            /** @description Banco de origen (transferencia, ach) */
+            banco_origen_id: number | null;
+            banco_origen_nombre: string | null;
+            referencia: string;
+            monto: components["schemas"]["Dinero"];
+            /** Format: date */
+            fecha_deposito: string;
+            /** @enum {string} */
+            archivo_tipo: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+            /** @description Bytes (máximo 5 MB) */
+            archivo_tamano: number;
+            /** @description Nombre original del archivo subido */
+            archivo_nombre: string | null;
+            /** @enum {string} */
+            canal: "portal" | "panel";
+            nota: string | null;
+            /** @enum {string} */
+            estado: "pendiente" | "aprobado" | "rechazado";
+            motivo_rechazo: string | null;
+            /** @description Pago creado al aprobarlo */
+            pago_id: number | null;
+            registrado_por: number | null;
+            /** @description Quién lo aprobó o rechazó */
+            verificado_por: number | null;
+            /** Format: date-time */
+            verificado_en: string | null;
+            /** @description Solo al aprobar: el pago registrado (aplicaciones y servicios) */
+            pago?: components["schemas"]["Pago"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3988,6 +4128,315 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso clientes.vincular_telegram */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "pendiente" | "aprobado" | "rechazado";
+                cliente_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de comprobantes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Comprobante"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comprobante */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comprobante"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesAprobar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Facturas a las que aplicar el pago; por defecto las del servicio del comprobante y luego la más antigua */
+                    facturas?: number[];
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Comprobante aprobado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comprobante"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.aprobar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesArchivo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesRechazar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Comprobante rechazado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comprobante"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.rechazar */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7481,7 +7930,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -7539,7 +7988,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -9307,7 +9756,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

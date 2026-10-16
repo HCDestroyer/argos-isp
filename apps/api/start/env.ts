@@ -112,4 +112,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_CODIGO_MAX_HORA: Env.schema.number.optional(),
     PORTAL_SESION_INACTIVIDAD_S: Env.schema.number.optional(),
     PORTAL_SESION_MAX_S: Env.schema.number.optional(),
+
+    /*
+    |----------------------------------------------------------
+    | Billing: archivos de comprobantes de depósito (`app/billing/comprobantes_archivos.ts`)
+    |----------------------------------------------------------
+    */
+    COMPROBANTES_DIR: Env.schema.string.optional(),
 })
