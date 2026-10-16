@@ -6,6 +6,7 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 
 - `api_password` y `radius_secret` se guardan cifrados con el formato `v1` (`app/shared/cifrado.ts`, AES-256-GCM, clave `AAA_PPP_KEY`), el mismo que descifran `services/aaa` y `services/coa`. Nunca salen por la API: la respuesta trae `tiene_api_password` / `tiene_radius_secret`. En `audit.cambios` aparecen como `***`.
 - Alcance del ACL por router: listas filtradas y 403 en recursos de otro router.
+- Conexión de la API REST de RouterOS (`api_url`, `api_tls_verificar`, `api_ca`, `dhcp_servidor`, `interfaz_clientes`): columnas y precedencias en `.claude/integration/contratos/routeros.md`, "Conexión del router". `api_ca` se audita como `***` (`esCampoSensible`).
 
 ## IPAM IPv4 (`ipam_v4.ts`)
 

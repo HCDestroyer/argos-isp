@@ -20,6 +20,44 @@ const capacidad = () =>
         .optional()
         .meta({ description: 'kbps del enlace (techo de la cola padre global); null = sin techo' })
 
+/** Conexión a la API REST de RouterOS (`contratos/routeros.md`): todos opcionales. */
+const camposConexionApi = {
+    api_url: vine
+        .string()
+        .trim()
+        .maxLength(300)
+        .regex(/^https?:\/\/[^\s/]+(:\d{1,5})?\/?$/)
+        .nullable()
+        .optional()
+        .meta({ description: 'https://host:puerto de la API REST; null = https://<host>' }),
+    api_tls_verificar: vine
+        .boolean()
+        .optional()
+        .meta({ description: 'Verificar el certificado TLS del router (por defecto true)' }),
+    api_ca: vine
+        .string()
+        .trim()
+        .maxLength(20_000)
+        .regex(/^-----BEGIN CERTIFICATE-----/)
+        .nullable()
+        .optional()
+        .meta({
+            description: 'CA en PEM para routers con certificado propio; en auditoría se registra como ***',
+        }),
+    dhcp_servidor: vine
+        .string()
+        .trim()
+        .minLength(1)
+        .maxLength(100)
+        .nullable()
+        .optional()
+        .meta({ description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all' }),
+    interfaz_clientes: vine.string().trim().minLength(1).maxLength(100).nullable().optional().meta({
+        description:
+            'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP)',
+    }),
+}
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -49,6 +87,7 @@ const camposRouter = {
     }),
     capacidad_bajada_kbps: capacidad(),
     capacidad_subida_kbps: capacidad(),
+    ...camposConexionApi,
     activo: vine.boolean().optional(),
 }
 
@@ -66,6 +105,7 @@ export const editarRouterValidator = vine.compile(
         modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
         capacidad_bajada_kbps: capacidad(),
         capacidad_subida_kbps: capacidad(),
+        ...camposConexionApi,
         activo: vine.boolean().optional(),
     }),
 )
