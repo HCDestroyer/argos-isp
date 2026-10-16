@@ -3,6 +3,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import db from '@adonisjs/lucid/services/db'
 import { Conflicto, Problema } from '#shared/errores'
+import { COOKIE_PORTAL } from '#shared/rutas'
+import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
 
 interface RespuestaGuardada {
     status: number
@@ -28,6 +30,11 @@ const CLAVE_VALIDA = /^[\x21-\x7E]{1,255}$/
  * - Repetición con la misma ruta y cuerpo: devuelve la respuesta guardada con
  *   `Idempotent-Replayed: true` sin ejecutar nada.
  * - Misma clave con otra ruta u otro cuerpo: 422. Mientras la primera sigue en curso: 409.
+ *
+ * Espacio de claves (semana 3): con usuario autenticado, por `actor_id`. Sin usuario (rutas
+ * públicas del portal) se acota por `alcance` (`alcanceAnonimo`): la sesión del portal si trae la
+ * cookie, si no la IP de origen; así dos clientes con la misma clave nunca reciben la respuesta
+ * guardada del otro.
  */
 export default class IdempotenciaMiddleware {
     async handle(ctx: HttpContext, next: NextFn) {
@@ -43,6 +50,7 @@ export default class IdempotenciaMiddleware {
         }
 
         const actorId = 'auth' in ctx ? (ctx.auth.user?.id ?? null) : null
+        const alcance = actorId === null ? alcanceAnonimo(ctx) : null
         const metodo = ctx.request.method()
         const ruta = ctx.request.url(true)
         const huella = createHash('sha256')
@@ -52,7 +60,7 @@ export default class IdempotenciaMiddleware {
         const insertadas = (await db
             .knexQuery()
             .table('core.idempotency_keys')
-            .insert({ clave, actor_id: actorId, metodo, ruta, huella })
+            .insert({ clave, actor_id: actorId, alcance, metodo, ruta, huella })
             .onConflict()
             .ignore()
             .returning('id')) as Array<{ id: number }>
@@ -66,6 +74,11 @@ export default class IdempotenciaMiddleware {
                     actorId === null,
                     (q) => q.whereNull('actor_id'),
                     (q) => q.where('actor_id', actorId!),
+                )
+                .if(
+                    alcance === null,
+                    (q) => q.whereNull('alcance'),
+                    (q) => q.where('alcance', alcance!),
                 )
                 .first()) as FilaIdempotencia | null
 
@@ -110,4 +123,18 @@ export default class IdempotenciaMiddleware {
             await db.from('core.idempotency_keys').where('id', reserva.id).delete()
         }
     }
+}
+
+const hash = (texto: string) => createHash('sha256').update(texto).digest('hex').slice(0, 40)
+
+/**
+ * Alcance de una petición sin usuario: `sesion:<hash>` de la cookie del portal (`argos_portal`) o
+ * `ip:<hash>` de la IP de origen (`ipOrigenDeLaPeticion`, que respeta
+ * `PORTAL_PROXIES_CONFIABLES`). Solo hashes: ni el token ni la IP quedan en la tabla.
+ */
+export function alcanceAnonimo(ctx: HttpContext): string {
+    const sesion = ctx.request.plainCookie(COOKIE_PORTAL, { encoded: false })
+    if (typeof sesion === 'string' && sesion !== '') return `sesion:${hash(sesion)}`
+    const ip = ipOrigenDeLaPeticion(ctx) ?? ctx.request.ip()
+    return `ip:${hash(ip)}`
 }

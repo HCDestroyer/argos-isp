@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import db from '@adonisjs/lucid/services/db'
 import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
 import { NoImplementado } from '#shared/errores'
@@ -22,6 +23,15 @@ router
         throw new NoImplementado('prueba')
     })
     .use([middleware.auth(), middleware.idempotencia()])
+
+// pública (sin auth), como `POST /portal/promesas`
+router
+    .post('/__pruebas/idempotente-publica', async ({ request, response }) => {
+        ejecuciones++
+        response.status(201)
+        return { ejecucion: ejecuciones, eco: request.body() }
+    })
+    .use([middleware.idempotencia()])
 
 test.group('Idempotency-Key', (group) => {
     group.each.setup(() => {
@@ -101,5 +111,73 @@ test.group('Idempotency-Key', (group) => {
         await estado(client.post('/__pruebas/idempotente').bearerToken(token).json({}), 201)
         await estado(client.post('/__pruebas/idempotente').bearerToken(token).json({}), 201)
         assert.equal(ejecuciones, 2)
+    })
+
+    test('pública: la clave se acota por sesión del portal; sin sesión, por IP de origen', async ({
+        client,
+        assert,
+    }) => {
+        const clave = unico('clave-publica')
+        const enviar = (cabeceras: Record<string, string>) => {
+            const peticion = client.post('/__pruebas/idempotente-publica').header('Idempotency-Key', clave)
+            for (const [nombre, valor] of Object.entries(cabeceras)) peticion.header(nombre, valor)
+            return peticion.json({ servicio_id: 1 })
+        }
+
+        // dos sesiones distintas con la misma clave y el mismo cuerpo: cada una ejecuta
+        const a = await estado(enviar({ Cookie: 'argos_portal=pses_sesion-a' }), 201)
+        const b = await estado(enviar({ Cookie: 'argos_portal=pses_sesion-b' }), 201)
+        assert.notEqual(a.body().ejecucion, b.body().ejecucion)
+        // la misma sesión repite su respuesta
+        const repetida = await estado(enviar({ Cookie: 'argos_portal=pses_sesion-a' }), 201)
+        assert.equal(repetida.header('idempotent-replayed'), 'true')
+        assert.deepEqual(repetida.body(), a.body())
+        assert.equal(ejecuciones, 2)
+
+        // sin cookie, por IP de origen (detrás de un proxy confiable)
+        const previos = {
+            PORTAL_PROXIES_CONFIABLES: process.env.PORTAL_PROXIES_CONFIABLES,
+            PORTAL_CABECERA_IP: process.env.PORTAL_CABECERA_IP,
+        }
+        process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1/128'
+        process.env.PORTAL_CABECERA_IP = 'x-forwarded-for'
+        try {
+            await estado(enviar({ 'X-Forwarded-For': '198.51.100.7' }), 201)
+            await estado(enviar({ 'X-Forwarded-For': '198.51.100.8' }), 201)
+            const misma = await estado(enviar({ 'X-Forwarded-For': '198.51.100.7' }), 201)
+            assert.equal(misma.header('idempotent-replayed'), 'true')
+        } finally {
+            for (const [nombre, valor] of Object.entries(previos)) {
+                if (valor === undefined) delete process.env[nombre]
+                else process.env[nombre] = valor
+            }
+        }
+        assert.equal(ejecuciones, 4)
+
+        // en la tabla solo quedan hashes: ni el token de sesión ni la IP
+        const filas = await db.from('core.idempotency_keys').where('clave', clave)
+        assert.lengthOf(filas, 4)
+        for (const fila of filas) {
+            assert.isNull(fila.actor_id)
+            assert.match(fila.alcance, /^(sesion|ip):[0-9a-f]{40}$/)
+        }
+        assert.isFalse(JSON.stringify(filas.map((f) => f.alcance)).includes('198.51.100'))
+    })
+
+    test('autenticado: el alcance queda null y manda el actor', async ({ client, assert }) => {
+        const { token } = await usuarioConRoles(['cajero'])
+        const clave = unico('clave')
+        await estado(
+            client
+                .post('/__pruebas/idempotente')
+                .bearerToken(token)
+                .header('Idempotency-Key', clave)
+                .header('Cookie', 'argos_portal=pses_cualquiera')
+                .json({}),
+            201,
+        )
+        const fila = await db.from('core.idempotency_keys').where('clave', clave).firstOrFail()
+        assert.isNull(fila.alcance)
+        assert.isNotNull(fila.actor_id)
     })
 })
