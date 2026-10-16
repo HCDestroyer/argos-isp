@@ -8,7 +8,7 @@
 | `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6)                                                                                    |
 | `ci/`                    | Verificaciones de CI de infraestructura (FreeRADIUS)                                                                                                                                  |
 | `postgres/`              | Inicialización de Postgres: base de pruebas (`init.sql`) y usuarios dueño y aplicación (`usuarios.sh`)                                                                                |
-| `backups/`               | Servicio `backup`: `pg_dump` diario con retención, cifrado (age) y copia remota (rclone) opcionales; `restaurar.sh` verificado por conteo de filas (ver "Respaldos")                  |
+| `backups/`               | Servicio `backup`: `pg_dump` y tar de comprobantes diarios con retención, cifrado (age) y copia remota (rclone) opcionales; `restaurar.sh` verificado por conteo de filas y de archivos (ver "Respaldos") |
 
 ```sh
 cp infra/.env.example infra/.env        # completa los secretos
@@ -93,7 +93,7 @@ El servicio `backup` (imagen `infra/backups/Dockerfile`, `postgres:16.15-alpine`
 | `BACKUP_RCLONE_DESTINO` | vacío              | Copia remota con rclone (`s3:bucket/ruta`, `b2:...`, `sftp:...`), remoto definido en `BACKUP_CONFIG_DIR/rclone.conf`                                          |
 | `BACKUP_CONFIG_DIR`     | `./backups/config` | Montado en `/config` (solo lectura): `rclone.conf` y, solo para restaurar, `age.key`                                                                          |
 
-Cada respaldo deja `argosisp-<AAAAMMDDTHHMMSSZ>.dump[.age]`, su `.sha256` y un `.conteos` con las filas por tabla leídas del propio dump. El estado del último intento queda en `/backups/.estado` y el healthcheck del servicio falla si fue un error.
+Cada respaldo deja `argosisp-<AAAAMMDDTHHMMSSZ>.dump[.age]`, su `.sha256` y un `.conteos` con las filas por tabla leídas del propio dump. Además, con la misma marca, `argosisp-<marca>.comprobantes.tar.gz[.age]` (los archivos de los comprobantes de depósito, ver abajo), su `.sha256` y un `.comprobantes.conteo` con la cantidad de archivos del tar. Mismo cifrado, misma copia remota y misma retención que el dump. El estado del último intento queda en `/backups/.estado` y el healthcheck del servicio falla si fue un error.
 
 ```sh
 # Respaldo a mano (además del diario)
@@ -101,6 +101,15 @@ docker compose -f infra/docker-compose.yml exec backup respaldar.sh
 # Clave para cifrar: generarla FUERA del servidor y guardar la privada en un gestor de secretos
 age-keygen -o age.key        # imprime la pública: va a BACKUP_AGE_RECIPIENTS
 ```
+
+### Comprobantes de depósito
+
+Las fotos y PDF que suben los clientes (A3, `COMPROBANTES_DIR`) no viven en Postgres. En el compose:
+
+- Volumen `comprobantes` (o una ruta del host con `COMPROBANTES_HOST_DIR`) montado en `/comprobantes` en `api` (los guarda y los sirve; el portal los sube y los pide por la API) y en `backup`. Ningún otro proceso los lee.
+- `comprobantes-permisos` (imagen de api, como root, una vez por `up`) deja la carpeta a nombre de `node` (uid 1000, el usuario de la imagen de api) con `u=rwX,g=rX,o=`: un volumen nuevo o una ruta del host nacen de root, y una restauración trae los permisos del tar. `api` y `backup` esperan a que termine.
+- `respaldar.sh` hace el tar **después** del dump: todo comprobante del dump tiene su archivo (los archivos nuevos que lleguen en medio quedan en el tar sin fila, lo cual es inofensivo). Si `COMPROBANTES_DIR` tiene valor y la carpeta no existe, el respaldo falla (volumen sin montar).
+- `restaurar.sh` encuentra el tar de la misma marca junto al dump (o `--comprobantes ARCHIVO`), lo verifica siempre (sha256, descifrado, archivos del tar = su `.conteo`) y, después de restaurar la base, comprueba que cada `billing.comprobantes.archivo` está en el tar. Con `--comprobantes-dir /comprobantes` los deja en el volumen (vacío, o con `--reemplazar` lo vacía antes) y vuelve a contar.
 
 ### Restaurar
 
@@ -118,7 +127,7 @@ docker compose -f infra/docker-compose.yml run --rm backup \
 ```sh
 docker compose -f infra/docker-compose.yml up -d --wait postgres          # volumen nuevo: init.sql y usuarios.sh
 docker compose -f infra/docker-compose.yml run --rm --no-deps backup \
-  restaurar.sh /backups/argosisp-<marca>.dump.age --base argosisp --reemplazar
+  restaurar.sh /backups/argosisp-<marca>.dump.age --base argosisp --reemplazar --comprobantes-dir /comprobantes
 docker compose -f infra/docker-compose.yml up -d --wait                   # migrate pone las migraciones al día
 rm infra/backups/config/age.key
 ```
@@ -131,6 +140,11 @@ Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a pub
 - Compose en entorno limpio (proyecto aparte): `pnpm demo:datos`, respaldo con el servicio `backup`, `down -v`, `up postgres`, `restaurar.sh --base argosisp --reemplazar`, `up --wait`: `migrate` "Already up to date", api, relay, billing-worker, worker y backup `healthy`, y la API devuelve los 8 clientes y 7 servicios con el login del admin restaurado.
 - Retención: un respaldo con fecha de hace 20 días se borra con `BACKUP_RETENCION_DIAS=14`.
 - CI: el paso "Respaldo y restauración" repite el ciclo sobre la base que dejan las pruebas.
+
+**Probado (día 4, comprobantes):**
+
+- Compose en entorno limpio (proyecto aparte): `comprobantes-permisos` deja `/comprobantes` a nombre de `node`; la API (usuario `node`) escribe tres archivos; respaldo cifrado con el servicio `backup` (dump + tar, `.conteo` = 3); `down -v` (sin volúmenes); `up postgres`; `restaurar.sh --base argosisp --reemplazar --comprobantes-dir /comprobantes` = 98 tablas iguales al dump y 3 archivos; `up --wait`: api y backup `healthy`, los archivos son de uid 1000 con `u=rwX,g=rX,o=`, la API los lee, escribe uno nuevo y `GET /comprobantes` responde 200.
+- Local: un comprobante de la base sin archivo en el tar, un `.conteo` alterado y un destino no vacío sin `--reemplazar` terminan con código 1; la retención borra también los tar viejos.
 
 ## Walled garden
 
