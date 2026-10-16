@@ -105,4 +105,4 @@ Prometheus raspa `aaa:3100/metrics` y `coa:3200/metrics` con el mismo `METRICS_T
 | `argosisp_coa_envios_total{tipo,resultado}`, `argosisp_coa_rtt_segundos{tipo}` | coa | CoA/Disconnect por resultado (ack, nak, timeout, error, sin_secret) y RTT del NAS |
 | `argosisp_coa_eventos_pendientes`, `argosisp_coa_consumidor_activo` | coa | grupo `coa` de `argos:eventos` |
 
-Reglas: `ServicioSinMetricas` (2 min), `AaaSinRedis` (1 min), `AaaLatenciaAlta` (p95 > 100 ms durante 10 min) y `CoaConsumidorInactivo` (2 min), con pruebas en `reglas.test.yml`. Las colas `routeros-cron` y `routeros-prefijos` del `routeros-worker` aparecen en `argosisp_cola_trabajos` de la API.
+Reglas: `ServicioSinMetricas` (2 min), `AaaSinRedis` (1 min), `AaaDegradado` (modo degradado 1 min, crítica), `AaaEspejoViejo` (último perfil conocido sin actualizar hace más de 30 min), `AaaLatenciaAlta` (p95 > 100 ms durante 10 min) y `CoaConsumidorInactivo` (2 min), con pruebas en `reglas.test.yml`. Qué hacer con cada una: `docs/runbooks/aaa-caido.md`. Las colas `routeros-cron` y `routeros-prefijos` del `routeros-worker` aparecen en `argosisp_cola_trabajos` de la API.

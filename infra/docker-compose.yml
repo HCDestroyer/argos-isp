@@ -334,7 +334,8 @@ services:
   # crons del reconciliador (cola routeros-cron) y prefijo delegado de las sesiones en modo
   # radius_pool (cola routeros-prefijos). Una réplica: los crons llevan lock. Debe alcanzar la API
   # REST de los routers (HTTPS, servicio www-ssl): en el laboratorio, por la LAN o el túnel WireGuard.
-  # Usuario y contraseña de cada router salen de network.routers (cifrados con AAA_PPP_KEY).
+  # Usuario y contraseña de cada router salen de network.routers (cifrados con AAA_PPP_KEY); la
+  # verificación TLS también es por router (api_tls_verificar, api_ca), no por variable de entorno.
   routeros-worker:
     <<: *proceso-fondo
     command: [node, ace.js, routeros:worker]
@@ -342,7 +343,6 @@ services:
       replicas: 1
     environment:
       <<: *api-env
-      ROUTEROS_TLS_VERIFICAR: ${ROUTEROS_TLS_VERIFICAR:-true}
       ROUTEROS_TIMEOUT_MS: ${ROUTEROS_TIMEOUT_MS:-5000}
       ROUTEROS_REINTENTOS: ${ROUTEROS_REINTENTOS:-3}
       ROUTEROS_ESPERA_MS: ${ROUTEROS_ESPERA_MS:-500}
@@ -464,6 +464,11 @@ services:
       AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
       # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+    # Último perfil conocido del modo degradado (A2: AAA_DEGRADADO_RUTA de la imagen,
+    # /var/lib/argosisp-aaa/ultimo-conocido.json, dueño node, 0600). Con un segundo nodo, un volumen
+    # propio por nodo (aaa2-datos).
+    volumes:
+      - aaa-datos:/var/lib/argosisp-aaa
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
@@ -520,6 +525,9 @@ services:
       # Nombres de services/coa/.env.example.
       API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
       AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      COA_API_TIMEOUT_MS: ${COA_API_TIMEOUT_MS:-2000}
+      COA_API_REINTENTOS: ${COA_API_REINTENTOS:-3}
+      COA_API_ESPERA_MS: ${COA_API_ESPERA_MS:-500}
       # GET /metrics (job coa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
     ports:
@@ -529,6 +537,9 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      # Respaldo del rate-limit por la API interna (no bloquea si la API tarda: service_started)
+      api:
+        condition: service_started
     healthcheck:
       <<: *node-healthcheck
       test:
@@ -673,5 +684,7 @@ volumes:
   # Certificados y estado de Caddy (servicio proxy)
   caddydata:
   caddyconfig:
+  # Último perfil conocido de aaa (modo degradado)
+  aaa-datos:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:
