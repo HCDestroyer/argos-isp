@@ -742,6 +742,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/aaa/servicios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registros de autorización RADIUS por lotes (servicio aaa)
+         * @description Mismo JSON que `GET /internal/aaa/servicio`, varios a la vez. Con `user_ppp` o `servicio_ids` (hasta 100, uno de los dos) devuelve los que existen en el orden pedido (`nextCursor: null`). Sin lista, pagina todos los servicios `pppoe` (también retirados) por `servicio_id` ascendente con `cursor`/`limit` (por defecto 50). No escribe en Redis.
+         */
+        post: operations["internoAaaServicios"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ip/{ip}": {
         parameters: {
             query?: never;
@@ -7423,6 +7443,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AaaServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    internoAaaServicios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Hasta 100 user_ppp; los inexistentes se omiten */
+                    user_ppp?: string[];
+                    /** @description Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten */
+                    servicio_ids?: number[];
+                    /** @description Cursor opaco de la página anterior */
+                    cursor?: string;
+                    /** @description Tamaño de página (por defecto 50) */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Registros de autorización */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AaaServicio"][];
+                        nextCursor: string | null;
+                    };
                 };
             };
             /** @description No autenticado */

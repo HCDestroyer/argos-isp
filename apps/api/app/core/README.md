@@ -90,7 +90,9 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 
 - Contrato con A2: `.claude/integration/contratos/aaa.md`. `GET /api/v1/internal/aaa/servicio?user_ppp=` (Bearer `INTERNAL_TOKEN`) arma el JSON desde Postgres: 404 si no existe; retirado → 200 con `estado: retirado`.
 - Redis `aaa:user:<user_ppp>` (prefijo `AAA_REDIS_PREFIJO`; en pruebas `<COLAS_PREFIJO>:aaa:user:`), **sin TTL**, write-through después del COMMIT con `refrescarAaaAlConfirmar(t, objetivo)`: `CrearServicio`, `EditarServicio`, `RetirarServicio` (lápida), `CambiarEstadoServicio` (y las acciones manuales que la anidan), `EditarPlan` (todos los servicios no retirados del plan) e `ImplementarPlan` (los del plan en ese router).
-- SET condicionado por `version` (Lua): un registro del mismo servicio con `version` mayor no se pisa. Tras restaurar un respaldo de la base, borrar `aaa:user:*`.
+- SET condicionado por `version` (Lua): un registro del mismo servicio con `version` mayor no se pisa. Tras restaurar un respaldo de la base, `node ace aaa:repoblar --forzar` (o borrar `aaa:user:*`).
+- Carga por lotes (semana 3): `POST /api/v1/internal/aaa/servicios` (Bearer `INTERNAL_TOKEN`) con `{ user_ppp: [...] }` o `{ servicio_ids: [...] }` (hasta 100; los inexistentes se omiten, en el orden pedido) o sin lista con `cursor`/`limit` (todos los `pppoe`, retirados incluidos, por `servicio_id` ascendente). Responde `{ data, nextCursor }` con el mismo JSON del GET y no escribe en Redis.
+- `node ace aaa:repoblar [--lote=500] [--forzar]` (`repoblarAaa`): reescribe todas las claves desde Postgres por lotes con el mismo SET condicionado (idempotente, se puede correr con la API atendiendo). Resumen al final: servicios, lápidas, escritas, omitidas por `version` mayor, lotes, duración y claves huérfanas (sin servicio `pppoe` y sin lápida; se informan, no se borran).
 - Si Redis falla en el gancho, el cambio queda confirmado y se registra en el log; el consumidor `aaa-cache` del bus de eventos vuelve a escribir la clave.
 
 ## Bus de eventos (`app/shared/eventos_bus.ts`, `app/shared/relay_outbox.ts`, tarea 10)

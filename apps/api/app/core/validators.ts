@@ -421,3 +421,26 @@ export const aaaServicioValidator = vine.compile(
         user_ppp: vine.string().trim().minLength(1).maxLength(64),
     }),
 )
+
+/**
+ * `POST /internal/aaa/servicios` (carga por lotes, pedido de A2): `user_ppp` o `servicio_ids`
+ * (hasta 100, sin paginar) o, sin ninguno, la página `cursor`/`limit` de todos los servicios
+ * `pppoe` por `servicio_id` ascendente.
+ */
+export const aaaServiciosLoteValidator = vine.compile(
+    vine.object({
+        user_ppp: vine
+            .array(vine.string().trim().minLength(1).maxLength(64))
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Hasta 100 user_ppp; los inexistentes se omiten' }),
+        servicio_ids: vine
+            .array(vine.number().withoutDecimals().min(1))
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten' }),
+        ...reglasPaginacion,
+    }),
+)

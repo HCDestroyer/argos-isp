@@ -5118,6 +5118,118 @@
         "x-implementado": true
       }
     },
+    "/api/v1/internal/aaa/servicios": {
+      "post": {
+        "operationId": "internoAaaServicios",
+        "summary": "Registros de autorización RADIUS por lotes (servicio aaa)",
+        "description": "Mismo JSON que `GET /internal/aaa/servicio`, varios a la vez. Con `user_ppp` o `servicio_ids` (hasta 100, uno de los dos) devuelve los que existen en el orden pedido (`nextCursor: null`). Sin lista, pagina todos los servicios `pppoe` (también retirados) por `servicio_id` ascendente con `cursor`/`limit` (por defecto 50). No escribe en Redis.",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "user_ppp": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Hasta 100 user_ppp; los inexistentes se omiten"
+                  },
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten"
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Cursor opaco de la página anterior"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Tamaño de página (por defecto 50)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registros de autorización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AaaServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/ip/{ip}": {
       "get": {
         "operationId": "ipResolver",
