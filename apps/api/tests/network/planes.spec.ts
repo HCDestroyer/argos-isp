@@ -101,8 +101,8 @@ test.group('Planes por router', () => {
         assert.containsSubset(efectivo, {
             router_id: r1,
             implementacion: null,
-            rate_limit: '5000k/20000k',
-            rate_limit_limitado: '512k/1024k',
+            rate_limit: '5M/20M 0/0 0/0 0/0 8 5M/20M',
+            rate_limit_limitado: '512k/1024k 0/0 0/0 0/0 8 512k/1024k',
             profile_ppp: null,
         })
         await assert.rejects(() => obtenerImplementacionPlan(local, r1), /no está disponible/)
@@ -155,7 +155,7 @@ test.group('Planes por router', () => {
             409,
         )
         const sinOverride = await obtenerImplementacionPlan(local, r1)
-        assert.equal(sinOverride.rate_limit, '5000k/20000k')
+        assert.equal(sinOverride.rate_limit, '5M/20M 0/0 0/0 0/0 8 5M/20M')
 
         const enR1 = await estado(client.get(`/api/v1/routers/${r1}/planes`).bearerToken(token), 200)
         const ids = enR1.body().map((p: { id: number }) => p.id)

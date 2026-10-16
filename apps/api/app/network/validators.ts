@@ -1,12 +1,24 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { cidrV4, dinero, idEntidad, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
+import { CONTROLES_VELOCIDAD } from '#network/velocidad'
 
 /*
 |--------------------------------------------------------------------------
 | Routers
 |--------------------------------------------------------------------------
 */
+
+/** Capacidad del enlace en kbps (techo del padre global); null = sin techo. */
+const capacidad = () =>
+    vine
+        .number()
+        .withoutDecimals()
+        .min(1)
+        .max(100_000_000)
+        .nullable()
+        .optional()
+        .meta({ description: 'kbps del enlace (techo de la cola padre global); null = sin techo' })
 
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
@@ -31,7 +43,12 @@ const camposRouter = {
         .meta({ description: 'Se guarda cifrado' }),
     nas_ip: ipv4(),
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
-    modo_velocidad: vine.enum(['simple', 'pcq'] as const).optional(),
+    control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
+        description:
+            'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
+    }),
+    capacidad_bajada_kbps: capacidad(),
+    capacidad_subida_kbps: capacidad(),
     activo: vine.boolean().optional(),
 }
 
@@ -47,8 +64,18 @@ export const editarRouterValidator = vine.compile(
         radius_secret: vine.string().maxLength(200).nullable().optional(),
         nas_ip: ipv4().optional(),
         modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
-        modo_velocidad: vine.enum(['simple', 'pcq'] as const).optional(),
+        capacidad_bajada_kbps: capacidad(),
+        capacidad_subida_kbps: capacidad(),
         activo: vine.boolean().optional(),
+    }),
+)
+
+/** `POST /routers/:id/cambiar-control-velocidad` (solo admin; la ejecución en el router es de A2). */
+export const cambiarControlVelocidadValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        control_velocidad: vine.enum(CONTROLES_VELOCIDAD),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
     }),
 )
 
@@ -89,6 +116,64 @@ export const crearPoolIpv6Validator = vine.compile(
 
 const kbps = () => vine.number().withoutDecimals().min(1).max(100_000_000)
 
+/**
+ * Campos de velocidad (`contratos/velocidad.md`). Las reglas que cruzan campos (CIR ≤ MIR / reuso,
+ * umbral < MIR < ráfaga) las valida `validarVelocidad` en la acción (422 por campo).
+ */
+const reglasVelocidad = {
+    reuso: () =>
+        vine.number().withoutDecimals().min(1).max(64).meta({ description: 'N de 1:N (1 = dedicado)' }),
+    garantizado_pct: () =>
+        vine
+            .number()
+            .decimal([0, 2])
+            .min(0.01)
+            .max(100)
+            .meta({ description: 'CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso' }),
+    rafaga_bajada_kbps: () =>
+        kbps().meta({ description: 'burst-limit de bajada (> bajada_kbps); null = sin ráfaga' }),
+    rafaga_subida_kbps: () =>
+        kbps().meta({ description: 'burst-limit de subida (> subida_kbps); null = sin ráfaga' }),
+    rafaga_umbral_pct: () =>
+        vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .max(99)
+            .meta({ description: 'burst-threshold como % del MIR (75)' }),
+    rafaga_segundos: () =>
+        vine.number().withoutDecimals().min(1).max(3600).meta({ description: 'burst-time en segundos (16)' }),
+    prioridad: () =>
+        vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .max(8)
+            .meta({ description: '1 (alta) a 8 (baja, por defecto)' }),
+}
+
+/** En el plan: los que tienen valor por defecto no admiten null. */
+const camposVelocidadPlan = () => ({
+    reuso: reglasVelocidad.reuso().optional(),
+    garantizado_pct: reglasVelocidad.garantizado_pct().nullable().optional(),
+    rafaga_bajada_kbps: reglasVelocidad.rafaga_bajada_kbps().nullable().optional(),
+    rafaga_subida_kbps: reglasVelocidad.rafaga_subida_kbps().nullable().optional(),
+    rafaga_umbral_pct: reglasVelocidad.rafaga_umbral_pct().optional(),
+    rafaga_segundos: reglasVelocidad.rafaga_segundos().optional(),
+    prioridad: reglasVelocidad.prioridad().optional(),
+})
+
+/** En `planes_routers`: todo admite null (= hereda el valor del plan). */
+const camposVelocidadExcepcion = () => ({
+    reuso: reglasVelocidad.reuso().nullable().optional(),
+    garantizado_pct: reglasVelocidad.garantizado_pct().nullable().optional(),
+    rafaga_bajada_kbps: reglasVelocidad.rafaga_bajada_kbps().nullable().optional(),
+    rafaga_subida_kbps: reglasVelocidad.rafaga_subida_kbps().nullable().optional(),
+    rafaga_umbral_pct: reglasVelocidad.rafaga_umbral_pct().nullable().optional(),
+    rafaga_segundos: reglasVelocidad.rafaga_segundos().nullable().optional(),
+    prioridad: reglasVelocidad.prioridad().nullable().optional(),
+})
+
 const camposPlan = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     precio: dinero(),
@@ -97,7 +182,7 @@ const camposPlan = {
     // > 0: con 0 el servicio limitado navegaría a velocidad completa (aaa lo usa al limitar)
     bajada_limitada_kbps: kbps().min(1),
     subida_limitada_kbps: kbps().min(1),
-    reuso: vine.number().withoutDecimals().min(1).max(64).optional(),
+    ...camposVelocidadPlan(),
     dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
     tamano_prefijo_delegado: vine
         .enum([64, 56, 48] as const)
@@ -118,7 +203,7 @@ export const editarPlanValidator = vine.compile(
         subida_kbps: kbps().optional(),
         bajada_limitada_kbps: kbps().min(1).optional(),
         subida_limitada_kbps: kbps().min(1).optional(),
-        reuso: vine.number().withoutDecimals().min(1).max(64).optional(),
+        ...camposVelocidadPlan(),
         dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
         tamano_prefijo_delegado: vine
             .enum([64, 56, 48] as const)
@@ -149,7 +234,11 @@ export const implementacionPlanValidator = vine.compile(
         pool_ipv6_delegacion: vine.string().trim().maxLength(100).nullable().optional(),
         local_address: ipv4().nullable().optional(),
         no_crear_reglas: vine.boolean().optional(),
-        rate_limit_override: vine.string().trim().maxLength(200).nullable().optional(),
+        rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
+            description: 'Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo',
+        }),
+        // excepciones de velocidad del plan en este router: null = hereda del plan
+        ...camposVelocidadExcepcion(),
     }),
 )
 

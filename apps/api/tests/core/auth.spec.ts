@@ -38,6 +38,26 @@ test.group('Auth: login y /me', () => {
         assert.equal(accion.canal, 'panel')
         assert.equal(accion.resultado, 'ok')
         assert.deepEqual(accion.entrada, { email: 'admin@argosisp.local', password: '***' })
+        // el actor es el usuario que inició sesión, no "Sistema"
+        const admin = await db.from('core.usuarios').where('email', 'admin@argosisp.local').firstOrFail()
+        assert.equal(accion.actor_tipo, 'usuario')
+        assert.equal(Number(accion.actor_id), Number(admin.id))
+        assert.equal(Number(accion.entidad_id), Number(admin.id))
+    })
+
+    test('un login fallido queda auditado como error con actor sistema', async ({ client, assert }) => {
+        const requestId = `prueba-login-fallido-${Date.now()}`
+        await estado(
+            client
+                .post('/api/v1/auth/login')
+                .header('X-Request-Id', requestId)
+                .json({ email: 'admin@argosisp.local', password: 'incorrecta' }),
+            401,
+        )
+        const accion = await db.from('audit.acciones').where('request_id', requestId).firstOrFail()
+        assert.equal(accion.resultado, 'error')
+        assert.equal(accion.actor_tipo, 'sistema')
+        assert.isNull(accion.actor_id)
     })
 
     test('credenciales inválidas → 401 Problem', async ({ client, assert }) => {

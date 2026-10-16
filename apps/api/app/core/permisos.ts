@@ -32,6 +32,8 @@ export const PERMISOS = {
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
     'routers.editar': 'Editar routers y sus credenciales',
+    'routers.cambiar_control_velocidad':
+        'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
     'redes.ver': 'Ver redes IPv4',
     'redes.crear': 'Crear redes IPv4',
     'ipv6.ver': 'Ver bloques y pools IPv6',
