@@ -120,6 +120,15 @@ Checklist completo en `docs/seguridad/portal.md`. En el portal:
 
 En desarrollo (`nuxt dev`) no se pone CSP: Vite necesita scripts propios.
 
+## Guía para el ISP
+
+`docs/piloto/portal-cliente.md`: qué ve un cliente cortado, promesa, comprobante, Telegram y dudas
+frecuentes, con capturas a 390 px en `docs/piloto/img/` (build de producción con fixtures,
+Chromium, PNG de 128 colores; menos de 60 KB cada una).
+
+Los modales dejan margen a la derecha del título (`modal.slots.wrapper` en `app.config.ts`): a 390 px
+la descripción pasaba por debajo del botón de cerrar.
+
 ## Pruebas
 
 `pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y
