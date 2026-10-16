@@ -2012,7 +2012,7 @@ export interface components {
             horario: string | null;
             /** @description Texto que acompaña los datos de depósito */
             instrucciones_pago: string | null;
-            /** @description Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran */
+            /** @description Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
         };
         EnvioNotificacion: {

@@ -1,7 +1,9 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { usarFuenteCuentasDeposito, type CuentaDeposito } from '#portal/cuentas_deposito'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
+import { bancoId } from '#tests/billing/ayudas_billing'
 import { renderizarHtml } from '#portal/documentos/render'
 import { vistaDeEjemplo } from '#portal/documentos/variables'
 
@@ -30,6 +32,7 @@ test.group('Empresa: configuración editable', (group) => {
         client,
         assert,
     }) => {
+        usarFuenteCuentasDeposito({ activas: async () => [] })
         const publica = await estado(client.get('/api/v1/portal/empresa'), 200)
         assert.deepEqual(publica.body().cuentas_deposito, [])
         assert.isNull(publica.body().whatsapp)
@@ -135,5 +138,34 @@ test.group('Empresa: configuración editable', (group) => {
             403,
         )
         await estado(client.get('/api/v1/empresa').bearerToken(cajero.token), 403)
+    })
+
+    test('cuentas reales de A3: solo activas y en quetzales, sin datos del libro', async ({
+        client,
+        assert,
+    }) => {
+        const crear = async (banco: string, datos: { moneda?: 'GTQ' | 'USD'; activa?: boolean }) =>
+            new CrearCuentaBancaria().execute(
+                { banco_id: await bancoId(banco), numero: unico('300'), alias: unico('Deposito'), ...datos },
+                contextoPrueba(),
+            )
+        const visible = await crear('Banrural', {})
+        const inactiva = await crear('Banrural', { activa: false })
+        const dolares = await crear('Banrural', { moneda: 'USD' })
+
+        const publica = await estado(client.get('/api/v1/portal/empresa'), 200)
+        const cuentas = publica.body().cuentas_deposito as CuentaDeposito[]
+        const numeros = cuentas.map((c) => c.numero)
+        assert.include(numeros, visible.numero)
+        assert.notInclude(numeros, inactiva.numero)
+        assert.notInclude(numeros, dolares.numero)
+        assert.deepEqual(
+            cuentas.find((c) => c.numero === visible.numero),
+            { banco: 'Banrural', alias: visible.alias, numero: visible.numero, moneda: 'GTQ' },
+        )
+        for (const cuenta of cuentas) {
+            assert.equal(cuenta.moneda, 'GTQ')
+            assert.sameMembers(Object.keys(cuenta), ['banco', 'alias', 'numero', 'moneda'])
+        }
     })
 })

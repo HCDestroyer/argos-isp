@@ -301,7 +301,7 @@ export const EmpresaPublica = definirEsquema(
         cuentas_deposito: {
             ...lista(CuentaDeposito),
             description:
-                'Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran',
+                'Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran',
         },
     }),
 )

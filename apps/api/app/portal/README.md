@@ -111,8 +111,12 @@ largas siguen en otra página.
 - La usan `/corte`, `/contacto`, el encabezado del portal, el mensaje del código de acceso y `{{empresa.*}}`
   de los documentos (`empresa.ts`).
 - **Cuentas para depósito**: no se guardan aquí. Su fuente única es `billing.cuentas_bancarias` (A3);
-  el portal las lee por el puerto `cuentas_deposito.ts` (solo banco, alias, número y moneda). Hasta que la
-  consulta de A3 esté en `main` el puerto devuelve `[]` y `/corte` no muestra cuentas (nunca inventadas).
+  el portal las lee por el puerto `cuentas_deposito.ts` con `listarCuentasBancarias({ activa: true })` de
+  A3 (solo lectura; salen banco, alias, número y moneda, nada del libro). Sin cuentas activas, `[]` y
+  `/corte` no muestra la sección (nunca inventadas).
+- **Las cuentas en USD no se muestran** (decisión de la tarea 9): los avisos y los pagos son en
+  quetzales y un depósito a una cuenta en dólares lo convierte el banco a su tipo de cambio, así que lo
+  acreditado no cuadra con la deuda. Ocultarlas es más claro en el teléfono que marcarlas.
 
 ### Promesa de pago desde el portal (tarea 4)
 

@@ -1,11 +1,17 @@
+import { listarCuentasBancarias } from '#billing/cuentas_bancarias'
+
 /**
  * Cuentas bancarias para depósito que muestran `/corte` y el portal.
  *
  * La fuente única es `billing.cuentas_bancarias` de A3 (cada cuenta tiene su subcuenta en el
- * libro); el portal solo la lee, nunca escribe en `billing`. A3 exporta la consulta de solo lectura
- * en su rama (`listarCuentasBancarias({ activa: true })` de `#billing/cuentas_bancarias`); mientras
- * no esté en `main`, este puerto devuelve una lista vacía y `/corte` no muestra la sección (nunca
- * cuentas inventadas). Pedido en `.claude/integration/a5.md`. Las pruebas usan un falso.
+ * libro); el portal solo la lee con `listarCuentasBancarias({ activa: true })` de
+ * `#billing/cuentas_bancarias` y nunca escribe en `billing`. Sin cuentas activas devuelve `[]` y
+ * `/corte` no muestra la sección (nunca cuentas inventadas). Las pruebas pueden usar un falso.
+ *
+ * **Las cuentas en dólares no se muestran.** Los avisos de cobro y los pagos del portal son en
+ * quetzales; un depósito en una cuenta en USD lo convierte el banco a su tipo de cambio y el monto
+ * acreditado ya no coincide con la deuda. Se ocultan en vez de marcarlas: en la página de corte (en
+ * el teléfono, con prisa) una cuenta con advertencia sigue invitando a depositar ahí.
  *
  * Solo salen banco, alias, número y moneda: nada del libro (cuenta contable, código).
  */
@@ -22,17 +28,25 @@ export interface FuenteCuentasDeposito {
     activas(): Promise<CuentaDeposito[]>
 }
 
-/** NEEDS(A3): reemplazar por un adaptador sobre la consulta de A3 cuando esté en `main`. */
-export class CuentasDepositoPendientes implements FuenteCuentasDeposito {
+/** Adaptador sobre la consulta de solo lectura de A3: activas y en quetzales, en el orden de A3. */
+export class CuentasDepositoBilling implements FuenteCuentasDeposito {
     async activas(): Promise<CuentaDeposito[]> {
-        return []
+        const cuentas = await listarCuentasBancarias({ activa: true })
+        return cuentas
+            .filter((cuenta) => cuenta.moneda === 'GTQ')
+            .map((cuenta) => ({
+                banco: cuenta.banco_nombre,
+                alias: cuenta.alias,
+                numero: cuenta.numero,
+                moneda: cuenta.moneda,
+            }))
     }
 }
 
 let actual: FuenteCuentasDeposito | undefined
 
 export function fuenteCuentasDeposito(): FuenteCuentasDeposito {
-    actual ??= new CuentasDepositoPendientes()
+    actual ??= new CuentasDepositoBilling()
     return actual
 }
 
