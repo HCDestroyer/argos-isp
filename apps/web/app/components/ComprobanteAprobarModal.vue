@@ -38,7 +38,7 @@ const marcadas = ref<number[]>([])
 
 const puedeElegir = computed(() => puede('clientes.estado_cuenta'))
 const resumen = computed(() => (cuenta.value ? resumenPendiente(cuenta.value.facturas_pendientes, hoy) : null))
-const nombresServicio = computed(() => new Map(servicios.value.map(s => [s.id, s.user_ppp])))
+const nombresServicio = computed(() => new Map(servicios.value.map(s => [s.id, etiquetaServicio(s)])))
 const monto = computed(() => new Decimal(props.comprobante.monto))
 
 /** Las que irán primero: las marcadas o, sin marcar, las que elegiría la API. */

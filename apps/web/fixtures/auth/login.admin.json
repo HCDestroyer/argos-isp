@@ -82,7 +82,14 @@
       "roles.editar",
       "tokens.ver",
       "tokens.crear",
-      "tokens.revocar"
+      "tokens.revocar",
+      "routers.cambiar_control_velocidad",
+      "libro.cerrar_periodo",
+      "libro.reabrir_periodo",
+      "egresos.ver",
+      "egresos.registrar",
+      "egresos.anular",
+      "reportes.ver"
     ]
   }
 }
