@@ -34,6 +34,17 @@ Las reglas de salto (`argosisp:top`) se colocan al inicio de `filter` y `nat` (I
 | Perfil de corte               | `suspendido`      | —                          | `Mikrotik-Group`                                                  |
 | Address-list / interface-list | `suspendidos`     | —                          | `Mikrotik-Address-List`                                           |
 
+### Binding DHCPv6-PD de una sesión PPPoE
+
+Verificado el 16-10-2026 en dos CHR RouterOS **7.24.5** (r1 con `lab.rsc`, r2 como cliente PPPoE con `/ipv6 dhcp-client request=prefix`), usuario `cliente-pd`:
+
+- Cada sesión con `dhcpv6-pd-pool` en su perfil crea un **servidor DHCPv6 dinámico** con el nombre de la interfaz PPP, con los signos `<` y `>` incluidos: `/ipv6/dhcp-server` → `name = interface = <pppoe-cliente-pd>`, `dynamic = true`, `prefix-pool = argos-v6-pd`, `address-pool = static-only`.
+- El binding: `/ipv6/dhcp-server/binding` → `server = <pppoe-cliente-pd>`, `active-server = <pppoe-cliente-pd>`, `address = 2001:db8:200::/56`, `ia-type = pd`, `prefix-pool = argos-v6-pd`, `dynamic = true`, `status = bound`, `duid` del CPE. El nombre **sí es `<pppoe-<usuario>>`**, como lo busca `CompletarPrefijoDelegado`.
+- Por la API REST el filtro funciona con los signos codificados: `GET /rest/ipv6/dhcp-server/binding?server=%3Cpppoe-cliente-pd%3E` devuelve el binding; `?server=pppoe-cliente-pd` (sin `< >`) devuelve `[]`. Leerlo solo necesita la política `read`.
+- La ruta del /56 en `/ipv6/route` es `dst-address = 2001:db8:200::/56`, `gateway = fe80::…%<pppoe-cliente-pd>` (link-local del CPE con la interfaz, no `<pppoe-…>` solo), `dynamic` y `dhcp = true`; el /64 de enlace sí tiene `gateway = <pppoe-cliente-pd>`. Para el /56 conviene el binding, no la ruta.
+- Al cerrar la sesión desaparecen el servidor dinámico y el binding; al reconectar el mismo CPE (mismo DUID) recibe el mismo /56 mientras el pool no lo reasigne.
+- En la prueba el /56 salió del pool del perfil (`/ppp secret` local, `radius = false`). Con RADIUS en modo `radius_pool` (`Delegated-IPv6-Pool`) el servidor dinámico es el mismo (depende de la interfaz, no del origen del pool); falta confirmarlo con RADIUS en el equipo físico. Con `Delegated-IPv6-Prefix` fijo (`radius_servicio`) no hace falta buscarlo.
+
 Para el modo `radius_servicio` (IP y prefijos fijos por servicio), el IPAM debe usar rangos fuera de esos pools, por ejemplo `10.10.1.0/24`, `2001:db8:101::/48` (enlace) y `2001:db8:300::/40` (delegados). El router instala la ruta al recibir `Framed-IP-Address`, `Framed-IPv6-Prefix` y `Delegated-IPv6-Prefix`.
 
 ## Aplicar
@@ -88,7 +99,7 @@ En el router:
     # usuario conectado: address (IPv4), caller-id, uptime
 /interface pppoe-server print
 /ipv6 dhcp-server binding print
-    # el /56 delegado al cliente (servidor dinámico creado por el perfil)
+    # el /56 delegado al cliente: server = <pppoe-usuario> (servidor dinámico creado por el perfil)
 /ipv6 route print where dynamic
     # /64 de enlace y /56 delegado hacia la interfaz <pppoe-usuario>
 /queue simple print
