@@ -5,6 +5,7 @@ Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabiliz
 | Ruta                   | Llamada desde                     | Estado                       |
 | ---------------------- | --------------------------------- | ---------------------------- |
 | `GET /health`          | healthcheck de compose            | hecho (incluye estado Redis) |
+| `GET /metrics`         | Prometheus (A6)                   | hecho (semana 2, tarea 5)    |
 | `POST /aaa/authorize`  | `authorize` de FreeRADIUS         | hecho (tarea 1)              |
 | `POST /aaa/post-auth`  | `post-auth`, solo en Reject       | 204, registra el rechazo     |
 | `POST /aaa/accounting` | `accounting` (Start/Interim/Stop) | hecho (tarea 4): encola      |
@@ -59,6 +60,19 @@ El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la pá
 | Redis no acepta el job en 1,5 s                         | 503  | fail → sin respuesta: el NAS reintenta           |
 
 `aaa` no escribe en Postgres ni decide nada sobre la sesión. RouterOS 7.24.5 no manda `Delegated-IPv6-Prefix` en accounting (lo comprobó el PM): el worker lo toma de la asignación vigente en modo `radius_servicio` (ver `apps/api/app/network/sesiones/README.md`).
+
+## Observabilidad (semana 2, tarea 5)
+
+`GET /metrics` (texto Prometheus 0.0.4; con `METRICS_TOKEN` exige `Authorization: Bearer <token>`, vacío = abierto en la red interna):
+
+| Métrica                                       | Tipo                    | Etiquetas                                                                               |
+| --------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
+| `argosisp_aaa_autorizaciones_total`           | counter                 | `resultado` = `accept` (200), `reject` (401, retirado), `notfound` (404), `error` (5xx) |
+| `argosisp_aaa_autorizacion_duracion_segundos` | histogram (0,005 a 1 s) | `resultado`                                                                             |
+| `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                 |
+| `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                       |
+
+Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (el `X-Request-Id` de la petición o un UUID nuevo; se devuelve en la respuesta).
 
 ## Comandos
 

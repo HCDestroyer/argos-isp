@@ -42,6 +42,7 @@ const cola = new ColaAccountingBullmq({
 })
 
 const app = crearApp({
+    metricasToken: process.env.METRICS_TOKEN || undefined,
     resolutor: new ResolutorServicios({
         redis,
         prefijo: config.redis.prefijo,

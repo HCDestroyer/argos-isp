@@ -7,6 +7,7 @@ import { ConsumidorStream } from './consumidor.ts'
 import { Dispatcher } from './dispatcher.ts'
 import { crearLog } from './log.ts'
 import { ClienteNasUdp } from './nas.ts'
+import { MetricasCoa } from './metricas.ts'
 
 const config = leerConfig()
 const log = crearLog(config.logLevel)
@@ -24,6 +25,7 @@ redis.on('error', () => {
     // Se ve en /health y en el log del bucle del consumidor.
 })
 
+const metricas = new MetricasCoa()
 const almacen = new AlmacenPg(config.db, { redis, prefijo: config.aaaPrefijo })
 const dispatcher = new Dispatcher({
     almacen,
@@ -36,6 +38,7 @@ const dispatcher = new Dispatcher({
     reintentos: config.nas.reintentos,
     esperaMs: config.nas.esperaMs,
     log,
+    metricas,
 })
 const consumidor = new ConsumidorStream({
     redis,
@@ -51,6 +54,13 @@ const consumidor = new ConsumidorStream({
 const servidor = crearServidor({
     consumidor: () => ({ activo: consumidor.activo, ultimaLectura: consumidor.ultimaLectura }),
     redisListo: () => redis.status === 'ready',
+    metricas,
+    metricasToken: process.env.METRICS_TOKEN || undefined,
+    // XPENDING resumido: [cantidad, primero, último, consumidores]
+    pendientes: async () => {
+        const r = (await redis.xpending(config.stream, config.grupo)) as [number, ...unknown[]]
+        return Number(r[0] ?? 0)
+    },
 })
 servidor.listen(config.port, config.host, () => {
     log.info(
