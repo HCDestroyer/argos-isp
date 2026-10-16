@@ -12,10 +12,15 @@ import { parsearRegistro, type RegistroAaa } from './servicio.ts'
  *      publique el endpoint) y se cachea con `SET NX` para no pisar una escritura más nueva de A1.
  */
 
+/** Datos de la petición que viajan al respaldo (hoy, el `request_id` para correlacionar logs). */
+export interface ContextoConsulta {
+    requestId?: string
+}
+
 /** Fuente de respaldo: devuelve el registro o null si el usuario no existe. */
 export interface FuenteRespaldo {
     readonly nombre: 'api' | 'fixtures'
-    obtener(userPpp: string): Promise<RegistroAaa | null>
+    obtener(userPpp: string, contexto?: ContextoConsulta): Promise<RegistroAaa | null>
 }
 
 export class ErrorFuente extends Error {}
@@ -51,10 +56,11 @@ export class FuenteApi implements FuenteRespaldo {
             : new AgenteHttp(conexiones)
     }
 
-    async obtener(userPpp: string): Promise<RegistroAaa | null> {
+    async obtener(userPpp: string, contexto: ContextoConsulta = {}): Promise<RegistroAaa | null> {
         const url = new URL('internal/aaa/servicio', this.base)
         url.searchParams.set('user_ppp', userPpp)
-        const { status, cuerpo } = await this.get(url)
+        // La API usa el mismo `request_id` en su log de acceso (`request_id_middleware.ts`).
+        const { status, cuerpo } = await this.get(url, contexto.requestId)
         if (status === 404) return null
         if (status !== 200) throw new ErrorFuente(`API interna respondió ${status}`)
         let datos: unknown
@@ -83,14 +89,19 @@ export class FuenteApi implements FuenteRespaldo {
         this.agente.destroy()
     }
 
-    private get(url: URL): Promise<{ status: number; cuerpo: string }> {
+    private get(url: URL, requestId?: string): Promise<{ status: number; cuerpo: string }> {
         const solicitar = url.protocol === 'https:' ? solicitudHttps : solicitudHttp
+        const headers: Record<string, string> = {
+            authorization: `Bearer ${this.token}`,
+            accept: 'application/json',
+        }
+        if (requestId) headers['x-request-id'] = requestId
         return new Promise((resolver, rechazar) => {
             const req = solicitar(
                 url,
                 {
                     agent: this.agente,
-                    headers: { authorization: `Bearer ${this.token}`, accept: 'application/json' },
+                    headers,
                 },
                 (res) => {
                     const partes: Buffer[] = []
@@ -183,7 +194,7 @@ export class ResolutorServicios {
         return `${this.prefijo}${userPpp}`
     }
 
-    async resolver(userPpp: string): Promise<Resuelto> {
+    async resolver(userPpp: string, contexto: ContextoConsulta = {}): Promise<Resuelto> {
         const clave = this.clave(userPpp)
         let errorRedis: string | undefined
         let crudo: string | null = null
@@ -203,12 +214,12 @@ export class ResolutorServicios {
                     { clave, error: (e as Error).message },
                     'registro inválido en Redis; se usa el respaldo',
                 )
-                const registro = await this.respaldo.obtener(userPpp)
+                const registro = await this.respaldo.obtener(userPpp, contexto)
                 return { registro, origen: this.respaldo.nombre }
             }
         }
 
-        const registro = await this.respaldo.obtener(userPpp)
+        const registro = await this.respaldo.obtener(userPpp, contexto)
         if (registro !== null && errorRedis === undefined) {
             // Sin TTL (CLAUDE.md regla 5). NX: si A1 escribió mientras consultábamos, gana A1.
             // Los inexistentes no se cachean: A1 no tendría cómo invalidarlos al crear el servicio.

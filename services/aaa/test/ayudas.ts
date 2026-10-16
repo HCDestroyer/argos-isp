@@ -79,11 +79,16 @@ export function cuerpoRest(
 
 /** API interna simulada de A1 (`GET /internal/aaa/servicio`). */
 export class ApiFalsa {
-    readonly llamadas: { url: string; auth: string | undefined }[] = []
+    readonly llamadas: { url: string; auth: string | undefined; requestId?: string }[] = []
     respuestas = new Map<string, { status: number; cuerpo?: unknown }>()
     private servidor: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
         const url = new URL(req.url ?? '/', 'http://x')
-        this.llamadas.push({ url: url.pathname + url.search, auth: req.headers.authorization })
+        const requestId = req.headers['x-request-id']
+        this.llamadas.push({
+            url: url.pathname + url.search,
+            auth: req.headers.authorization,
+            ...(typeof requestId === 'string' ? { requestId } : {}),
+        })
         const r = this.respuestas.get(url.searchParams.get('user_ppp') ?? '') ?? { status: 404 }
         res.writeHead(r.status, { 'content-type': 'application/json' })
         res.end(r.cuerpo === undefined ? '' : JSON.stringify(r.cuerpo))

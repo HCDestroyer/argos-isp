@@ -76,7 +76,12 @@ El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la pá
 | `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                 |
 | `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                       |
 
-Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (el `X-Request-Id` de la petición o un UUID nuevo; se devuelve en la respuesta).
+Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (`src/request_id.ts`, semana 3):
+
+- FreeRADIUS manda `X-Request-Id` en authorize, post-auth y accounting (`control:REST-HTTP-Header` en `sites-enabled/default`): `rad-` + md5(`<NAS-IP>|<Acct-Session-Id>`), o md5(`<NAS-IP>|u:<User-Name>`) si el paquete no trae sesión.
+- Si no llega (otra config, pruebas), `aaa` calcula el mismo valor del cuerpo. Es estable, no al azar: el authorize y todo el accounting de una sesión PPPoE comparten id, y un reintento del NAS también.
+- Se propaga a la consulta de respaldo (`X-Request-Id` en `GET /internal/aaa/servicio`, que la API usa en su log de acceso) y al job de accounting (`request_id`), que el worker usa en `audit.*` y en `sesion.iniciada` / `sesion.terminada`.
+- `/health` y `/metrics`: UUID nuevo. Se devuelve siempre en la respuesta.
 
 ## Comandos
 

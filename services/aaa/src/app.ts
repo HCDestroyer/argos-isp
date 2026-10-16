@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto'
 import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
 import { ErrorAccounting, normalizarAccounting, type ColaAccounting } from './accounting.ts'
 import { descifrar } from './cifrado.ts'
 import type { ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
 import { leerAtributos } from './radius.ts'
+import { idDerivado, idEntrante, idNuevo } from './request_id.ts'
 import { esLapida } from './servicio.ts'
 import { MetricasAaa, scrapeAutorizado, type ResultadoAutorizacion } from './metricas.ts'
 
@@ -24,6 +24,8 @@ export interface DependenciasApp {
     claveSecretos: Buffer
     perfil: OpcionesPerfil
     logLevel?: string
+    /** Destino del log (pruebas); por defecto stdout. */
+    logStream?: { write(linea: string): void }
     /** Estado de Redis para /health (no bloquea: sin Redis se autoriza por el respaldo). */
     redisListo?: () => boolean
     /** Cola de accounting (BullMQ `aaa-accounting`). Sin ella `/aaa/accounting` responde 503. */
@@ -66,20 +68,36 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         logger: {
             level: deps.logLevel ?? 'info',
             base: { servicio: 'aaa' },
+            ...(deps.logStream ? { stream: deps.logStream } : {}),
             // El cuerpo nunca se registra (trae User-Password en PAP); por si alguien lo agrega:
             redact: ['req.body', 'body', '*.User-Password', '*.CHAP-Password', '*.Cleartext-Password'],
         },
-        // Una línea propia por autorización en lugar de dos por petición.
-        logController: new LogController({ disableRequestLogging: true }),
-        // `request_id` en cada línea: el de `X-Request-Id` si viene (pruebas, otro proxy) o uno nuevo.
-        requestIdHeader: 'x-request-id',
-        requestIdLogLabel: 'request_id',
-        genReqId: () => randomUUID(),
+        // Una línea propia por autorización en lugar de dos por petición. La etiqueta del id va aquí:
+        // con `logController`, Fastify 5 ignora `requestIdLogLabel` de nivel superior (salía `reqId`).
+        logController: new LogController({ disableRequestLogging: true, requestIdLogLabel: 'request_id' }),
+        // `request_id` en cada línea (`request_id.ts`): el de `X-Request-Id` si es válido (FreeRADIUS lo
+        // manda) o uno nuevo; en las rutas de RADIUS sin cabecera se cambia por el derivado del paquete.
+        requestIdHeader: false,
+        genReqId: (req) => idEntrante(req.headers['x-request-id']) ?? idNuevo(),
     })
     const metricas = deps.metricas ?? new MetricasAaa()
 
+    app.decorateRequest('requestId', '')
     app.addHook('onRequest', async (req, reply) => {
+        req.requestId = req.id
         reply.header('x-request-id', req.id)
+    })
+
+    // El cuerpo ya está leído: sin `X-Request-Id`, el id sale del paquete (estable por sesión).
+    app.addHook('preHandler', async (req, reply) => {
+        if (!req.routeOptions.url?.startsWith('/aaa/')) return
+        if (idEntrante(req.headers['x-request-id'])) return
+        const derivado = idDerivado(leerAtributos(req.body))
+        if (!derivado) return
+        req.requestId = derivado
+        req.log = app.log.child({ request_id: derivado })
+        reply.log = req.log
+        reply.header('x-request-id', derivado)
     })
 
     app.addHook('onResponse', async (req, reply) => {
@@ -115,7 +133,7 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
 
         let resuelto
         try {
-            resuelto = await deps.resolutor.resolver(usuario)
+            resuelto = await deps.resolutor.resolver(usuario, { requestId: req.requestId })
         } catch (e) {
             req.log.error({ usuario, nas, error: (e as Error).message }, 'authorize: sin Redis ni respaldo')
             return problema(reply, 503, 'Fuente de servicios no disponible')
@@ -209,7 +227,11 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         }
         if (!deps.cola) return problema(reply, 503, 'Cola de accounting no configurada')
         try {
-            await conLimite(deps.cola.encolar(registro), deps.encolarTimeoutMs ?? 1500)
+            // El worker de la API usa este `request_id` en `audit.*` y en los eventos de la sesión.
+            await conLimite(
+                deps.cola.encolar({ ...registro, request_id: req.requestId }),
+                deps.encolarTimeoutMs ?? 1500,
+            )
         } catch (e) {
             req.log.error(
                 {
@@ -250,4 +272,11 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
     })
 
     return app
+}
+
+declare module 'fastify' {
+    interface FastifyRequest {
+        /** `request_id` de los logs y de las llamadas a la API (`request_id.ts`). */
+        requestId: string
+    }
 }

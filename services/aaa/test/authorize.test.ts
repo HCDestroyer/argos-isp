@@ -230,9 +230,11 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         const primero = await autorizar('u-api')
         assert.equal(primero.status, 200)
         assert.equal(primero.cuerpo?.['control:Cleartext-Password'], 'clave-api')
-        assert.deepEqual(api.llamadas, [
-            { url: '/internal/aaa/servicio?user_ppp=u-api', auth: 'Bearer token-interno' },
-        ])
+        assert.deepEqual(
+            api.llamadas.map(({ url, auth }) => ({ url, auth })),
+            [{ url: '/internal/aaa/servicio?user_ppp=u-api', auth: 'Bearer token-interno' }],
+        )
+        assert.match(String(api.llamadas[0]?.requestId), /^rad-[0-9a-f]{32}$/, 'propaga el request_id')
 
         const clave = `${prefijo}u-api`
         assert.deepEqual(JSON.parse((await redis.get(clave)) ?? 'null'), s)
