@@ -161,6 +161,11 @@ async function salir() {
                         />
                     </div>
                 </div>
+                <PagoEnLinea
+                    v-if="new Decimal(cuenta.monto_adeudado).greaterThan(0)"
+                    id-ayuda="pagar-en-linea-pronto-cuenta"
+                    class="mt-3"
+                />
                 <UButton
                     v-if="cuenta.servicios.some(s => s.estado === 'suspendido' || s.estado === 'limitado')"
                     label="Cómo reactivar mi servicio"
