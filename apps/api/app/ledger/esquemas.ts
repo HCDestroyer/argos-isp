@@ -1,3 +1,4 @@
+import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
 import {
     Dinero,
     auditable,
@@ -140,4 +141,48 @@ export const CajaTurno = definirEsquema(
         },
         ['abierto_por', 'cerrado_por', 'abierto_por_nombre', 'cerrado_por_nombre'],
     ),
+)
+
+export const CategoriaEgreso = definirEsquema(
+    'CategoriaEgreso',
+    objeto({
+        id,
+        clave: enumerado(CLAVES_CATEGORIA_EGRESO),
+        nombre: texto,
+        cuenta_id: id,
+        cuenta_codigo: texto,
+        cuenta_nombre: texto,
+    }),
+)
+
+export const Egreso = definirEsquema(
+    'Egreso',
+    objeto({
+        id,
+        fecha,
+        categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
+        categoria_nombre: texto,
+        cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
+        proveedor: nulable(texto),
+        descripcion: nulable(texto),
+        comprobante: { ...nulable(texto), description: 'Número o serie del documento del proveedor' },
+        monto: Dinero,
+        metodo: enumerado(['caja', 'banco', 'cuenta_bancaria']),
+        caja_id: nulable(id),
+        caja_nombre: nulable(texto),
+        turno_id: { ...nulable(id), description: 'Turno de caja abierto cuando salió el efectivo' },
+        banco_id: nulable(id),
+        banco_nombre: nulable(texto),
+        cuenta_bancaria_id: nulable(id),
+        cuenta_bancaria_nombre: nulable(texto),
+        asiento_id: nulable(id),
+        estado: enumerado(['registrado', 'anulado']),
+        registrado_por: nulable(id),
+        registrado_por_nombre: nulable(texto),
+        anulado_en: nulable(instante),
+        anulado_por: nulable(id),
+        motivo_anulacion: nulable(texto),
+        asiento_reverso_id: nulable(id),
+        ...auditable,
+    }),
 )

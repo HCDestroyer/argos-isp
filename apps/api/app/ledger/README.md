@@ -59,6 +59,17 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
 
+## Egresos (`egresos.ts`)
+
+| Acción              | Archivo                       | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `egresos.registrar` | `actions/registrar_egreso.ts` | Gasto con categoría (`energia`, `transito`, `nomina`, `vehiculos`, `alquileres`, `otros` → su cuenta `5.2.xx`), monto, fecha (hoy por defecto, no futura), proveedor, descripción y `comprobante` opcional (número del documento). Método: `caja` (`caja_id`; sin ella, la del turno abierto del usuario o la principal), `banco` (`banco_id` del libro; por defecto el principal) o `cuenta_bancaria` (propia, activa y GTQ). Asiento `Gasto / Caja \| Banco \| subcuenta` con origen `egreso` |
+| `egresos.anular`    | `actions/anular_egreso.ts`    | Motivo obligatorio; `RevertirAsiento` con fecha de hoy y fila en `ledger.egresos_anulaciones`. 409 `egreso_anulado`                                                                                                                                                                                                                                                                                                                                                                             |
+
+- Inmutable como el libro: `ledger.egresos` y `ledger.egresos_anulaciones` rechazan UPDATE/DELETE (trigger y `REVOKE`). El estado (`registrado`/`anulado`) y el asiento se derivan (por origen), no se escriben en la fila.
+- Efectivo: el egreso queda en el turno abierto de la caja (`turno_id`) y `cerrarCaja` lo resta del esperado (`fondo + cobros − egresos vigentes del turno`).
+- Alcance por caja: un usuario con rol acotado a una caja solo ve y registra egresos de esa caja.
+
 ## Endpoints
 
 | Método | Ruta                                                                  | Permiso        |
