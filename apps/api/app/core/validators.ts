@@ -13,6 +13,8 @@ import {
 } from '#shared/validadores'
 import { NOMBRES_PERMISOS } from '#core/permisos'
 import { CANALES } from '#shared/contexto'
+import { CAMPOS_EXCEPCION } from '#billing/excepciones'
+import { TIPOS_EXCEPCION } from '#core/esquemas'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -109,6 +111,34 @@ export const editarZonaValidator = vine.compile(
     vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100), version: versionEsperada() }),
 )
 
+/**
+ * Excepciones a la plantilla de facturación del servicio: `{ campo: valor }`. Los campos y sus
+ * valores los define y valida A3 (`app/billing/excepciones.ts`, `validarExcepcion`); aquí solo se
+ * declaran para el OpenAPI. `null` borra la excepción; un campo desconocido responde 422.
+ */
+const excepciones = () =>
+    vine
+        .object(
+            Object.fromEntries(
+                CAMPOS_EXCEPCION.map((campo) => [
+                    campo,
+                    // el valor lo valida validarExcepcion; el tipo es solo para el OpenAPI
+                    vine
+                        .any()
+                        .nullable()
+                        .optional()
+                        .meta({ anyOf: [TIPOS_EXCEPCION[campo], { type: 'null' }] }),
+                ]),
+            ),
+        )
+        .allowUnknownProperties()
+        .optional()
+        .meta({
+            description:
+                'Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: ' +
+                CAMPOS_EXCEPCION.join(', '),
+        })
+
 /*
 |--------------------------------------------------------------------------
 | Servicios
@@ -152,6 +182,7 @@ export const crearServicioValidator = vine.compile(
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional().meta({ description: 'Solo modo estatico' }),
+        excepciones: excepciones(),
     }),
 )
 
@@ -177,6 +208,7 @@ export const editarServicioValidator = vine.compile(
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional(),
+        excepciones: excepciones(),
     }),
 )
 

@@ -11,6 +11,7 @@ import {
     validarModoIpv6,
 } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 
 export interface EntradaCrearServicio {
     cliente_id: number
@@ -29,6 +30,8 @@ export interface EntradaCrearServicio {
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
+    /** excepciones a la plantilla `{ campo: valor }` (campos de `app/billing/excepciones.ts`) */
+    excepciones?: Record<string, unknown>
 }
 
 /** Valida que existan las referencias del cuerpo (422 por campo, no 404). */
@@ -40,8 +43,8 @@ export async function exigirReferencia(t: Transaccion, tabla: string, id: number
 /**
  * Alta de un servicio PPPoE: valida cliente, router activo, plan disponible en el router y
  * plantilla; genera `user_ppp` y `pass_ppp` si no vienen (la contraseña se guarda cifrada v1);
- * asigna IPv4 y reserva prefijos IPv6 según el modo; emite `servicio.creado` y
- * `asignacion.cambiada`.
+ * asigna IPv4 y reserva prefijos IPv6 según el modo; guarda las excepciones a la plantilla
+ * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`.
  */
 export default class CrearServicio extends DomainAction<EntradaCrearServicio, ServicioVista> {
     readonly nombre = 'servicios.crear'
@@ -84,6 +87,8 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         const plan = await obtenerImplementacionPlan(input.plan_id, input.router_id, t.trx)
         if (!plan.activo) throw new ReglaNegocio(`El plan ${plan.nombre} está inactivo`, 'plan_inactivo')
 
+        const excepciones = input.excepciones ? await validarExcepciones(input.excepciones) : {}
+
         const modo = input.ipv6_modo ?? modoIpv6PorDefecto(plan)
         validarModoIpv6(plan, modo, input)
 
@@ -123,8 +128,13 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             prefijoEstatico: input.prefijo_delegado_v6,
         })
 
+        await guardarExcepciones(t.trx, id, excepciones)
+
         const servicio = await verServicio(id, t.trx)
-        await t.registrarCambios({ tipo: 'servicio', id }, null, { ...servicio, pass_ppp: 'definida' })
+        await t.registrarCambios({ tipo: 'servicio', id }, null, {
+            ...paraAuditoriaServicio(servicio),
+            pass_ppp: 'definida',
+        })
         await t.emit('servicio.creado', {
             servicio_id: id,
             cliente_id: input.cliente_id,

@@ -26,6 +26,7 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
@@ -45,6 +46,7 @@ import {
     AccionAuditoria,
     CambioAuditoria,
     Cliente,
+    ConfiguracionEfectivaServicio,
     CredencialesPpp,
     Me,
     Permiso,
@@ -408,6 +410,24 @@ const servicios: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
             return verServicio(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/configuracion-efectiva',
+        operacion: 'serviciosConfiguracionEfectiva',
+        resumen: 'Configuración efectiva: plan en su router y plantilla con excepciones aplicadas',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: {
+            status: 200,
+            descripcion: 'Plan efectivo y facturación efectiva del servicio',
+            esquema: ConfiguracionEfectivaServicio,
+        },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return configuracionEfectivaPublica(id)
         },
     }),
     definirRuta({

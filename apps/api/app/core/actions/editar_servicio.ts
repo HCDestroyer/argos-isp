@@ -8,6 +8,13 @@ import { verServicio, type ModoIpv6, type ServicioVista } from '#core/consultas/
 import { exigirReferencia } from '#core/actions/crear_servicio'
 import { asignacionesVigentes, reconciliarAsignaciones, validarModoIpv6 } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import {
+    CAMPOS_QUE_AFECTAN_CORTE,
+    guardarExcepciones,
+    paraAuditoriaServicio,
+    validarExcepciones,
+} from '#core/excepciones_servicio'
+import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 export interface EntradaEditarServicio {
     id: number
@@ -26,6 +33,8 @@ export interface EntradaEditarServicio {
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
+    /** `{ campo: valor }`; `null` borra la excepción, un campo ausente no se toca */
+    excepciones?: Record<string, unknown>
 }
 
 type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
@@ -35,12 +44,25 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  * recibe 409). Cambiar router, plan, IP o modo IPv6 reconcilia las asignaciones y emite
  * `servicio.config_cambiada` (con los campos afectados) y, si cambiaron IPs o prefijos,
  * `asignacion.cambiada`. El estado no se edita aquí: tiene sus acciones propias.
+ *
+ * `excepciones` (tarea 11) se valida con `validarExcepcion` de A3 y se guarda en
+ * `core.servicios_excepciones` con diff por campo (`excepcion_<campo>`). Si cambia una que afecta
+ * el corte (`facturas_para_limitar`, `facturas_para_cortar`, `reglas_promesa`), se llama
+ * `EvaluarEstadoServicio` anidada: A3 decide si el estado cambia, A1 no.
  */
 export default class EditarServicio extends DomainAction<EntradaEditarServicio, ServicioVista> {
     readonly nombre = 'servicios.editar'
 
     protected async handle(input: EntradaEditarServicio, t: Transaccion): Promise<ServicioVista> {
-        const { id, version, ipv4, prefijo_delegado_v6: prefijoEstatico, pass_ppp: passPpp, ...datos } = input
+        const {
+            id,
+            version,
+            ipv4,
+            prefijo_delegado_v6: prefijoEstatico,
+            pass_ppp: passPpp,
+            excepciones: excepcionesEntrada,
+            ...datos
+        } = input
         t.fijarEntidad('servicio', id)
         const antes = await verServicio(id, t.trx)
         if (antes.estado === 'retirado') {
@@ -81,6 +103,8 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             throw new ReglaNegocio(`El plan ${plan.nombre} está inactivo`, 'plan_inactivo')
         }
 
+        const excepciones = excepcionesEntrada ? await validarExcepciones(excepcionesEntrada) : {}
+
         let modo = datos.ipv6_modo ?? antes.ipv6_modo
         // Pasar a un plan solo IPv4 apaga IPv6 si no se pidió otro modo.
         if (datos.ipv6_modo === undefined && plan.dual_stack === 'v4') modo = 'ninguno'
@@ -106,12 +130,16 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             prefijoEstatico,
         })
 
+        const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
+
         const despues = await verServicio(id, t.trx)
         await t.registrarCambios(
             { tipo: 'servicio', id },
-            antes,
+            paraAuditoriaServicio(antes),
             // la contraseña nunca se audita; solo que cambió
-            passPpp !== undefined ? { ...despues, clave_ppp_cambiada: true } : despues,
+            passPpp !== undefined
+                ? { ...paraAuditoriaServicio(despues), clave_ppp_cambiada: true }
+                : paraAuditoriaServicio(despues),
         )
 
         const campos: CampoConfig[] = []
@@ -137,6 +165,11 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             })
         }
         refrescarAaaAlConfirmar(t, { servicioId: id })
+
+        if (excepcionesCambiadas.some((campo) => CAMPOS_QUE_AFECTAN_CORTE.includes(campo as never))) {
+            await new EvaluarEstadoServicio().execute({ servicio_id: id }, t.ctx, { trx: t.trx })
+            return verServicio(id, t.trx)
+        }
         return despues
     }
 }

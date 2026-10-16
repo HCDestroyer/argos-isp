@@ -7756,6 +7756,143 @@
                     "type": "string",
                     "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
                     "description": "Solo modo estatico"
+                  },
+                  "excepciones": {
+                    "type": "object",
+                    "properties": {
+                      "dia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 28
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prorrateo": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dias_gracia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_limitar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_cortar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_tipo": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "ninguna",
+                              "fija",
+                              "porcentaje"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_valor": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/Dinero"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_recurrente": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hora_corte": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                            "description": "HH:MM hora de Guatemala"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "certificar_al": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "emitir",
+                              "pagar",
+                              "nunca"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reglas_promesa": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "Parcial: se combina clave a clave sobre la plantilla"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa"
                   }
                 },
                 "required": [
@@ -8015,6 +8152,143 @@
                     "type": "string",
                     "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
                     "description": "Prefijo IPv6 en notación CIDR"
+                  },
+                  "excepciones": {
+                    "type": "object",
+                    "properties": {
+                      "dia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 28
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prorrateo": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dias_gracia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_limitar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_cortar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_tipo": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "ninguna",
+                              "fija",
+                              "porcentaje"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_valor": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/Dinero"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_recurrente": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hora_corte": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                            "description": "HH:MM hora de Guatemala"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "certificar_al": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "emitir",
+                              "pagar",
+                              "nunca"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reglas_promesa": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "Parcial: se combina clave a clave sobre la plantilla"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa"
                   }
                 },
                 "required": [
@@ -8088,6 +8362,75 @@
           }
         },
         "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/configuracion-efectiva": {
+      "get": {
+        "operationId": "serviciosConfiguracionEfectiva",
+        "summary": "Configuración efectiva: plan en su router y plantilla con excepciones aplicadas",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plan efectivo y facturación efectiva del servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionEfectivaServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -10975,6 +11318,136 @@
           }
         }
       },
+      "ConfiguracionEfectivaServicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "plantilla_facturacion_id",
+          "plan",
+          "facturacion",
+          "excepciones"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plantilla_facturacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanEfectivo"
+          },
+          "facturacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfiguracionFacturacion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excepciones": {
+            "$ref": "#/components/schemas/ExcepcionesServicio"
+          }
+        }
+      },
+      "ConfiguracionFacturacion": {
+        "type": "object",
+        "required": [
+          "plantilla_id",
+          "nombre",
+          "ciclo",
+          "dia",
+          "prorrateo",
+          "dias_gracia",
+          "facturas_para_limitar",
+          "facturas_para_cortar",
+          "mora_tipo",
+          "mora_valor",
+          "mora_recurrente",
+          "hora_corte",
+          "certificar_al",
+          "reglas_promesa",
+          "excepciones"
+        ],
+        "properties": {
+          "plantilla_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "ciclo": {
+            "type": "string",
+            "enum": [
+              "dia_fijo",
+              "aniversario"
+            ]
+          },
+          "dia": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "prorrateo": {
+            "type": "boolean"
+          },
+          "dias_gracia": {
+            "type": "integer"
+          },
+          "facturas_para_limitar": {
+            "type": "integer"
+          },
+          "facturas_para_cortar": {
+            "type": "integer"
+          },
+          "mora_tipo": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "fija",
+              "porcentaje"
+            ]
+          },
+          "mora_valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "mora_recurrente": {
+            "type": "boolean"
+          },
+          "hora_corte": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM hora de Guatemala"
+          },
+          "certificar_al": {
+            "type": "string",
+            "enum": [
+              "emitir",
+              "pagar",
+              "nunca"
+            ]
+          },
+          "reglas_promesa": {
+            "$ref": "#/components/schemas/ReglasPromesa"
+          },
+          "excepciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Campos que vienen de una excepción del servicio"
+          }
+        }
+      },
       "CredencialesPpp": {
         "type": "object",
         "required": [
@@ -11270,6 +11743,65 @@
           "suspendido",
           "retirado"
         ]
+      },
+      "ExcepcionesServicio": {
+        "type": "object",
+        "description": "Excepciones a la plantilla de facturación del servicio",
+        "properties": {
+          "dia": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "prorrateo": {
+            "type": "boolean"
+          },
+          "dias_gracia": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facturas_para_limitar": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facturas_para_cortar": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "mora_tipo": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "fija",
+              "porcentaje"
+            ]
+          },
+          "mora_valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "mora_recurrente": {
+            "type": "boolean"
+          },
+          "hora_corte": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM hora de Guatemala"
+          },
+          "certificar_al": {
+            "type": "string",
+            "enum": [
+              "emitir",
+              "pagar",
+              "nunca"
+            ]
+          },
+          "reglas_promesa": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Parcial: se combina clave a clave sobre la plantilla"
+          }
+        },
+        "additionalProperties": false
       },
       "Factura": {
         "type": "object",
@@ -13340,6 +13872,9 @@
               "string",
               "null"
             ]
+          },
+          "excepciones": {
+            "$ref": "#/components/schemas/ExcepcionesServicio"
           },
           "version": {
             "type": "integer",

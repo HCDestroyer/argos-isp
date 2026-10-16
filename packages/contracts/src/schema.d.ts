@@ -922,6 +922,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/configuracion-efectiva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configuración efectiva: plan en su router y plantilla con excepciones aplicadas */
+        get: operations["serviciosConfiguracionEfectiva"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/credenciales": {
         parameters: {
             query?: never;
@@ -1346,6 +1363,35 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ConfiguracionEfectivaServicio: {
+            servicio_id: number;
+            plantilla_facturacion_id: number | null;
+            plan: components["schemas"]["PlanEfectivo"];
+            facturacion: components["schemas"]["ConfiguracionFacturacion"] | null;
+            excepciones: components["schemas"]["ExcepcionesServicio"];
+        };
+        ConfiguracionFacturacion: {
+            plantilla_id: number;
+            nombre: string;
+            /** @enum {string} */
+            ciclo: "dia_fijo" | "aniversario";
+            dia: number | null;
+            prorrateo: boolean;
+            dias_gracia: number;
+            facturas_para_limitar: number;
+            facturas_para_cortar: number;
+            /** @enum {string} */
+            mora_tipo: "ninguna" | "fija" | "porcentaje";
+            mora_valor: components["schemas"]["Dinero"];
+            mora_recurrente: boolean;
+            /** @description HH:MM hora de Guatemala */
+            hora_corte: string;
+            /** @enum {string} */
+            certificar_al: "emitir" | "pagar" | "nunca";
+            reglas_promesa: components["schemas"]["ReglasPromesa"];
+            /** @description Campos que vienen de una excepción del servicio */
+            excepciones: string[];
+        };
         CredencialesPpp: {
             servicio_id: number;
             user_ppp: string;
@@ -1421,6 +1467,26 @@ export interface components {
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        /** @description Excepciones a la plantilla de facturación del servicio */
+        ExcepcionesServicio: {
+            dia?: number;
+            prorrateo?: boolean;
+            dias_gracia?: number;
+            facturas_para_limitar?: number;
+            facturas_para_cortar?: number;
+            /** @enum {string} */
+            mora_tipo?: "ninguna" | "fija" | "porcentaje";
+            mora_valor?: components["schemas"]["Dinero"];
+            mora_recurrente?: boolean;
+            /** @description HH:MM hora de Guatemala */
+            hora_corte?: string;
+            /** @enum {string} */
+            certificar_al?: "emitir" | "pagar" | "nunca";
+            /** @description Parcial: se combina clave a clave sobre la plantilla */
+            reglas_promesa?: {
+                [key: string]: unknown;
+            };
+        };
         Factura: {
             id: number;
             cliente_id: number;
@@ -1933,6 +1999,7 @@ export interface components {
             plan_nombre?: string;
             router_nombre?: string;
             zona_nombre?: string | null;
+            excepciones?: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -6136,6 +6203,24 @@ export interface operations {
                     ipv6_duid?: string | null;
                     /** @description Solo modo estatico */
                     prefijo_delegado_v6?: string;
+                    /** @description Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa */
+                    excepciones?: {
+                        dia?: number | null;
+                        prorrateo?: boolean | null;
+                        dias_gracia?: number | null;
+                        facturas_para_limitar?: number | null;
+                        facturas_para_cortar?: number | null;
+                        mora_tipo?: ("ninguna" | "fija" | "porcentaje") | null;
+                        mora_valor?: components["schemas"]["Dinero"] | null;
+                        mora_recurrente?: boolean | null;
+                        hora_corte?: string | null;
+                        certificar_al?: ("emitir" | "pagar" | "nunca") | null;
+                        reglas_promesa?: {
+                            [key: string]: unknown;
+                        } | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -6273,6 +6358,24 @@ export interface operations {
                     ipv6_duid?: string | null;
                     /** @description Prefijo IPv6 en notación CIDR */
                     prefijo_delegado_v6?: string;
+                    /** @description Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa */
+                    excepciones?: {
+                        dia?: number | null;
+                        prorrateo?: boolean | null;
+                        dias_gracia?: number | null;
+                        facturas_para_limitar?: number | null;
+                        facturas_para_cortar?: number | null;
+                        mora_tipo?: ("ninguna" | "fija" | "porcentaje") | null;
+                        mora_valor?: components["schemas"]["Dinero"] | null;
+                        mora_recurrente?: boolean | null;
+                        hora_corte?: string | null;
+                        certificar_al?: ("emitir" | "pagar" | "nunca") | null;
+                        reglas_promesa?: {
+                            [key: string]: unknown;
+                        } | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -6324,6 +6427,55 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosConfiguracionEfectiva: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan efectivo y facturación efectiva del servicio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionEfectivaServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
