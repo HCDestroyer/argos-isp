@@ -50,11 +50,16 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
+  TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+  NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
   NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
   # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+  # Bearer de GET /metrics (Prometheus, perfil monitoreo). Vacío = /metrics responde 404.
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
   AAA_PPP_KEY: ${AAA_PPP_KEY:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
   # /portal/quien-soy: confiar en X-Forwarded-For solo si la conexión viene de la red de compose
@@ -149,6 +154,46 @@ services:
       timeout: 3s
       retries: 5
 
+  # Respaldo diario de Postgres (infra/backups, infra/README.md "Respaldos"): pg_dump a BACKUP_HOST_DIR
+  # (un disco externo o NFS montado en el host), retención por días, cifrado con age y copia con rclone
+  # opcionales. Restaurar: docker compose run --rm backup restaurar.sh /backups/<archivo> ...
+  backup:
+    image: argosisp/backup:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/backups/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      PGHOST: postgres
+      PGPORT: '5432'
+      # Superusuario: lee todo y, al restaurar, crea la base y asigna dueños
+      PGUSER: argosisp
+      PGPASSWORD: ${DB_PASSWORD:-argosisp}
+      DB_OWNER_USER: ${DB_OWNER_USER:-argosisp_owner}
+      BACKUP_BASE: argosisp
+      BACKUP_HORA: ${BACKUP_HORA:-03:13}
+      BACKUP_RETENCION_DIAS: ${BACKUP_RETENCION_DIAS:-14}
+      BACKUP_AGE_RECIPIENTS: ${BACKUP_AGE_RECIPIENTS:-}
+      # Solo para restaurar un .age: clave privada montada (nunca en el servidor de producción a diario)
+      BACKUP_AGE_IDENTITY: ${BACKUP_AGE_IDENTITY:-/config/age.key}
+      BACKUP_RCLONE_DESTINO: ${BACKUP_RCLONE_DESTINO:-}
+      RCLONE_CONFIG: /config/rclone.conf
+    volumes:
+      - ${BACKUP_HOST_DIR:-./backups/datos}:/backups
+      # rclone.conf (y age.key al restaurar), solo lectura
+      - ${BACKUP_CONFIG_DIR:-./backups/config}:/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Sano mientras el último intento no haya fallado (BACKUP_DIR/.estado lo escribe programar.sh)
+      test: [CMD-SHELL, "! grep -q '^error' /backups/.estado 2>/dev/null"]
+      interval: 5m
+      timeout: 5s
+      retries: 1
+      start_period: 1m
+
   # Migraciones de apps/api (AdonisJS) antes de levantar la API. Misma imagen que api.
   migrate:
     image: argosisp/api:${IMAGE_TAG:-dev}
@@ -221,6 +266,22 @@ services:
     healthcheck:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js sesiones:worker'"]
+
+  # Vigía de aaa (A2): health check de los nodos aaa; emite aaa.caido / aaa.recuperado por outbox
+  # (notify los manda al chat del equipo). Perfil lab, como aaa. Una réplica basta (tiene lock).
+  aaa-vigia:
+    <<: *proceso-fondo
+    profiles: [lab]
+    command: [node, ace.js, aaa:vigilar]
+    environment:
+      <<: *api-env
+      # nombre=url separados por coma (segundo nodo: aaa=http://aaa:3100,aaa2=http://<ip>:3100)
+      AAA_SALUD_NODOS: ${AAA_SALUD_NODOS:-aaa=http://aaa:3100}
+      AAA_CAIDO_TRAS_MS: ${AAA_CAIDO_TRAS_MS:-60000}
+      AAA_SALUD_CADA_MS: ${AAA_SALUD_CADA_MS:-5000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js aaa:vigilar'"]
 
   # Notificaciones (A6): cola de envíos, cron de recordatorios y cron mensual de particiones.
   worker:
@@ -364,7 +425,19 @@ services:
       DB_USER: ${DB_APP_USER:-argosisp_api}
       DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
       DB_DATABASE: argosisp
+      # Descifra network.routers.radius_secret (la misma clave que api y aaa)
+      AAA_PPP_KEY: ${AAA_PPP_KEY:-}
       COA_NAS_PORT: '3799'
+      COA_TIMEOUT_MS: ${COA_TIMEOUT_MS:-2000}
+      COA_REINTENTOS: ${COA_REINTENTOS:-3}
+      # IP de origen de los CoA: la que el router tiene en /radius (túnel WireGuard o LAN)
+      COA_ORIGEN_IP: ${COA_ORIGEN_IP:-}
+      COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      # Suspender sesiones con IPv6: coa (sin reconectar; IPv6 bloqueado con reset) o disconnect
+      # (reconecta con el perfil suspendido y el router redirige IPv6 a /corte). Decide el PM.
+      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
     ports:
       - 127.0.0.1:${COA_PORT_HOST:-3200}:3200
     depends_on:
@@ -413,6 +486,37 @@ services:
       retries: 5
       start_period: 10s
 
+  # Perfil monitoreo: Prometheus con las métricas de la API y las reglas de infra/monitoring.
+  prometheus:
+    profiles: [monitoreo]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    # El token no puede ir en prometheus.yml (no expande variables): se escribe a un archivo al arrancar.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        printf '%s' "$$METRICS_TOKEN" > /tmp/metrics_token &&
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml
+        --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=$${PROMETHEUS_RETENCION:-30d}
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      PROMETHEUS_RETENCION: ${PROMETHEUS_RETENCION:-30d}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/reglas.yml:/etc/prometheus/reglas.yml:ro
+      - promdata:/prometheus
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT_HOST:-9090}:9090
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9090/-/ready']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 # Red por defecto con subred fija: PORTAL_PROXIES_CONFIABLES de la API la usa para confiar en el
 # X-Forwarded-For que agrega el portal. IPv6 en la red: COMPOSE_IPV6=true (perfil lab, ver infra/README.md).
 networks:
@@ -426,3 +530,4 @@ networks:
 volumes:
   pgdata:
   redisdata:
+  promdata:

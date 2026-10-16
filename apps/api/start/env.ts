@@ -68,6 +68,10 @@ export default await Env.create(new URL('../', import.meta.url), {
     NOTIFY_EMPRESA_NOMBRE: Env.schema.string.optional(),
     NOTIFY_EMPRESA_TELEFONO: Env.schema.string.optional(),
     NOTIFY_PORTAL_URL: Env.schema.string.optional(),
+    TELEGRAM_CHAT_EQUIPO: Env.schema.string.optional(),
+    NOTIFY_CRON_TOLERANCIA_MIN: Env.schema.number.optional(),
+    /** Bearer de GET /metrics (Prometheus). Vacío = /metrics responde 404. */
+    METRICS_TOKEN: Env.schema.string.optional(),
 
     /*
     |----------------------------------------------------------

@@ -1,0 +1,3 @@
+# Respaldos y configuración locales del servicio backup (BACKUP_HOST_DIR, BACKUP_CONFIG_DIR por defecto)
+datos/
+config/
