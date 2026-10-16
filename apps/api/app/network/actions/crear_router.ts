@@ -14,6 +14,11 @@ export interface DatosRouter {
     modo_seguridad?: 'radius' | 'api'
     capacidad_bajada_kbps?: number | null
     capacidad_subida_kbps?: number | null
+    api_url?: string | null
+    api_tls_verificar?: boolean
+    api_ca?: string | null
+    dhcp_servidor?: string | null
+    interfaz_clientes?: string | null
     activo?: boolean
 }
 
@@ -40,7 +45,10 @@ export function columnasRouter(datos: DatosRouter): Record<string, unknown> {
     return columnas
 }
 
-/** Instantánea auditable: las credenciales se registran solo como "definida" o null. */
+/**
+ * Instantánea auditable: las credenciales se registran solo como "definida" o null; `api_ca` sale
+ * en claro aquí y `registrarCambios` la guarda como `***` (`esCampoSensible`).
+ */
 export function auditableRouter(router: RouterVista) {
     // modo_velocidad es derivado de control_velocidad: no se audita dos veces
     const {

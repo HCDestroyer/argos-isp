@@ -1,5 +1,6 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
+import { plantillaPorDefectoId } from '#billing/plantillas'
 
 /**
  * Plantilla de facturación por defecto al crear un servicio sin `plantilla_facturacion_id`
@@ -9,10 +10,10 @@ import { ValidacionFallida } from '#shared/errores'
  *   - `plantilla_facturacion_id` con un id → esa plantilla.
  *   - `plantilla_facturacion_id: null` explícito → sin plantilla (no se factura hasta asignarla).
  *   - Ausente → plantilla por defecto:
- *       - si hay exactamente una plantilla, esa; si no hay ninguna, sin plantilla; si hay varias,
- *         422 en `plantilla_facturacion_id` pidiendo elegir.
- *       - Cuando A3 agregue la marca `por_defecto` (pedido en `.claude/integration/a1.md`), la
- *         marcada gana; esta función es el único lugar que cambia.
+ *       - la marcada con `billing.plantillas_facturacion.por_defecto` (A3: a lo sumo una, índice
+ *         único parcial; se lee con `plantillaPorDefectoId` de `#billing/plantillas`);
+ *       - sin marcada: si hay exactamente una plantilla, esa; si no hay ninguna, sin plantilla; si
+ *         hay varias, 422 en `plantilla_facturacion_id` pidiendo elegir (o marcar una por defecto).
  *
  * Las llamadas internas a `CrearServicio` (importador) no piden la plantilla por defecto: siguen
  * con `plantilla_facturacion_id` tal como lo pasan.
@@ -26,7 +27,7 @@ export function elegirPlantilla(candidatas: readonly number[]): number | null {
         [
             {
                 field: 'plantilla_facturacion_id',
-                message: 'Hay varias plantillas de facturación: elige una',
+                message: 'Hay varias plantillas de facturación y ninguna por defecto: elige una',
                 rule: 'required',
             },
         ],
@@ -35,6 +36,8 @@ export function elegirPlantilla(candidatas: readonly number[]): number | null {
 }
 
 export async function plantillaPorDefecto(trx: TransactionClientContract): Promise<number | null> {
+    const marcada = await plantillaPorDefectoId(trx)
+    if (marcada !== null) return marcada
     const todas = (await trx
         .from('billing.plantillas_facturacion')
         .orderBy('id')

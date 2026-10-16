@@ -121,6 +121,7 @@ const ACTORES: Record<Accion['actor_tipo'], string> = {
     token: 'Token de API',
     agente: 'Agente de IA',
     sistema: 'Sistema',
+    cliente: 'Cliente (portal)',
 }
 
 /** Acciones conocidas para el filtro de la bitácora, ordenadas por nombre técnico. */
