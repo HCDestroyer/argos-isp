@@ -1,51 +1,13 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import Usuario from '#core/models/usuario'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
+import { afirmarLibroCuadrado, cajeroDe, nuevaCaja } from '#tests/ledger/ayudas_libro'
 import { escenario, generar, lineasAsiento } from '#tests/billing/ayudas_billing'
 
 /**
  * Tarea 9: cajas y turnos. Cada prueba crea su propia caja (con su cuenta hija de 1.1.01) y un
  * cajero con el rol `cajero` acotado a esa caja (alcance ACL).
  */
-
-async function nuevaCaja(): Promise<number> {
-    const padre = await db.from('ledger.cuentas').where('codigo', '1.1.01').select('id').firstOrFail()
-    const [cuenta] = (await db
-        .table('ledger.cuentas')
-        .insert({
-            codigo: `1.1.01.${unico('c')}`,
-            nombre: unico('Caja'),
-            tipo: 'activo',
-            padre_id: padre.id,
-        })
-        .returning('id')) as Array<{ id: number }>
-    const [caja] = (await db
-        .table('ledger.cajas')
-        .insert({ nombre: unico('Caja'), cuenta_id: cuenta!.id })
-        .returning('id')) as Array<{ id: number }>
-    return caja!.id
-}
-
-/** Cajero cuyo rol `cajero` solo vale en `cajaId`. */
-async function cajeroDe(cajaId: number) {
-    const usuario = await Usuario.create({
-        nombre: unico('Cajero'),
-        email: `${unico('cajero')}@prueba.local`,
-        password: 'clave-de-prueba',
-        activo: true,
-    })
-    const rol = await db.from('core.roles').where('nombre', 'cajero').select('id').firstOrFail()
-    await db.table('core.usuarios_roles').insert({
-        usuario_id: usuario.id,
-        role_id: rol.id,
-        alcance_tipo: 'caja',
-        alcance_id: cajaId,
-    })
-    const token = await Usuario.accessTokens.create(usuario)
-    return { usuario, token: token.value!.release() }
-}
 
 test.group('ledger · cajas y turnos', () => {
     test('el cajero solo ve y opera su caja; cobra en efectivo sin caja_id en su turno', async ({

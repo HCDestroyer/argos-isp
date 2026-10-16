@@ -151,14 +151,41 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 - `facturas_pendientes`: `emitida`/`parcial`/`vencida` (servicio y mora), la más antigua primero.
 - `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
 
+## Pruebas (tarea 12)
+
+Japa contra Postgres real; después de cada paso, el SELECT de control del libro (`afirmarLibroCuadrado`: ningún asiento descuadrado y total debe = total haber).
+
+| Archivo                                                                            | Qué cubre                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/billing/ciclo.spec.ts`                                                      | Emitir (dos veces sin duplicar) → vencer → limitar → cortar → pagar una (limitado) → pagar todo (activo); y promesa incumplida → corte, pago parcial y total en un turno de caja, anular pago, anular factura, cerrar caja con diferencia (motivo obligatorio y asiento) |
+| `tests/billing/pagos.spec.ts`, `pagos_bancarios.spec.ts`, `pagos_terceros.spec.ts` | Pago parcial, excedente a Anticipos, anulación con reverso, concurrencia; métodos bancarios con su subcuenta, 422 por campo y 409 por referencia; pago de terceros (un asiento, dos auxiliares, anulación)                                                               |
+| `tests/billing/promesas.spec.ts`                                                   | Aprobada (reactiva), rechazada con la regla exacta, límites por canal, suspensión manual, cumplida por evento, incumplida por cron, aprobación y cancelación, endpoints                                                                                                  |
+| `tests/billing/anular_factura.spec.ts`, `importacion.spec.ts`                      | Anular factura (y su mora), 409 con pagos; acciones del importador idempotentes                                                                                                                                                                                          |
+| `tests/ledger/cajas.spec.ts`                                                       | Alcance por caja, turnos, cierre exacto, faltante y sobrante                                                                                                                                                                                                             |
+
+Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace test --files tests/billing --files tests/ledger`.
+
 ## Endpoints
 
-| Método | Ruta                                 | Permiso             |
-| ------ | ------------------------------------ | ------------------- |
-| GET    | `/api/v1/plantillas-facturacion`     | `plantillas.ver`    |
-| POST   | `/api/v1/plantillas-facturacion`     | `plantillas.crear`  |
-| GET    | `/api/v1/plantillas-facturacion/:id` | `plantillas.ver`    |
-| PUT    | `/api/v1/plantillas-facturacion/:id` | `plantillas.editar` |
+| Método   | Ruta                                            | Permiso                    |
+| -------- | ----------------------------------------------- | -------------------------- |
+| GET      | `/api/v1/plantillas-facturacion`                | `plantillas.ver`           |
+| POST     | `/api/v1/plantillas-facturacion`                | `plantillas.crear`         |
+| GET      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.ver`           |
+| PUT      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.editar`        |
+| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`      | `facturas.ver`             |
+| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte` | `facturas.generar`         |
+| POST     | `/api/v1/facturas/:id/anular`                   | `facturas.anular`          |
+| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`            | `pagos.ver`                |
+| POST     | `/api/v1/pagos`                                 | `pagos.registrar`          |
+| POST     | `/api/v1/pagos/:id/anular`                      | `pagos.anular`             |
+| GET      | `/api/v1/promesas`                              | `promesas.ver`             |
+| POST     | `/api/v1/promesas`                              | `promesas.crear`           |
+| POST     | `/api/v1/promesas/:id/aprobar`                  | `promesas.aprobar`         |
+| GET      | `/api/v1/bancos`                                | sesión (sin permiso)       |
+| GET      | `/api/v1/cuentas-bancarias`, `/:id`             | `cuentas_bancarias.ver`    |
+| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`               | `cuentas_bancarias.editar` |
+| GET      | `/api/v1/clientes/:id/estado-cuenta`            | `clientes.estado_cuenta`   |
 
 ## Eventos
 
