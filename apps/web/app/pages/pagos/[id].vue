@@ -8,7 +8,7 @@ definePageMeta({ permiso: 'pagos.ver' })
 type Aplicacion = Schema<'AplicacionPago'>
 
 const route = useRoute()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 const nombres = useNombresClientes()
 
@@ -150,7 +150,7 @@ onMounted(cargar)
                     <p class="text-sm text-muted">
                         {{ formatearFechaHora(pago.created_at) }} ·
                         <ULink
-                            :to="`/clientes/${pago.cliente_id}?tab=cuenta`"
+                            :to="enlace(`/clientes/${pago.cliente_id}?tab=cuenta`)"
                             class="text-default hover:text-primary"
                         >
                             {{ nombres.nombre(pago.cliente_id) }}

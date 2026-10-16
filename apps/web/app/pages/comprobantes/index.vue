@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TableColumn, TabsItem } from '@nuxt/ui'
 
+const { enlace, puede } = usePermisos()
+
 /**
  * Cola de verificación de comprobantes de depósito (A3): los que el cliente subió desde el
  * portal (o un operador desde el panel). Cada fila abre el detalle con la foto o el PDF.
@@ -83,7 +85,8 @@ watch(lista.filas, () => {
 
 onMounted(async () => {
     void lista.recargar()
-    if (clienteId.value) {
+    // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
+    if (clienteId.value && puede('clientes.ver')) {
         const resultado = await useClientes().ver(clienteId.value)
         if (resultado.ok) {
             alElegirCliente(resultado.data)
@@ -161,7 +164,7 @@ onMounted(async () => {
                     <template #cliente_nombre-cell="{ row }">
                         <div class="flex flex-col">
                             <ULink
-                                :to="`/clientes/${row.original.cliente_id}?tab=cuenta`"
+                                :to="enlace(`/clientes/${row.original.cliente_id}?tab=cuenta`)"
                                 class="text-sm text-default hover:text-primary"
                             >
                                 {{ row.original.cliente_nombre }}
@@ -190,7 +193,7 @@ onMounted(async () => {
                             >{{ row.original.motivo_rechazo }}</span>
                             <ULink
                                 v-else-if="row.original.pago_id"
-                                :to="`/pagos/${row.original.pago_id}`"
+                                :to="enlace(`/pagos/${row.original.pago_id}`)"
                                 class="text-xs text-muted hover:text-primary"
                             >Pago #{{ row.original.pago_id }}</ULink>
                         </div>

@@ -15,7 +15,7 @@ const emit = defineEmits<{
     cambiado: [cliente: Cliente]
 }>()
 
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 
 // Dependientes ("Responsable de pago de: …")
@@ -109,7 +109,7 @@ onMounted(() => cargarDependientes())
                     >
                         Paga por este cliente:
                         <ULink
-                            :to="`/clientes/${cliente.responsable_pago_id}`"
+                            :to="enlace(`/clientes/${cliente.responsable_pago_id}`)"
                             class="font-medium text-primary"
                         >
                             {{ cliente.responsable_pago_nombre ?? `Cliente #${cliente.responsable_pago_id}` }}
@@ -177,7 +177,7 @@ onMounted(() => cargarDependientes())
                     >
                         <div class="flex min-w-0 flex-col">
                             <ULink
-                                :to="`/clientes/${dependiente.id}`"
+                                :to="enlace(`/clientes/${dependiente.id}`)"
                                 class="text-sm font-medium text-highlighted hover:text-primary"
                             >
                                 {{ dependiente.nombre }}

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 
+const { enlace, puede } = usePermisos()
+
 definePageMeta({ permiso: 'facturas.ver' })
 
 useHead({ title: 'Facturas · ArgosIsp' })
@@ -92,7 +94,7 @@ const hayFiltros = computed(() => estado.value !== TODOS || clienteId.value !== 
 
 async function cargarServiciosCliente() {
     serviciosCliente.value = []
-    if (!clienteId.value) {
+    if (!clienteId.value || !puede('servicios.ver')) {
         return
     }
     const resultado = await useServicios().listar({ cliente_id: clienteId.value })
@@ -143,8 +145,9 @@ onMounted(async () => {
     void lista.recargar()
     if (clienteId.value) {
         void cargarServiciosCliente()
-        const resultado = await useClientes().ver(clienteId.value)
-        if (resultado.ok) {
+        // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
+        const resultado = puede('clientes.ver') ? await useClientes().ver(clienteId.value) : null
+        if (resultado?.ok) {
             alElegirCliente(resultado.data)
         }
     }
@@ -246,7 +249,7 @@ onMounted(async () => {
 
                     <template #cliente_id-cell="{ row }">
                         <ULink
-                            :to="`/clientes/${row.original.cliente_id}`"
+                            :to="enlace(`/clientes/${row.original.cliente_id}`)"
                             class="text-sm text-default hover:text-primary"
                         >
                             {{ nombres.nombre(row.original.cliente_id) }}

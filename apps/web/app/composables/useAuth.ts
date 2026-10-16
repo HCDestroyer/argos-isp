@@ -69,7 +69,20 @@ export function useAuth() {
         return null
     }
 
+    /**
+     * Revoca el token en la API (`POST /auth/logout`, queda `auth.logout` en la bitácora) y luego
+     * borra la cookie. Antes solo se borraba la cookie y el token seguía valiendo hasta 12 h.
+     * Sin conexión se sale igual: la cookie se borra y el token expira solo.
+     */
     async function logout(): Promise<void> {
+        if (token.value) {
+            try {
+                await api.POST('/api/v1/auth/logout')
+            }
+            catch {
+                // Sin conexión: se cierra la sesión local de todos modos.
+            }
+        }
         token.value = null
         usuario.value = null
         await navigateTo('/login')

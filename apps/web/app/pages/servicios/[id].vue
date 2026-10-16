@@ -5,7 +5,7 @@ import Decimal from 'decimal.js'
 definePageMeta({ permiso: 'servicios.ver' })
 
 const route = useRoute()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 
 const servicioId = computed(() => Number(route.params.id))
@@ -262,7 +262,7 @@ onMounted(cargar)
                 <p class="text-sm text-muted">
                     Servicio #{{ servicio.id }} ·
                     <ULink
-                        :to="`/clientes/${servicio.cliente_id}`"
+                        :to="enlace(`/clientes/${servicio.cliente_id}`)"
                         class="text-default hover:text-primary"
                     >
                         {{ nombreCliente(servicio) }}

@@ -4,7 +4,7 @@ definePageMeta({ permiso: 'clientes.crear' })
 useHead({ title: 'Nuevo cliente · ArgosIsp' })
 
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, destinoPermitido } = usePermisos()
 
 async function alGuardar(cliente: Cliente) {
     toast.add({
@@ -16,7 +16,7 @@ async function alGuardar(cliente: Cliente) {
             ? [{ label: 'Agregar servicio', to: `/servicios/nuevo?cliente=${cliente.id}`, color: 'neutral', variant: 'outline' }]
             : undefined,
     })
-    await navigateTo(`/clientes/${cliente.id}`)
+    await navigateTo(destinoPermitido(`/clientes/${cliente.id}`))
 }
 </script>
 
@@ -28,7 +28,7 @@ async function alGuardar(cliente: Cliente) {
     >
         <ClienteFormulario
             @guardado="alGuardar"
-            @cancelar="navigateTo('/clientes')"
+            @cancelar="navigateTo(destinoPermitido('/clientes'))"
         />
     </PanelPagina>
 </template>
