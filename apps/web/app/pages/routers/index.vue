@@ -55,6 +55,17 @@ onMounted(() => void lista.recargar())
         titulo="Routers"
         icono="i-lucide-router"
     >
+        <template #acciones>
+            <UButton
+                to="/routers/migracion"
+                label="Migración"
+                icon="i-lucide-arrow-right-left"
+                color="neutral"
+                variant="outline"
+                data-prueba="ir-migracion"
+            />
+        </template>
+
         <div class="flex flex-col gap-4">
             <ProblemaAlerta
                 v-if="lista.problema.value"
