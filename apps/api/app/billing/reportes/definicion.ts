@@ -58,11 +58,19 @@ export function definirColumnas<const C extends readonly Columna[]>(columnas: C)
 
 const ColumnaReporte = definirEsquema(
     'ColumnaReporte',
-    objeto({
-        clave: texto,
-        titulo: texto,
-        tipo: { type: 'string', enum: ['texto', 'dinero', 'entero', 'fecha', 'porcentaje', 'id'] },
-    }),
+    objeto(
+        {
+            clave: texto,
+            titulo: texto,
+            tipo: { type: 'string', enum: ['texto', 'dinero', 'entero', 'fecha', 'porcentaje', 'id'] },
+            nulable: {
+                type: 'boolean',
+                description:
+                    'Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null',
+            },
+        },
+        ['nulable'],
+    ),
 )
 
 /** Schema OpenAPI del reporte con sus filas tipadas. */

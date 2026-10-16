@@ -2837,6 +2837,8 @@ export interface components {
             titulo: string;
             /** @enum {string} */
             tipo: "texto" | "dinero" | "entero" | "fecha" | "porcentaje" | "id";
+            /** @description Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null */
+            nulable?: boolean;
         };
         Comprobante: {
             id: number;

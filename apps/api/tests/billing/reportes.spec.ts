@@ -76,6 +76,18 @@ test.group('billing · reportes', () => {
         )
         const reporte = respuesta.body()
         assert.equal(reporte.reporte, 'cartera-vencida')
+        // nulable solo viene (en true) en las columnas que pueden ser null; el OpenAPI lo declara
+        const columnas = reporte.columnas as Array<{ clave: string; nulable?: boolean }>
+        assert.isTrue(columnas.find((c) => c.clave === 'grupo_id')!.nulable)
+        assert.notProperty(
+            columnas.find((c) => c.clave === 'total')!,
+            'nulable',
+        )
+        const { construirOpenApi } = await import('#shared/openapi/documento')
+        const documento = JSON.parse(await construirOpenApi())
+        const esquema = documento.components.schemas.ColumnaReporte
+        assert.equal(esquema.properties.nulable.type, 'boolean')
+        assert.notInclude(esquema.required, 'nulable')
         assert.lengthOf(reporte.filas, 1)
         const [fila] = reporte.filas
         // septiembre vence el 6/9 (40 días al 16/10) y octubre el 6/10 (10 días)
