@@ -8,7 +8,7 @@ import { resolverIp } from '#network/consultas/ip'
 import { DemasiadasPeticiones } from '#portal/limite_peticiones'
 import { configAcceso, describirDestino, generarCodigo, hashCodigo } from '#portal/acceso/codigos'
 import { enviadorCodigo, type CanalCodigo, type EnviadorCodigo } from '#portal/acceso/envio_codigo'
-import { nombreEmpresa } from '#portal/acceso/empresa_texto'
+import { leerEmpresa } from '#portal/empresa'
 
 export interface EntradaSolicitarCodigo {
     /** IP de origen ya resuelta */
@@ -122,7 +122,7 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
             })
 
         const minutos = Math.round(config.codigoVigenciaS / 60)
-        const empresa = await nombreEmpresa(t.trx)
+        const { nombre: empresa } = await leerEmpresa(t.trx)
         try {
             await this.enviador.enviar({
                 canal: destino.canal,

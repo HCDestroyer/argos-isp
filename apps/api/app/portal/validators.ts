@@ -43,6 +43,21 @@ const telefono = () =>
         .maxLength(30)
         .regex(/^\+?[\d\s()-]{7,30}$/)
 
+export const editarPlantillaDocumentoValidator = vine.compile(
+    vine.object({
+        html: vine.string().minLength(1).maxLength(100_000),
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si es la de fábrica); si cambió responde 409' }),
+    }),
+)
+
+export const vistaPreviaDocumentoValidator = vine.compile(
+    vine.object({ html: vine.string().minLength(1).maxLength(100_000) }),
+)
+
 export const editarContactoValidator = vine.compile(
     vine.object({
         version: versionEsperada(),

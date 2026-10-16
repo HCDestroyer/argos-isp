@@ -1,6 +1,10 @@
 <script setup lang="ts">
-/** Facturas (avisos de cobro) del cliente: concepto, estado, total, saldo y vencimiento. */
-const { items, cargando, cargado, problema, hayMas, recargar, cargarMas } = useFacturas()
+/**
+ * Facturas (avisos de cobro) del cliente: concepto, estado, total, saldo, vencimiento y el PDF.
+ * El PDF se abre directo de `/api/v1/portal/facturas/:id/pdf` en este mismo origen (la cookie de
+ * la sesión viaja sola; el PDF lo genera la API).
+ */
+const { items, cargando, cargado, problema, hayMas, recargar, cargarMas, urlPdf } = useFacturas()
 
 onMounted(recargar)
 </script>
@@ -61,6 +65,19 @@ onMounted(recargar)
                     </p>
                 </div>
             </div>
+
+            <UButton
+                data-testid="descargar-pdf"
+                :label="`Ver ${factura.documento === 'factura' ? 'factura' : 'aviso de cobro'} (PDF)`"
+                icon="i-lucide-file-down"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                :to="urlPdf(factura.id)"
+                target="_blank"
+                external
+                class="mt-3"
+            />
         </UCard>
     </CuentaEstadoLista>
 </template>

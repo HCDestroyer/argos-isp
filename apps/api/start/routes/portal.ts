@@ -5,10 +5,12 @@
 */
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { pagina } from '#shared/openapi/esquemas'
 import {
+    ArchivoPdf,
     EstadoPortal,
+    PlantillaDocumento,
     PortalContacto,
     PortalCuenta,
     PortalFactura,
@@ -21,7 +23,9 @@ import {
 } from '#portal/esquemas'
 import {
     editarContactoValidator,
+    editarPlantillaDocumentoValidator,
     paginaPortalValidator,
+    vistaPreviaDocumentoValidator,
     solicitarCodigoValidator,
     verificarCodigoValidator,
 } from '#portal/validators'
@@ -40,6 +44,31 @@ import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
 import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
 import EditarContactoPortal from '#portal/actions/editar_contacto'
+import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
+import {
+    avisoCobroPdf,
+    pdfDesdePlantilla,
+    plantillaVigente,
+    type DocumentoPdf,
+} from '#portal/documentos/render'
+import { VARIABLES_AVISO_COBRO, vistaDeEjemplo } from '#portal/documentos/variables'
+import { exigirAlcance } from '#core/acl'
+import { dimensionesDeFactura } from '#billing/facturas'
+
+/** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
+function enviarPdf(ctx: HttpContext, documento: DocumentoPdf): void {
+    ctx.response.header('Content-Type', 'application/pdf')
+    ctx.response.header('Content-Disposition', `inline; filename="${documento.nombreArchivo}"`)
+    ctx.response.header('Cache-Control', 'private, no-store')
+    ctx.response.send(documento.pdf)
+}
+
+const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro'] } }
+
+function tipoDocumento(valor: unknown): 'aviso_cobro' {
+    if (valor !== 'aviso_cobro') throw new NoEncontrado(`No hay plantilla de documento "${String(valor)}"`)
+    return valor
+}
 
 const SOBRE_LA_IP =
     'La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión ' +
@@ -274,6 +303,93 @@ const autenticadas: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas]
+const documentos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/facturas/:id/pdf',
+        operacion: 'portalFacturaPdf',
+        resumen: 'PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión',
+        descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404. Responde application/pdf.`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        handler: async (ctx, { params }) => {
+            const clienteId = await clienteDeLaSesion(ctx)
+            enviarPdf(ctx, await avisoCobroPdf(Number(params.id), { clienteId }))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/documentos/aviso-cobro/:facturaId',
+        operacion: 'documentosAvisoCobroPdf',
+        resumen: 'PDF del aviso de cobro de una factura (panel)',
+        descripcion:
+            'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.',
+        etiqueta: 'documentos',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.facturaId)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            enviarPdf(ctx, await avisoCobroPdf(id))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/documentos/plantillas/:tipo',
+        operacion: 'documentosPlantillaVer',
+        resumen: 'Plantilla HTML vigente de un documento y sus variables (editor del panel)',
+        etiqueta: 'documentos',
+        permiso: 'documentos.ver',
+        parametros: PARAMETRO_TIPO,
+        respuesta: { status: 200, descripcion: 'Plantilla', esquema: PlantillaDocumento },
+        handler: async (_ctx, { params }) => ({
+            ...(await plantillaVigente(tipoDocumento(params.tipo))),
+            variables: VARIABLES_AVISO_COBRO,
+        }),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/documentos/plantillas/:tipo',
+        operacion: 'documentosPlantillaEditar',
+        resumen: 'Guarda la plantilla HTML de un documento',
+        descripcion:
+            'Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la ' +
+            'de fábrica. Diff en audit.cambios.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.editar',
+        versionada: true,
+        parametros: PARAMETRO_TIPO,
+        cuerpo: editarPlantillaDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'Plantilla guardada', esquema: PlantillaDocumento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const plantilla = await new EditarPlantillaDocumento().execute(
+                { tipo: tipoDocumento(params.tipo), html: cuerpo.html, version: cuerpo.version },
+                ctx.contextoAccion(),
+            )
+            return { ...plantilla, variables: VARIABLES_AVISO_COBRO }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/documentos/plantillas/:tipo/vista-previa',
+        operacion: 'documentosPlantillaVistaPrevia',
+        resumen: 'PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)',
+        descripcion: '422 si la plantilla no es válida. Responde application/pdf.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.editar',
+        parametros: PARAMETRO_TIPO,
+        cuerpo: vistaPreviaDocumentoValidator,
+        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        handler: async (ctx, { cuerpo, params }) => {
+            tipoDocumento(params.tipo)
+            const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaDeEjemplo())
+            enviarPdf(ctx, { pdf, nombreArchivo: 'vista-previa.pdf' })
+        },
+    }),
+]
+
+const portal: Ruta[] = [...publicas, ...autenticadas, ...documentos]
 
 export default portal

@@ -61,6 +61,9 @@ export const PERMISOS = {
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
 
+    'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
+    'documentos.editar': 'Editar plantillas de documentos (aviso de cobro)',
+
     'bitacora.ver': 'Ver bitácora de acciones y cambios',
     'usuarios.ver': 'Ver usuarios',
     'usuarios.crear': 'Crear usuarios',

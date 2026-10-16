@@ -202,3 +202,37 @@ export const PortalPromesa = definirEsquema(
         created_at: instante,
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Documentos (tarea 8)
+|--------------------------------------------------------------------------
+*/
+
+/** Respuesta binaria: el cuerpo es el PDF (`Content-Type: application/pdf`). */
+export const ArchivoPdf = {
+    type: 'string',
+    format: 'binary',
+    description:
+        'PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` ' +
+        '(el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)',
+}
+
+export const VariableDocumento = definirEsquema(
+    'VariableDocumento',
+    objeto({ nombre: texto, descripcion: texto }),
+)
+
+export const PlantillaDocumento = definirEsquema(
+    'PlantillaDocumento',
+    objeto({
+        tipo: enumerado(['aviso_cobro']),
+        html: { ...texto, description: 'HTML con variables Mustache (`{{factura.total}}`)' },
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar',
+        },
+        variables: lista(VariableDocumento),
+    }),
+)

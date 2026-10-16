@@ -45,6 +45,59 @@ Reglas:
 - **Actor.** No hay tipo de actor "cliente" todavía: las acciones del portal se auditan con actor
   `sistema`, canal `portal` y entidad `cliente` (pedido al líder BE en `a5.md`).
 
+### PDF del aviso de cobro y plantillas de documentos (tarea 8)
+
+| Endpoint | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/facturas/:id/pdf` | sesión del portal | PDF de una factura del cliente (ajena: 404) |
+| `GET /api/v1/documentos/aviso-cobro/:facturaId` | `facturas.ver` (con alcance) | El mismo PDF desde el panel |
+| `GET /api/v1/documentos/plantillas/aviso_cobro` | `documentos.ver` | HTML vigente, `version` (0 = de fábrica) y la lista de variables |
+| `PUT /api/v1/documentos/plantillas/aviso_cobro` | `documentos.editar` | Acción `documentos.editar` (`actions/editar_plantilla_documento.ts`): valida, guarda con `version` (409) y diff en `audit.cambios` |
+| `POST /api/v1/documentos/plantillas/aviso_cobro/vista-previa` | `documentos.editar` | PDF con datos de ejemplo, sin guardar |
+
+El PDF responde `Content-Type: application/pdf` y `Content-Disposition: inline; filename="aviso-cobro-<número>.pdf"`
+(`factura-<serie>-<número>.pdf` cuando la factura tiene `fel_uuid`: el documento pasa a llamarse
+"Factura" y muestra serie, número y autorización FEL).
+
+**Generación** (`documentos/`): Mustache (`render.ts`, ya era dependencia) sobre la plantilla de
+`core.plantillas_documentos` o la de fábrica (`plantilla_base.ts`), y el HTML resultante a PDF con
+`html_a_pdf.ts` (**pdfkit** + **htmlparser2**, dependencias nuevas). Motivo: la imagen de la API es
+`node:22-alpine`; Chromium suma unos 300 MB y un proceso por PDF, y un aviso de cobro es texto, tablas y
+líneas. pdfkit es JavaScript puro y usa las fuentes estándar del PDF (Helvetica, WinAnsi: tildes, ñ, ¿¡).
+
+**Variables** (para el editor de A4; también las devuelve `GET /documentos/plantillas/aviso_cobro`).
+Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemala`.
+
+| Variable | Ejemplo |
+| --- | --- |
+| `{{empresa.nombre}}`, `{{empresa.nit}}`, `{{empresa.direccion}}`, `{{empresa.telefono}}`, `{{empresa.whatsapp}}`, `{{empresa.correo}}`, `{{empresa.horario}}`, `{{empresa.instrucciones_pago}}` | Configuración de empresa (tarea 9) |
+| `{{cliente.nombre}}` | Nombre fiscal o, si no hay, el nombre |
+| `{{cliente.nit}}` | NIT/CUI o `CF` |
+| `{{cliente.direccion}}`, `{{cliente.email}}` | Dirección fiscal (o la del cliente), correo |
+| `{{servicio.plan}}`, `{{servicio.direccion}}` | Plan y dirección de instalación |
+| `{{factura.documento}}` | `Aviso de cobro` o `Factura` (con FEL) |
+| `{{factura.numero}}` | `1203`, o `ABCD1234-1449658872` con FEL |
+| `{{factura.periodo}}` | `octubre 2026` (`Recargo por mora` en una mora) |
+| `{{factura.emitida}}`, `{{factura.vence}}` | `01/10/2026`, `10/10/2026` |
+| `{{factura.estado}}` | `Pendiente`, `Abono parcial`, `Vencida`, `Pagada`, `Anulada` |
+| `{{factura.subtotal}}`, `{{factura.iva}}`, `{{factura.total}}`, `{{factura.pagado}}`, `{{factura.saldo}}` | `Q 1,234.50` |
+| `{{factura.lineas}}` | Tabla de líneas ya armada (concepto, cantidad, precio, total) |
+| `{{#lineas}}…{{/lineas}}` | Para una tabla propia: `concepto`, `cantidad`, `precio_unitario`, `iva`, `total` |
+| `{{#factura.tiene_pagos}}…{{/factura.tiene_pagos}}` | Sección si hay abonos |
+| `{{#factura.fel}}…{{/factura.fel}}`, `{{factura.fel_uuid}}`, `{{factura.fel_serie}}`, `{{factura.fel_numero}}` | Datos FEL (semana 5) |
+| `{{generado}}` | Fecha y hora de generación |
+
+Una variable vacía se oculta con su sección: `{{#empresa.nit}}NIT {{empresa.nit}}{{/empresa.nit}}`.
+Mustache escapa el HTML de cada dato; `{{{ }}}` y `{{& }}` se rechazan (422) para que un dato del
+cliente nunca agregue marcas.
+
+**HTML que entiende el generador:** `h1`–`h3`, `p`, `div`, `section`, `header`, `footer`, `ul`/`ol`/`li`,
+`hr`, `br`, `table` (`thead`, `tbody`, `tfoot`, `tr`, `th`, `td` con `width="40%"` y `colspan`), `strong`/`b`,
+`em`/`i`, `small`, `span`. Clases: `derecha`, `centro`, `tenue`, `grande`, `negrita`; en tablas `caja` (con
+bordes) y `sin-borde`. `style` admite `text-align`, `font-weight`, `font-style`, `font-size` y `color`
+(`#rgb`). Imágenes, CSS externo y scripts se ignoran. Página carta con márgenes de 48 pt; las tablas
+largas siguen en otra página.
+
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
 `{ ip }`) porque son públicas y revelan información de un cliente.
@@ -120,6 +173,12 @@ NIT y por usuario PPPoE, sin enumeración, destino que no sale de la petición, 
 con destino enmascarado y 422, intentos agotados, vencido/usado/reemplazado, límite por cliente, canal
 caído (503 sin código guardado), 401 sin sesión, datos solo del cliente de la sesión (factura ajena 404),
 salir y sesión vencida, extensión hasta el máximo, edición de contacto con auditoría, 409 y 422.
+
+`tests/portal/documentos.spec.ts`: HTML a PDF (tildes, tablas, listas, salto de página), escape de
+datos, PDF del portal con datos, montos y fechas de Guatemala, factura ajena 404 y sin sesión 401, FEL,
+PDF del panel con y sin `facturas.ver`, plantilla editable (versión 0, diff, 409, el PDF usa la nueva),
+Mustache inválido y triple bigote (422), vista previa y 403 sin `documentos.editar`. Con
+`PDF_SALIDA=/ruta` deja los PDF para revisarlos.
 
 `tests/portal/auditoria_unica.spec.ts`: misma IP y servicio auditan una vez (quien-soy y estado por
 separado), otra IP u otro servicio se auditan, IP sin servicio, fin de la ventana, ventana `0`, Redis

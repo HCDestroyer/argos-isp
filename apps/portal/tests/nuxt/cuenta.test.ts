@@ -54,6 +54,9 @@ describe('portal autenticado /cuenta', () => {
         expect(facturas[0]!.text()).toContain('Aviso de cobro 1203')
         expect(facturas[0]!.text()).toContain('Vencida')
         expect(wrapper.text()).toContain('Recargo por mora')
+        const pdf = facturas[0]!.find('[data-testid="descargar-pdf"]')
+        expect(pdf.attributes('href')).toBe('/api/v1/portal/facturas/1203/pdf')
+        expect(pdf.text()).toContain('Ver aviso de cobro (PDF)')
     })
 
     it('no usa controles HTML crudos fuera de los de Nuxt UI', async () => {

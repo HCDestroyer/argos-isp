@@ -27,6 +27,9 @@
       "name": "clientes"
     },
     {
+      "name": "documentos"
+    },
+    {
       "name": "facturacion"
     },
     {
@@ -1682,6 +1685,371 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/aviso-cobro/{facturaId}": {
+      "get": {
+        "operationId": "documentosAvisoCobroPdf",
+        "summary": "PDF del aviso de cobro de una factura (panel)",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "facturaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/plantillas/{tipo}": {
+      "get": {
+        "operationId": "documentosPlantillaVer",
+        "summary": "Plantilla HTML vigente de un documento y sus variables (editor del panel)",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "documentosPlantillaEditar",
+        "summary": "Guarda la plantilla HTML de un documento",
+        "description": "Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si es la de fábrica); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "html",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/plantillas/{tipo}/vista-previa": {
+      "post": {
+        "operationId": "documentosPlantillaVistaPrevia",
+        "summary": "PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)",
+        "description": "422 si la plantilla no es válida. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000
+                  }
+                },
+                "required": [
+                  "html"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.editar",
         "x-implementado": true
       }
     },
@@ -6042,6 +6410,52 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/facturas/{id}/pdf": {
+      "get": {
+        "operationId": "portalFacturaPdf",
+        "summary": "PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404. Responde application/pdf.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/pagos": {
       "get": {
         "operationId": "portalPagos",
@@ -6807,6 +7221,8 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.ver",
+                        "documentos.editar",
+                        "documentos.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -6973,6 +7389,8 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.ver",
+                        "documentos.editar",
+                        "documentos.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -9841,6 +10259,8 @@
                             "clientes.editar",
                             "clientes.estado_cuenta",
                             "clientes.ver",
+                            "documentos.editar",
+                            "documentos.ver",
                             "facturas.anular",
                             "facturas.generar",
                             "facturas.ver",
@@ -12790,6 +13210,38 @@
           }
         }
       },
+      "PlantillaDocumento": {
+        "type": "object",
+        "required": [
+          "tipo",
+          "html",
+          "version",
+          "variables"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro"
+            ]
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML con variables Mustache (`{{factura.total}}`)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableDocumento"
+            }
+          }
+        }
+      },
       "PlantillaFacturacion": {
         "type": "object",
         "required": [
@@ -14601,6 +15053,21 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "VariableDocumento": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "descripcion"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
           }
         }
       },
