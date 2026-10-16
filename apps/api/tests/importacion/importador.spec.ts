@@ -163,7 +163,7 @@ test.group('importacion · Mikrowisp', () => {
     }) => {
         const plantillaId = await crearPlantillaFila()
         const wisp = await hayTipoConexion()
-        const antes = await contar()
+        const antes = await contarVinculos()
         const fuente = await leerDirectorio(EJEMPLO)
         const r = await importarMikrowisp(fuente, { dryRun: true, directorio: EJEMPLO, plantillaId })
 
@@ -465,18 +465,27 @@ test.group('importacion · Mikrowisp', () => {
         const trx = await db.transaction()
         try {
             const fuente = await leerDirectorio(EJEMPLO)
+            // Otras pruebas (p. ej. las de A1) también dejan vínculos `mikrowisp` en la base
+            // compartida: se cuenta solo lo que agrega esta corrida.
+            const contarVinculos = async () => {
+                const filas = (await trx
+                    .from('core.ids_externos')
+                    .where('sistema', 'mikrowisp')
+                    .groupBy('entidad_tipo')
+                    .select('entidad_tipo', trx.raw('count(*)::int AS n'))) as Array<{
+                    entidad_tipo: string
+                    n: number
+                }>
+                return Object.fromEntries(filas.map((v) => [v.entidad_tipo, v.n])) as Record<string, number>
+            }
+            const antes = await contar()
             const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
             assert.equal(primera.ids_externos, 'tabla')
             assert.deepEqual(primera.errores, [])
-            const vinculos = (await trx
-                .from('core.ids_externos')
-                .where('sistema', 'mikrowisp')
-                .groupBy('entidad_tipo')
-                .select('entidad_tipo', trx.raw('count(*)::int AS n'))) as Array<{
-                entidad_tipo: string
-                n: number
-            }>
-            const porTipo = Object.fromEntries(vinculos.map((v) => [v.entidad_tipo, v.n]))
+            const despues = await contarVinculos()
+            const porTipo = Object.fromEntries(
+                Object.entries(despues).map(([tipo, n]) => [tipo, n - (antes[tipo] ?? 0)]),
+            )
             assert.containSubset(porTipo, { router: 2, plan: 2, cliente: 5 })
             assert.equal(porTipo.servicio, primera.resumen.servicios.creados)
 
