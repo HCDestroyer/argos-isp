@@ -25,13 +25,15 @@ import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/factu
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { Prohibido } from '#shared/errores'
-import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas } from '#billing/promesas'
+import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
 import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
 import AprobarPromesa from '#billing/actions/aprobar_promesa'
+import RechazarPromesa from '#billing/actions/rechazar_promesa'
+import CancelarPromesa from '#billing/actions/cancelar_promesa'
 import AprobarComprobante from '#billing/actions/aprobar_comprobante'
 import RechazarComprobante from '#billing/actions/rechazar_comprobante'
 import {
@@ -316,6 +318,50 @@ const promesas: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
             return new AprobarPromesa().execute({ promesa_id: id, nota: cuerpo.nota }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/promesas/:id/rechazar',
+        operacion: 'promesasRechazar',
+        resumen: 'Rechazar promesa pendiente de aprobación',
+        etiqueta: 'promesas',
+        permiso: 'promesas.rechazar',
+        cuerpo: v.rechazarPromesaValidator,
+        idempotente: true,
+        descripcion:
+            'Solo una pendiente_aprobacion: queda rechazada con el motivo en `resultado_evaluacion.cierre`. 409 promesa_no_pendiente en otro estado.',
+        respuesta: { status: 200, descripcion: 'Promesa rechazada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            await new RechazarPromesa().execute(
+                { promesa_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+            return verPromesa(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/promesas/:id/cancelar',
+        operacion: 'promesasCancelar',
+        resumen: 'Cancelar promesa activa o pendiente (el servicio se re-evalúa)',
+        etiqueta: 'promesas',
+        permiso: 'promesas.cancelar',
+        cuerpo: v.cancelarPromesaValidator,
+        idempotente: true,
+        descripcion:
+            'Una activa o pendiente_aprobacion queda cancelada con el motivo en `resultado_evaluacion.cierre`. Si estaba activa, el servicio se re-evalúa en la misma transacción (puede limitarse o cortarse, respetando la hora de corte). 409 promesa_no_pendiente si ya estaba cerrada.',
+        respuesta: { status: 200, descripcion: 'Promesa cancelada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            await new CancelarPromesa().execute(
+                { promesa_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+            return verPromesa(id)
         },
     }),
 ]

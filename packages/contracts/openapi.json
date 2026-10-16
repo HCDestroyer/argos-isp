@@ -8845,6 +8845,250 @@
         "x-implementado": true
       }
     },
+    "/api/v1/promesas/{id}/cancelar": {
+      "post": {
+        "operationId": "promesasCancelar",
+        "summary": "Cancelar promesa activa o pendiente (el servicio se re-evalúa)",
+        "description": "Una activa o pendiente_aprobacion queda cancelada con el motivo en `resultado_evaluacion.cierre`. Si estaba activa, el servicio se re-evalúa en la misma transacción (puede limitarse o cortarse, respetando la hora de corte). 409 promesa_no_pendiente si ya estaba cerrada.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promesa cancelada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.cancelar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.cancelar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promesas/{id}/rechazar": {
+      "post": {
+        "operationId": "promesasRechazar",
+        "summary": "Rechazar promesa pendiente de aprobación",
+        "description": "Solo una pendiente_aprobacion: queda rechazada con el motivo en `resultado_evaluacion.cierre`. 409 promesa_no_pendiente en otro estado.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promesa rechazada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.rechazar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.rechazar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/roles": {
       "get": {
         "operationId": "rolesListar",
@@ -8971,7 +9215,9 @@
                         "plantillas.editar",
                         "plantillas.ver",
                         "promesas.aprobar",
+                        "promesas.cancelar",
                         "promesas.crear",
+                        "promesas.rechazar",
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
@@ -9150,7 +9396,9 @@
                         "plantillas.editar",
                         "plantillas.ver",
                         "promesas.aprobar",
+                        "promesas.cancelar",
                         "promesas.crear",
+                        "promesas.rechazar",
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
@@ -12470,7 +12718,9 @@
                             "plantillas.editar",
                             "plantillas.ver",
                             "promesas.aprobar",
+                            "promesas.cancelar",
                             "promesas.crear",
+                            "promesas.rechazar",
                             "promesas.ver",
                             "redes.crear",
                             "redes.ver",

@@ -94,6 +94,8 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 `node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto) y `promesas` (cada minuto, `incumplirPromesas`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
 
+`cortes.ts`: `horasDeCorte(hasta, cliente?)` (pública, solo lectura) da las horas de corte distintas (HH:MM de Guatemala) de los servicios vigentes que ya llegaron; es la misma consulta que usa el corte y la que vigila A6 (`VigilarCrons`).
+
 `actions/ejecutar_corte.ts` (`servicios.corte`): procesa cada hora de corte del día que ya llegó (de la plantilla, o la excepción `hora_corte` del servicio) y no está en `billing.cortes_ejecutados`; primero vence lo pendiente y luego evalúa cada servicio con `evaluarEstadoServicio`. `POST /facturas/corte { servicio_id?, ignorar_hora? }` es el corte manual del laboratorio (no registra `cortes_ejecutados`).
 
 ## Pagos (tarea 8, versión de cobro rápido)
@@ -151,6 +153,8 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 | `promesas.revisar_cliente`    | `actions/revisar_promesas_cliente.ts` | `ConsumidorBilling` (grupo `billing`, `consumidor.ts`) |
 | `promesas.incumplir`          | `actions/incumplir_promesa.ts`        | `promesas.incumplir_vencidas`                          |
 | `promesas.incumplir_vencidas` | `actions/incumplir_promesas.ts`       | cron `promesas` (cada minuto, con lock)                |
+| `promesas.rechazar` | `actions/rechazar_promesa.ts` | `POST /promesas/:id/rechazar { motivo }` (supervisor) |
+| `promesas.cancelar` | `actions/cancelar_promesa.ts` | `POST /promesas/:id/cancelar { motivo }` (supervisor) |
 
 - `crearPromesaPago` evalúa las `reglas_promesa` efectivas (plantilla + excepción `reglas_promesa` del servicio) con `evaluarReglas` (`promesas.ts`, pura) en este orden y se detiene en la primera que falla: `habilitadas`, `canal_permitido`, `sin_deuda`, `plazo_max_dias`, `no_exceder_siguiente_facturacion`, `deuda_maxima` (deuda vencida), `abono_inicial_pct` (lo pagado de las facturas pendientes), `antiguedad_minima_dias`, `cumplimiento_minimo_pct` (últimas `historial_ventana` promesas resueltas), `bloqueo_tras_incumplida_dias`, `max_por_periodo` (promesas creadas en el periodo de facturación actual; con cumplimiento ≥ `buen_historial_pct`, `max_por_periodo_buen_historial`). Los límites no nulos del canal reemplazan al general; `requiere_aprobacion` deja la promesa `pendiente_aprobacion`.
 - Siempre guarda la promesa (también la rechazada) con `reglas_snapshot` y `resultado_evaluacion` = `{ resultado, regla, motivo, canal, evaluada_en, reglas[] (regla, ok, valor, limite, origen, detalle), deuda, historial, siguiente_facturacion }`. Al aprobar se agrega `aprobacion`; al cerrar, `cierre`.
@@ -159,6 +163,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Canal en `POST /promesas`: el del cuerpo, o `portal`/`ia` según `X-Canal`, o `operador`. `supervisor` exige el permiso `promesas.aprobar` (403).
 - Cumplida: lo pagado a las facturas del servicio desde la creación de la promesa llega a su monto, o el servicio ya no tiene deuda vencida. Se revisa con cada `pago.registrado` y otra vez al vencer. Al cumplirse: `promesa.cumplida` y re-evaluación (una promesa parcial puede volver a limitar o cortar).
 - Vencida sin cumplir → `incumplida`, `promesa.incumplida` y re-evaluación (corta con la hora de corte). Pendiente de aprobación vencida → `cancelada`.
+- Supervisor (`admin`, `contabilidad`): rechazar una `pendiente_aprobacion` → `rechazada`; cancelar una `activa` o `pendiente_aprobacion` → `cancelada` (si estaba activa, re-evaluación en la misma transacción: puede volver a cortarse). Motivo y quién en `resultado_evaluacion.cierre`; 409 `promesa_no_pendiente` en otro estado. Sin evento (el catálogo no tiene `promesa.rechazada` ni `promesa.cancelada`).
 
 ## Estado de cuenta (tarea 11)
 
@@ -201,6 +206,8 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 | GET      | `/api/v1/promesas`                              | `promesas.ver`             |
 | POST     | `/api/v1/promesas`                              | `promesas.crear`           |
 | POST     | `/api/v1/promesas/:id/aprobar`                  | `promesas.aprobar`         |
+| POST     | `/api/v1/promesas/:id/rechazar`                 | `promesas.rechazar`        |
+| POST     | `/api/v1/promesas/:id/cancelar`                 | `promesas.cancelar`        |
 | GET      | `/api/v1/bancos`                                | sesión (sin permiso)       |
 | GET      | `/api/v1/cuentas-bancarias`, `/:id`             | `cuentas_bancarias.ver`    |
 | POST/PUT | `/api/v1/cuentas-bancarias[/:id]`               | `cuentas_bancarias.editar` |

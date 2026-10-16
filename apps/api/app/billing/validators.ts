@@ -257,3 +257,12 @@ export const aprobarComprobanteValidator = vine.compile(
 )
 
 export const rechazarComprobanteValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/*
+|--------------------------------------------------------------------------
+| Rechazar y cancelar promesas
+|--------------------------------------------------------------------------
+*/
+
+export const rechazarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))
+export const cancelarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))

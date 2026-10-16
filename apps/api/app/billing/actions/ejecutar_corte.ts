@@ -7,6 +7,7 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import VencerFacturas, { type ResultadoVencimiento } from '#billing/actions/vencer_facturas'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
+import { HORA_CORTE_EFECTIVA, serviciosConHoraCorte } from '#billing/cortes'
 
 /**
  * `servicios.corte` (cron de corte, cada minuto, y `POST /facturas/corte`): a la `hora_corte`
@@ -34,17 +35,6 @@ export interface ResultadoCorte {
     cambiados: number
     errores: number
     vencimiento: ResultadoVencimiento | null
-}
-
-/** Hora de corte efectiva del servicio: la excepción, o la de su plantilla. */
-const HORA_EFECTIVA = `coalesce(left(e.valor #>> '{}', 5), to_char(p.hora_corte, 'HH24:MI'))`
-
-function serviciosConHora() {
-    return db
-        .from('core.servicios as s')
-        .join('billing.plantillas_facturacion as p', 'p.id', 's.plantilla_facturacion_id')
-        .joinRaw(`LEFT JOIN core.servicios_excepciones e ON e.servicio_id = s.id AND e.campo = 'hora_corte'`)
-        .whereIn('s.estado', ['activo', 'limitado', 'suspendido'])
 }
 
 export default class EjecutarCorte {
@@ -76,9 +66,9 @@ export default class EjecutarCorte {
             const antes = { evaluados: resultado.evaluados, cambiados: resultado.cambiados }
             let cursor = 0
             for (;;) {
-                const lote = (await serviciosConHora()
+                const lote = (await serviciosConHoraCorte()
                     .where('s.id', '>', cursor)
-                    .if(horaCorte !== '*', (q) => q.whereRaw(`${HORA_EFECTIVA} = ?`, [horaCorte]))
+                    .if(horaCorte !== '*', (q) => q.whereRaw(`${HORA_CORTE_EFECTIVA} = ?`, [horaCorte]))
                     .if(input.servicio_id, (q) => q.where('s.id', input.servicio_id!))
                     .orderBy('s.id', 'asc')
                     .limit(TAMANO_LOTE)
@@ -133,14 +123,14 @@ export default class EjecutarCorte {
 
     /** Horas de corte de hoy que ya llegaron y no se han procesado. */
     private async horasPendientes(hoy: string, hora: string): Promise<string[]> {
-        const filas = (await serviciosConHora()
-            .whereRaw(`${HORA_EFECTIVA} <= ?`, [hora])
+        const filas = (await serviciosConHoraCorte()
+            .whereRaw(`${HORA_CORTE_EFECTIVA} <= ?`, [hora])
             .whereRaw(
-                `NOT EXISTS (SELECT 1 FROM billing.cortes_ejecutados c WHERE c.clave = ? || ' ' || ${HORA_EFECTIVA})`,
+                `NOT EXISTS (SELECT 1 FROM billing.cortes_ejecutados c WHERE c.clave = ? || ' ' || ${HORA_CORTE_EFECTIVA})`,
                 [hoy],
             )
-            .select(db.raw(`${HORA_EFECTIVA} as hora`))
-            .groupByRaw(HORA_EFECTIVA)
+            .select(db.raw(`${HORA_CORTE_EFECTIVA} as hora`))
+            .groupByRaw(HORA_CORTE_EFECTIVA)
             .orderBy('hora', 'asc')) as Array<{ hora: string }>
         return filas.map((f) => f.hora)
     }
