@@ -23,6 +23,7 @@ export interface SolicitudFixture {
 
 export interface RespuestaFixture {
     status: number
+    /** JSON, o `Uint8Array` para responder un archivo (p. ej. un PDF) tal cual. */
     cuerpo?: unknown
     /** Por defecto `application/json`, o `application/problem+json` si `status >= 400`. */
     contentType?: string
@@ -70,6 +71,12 @@ function coincidir(ruta: RutaCompilada, segmentos: string[]): Record<string, str
 function responder({ status, cuerpo, contentType }: RespuestaFixture): Response {
     if (cuerpo === undefined || status === 204) {
         return new Response(null, { status })
+    }
+    // Archivos (PDF del aviso de cobro): el cuerpo va tal cual, con su `contentType`.
+    if (cuerpo instanceof Uint8Array) {
+        const bytes = new Uint8Array(cuerpo.byteLength)
+        bytes.set(cuerpo)
+        return new Response(bytes, { status, headers: { 'Content-Type': contentType ?? 'application/octet-stream' } })
     }
     const tipo = contentType ?? (status >= 400 ? 'application/problem+json' : 'application/json')
     return new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': tipo } })

@@ -17,6 +17,7 @@ import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
 import { rutasClientes } from './clientes/rutas'
+import { rutasDocumentos } from './documentos/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasLibro } from './libro/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
@@ -116,4 +117,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasPromesas,
     ...rutasUsuarios,
     ...rutasBancos,
+    ...rutasDocumentos,
 })

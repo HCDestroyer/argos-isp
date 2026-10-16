@@ -8,6 +8,7 @@ import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
+import { empresa, plantillaAvisoCobro } from './documentos/datos'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
 import { promesas } from './promesas/datos'
@@ -40,6 +41,8 @@ interface BaseFixtures {
     asientos: Schema<'Asiento'>[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
+    empresa: Schema<'Empresa'>
+    plantillaAvisoCobro: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -74,6 +77,8 @@ function inicial(): BaseFixtures {
         asientos,
         bancos,
         cuentasBancarias,
+        empresa,
+        plantillaAvisoCobro,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},
