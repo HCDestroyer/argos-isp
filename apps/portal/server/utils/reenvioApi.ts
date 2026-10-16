@@ -22,6 +22,36 @@ export function cadenaReenvio(entrante: string | undefined, ipSocket: string | u
     return previas.length > 0 ? previas.join(', ') : undefined
 }
 
+/** Tiempo máximo de espera de la API antes de responder 504 al navegador. */
+export const TIEMPO_MAXIMO_API_MS = 15_000
+
+export interface ProblemaProxy {
+    type: string
+    title: string
+    status: 502 | 504
+    detail: string
+}
+
+/** problem+json para el navegador cuando la API no contesta: 504 si se agotó el tiempo, 502 si no. */
+export function problemaApiNoDisponible(error: unknown): ProblemaProxy {
+    const causa = (error as { cause?: unknown } | null)?.cause ?? error
+    const nombre = (causa as { name?: unknown } | null)?.name
+    if (nombre === 'TimeoutError' || nombre === 'AbortError') {
+        return {
+            type: 'urn:argosisp:problema:api_sin_respuesta',
+            title: 'El sistema tardó demasiado',
+            status: 504,
+            detail: 'El sistema tardó demasiado en responder. Intenta de nuevo en unos segundos.',
+        }
+    }
+    return {
+        type: 'urn:argosisp:problema:api_no_disponible',
+        title: 'Servicio no disponible',
+        status: 502,
+        detail: 'No pudimos contactar al sistema. Intenta de nuevo en unos segundos.',
+    }
+}
+
 /** URL de destino en la API para una ruta del portal (incluye query). `null` si no se reenvía. */
 export function destinoReenvio(rutaConQuery: string, apiBaseInternal: string): string | null {
     if (!rutaConQuery.startsWith(PREFIJO_REENVIO)) {

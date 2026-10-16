@@ -24,11 +24,36 @@ function esProblema(valor: unknown): valor is Problem {
     return typeof valor === 'object' && valor !== null && 'title' in valor && typeof valor.title === 'string'
 }
 
+/**
+ * El error de la API como `Problem`. Si no lo es (p. ej. un 502 en HTML de un proxy de por medio),
+ * un texto claro según el status, nunca un "Error inesperado" sin explicación.
+ */
 export function aProblema(error: unknown, status: number): Problem {
     if (esProblema(error)) {
         return error
     }
-    return { type: 'about:blank', title: 'Error inesperado', status }
+    if (status === 429) {
+        return {
+            type: 'about:blank',
+            title: 'Demasiadas consultas',
+            status,
+            detail: 'Hiciste muchas consultas seguidas. Espera un minuto e intenta de nuevo.',
+        }
+    }
+    if (status >= 500) {
+        return {
+            type: 'about:blank',
+            title: 'Servicio no disponible',
+            status,
+            detail: 'No pudimos contactar al sistema. Intenta de nuevo en unos segundos.',
+        }
+    }
+    return {
+        type: 'about:blank',
+        title: 'Error inesperado',
+        status,
+        detail: 'Algo salió mal. Intenta de nuevo o comunícate con soporte.',
+    }
 }
 
 interface RespuestaApi<T> {

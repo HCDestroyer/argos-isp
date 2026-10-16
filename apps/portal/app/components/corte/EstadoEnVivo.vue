@@ -18,12 +18,15 @@ const props = withDefaults(defineProps<{
     pago?: PagoEnLinea | null
     /** `GET /portal/pagos/en-linea/:id` respondió 404. */
     pagoNoEncontrado?: boolean
+    /** Las últimas consultas de estado (o del pago) fallaron: sin red, API caída o 429. */
+    sinRespuesta?: boolean
 }>(), {
     vigilando: false,
     agotado: false,
     pagoEnCurso: false,
     pago: null,
     pagoNoEncontrado: false,
+    sinRespuesta: false,
 })
 
 const emit = defineEmits<{
@@ -77,6 +80,28 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
             :actions="accionDescartar"
             role="alert"
             data-testid="pago-expirado"
+        />
+
+        <UAlert
+            v-else-if="vigilando && sinRespuesta"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-wifi-off"
+            title="No logramos consultar tu servicio"
+            description="El sistema no responde en este momento. Seguimos intentando; no hace falta que recargues."
+            data-testid="estado-sin-respuesta"
+        />
+
+        <UAlert
+            v-else-if="agotado && sinRespuesta"
+            color="error"
+            variant="subtle"
+            icon="i-lucide-cloud-off"
+            title="No pudimos consultar el estado de tu servicio"
+            description="El sistema no respondió. Si ya pagaste, tu pago no se pierde: intenta de nuevo en unos minutos o comunícate con soporte."
+            :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => emit('revisar') }]"
+            role="alert"
+            data-testid="estado-sin-respuesta-agotado"
         />
 
         <UAlert

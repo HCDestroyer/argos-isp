@@ -56,6 +56,9 @@ export function useSeguimientoPago(opciones: OpcionesSeguimientoPago = {}) {
     const siguiendo = ref(false)
     const agotado = ref(false)
     const terminado = computed(() => cobro.value !== null && cobro.value.estado !== 'pendiente')
+    /** Consultas seguidas que fallaron sin ser 404 (red, API caída, 429). */
+    const fallos = ref(0)
+    const sinRespuesta = computed(() => fallos.value >= 2)
 
     let id: number | null = null
     let temporizador: ReturnType<typeof setTimeout> | undefined
@@ -74,11 +77,15 @@ export function useSeguimientoPago(opciones: OpcionesSeguimientoPago = {}) {
         if (leido.ok) {
             cobro.value = leido.data
             problema.value = null
+            fallos.value = 0
         }
         else if (leido.problema.status === 404) {
             problema.value = leido.problema
             detener()
             return
+        }
+        else {
+            fallos.value += 1
         }
         if (terminado.value) {
             detener()
@@ -100,6 +107,7 @@ export function useSeguimientoPago(opciones: OpcionesSeguimientoPago = {}) {
             id = cobroId
             cobro.value = null
             problema.value = null
+            fallos.value = 0
             detener()
         }
         if (terminado.value || problema.value) {
@@ -125,5 +133,5 @@ export function useSeguimientoPago(opciones: OpcionesSeguimientoPago = {}) {
 
     onScopeDispose(detener)
 
-    return { cobro, problema, siguiendo, agotado, terminado, seguir, detener }
+    return { cobro, problema, siguiendo, agotado, terminado, sinRespuesta, seguir, detener }
 }

@@ -1,6 +1,7 @@
 /**
- * Sondas de portal cautivo contra el servidor Nitro real (tarea 1 de la semana 3, pedido de A6).
+ * Portal contra el servidor Nitro de producción (una sola compilación para todo el archivo).
  *
+ * Sondas de portal cautivo (semana 3, tarea 1, pedido de A6):
  * Un cliente suspendido que hace la prueba de conectividad de su sistema operativo debe recibir
  * 302 a `/corte` (el aviso "Iniciar sesión en la red"), nunca el 204 ni el texto "de éxito" que
  * esperan Android, Apple, Windows o Firefox.
@@ -103,5 +104,29 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         const respuesta = await pedir('/corte', { host: 'connectivitycheck.gstatic.com' })
         expect(respuesta.status).toBe(200)
         expect(respuesta.headers['content-type']).toContain('text/html')
+    })
+})
+
+describe('proxy a la API caída (piloto, tarea 2)', () => {
+    let reiniciado = false
+    beforeEach(async () => {
+        if (reiniciado) return
+        // Puerto 9 (discard) en 127.0.0.1: conexión rechazada, como una API caída.
+        await startServer({ env: { NUXT_API_BASE_INTERNAL: 'http://127.0.0.1:9' } })
+        reiniciado = true
+    })
+
+    it('responde 502 problem+json en español, sin URLs internas, y la página sigue cargando', async () => {
+        const respuesta = await pedir('/api/v1/portal/quien-soy', { host: 'portal.argosisp.example' })
+        expect(respuesta.status).toBe(502)
+        expect(respuesta.headers['content-type']).toContain('application/problem+json')
+        expect(respuesta.headers['cache-control']).toContain('no-store')
+        const problema = JSON.parse(respuesta.cuerpo) as { status: number, title: string, detail: string }
+        expect(problema).toMatchObject({ status: 502, title: 'Servicio no disponible' })
+        expect(problema.detail).toContain('No pudimos contactar al sistema')
+        expect(respuesta.cuerpo).not.toContain('127.0.0.1')
+
+        // El HTML de /corte no depende de la API (se consulta en el navegador).
+        expect((await pedir('/corte', { host: 'portal.argosisp.example' })).status).toBe(200)
     })
 })

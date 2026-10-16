@@ -5,8 +5,12 @@
  * necesita estar expuesta ni tener CORS: Nitro reenvía `/api/v1/portal/**` a `apiBaseInternal`
  * con la IP de origen en `X-Forwarded-For` (ver `server/utils/reenvioApi.ts`). Cookies y
  * `Set-Cookie` viajan sin cambios.
+ *
+ * Si la API no responde (caída o más de `TIEMPO_MAXIMO_API_MS`), el navegador recibe un
+ * problem+json 502/504 en español en lugar del error genérico de h3: la página muestra el error
+ * con "Reintentar" (`problemaApiNoDisponible`).
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
     const { apiBaseInternal } = useRuntimeConfig(event)
     const destino = destinoReenvio(event.path, apiBaseInternal)
     if (!destino) {
@@ -23,5 +27,19 @@ export default defineEventHandler((event) => {
         headers['x-forwarded-for'] = xff
     }
 
-    return proxyRequest(event, destino, { headers })
+    try {
+        return await proxyRequest(event, destino, {
+            headers,
+            fetchOptions: { signal: AbortSignal.timeout(TIEMPO_MAXIMO_API_MS) },
+        })
+    }
+    catch (error) {
+        const problema = problemaApiNoDisponible(error)
+        setResponseStatus(event, problema.status)
+        setResponseHeaders(event, {
+            'Content-Type': 'application/problem+json',
+            'Cache-Control': 'no-store',
+        })
+        return problema
+    }
 })

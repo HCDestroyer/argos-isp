@@ -76,8 +76,35 @@ Para A6: ningún dominio de esta tabla puede estar en el walled garden; si lo es
 llegaría al sitio real, recibiría su respuesta de éxito y el teléfono no avisaría.
 
 Pruebas: `tests/nuxt/portal-cautivo.test.ts` (reglas puras, cada sonda) y
-`tests/servidor/portal-cautivo.test.ts` (servidor Nitro de producción: cada sonda con GET y HEAD,
+`tests/servidor/portal.test.ts` (servidor Nitro de producción: cada sonda con GET y HEAD,
 con y sin URL pública).
+
+## Cuando algo falla (piloto)
+
+Regla: error claro con "Reintentar" y nunca montos, saldos ni estados calculados sobre datos que
+no se pudieron leer. Pruebas en `tests/nuxt/robustez.test.ts` (fallas simuladas con
+`fijarFallaFixture(ruta, respuesta | 'sin_conexion')`).
+
+| Situación | Qué ve el cliente |
+| --- | --- |
+| La API no responde (el proxy de Nitro devuelve 502, o 504 a los 15 s) | problem+json en español ("No pudimos contactar al sistema…"), nunca el error genérico de h3 ni la URL interna |
+| `quien-soy` falla (sin red, 5xx, 429) | "No pudimos consultar tu servicio" con el detalle (el 429 dice cuántos segundos esperar) y "Reintentar"; sin montos ni estado. Siguen "Ver datos de depósito" y el contacto (si `/portal/empresa` tampoco responde, "Contacta a soporte" lleva a `/contacto`) |
+| Un error que no es problem+json (HTML de otro proxy) | Texto según el status (`aProblema`), no "Error inesperado" a secas |
+| `/portal/estado` falla durante el estado en vivo | Sigue intentando cada 5 s; desde el 2.º fallo seguido avisa "No logramos consultar tu servicio"; al agotarse los 2 min dice "No pudimos consultar el estado de tu servicio" con "Reintentar", nunca "Aún no vemos tu servicio activo" |
+| Seguimiento del pago en línea sin respuesta | Igual: no dice "Aún no recibimos la confirmación" si no se pudo leer |
+| `quien-soy` con `monto_adeudado` o `facturas_vencidas` nulos | "No disponible"; nunca "Q 0.00" ni "Sin facturas vencidas" |
+| Promesa, comprobante, pago y cuenta | Ya mostraban el `detail` y "Reintentar"; ahora el 502 del proxy llega con texto en español |
+
+**IP no identificada** (otra red, datos móviles, IP fuera de `network.sesiones` y asignaciones):
+"No pudimos identificar tu servicio", la IP de conexión, "Entrar con mi NIT o usuario" (`/entrar`),
+datos de depósito y contacto. No se ofrecen "Pagar en línea", "Subir comprobante" ni "Solicitar
+promesa": por IP la API respondería 422 `no_identificado` después de llenar el formulario. Con la
+sesión se hacen desde `/cuenta`.
+
+**Varios servicios**: por IP la página de corte muestra solo el servicio de esa IP y su deuda (lo
+que hay que pagar para reactivarlo). En `/cuenta` cada servicio muestra su saldo; "Pagar en línea"
+cobra un servicio, así que con dos o más servicios con saldo el cliente elige cuál en un selector
+(con su monto). Pruebas de la API en `apps/api/tests/portal/varios_servicios.spec.ts`.
 
 ## Pruebas
 
