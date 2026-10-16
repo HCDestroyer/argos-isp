@@ -10,14 +10,16 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  */
 export default class ImportarMikrowisp extends BaseCommand {
     static commandName = 'importar:mikrowisp'
-    static description = 'Importa clientes, routers, planes y servicios desde un export de Mikrowisp'
+    static description =
+        'Importa clientes, routers, planes, servicios, facturas pendientes y saldos desde un export de Mikrowisp'
 
     static options: CommandOptions = {
         startApp: true,
     }
 
     @args.string({
-        description: 'Directorio con routers.csv, redes.csv, planes.csv, clientes.csv y servicios.csv',
+        description:
+            'Directorio con routers.csv, planes.csv, clientes.csv y servicios.csv (y opcionales redes.csv, facturas.csv y saldos.csv)',
     })
     declare directorio: string
 
@@ -35,6 +37,11 @@ export default class ImportarMikrowisp extends BaseCommand {
 
     @flags.boolean({ description: 'No crear planes: solo mapear a planes que ya existen', default: false })
     declare soloPlanesExistentes: boolean
+
+    @flags.number({
+        description: 'Plantilla de facturación de los servicios nuevos (por defecto la única que exista)',
+    })
+    declare plantilla?: number
 
     async run() {
         const { leerDirectorio } = await import('#importacion/fuente')
@@ -55,6 +62,7 @@ export default class ImportarMikrowisp extends BaseCommand {
             dryRun: this.dryRun,
             ipv6: this.ipv6,
             soloPlanesExistentes: this.soloPlanesExistentes,
+            plantillaId: this.plantilla,
             directorio,
         })
         this.logger.log(formatearReporte(reporte))

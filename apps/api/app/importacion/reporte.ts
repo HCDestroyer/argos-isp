@@ -30,6 +30,24 @@ export interface ReporteImportacion {
         clientes: ConteoEntidad
         implementaciones: ConteoEntidad
         servicios: ConteoEntidad
+        /** facturas pendientes (ImportarFacturaPendiente de A3) */
+        facturas: ConteoEntidad
+        /** saldos iniciales por cliente (RegistrarSaldoInicial de A3) */
+        saldos: ConteoEntidad
+    }
+    /** cómo se reconoce lo ya importado: `core.ids_externos` o solo claves naturales */
+    ids_externos: 'tabla' | 'ninguno'
+    /**
+     * Suma de saldos: origen (saldos.csv, o la suma de sus facturas pendientes si el cliente no
+     * está en saldos.csv) contra lo que queda en ArgosIsp (CxC − anticipos de cada cliente, dentro
+     * de la misma transacción; en seco, antes de revertir). Montos con 2 decimales y signo.
+     */
+    saldos: {
+        clientes: number
+        suma_origen: string
+        suma_importada: string
+        diferencia: string
+        cuadra: boolean
     }
     diferencias: {
         /** misma IP en varios servicios del origen: se importa el primero (por orden del archivo) */
@@ -54,6 +72,18 @@ export interface ReporteImportacion {
         servicios_retirados_origen: Array<{ servicio_mw: string; user_ppp: string }>
         /** referencias rotas: cliente, router o plan que no está o no se pudo importar */
         referencias_faltantes: Array<{ entidad: string; id_mw: string; falta: string; id_falta_mw: string }>
+        /** servicio sin PPPoE (ip_estatica, dhcp_fija) que ArgosIsp aún no admite: no se importa */
+        tipos_conexion_pendientes: Array<{ servicio_mw: string; tipo_conexion: string; motivo: string }>
+        /** factura sin servicio en ArgosIsp: su monto entra en el saldo inicial del cliente */
+        facturas_a_saldo: Array<{ factura_mw: string; cliente_mw: string; pendiente: string; motivo: string }>
+        /** cliente cuyo saldo en ArgosIsp no es el del origen */
+        saldos_distintos: Array<{
+            cliente_mw: string
+            nombre: string | null
+            origen: string
+            importado: string
+            diferencia: string
+        }>
     }
     /** filas con formato inválido (omitidas) o campos descartados (avisos) */
     formato: ProblemaFila[]
@@ -82,6 +112,14 @@ export function formatearReporte(r: ReporteImportacion): string {
             ).padStart(11)} ${String(c.omitidos).padStart(9)}`,
         )
     }
+    lineas.push('')
+    lineas.push(
+        `Saldos (${r.saldos.clientes} clientes): origen Q ${r.saldos.suma_origen} · ArgosIsp Q ${r.saldos.suma_importada} · ` +
+            (r.saldos.cuadra ? 'CUADRA' : `DIFERENCIA Q ${r.saldos.diferencia}`),
+    )
+    lineas.push(
+        `Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales (sin core.ids_externos)'}`,
+    )
 
     const d = r.diferencias
     const seccion = (titulo2: string, filas: string[]) => {
@@ -140,6 +178,23 @@ export function formatearReporte(r: ReporteImportacion): string {
     seccion(
         'Referencias faltantes',
         d.referencias_faltantes.map((x) => `${x.entidad} ${x.id_mw}: falta ${x.falta} ${x.id_falta_mw}`),
+    )
+    seccion(
+        'Servicios sin PPPoE pendientes (no se importan)',
+        d.tipos_conexion_pendientes.map((x) => `servicio ${x.servicio_mw} (${x.tipo_conexion}): ${x.motivo}`),
+    )
+    seccion(
+        'Facturas sin servicio en ArgosIsp (su monto va al saldo inicial del cliente)',
+        d.facturas_a_saldo.map(
+            (x) => `factura ${x.factura_mw} · cliente ${x.cliente_mw} · Q ${x.pendiente}: ${x.motivo}`,
+        ),
+    )
+    seccion(
+        'Saldos distintos al origen',
+        d.saldos_distintos.map(
+            (x) =>
+                `cliente ${x.cliente_mw}${x.nombre ? ` ${x.nombre}` : ''}: origen Q ${x.origen} · ArgosIsp Q ${x.importado} · diferencia Q ${x.diferencia}`,
+        ),
     )
     seccion(
         'Formato',
