@@ -1,3 +1,4 @@
+import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { ContextoAccion } from '#shared/contexto'
 import { Problema } from '#shared/errores'
@@ -5,6 +6,7 @@ import { fechaHora, quetzales } from '#notify/formato'
 import { obtenerCanal } from '#notify/canales/registro'
 import CanjearCodigoTelegram, { CodigoTelegramInvalido } from '#notify/actions/canjear_codigo_telegram'
 import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
+import AnularCodigosTelegram from '#notify/actions/anular_codigos_telegram'
 import { cuentasDelChat, type CuentaChat } from '#notify/telegram/estado'
 import { configBot } from '#notify/telegram/config'
 
@@ -154,7 +156,12 @@ export async function procesarActualizacion(
             if (cuentas === null) return responder(chatId, 'desvincular', MENSAJES.errorTemporal())
             if (cuentas.length === 0) return responder(chatId, 'desvincular', MENSAJES.noVinculado())
             for (const cuenta of cuentas) {
-                await new DesvincularTelegramCliente().execute({ id: cuenta.cliente_id }, ctx)
+                // Misma transacción: desvincular y anular sus códigos pendientes (un enlace viejo
+                // no debe volver a vincular el chat).
+                await db.transaction(async (trx) => {
+                    await new DesvincularTelegramCliente().execute({ id: cuenta.cliente_id }, ctx, { trx })
+                    await new AnularCodigosTelegram().execute({ cliente_id: cuenta.cliente_id }, ctx, { trx })
+                })
             }
             return responder(chatId, 'desvincular', MENSAJES.desvinculado())
         }

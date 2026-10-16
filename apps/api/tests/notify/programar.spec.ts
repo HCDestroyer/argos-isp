@@ -5,6 +5,7 @@ import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { errorDeSintaxis, renderizar } from '#notify/plantillas'
 import { quetzales } from '#notify/formato'
 import {
+    PAGO_SIN_COMPROBANTE,
     CanalFalso,
     ColaFalsa,
     crearCliente,
@@ -153,7 +154,7 @@ test.group('notify · consumidor de eventos', (group) => {
 
         for (const clienteId of [sinChat, whatsapp]) {
             const payload = {
-                pago_id: 1,
+                pago_id: PAGO_SIN_COMPROBANTE,
                 cliente_id: clienteId,
                 monto: '50.00',
                 metodo: 'caja',
