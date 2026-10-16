@@ -122,3 +122,54 @@ export const cajas: Schema<'Caja'>[] = [
     { id: 2, nombre: 'Caja Oficina', cajero_id: 1, cuenta_id: 4, activa: true, turno_abierto_id: 42, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
     { id: 3, nombre: 'Caja Mixco', cajero_id: null, cuenta_id: 5, activa: true, turno_abierto_id: null, version: 1, created_at: '2026-09-01T15:00:00.000Z', updated_at: '2026-09-01T15:00:00.000Z' },
 ]
+
+type Turno = Schema<'CajaTurno'>
+
+function turnoCerrado(id: number, cajaId: number, dia: string, fondo: string, esperado: string, contado: string, motivo: string | null): Turno {
+    const abierto = `${dia}T13:00:00.000Z`
+    const cerrado = `${dia}T23:30:00.000Z`
+    return {
+        id,
+        caja_id: cajaId,
+        abierto_en: abierto,
+        fondo_inicial: fondo,
+        cerrado_en: cerrado,
+        esperado,
+        contado,
+        diferencia: new Decimal(contado).minus(esperado).toFixed(2),
+        motivo,
+        version: 2,
+        created_at: abierto,
+        updated_at: cerrado,
+    }
+}
+
+function turnoAbierto(id: number, cajaId: number, fondo: string): Turno {
+    return {
+        id,
+        caja_id: cajaId,
+        abierto_en: momentoCaja,
+        fondo_inicial: fondo,
+        cerrado_en: null,
+        esperado: null,
+        contado: null,
+        diferencia: null,
+        motivo: null,
+        version: 1,
+        created_at: momentoCaja,
+        updated_at: momentoCaja,
+    }
+}
+
+/**
+ * Turnos de caja: los abiertos 41 y 42 (`Caja.turno_abierto_id`) y cierres anteriores: uno
+ * exacto, uno con faltante y uno con sobrante (con motivo, como exige `cerrarCaja`).
+ */
+export const turnos: Turno[] = [
+    turnoCerrado(37, 1, '2026-10-12', '500.00', '1450.00', '1450.00', null),
+    turnoCerrado(38, 2, '2026-10-12', '300.00', '620.00', '620.00', null),
+    turnoCerrado(39, 1, '2026-10-13', '500.00', '1875.50', '1870.50', 'Faltaron Q 5.00: vuelto mal entregado'),
+    turnoCerrado(40, 1, '2026-10-14', '500.00', '960.00', '980.00', 'Sobrante: un cliente no esperó su vuelto'),
+    turnoAbierto(41, 1, '500.00'),
+    turnoAbierto(42, 2, '300.00'),
+]

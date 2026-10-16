@@ -6,7 +6,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
-import { cajas, facturas, pagos } from './facturacion/datos'
+import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
@@ -30,6 +30,7 @@ interface BaseFixtures {
     facturas: Schema<'Factura'>[]
     pagos: Schema<'Pago'>[]
     cajas: Schema<'Caja'>[]
+    turnos: Schema<'CajaTurno'>[]
     cuentas: Schema<'Cuenta'>[]
     asientos: Schema<'Asiento'>[]
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
@@ -59,6 +60,7 @@ function inicial(): BaseFixtures {
         facturas,
         pagos,
         cajas,
+        turnos,
         cuentas,
         asientos,
         clavesPpp: {},
