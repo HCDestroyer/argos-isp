@@ -163,7 +163,7 @@ test.group('importacion · Mikrowisp', () => {
     }) => {
         const plantillaId = await crearPlantillaFila()
         const wisp = await hayTipoConexion()
-        const antes = await contarVinculos()
+        const antes = await contar()
         const fuente = await leerDirectorio(EJEMPLO)
         const r = await importarMikrowisp(fuente, { dryRun: true, directorio: EJEMPLO, plantillaId })
 
@@ -478,7 +478,7 @@ test.group('importacion · Mikrowisp', () => {
                 }>
                 return Object.fromEntries(filas.map((v) => [v.entidad_tipo, v.n])) as Record<string, number>
             }
-            const antes = await contar()
+            const antes = await contarVinculos()
             const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
             assert.equal(primera.ids_externos, 'tabla')
             assert.deepEqual(primera.errores, [])
