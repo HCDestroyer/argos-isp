@@ -98,16 +98,17 @@ function repartir(monto: Decimal, facturas: readonly Factura[]): { lineas: Linea
 }
 
 /**
- * Vista previa de `POST /pagos` con `facturas[]`: la API paga primero las pedidas (en ese orden),
- * luego las demás de la más antigua a la más nueva, y el excedente queda como anticipo
- * (`registrarPago` de A3). Todo con `decimal.js`.
+ * Vista previa de `POST /pagos` con `facturas[]`: la API paga primero las pedidas (en ese orden,
+ * de cualquier cliente: pago de terceros), luego las demás **del pagador** de la más antigua a la
+ * más nueva, y el excedente queda como anticipo del pagador (`registrarPago` de A3). `propias`
+ * son las facturas del pagador; sin ella, se usan todas. Todo con `decimal.js`.
  */
-export function distribuirPago(monto: Decimal, facturas: readonly Factura[], marcadas: readonly number[]): DistribucionPago {
+export function distribuirPago(monto: Decimal, facturas: readonly Factura[], marcadas: readonly number[], propias: readonly Factura[] = facturas): DistribucionPago {
     const elegidas = marcadas
         .map(id => facturas.find(f => f.id === id))
         .filter((f): f is Factura => f !== undefined)
     const primera = repartir(monto, elegidas)
-    const demas = facturas.filter(f => !marcadas.includes(f.id)).sort(ordenApi)
+    const demas = propias.filter(f => !marcadas.includes(f.id)).sort(ordenApi)
     const segunda = repartir(primera.resto, demas)
     return {
         marcadas: primera.lineas,

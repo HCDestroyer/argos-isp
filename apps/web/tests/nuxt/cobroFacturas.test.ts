@@ -55,12 +55,12 @@ describe('cobro · elegir facturas (pedido del PM)', () => {
         expect(d.aFavor.toFixed(2)).toBe('50.00')
     })
 
-    it('la API (fixtures) aplica en el orden de facturas[] y rechaza una ajena', async () => {
+    it('la API (fixtures) aplica en el orden de facturas[] y rechaza una sin saldo en facturas.<i>', async () => {
         const cobro = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '150.00', facturas: [210, 209] }, nuevaClaveIdempotencia())
-        expect(cobro.ok && cobro.data.aplicaciones).toEqual([{ factura_id: 210, monto: '150.00' }])
+        expect(cobro.ok && cobro.data.aplicaciones).toEqual([{ factura_id: 210, monto: '150.00', cliente_id: 2, cliente_nombre: 'Juan Carlos Ramírez' }])
 
-        const ajena = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '10.00', facturas: [109] }, nuevaClaveIdempotencia())
-        expect(!ajena.ok && ajena.problema.errors?.[0]?.field).toBe('facturas')
+        const sinSaldo = await usePagos().registrar({ cliente_id: 2, metodo: 'caja', monto: '10.00', facturas: [209, 99999] }, nuevaClaveIdempotencia())
+        expect(!sinSaldo.ok && sinSaldo.problema.errors?.[0]?.field).toBe('facturas.1')
     })
 
     it('la pantalla marca las vencidas, cambia el monto al desmarcar y avisa del parcial', async () => {

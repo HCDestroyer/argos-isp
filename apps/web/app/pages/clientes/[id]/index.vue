@@ -167,6 +167,22 @@ onMounted(cargar)
                             variant="outline"
                         />
                     </div>
+                    <p
+                        v-if="cliente.responsable_pago_id"
+                        class="flex items-center gap-1.5 text-sm text-muted"
+                    >
+                        <UIcon
+                            name="i-lucide-hand-coins"
+                            class="size-4 shrink-0"
+                        />
+                        Paga:
+                        <ULink
+                            :to="`/clientes/${cliente.responsable_pago_id}`"
+                            class="text-primary"
+                        >
+                            {{ cliente.responsable_pago_nombre ?? `Cliente #${cliente.responsable_pago_id}` }}
+                        </ULink>
+                    </p>
                     <p class="text-sm text-muted">
                         Cliente #{{ cliente.id }}<template v-if="zona">
                             · {{ zona }}
@@ -212,68 +228,75 @@ onMounted(cargar)
                 }"
             />
 
-            <dl
+            <div
                 v-if="pestana === 'datos'"
-                class="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3"
+                class="flex flex-col gap-8"
             >
-                <DatoFicha
-                    etiqueta="Teléfono"
-                    :valor="cliente.telefono"
-                />
-                <DatoFicha
-                    etiqueta="Móvil"
-                    :valor="cliente.movil"
-                />
-                <DatoFicha
-                    etiqueta="Correo"
-                    :valor="cliente.email"
-                />
-                <DatoFicha
-                    etiqueta="Canal preferido"
-                    :valor="CANALES[cliente.canal_preferido]"
-                />
-                <DatoFicha
-                    etiqueta="Telegram vinculado"
-                    :valor="cliente.telegram_chat_id ? 'Sí' : 'No'"
-                />
-                <DatoFicha
-                    etiqueta="Zona"
-                    :valor="zona ?? (cliente.zona_id ? `Zona #${cliente.zona_id}` : null)"
-                />
-                <DatoFicha
-                    etiqueta="Dirección"
-                    :valor="cliente.direccion"
-                    class="sm:col-span-2"
-                />
-                <DatoFicha
-                    etiqueta="Coordenadas"
-                    :valor="cliente.coordenadas"
-                    mono
-                >
-                    <ULink
-                        v-if="mapa"
-                        :to="mapa"
-                        target="_blank"
-                        class="inline-flex items-center gap-1 text-primary"
+                <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                    <DatoFicha
+                        etiqueta="Teléfono"
+                        :valor="cliente.telefono"
+                    />
+                    <DatoFicha
+                        etiqueta="Móvil"
+                        :valor="cliente.movil"
+                    />
+                    <DatoFicha
+                        etiqueta="Correo"
+                        :valor="cliente.email"
+                    />
+                    <DatoFicha
+                        etiqueta="Canal preferido"
+                        :valor="CANALES[cliente.canal_preferido]"
+                    />
+                    <DatoFicha
+                        etiqueta="Telegram vinculado"
+                        :valor="cliente.telegram_chat_id ? 'Sí' : 'No'"
+                    />
+                    <DatoFicha
+                        etiqueta="Zona"
+                        :valor="zona ?? (cliente.zona_id ? `Zona #${cliente.zona_id}` : null)"
+                    />
+                    <DatoFicha
+                        etiqueta="Dirección"
+                        :valor="cliente.direccion"
+                        class="sm:col-span-2"
+                    />
+                    <DatoFicha
+                        etiqueta="Coordenadas"
+                        :valor="cliente.coordenadas"
+                        mono
                     >
-                        {{ cliente.coordenadas }}
-                        <UIcon
-                            name="i-lucide-external-link"
-                            class="size-3.5"
-                        />
-                    </ULink>
-                </DatoFicha>
-                <DatoFicha
-                    v-for="campo in camposPersonalizados"
-                    :key="campo.clave"
-                    :etiqueta="campo.clave"
-                    :valor="campo.valor"
+                        <ULink
+                            v-if="mapa"
+                            :to="mapa"
+                            target="_blank"
+                            class="inline-flex items-center gap-1 text-primary"
+                        >
+                            {{ cliente.coordenadas }}
+                            <UIcon
+                                name="i-lucide-external-link"
+                                class="size-3.5"
+                            />
+                        </ULink>
+                    </DatoFicha>
+                    <DatoFicha
+                        v-for="campo in camposPersonalizados"
+                        :key="campo.clave"
+                        :etiqueta="campo.clave"
+                        :valor="campo.valor"
+                    />
+                    <DatoFicha
+                        etiqueta="Última edición"
+                        :valor="`${formatearFechaHora(cliente.updated_at)} · versión ${cliente.version}`"
+                    />
+                </dl>
+
+                <ClienteResponsablePago
+                    :cliente="cliente"
+                    @cambiado="cliente = $event"
                 />
-                <DatoFicha
-                    etiqueta="Última edición"
-                    :valor="`${formatearFechaHora(cliente.updated_at)} · versión ${cliente.version}`"
-                />
-            </dl>
+            </div>
 
             <div
                 v-else-if="pestana === 'fiscal'"

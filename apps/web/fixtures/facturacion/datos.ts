@@ -1,5 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
+import { clientes } from '../clientes/datos'
 import { planes } from '../planes/datos'
 import { servicios } from '../servicios/datos'
 
@@ -105,7 +106,12 @@ export const pagos: Pago[] = facturas
             estado: 'registrado',
             nota: null,
             registrado_por: 2,
-            aplicaciones: [{ factura_id: factura.id, monto: factura.pagado }],
+            aplicaciones: [{
+                factura_id: factura.id,
+                monto: factura.pagado,
+                cliente_id: factura.cliente_id,
+                cliente_nombre: clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
+            }],
             anulado_en: null,
             motivo_anulacion: null,
             // Como la vista `Pago` de la API: siempre trae los datos bancarios (null en efectivo).

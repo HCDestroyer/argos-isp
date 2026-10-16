@@ -246,12 +246,25 @@ onMounted(cargar)
                             :to="enlaceMovimiento(row.original) ?? undefined"
                             class="text-sm text-highlighted hover:text-primary"
                         >
-                            {{ row.original.descripcion }}
+                            {{ separarPagadoPor(row.original.descripcion).concepto }}
                         </ULink>
                         <span
                             v-else
                             class="text-sm"
-                        >{{ row.original.descripcion }}</span>
+                        >{{ separarPagadoPor(row.original.descripcion).concepto }}</span>
+                        <span
+                            v-if="separarPagadoPor(row.original.descripcion).pagadoPor"
+                            class="mt-0.5"
+                        >
+                            <UBadge
+                                :label="`Pagado por ${separarPagadoPor(row.original.descripcion).pagadoPor}`"
+                                icon="i-lucide-hand-coins"
+                                color="info"
+                                variant="subtle"
+                                size="sm"
+                                data-prueba="pagado-por"
+                            />
+                        </span>
                         <span class="text-xs tabular-nums text-muted sm:hidden">
                             {{ formatearFecha(row.original.fecha) }} ·
                             {{ esCero(row.original.cargo) ? `abono ${formatearQuetzales(row.original.abono)}` : `cargo ${formatearQuetzales(row.original.cargo)}` }}

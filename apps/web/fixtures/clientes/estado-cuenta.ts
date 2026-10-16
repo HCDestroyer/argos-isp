@@ -34,15 +34,29 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
             abono: '0.00',
         })
     }
-    for (const pago of bd.pagos.filter(p => p.cliente_id === clienteId && p.estado === 'registrado')) {
-        const avisos = pago.aplicaciones.map(a => a.factura_id).join(', ')
+    const propias = new Set(facturas.map(f => f.id))
+    for (const pago of bd.pagos.filter(p => p.estado === 'registrado')) {
+        // Pago de terceros (A3): el abono va al auxiliar del dueño de cada factura; al pagador le
+        // queda lo que aplicó a las suyas más el anticipo.
+        const aplicadas = pago.aplicaciones.filter(a => propias.has(a.factura_id))
+        const aplicadoAOtros = pago.aplicaciones
+            .filter(a => !propias.has(a.factura_id))
+            .reduce((total, a) => total.plus(a.monto), new Decimal(0))
+        const abono = pago.cliente_id === clienteId
+            ? new Decimal(pago.monto).minus(aplicadoAOtros)
+            : aplicadas.reduce((total, a) => total.plus(a.monto), new Decimal(0))
+        if (abono.lte(0)) {
+            continue
+        }
+        const avisos = aplicadas.map(a => a.factura_id).join(', ')
+        const pagador = pago.cliente_id === clienteId ? null : bd.clientes.find(c => c.id === pago.cliente_id)
         eventos.push({
             fecha: pago.created_at.slice(0, 10),
             tipo: 'pago',
             referencia_id: pago.id,
-            descripcion: `${METODOS[pago.metodo]}${avisos ? ` · aviso ${avisos}` : ''}`,
+            descripcion: `${METODOS[pago.metodo]}${avisos ? ` · aviso ${avisos}` : ''}${pagador ? ` · pagado por ${pagador.nombre}` : ''}`,
             cargo: '0.00',
-            abono: pago.monto,
+            abono: dinero(abono),
         })
     }
     eventos.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.referencia_id - b.referencia_id)

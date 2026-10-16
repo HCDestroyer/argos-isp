@@ -140,14 +140,15 @@ function validar(cuerpo: Record<string, unknown>): Errores {
         errores.push({ field: 'nota', message: 'Máximo 500 caracteres', rule: 'maxLength' })
     }
     errores.push(...validarBancarios(cuerpo))
-    // Como `facturasPendientes`: cada factura pedida debe ser del cliente y tener saldo.
-    if (Array.isArray(cuerpo.facturas) && typeof clienteId === 'number') {
-        const pendientes = new Set(pendientesDe(clienteId).map(f => f.id))
-        for (const id of cuerpo.facturas) {
-            if (!pendientes.has(Number(id))) {
-                errores.push({ field: 'facturas', message: `La factura ${String(id)} no es del cliente o no tiene saldo pendiente`, rule: 'factura_pendiente' })
+    // Pago de terceros (A3): cada factura pedida puede ser de cualquier cliente, pero debe existir
+    // y tener saldo; el error va en `facturas.<índice>`.
+    if (Array.isArray(cuerpo.facturas)) {
+        cuerpo.facturas.forEach((id: unknown, indice: number) => {
+            const factura = bd.facturas.find(f => f.id === Number(id))
+            if (!factura || factura.estado === 'pagada' || factura.estado === 'anulada') {
+                errores.push({ field: `facturas.${indice}`, message: `La factura ${String(id)} no existe o no tiene saldo pendiente`, rule: 'factura_pendiente' })
             }
-        }
+        })
     }
     return errores
 }
@@ -222,9 +223,9 @@ function pendientesDe(clienteId: number) {
  * antigua a la más nueva; el excedente queda como anticipo.
  */
 function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null): Pago['aplicaciones'] {
-    const todas = pendientesDe(clienteId)
-    const primero = (indicadas ?? []).map(id => todas.find(f => f.id === id)).filter(f => f !== undefined)
-    const pendientes = [...primero, ...todas.filter(f => !primero.includes(f))]
+    const propias = pendientesDe(clienteId)
+    const primero = (indicadas ?? []).map(id => bd.facturas.find(f => f.id === id)).filter(f => f !== undefined)
+    const pendientes = [...primero, ...propias.filter(f => !primero.includes(f))]
     const aplicaciones: Pago['aplicaciones'] = []
     let resto = monto
     for (const factura of pendientes) {
@@ -240,7 +241,13 @@ function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null):
             version: factura.version + 1,
             updated_at: ahora(),
         })
-        aplicaciones.push({ factura_id: factura.id, monto: dinero(parte) })
+        // Como `conAplicaciones` de la API: el dueño de cada factura (puede no ser el pagador).
+        aplicaciones.push({
+            factura_id: factura.id,
+            monto: dinero(parte),
+            cliente_id: factura.cliente_id,
+            cliente_nombre: bd.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
+        })
         resto = resto.minus(parte)
     }
     return aplicaciones
