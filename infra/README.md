@@ -36,18 +36,20 @@ docker compose -f infra/docker-compose.yml up -d
 
 ## Procesos de fondo
 
-Cuatro servicios corren con la imagen de api (`argosisp/api`), sin puerto HTTP, cada uno con un solo comando de ace. Comparten el entorno de la API (`x-api-env`) y arrancan después de `migrate` (migraciones terminadas) con Postgres y Redis sanos.
+Estos servicios corren con la imagen de api (`argosisp/api`), sin puerto HTTP, cada uno con un solo comando de ace. Comparten el entorno de la API (`x-api-env`) y arrancan después de `migrate` (migraciones terminadas) con Postgres y Redis sanos.
 
 | Servicio          | Comando                    | Dueño | Qué hace                                                                                                                                                                                                                                                                             |
 | ----------------- | -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `relay`           | `node ace eventos:relay`   | A1    | Lee `audit.outbox` sin publicar y lo publica al stream de Redis `argos:eventos`; marca `publicado_en`. Una sola instancia activa (lock en Redis). Contrato en `.claude/integration/contratos/eventos.md`                                                                             |
 | `billing-worker`  | `node ace billing:worker`  | A3    | Consumidor del grupo `billing` (`pago.registrado`, `servicio.creado`) y crons de facturación: generar facturas por periodo, vencerlas y evaluar el corte                                                                                                                             |
 | `sesiones-worker` | `node ace sesiones:worker` | A2    | Procesa la cola de accounting que llena `aaa` (Start, Interim-Update, Stop): escribe `network.sesiones` y emite `sesion.iniciada` / `sesion.terminada`                                                                                                                               |
+| `routeros-worker` | `node ace routeros:worker` | A2    | Servicios sin PPPoE por la API REST de RouterOS: consume el grupo `routeros` del bus, corre los crons del reconciliador (cola `routeros-cron`: `recuperar` cada 30 s, `reconciliar` cada 15 min) y completa el prefijo delegado de las sesiones en modo `radius_pool` (cola `routeros-prefijos`). Una réplica (`deploy.replicas: 1`; los crons llevan lock). Debe alcanzar `www-ssl` de los routers. Variables `ROUTEROS_*` en `infra/.env.example` |
+| `aaa-vigia`       | `node ace aaa:vigilar`     | A2    | Perfil lab. Sondea `/health` de los nodos `aaa` (`AAA_SALUD_NODOS`) y emite `aaa.caido` / `aaa.recuperado` |
 | `worker`          | `node ace notify:worker`   | A6    | Consumidor del grupo `notify`, cola de envíos (correo, Telegram), cron de recordatorios de pago, cron mensual de particiones de `audit`, alertas internas al chat del equipo y vigilancia de los crons de billing (ver `apps/api/app/notify/README.md`). Depende además de `mailpit` |
 
 - **Healthcheck por proceso vivo.** El contenedor ejecuta el comando con `exec`, así que el PID 1 es el propio proceso de ace; el healthcheck comprueba que `/proc/1/cmdline` sigue siendo ese comando. La imagen trae un `HEALTHCHECK` HTTP de la API que en estos procesos no aplica y se reemplaza.
 - **Varias réplicas.** Los crons de BullMQ y el relay toman lock, así que escalar (`docker compose up -d --scale billing-worker=2`) no duplica trabajo; los consumidores de streams reparten mensajes dentro de su grupo.
-- **Reinicio.** `docker compose restart relay billing-worker sesiones-worker worker`. Un evento que se estaba procesando sin `XACK` se reintenta (entrega al menos una vez; los consumidores son idempotentes).
+- **Reinicio.** `docker compose restart relay billing-worker sesiones-worker routeros-worker worker`. Un evento que se estaba procesando sin `XACK` se reintenta (entrega al menos una vez; los consumidores son idempotentes).
 - **Logs.** `docker compose logs -f relay` (JSON de pino).
 
 ## Portal: IP real del cliente
