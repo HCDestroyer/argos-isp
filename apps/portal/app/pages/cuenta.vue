@@ -170,8 +170,8 @@ async function salir() {
                 icon="i-lucide-circle-check"
                 :title="promesa.servicio_estado === 'activo' ? 'Ya tienes servicio' : 'Promesa de pago aprobada'"
                 :description="promesa.servicio_estado === 'activo'
-                    ? `Tu promesa fue aprobada: pagarás ${formatearQuetzales(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}.`
-                    : `Pagarás ${formatearQuetzales(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Si tu servicio no vuelve en unos minutos, comunícate con soporte.`"
+                    ? `Tu promesa fue aprobada: pagarás ${montoEnTexto(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}.`
+                    : `Pagarás ${montoEnTexto(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Si tu servicio no vuelve en unos minutos, comunícate con soporte.`"
                 data-testid="promesa-aprobada"
             />
             <UAlert

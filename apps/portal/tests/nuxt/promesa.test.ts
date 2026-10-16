@@ -68,6 +68,7 @@ describe('esquema y textos de la promesa', () => {
         const [anio, mes, dia] = diaFixture(3).split('-')
         expect(textoPlazo(condiciones)).toBe(`hasta 3 días (a más tardar el ${dia}/${mes}/${anio})`)
         expect(textoPlazo({ plazo_max_dias: null, fecha_maxima: null })).toBeNull()
+        expect(montoEnTexto('318.33')).toBe('Q\u00A0318.33')
         const clave = claveIdempotencia()
         expect(clave).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
         expect(claveIdempotencia()).not.toBe(clave)
@@ -79,7 +80,7 @@ describe('modal "Solicitar promesa de pago"', () => {
         await montarModal()
         const limites = enDocumento('[data-testid="promesa-limites"]')!.textContent ?? ''
         expect(limites).toContain('Fecha de pago: hasta 3 días')
-        expect(limites).toContain('Monto: hasta Q 525.00')
+        expect(limites).toContain('Monto: hasta Q\u00A0525.00')
         const fecha = document.querySelector<HTMLInputElement>('input[type="date"]')!
         expect(fecha.value).toBe(diaFixture(3))
         expect(fecha.min).toBe(diaFixture(0))
@@ -116,7 +117,7 @@ describe('modal "Solicitar promesa de pago"', () => {
         await montarModal()
         await enviarFormulario()
         expect(enDocumento('[data-testid="promesa-pendiente"]')!.textContent).toContain('pendiente de aprobación')
-        expect(texto()).toContain('Prometiste pagar Q 350.00')
+        expect(texto()).toContain('Prometiste pagar Q\u00A0350.00')
     })
 
     it('con una promesa abierta: no disponible, sin formulario', async () => {

@@ -33,6 +33,14 @@ export function esquemaPromesa(condiciones: Pick<Condiciones, 'fecha_minima' | '
 
 export type DatosPromesa = z.output<ReturnType<typeof esquemaPromesa>>
 
+/**
+ * Monto dentro de una frase: `Q 318.33` con espacio duro, para que la "Q" no quede sola al final
+ * de una línea en el teléfono.
+ */
+export function montoEnTexto(monto: string | null | undefined): string {
+    return formatearQuetzales(monto).replace(' ', '\u00A0')
+}
+
 /** "hasta 3 días (a más tardar el 19/10/2026)". */
 export function textoPlazo(condiciones: Pick<Condiciones, 'plazo_max_dias' | 'fecha_maxima'>): string | null {
     if (!condiciones.fecha_maxima) {

@@ -170,7 +170,7 @@ function corregir() {
                     v-if="resultado.resultado === 'pendiente_aprobacion'"
                     class="text-sm text-muted"
                 >
-                    Prometiste pagar {{ formatearQuetzales(resultado.monto) }} a más tardar el
+                    Prometiste pagar {{ montoEnTexto(resultado.monto) }} a más tardar el
                     {{ formatearFecha(resultado.vence_en) }}. Tu servicio se reactiva en cuanto la aprueben.
                 </p>
                 <div class="flex flex-col gap-2 sm:flex-row-reverse">
@@ -200,7 +200,7 @@ function corregir() {
                 icon="i-lucide-info"
                 title="No puedes solicitar una promesa ahora"
                 :description="condiciones.promesa_abierta
-                    ? `${condiciones.motivo} Pagarás ${formatearQuetzales(condiciones.promesa_abierta.monto)} a más tardar el ${formatearFecha(condiciones.promesa_abierta.vence_en)}.`
+                    ? `${condiciones.motivo} Pagarás ${montoEnTexto(condiciones.promesa_abierta.monto)} a más tardar el ${formatearFecha(condiciones.promesa_abierta.vence_en)}.`
                     : condiciones.motivo ?? undefined"
                 data-testid="promesa-no-disponible"
             />
@@ -231,7 +231,7 @@ function corregir() {
                             name="i-lucide-wallet"
                             class="mt-0.5 size-4 shrink-0 text-muted"
                         />
-                        <span>Monto: hasta {{ formatearQuetzales(condiciones.monto_maximo) }} (tu saldo pendiente)</span>
+                        <span>Monto: hasta {{ montoEnTexto(condiciones.monto_maximo) }} (tu saldo pendiente)</span>
                     </li>
                     <li
                         v-if="condiciones.abono_inicial"
@@ -243,8 +243,8 @@ function corregir() {
                         />
                         <span>
                             Antes de prometer debes abonar el {{ condiciones.abono_inicial.porcentaje }}% de tu deuda
-                            ({{ formatearQuetzales(condiciones.abono_inicial.requerido) }}); llevas
-                            {{ formatearQuetzales(condiciones.abono_inicial.abonado) }}.
+                            ({{ montoEnTexto(condiciones.abono_inicial.requerido) }}); llevas
+                            {{ montoEnTexto(condiciones.abono_inicial.abonado) }}.
                         </span>
                     </li>
                     <li
@@ -264,7 +264,7 @@ function corregir() {
                     color="warning"
                     variant="subtle"
                     icon="i-lucide-triangle-alert"
-                    :title="`Te falta abonar ${formatearQuetzales(faltaAbono.faltante)}`"
+                    :title="`Te falta abonar ${montoEnTexto(faltaAbono.faltante)}`"
                     description="Paga ese abono en oficina o por depósito y luego solicita la promesa."
                     data-testid="promesa-falta-abono"
                 />

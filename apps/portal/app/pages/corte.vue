@@ -142,7 +142,7 @@ const hayDatosDeposito = computed(() => !empresa.value
                 variant="subtle"
                 icon="i-lucide-circle-check"
                 title="Promesa de pago aprobada"
-                :description="`Pagarás ${formatearQuetzales(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Estamos reactivando tu servicio.`"
+                :description="`Pagarás ${montoEnTexto(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Estamos reactivando tu servicio.`"
                 data-testid="promesa-aprobada"
             />
             <UAlert
