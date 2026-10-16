@@ -30,6 +30,7 @@ const dispatcher = new Dispatcher({
     nas: new ClienteNasUdp(config.nas.origen),
     claveSecretos: clave,
     suspendido: config.suspendido,
+    suspenderConIpv6: config.suspenderConIpv6,
     puertoNas: config.nas.puerto,
     timeoutMs: config.nas.timeoutMs,
     reintentos: config.nas.reintentos,

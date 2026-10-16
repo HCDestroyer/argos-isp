@@ -8857,7 +8857,7 @@
     "/api/v1/servicios/{id}/desconectar": {
       "post": {
         "operationId": "serviciosDesconectar",
-        "summary": "Desconectar la sesión PPPoE",
+        "summary": "Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa)",
         "tags": [
           "servicios"
         ],
@@ -8969,20 +8969,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "servicios.desconectar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/limitar": {
@@ -9709,26 +9699,17 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "sesiones.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/sesiones/{id}/desconectar": {
       "post": {
         "operationId": "sesionesDesconectar",
         "summary": "Desconectar sesión (Disconnect-Request al NAS)",
+        "description": "Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.",
         "tags": [
           "sesiones"
         ],
@@ -9840,20 +9821,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "sesiones.desconectar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/tokens": {

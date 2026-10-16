@@ -31,6 +31,7 @@ import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
 import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
+import DesconectarServicio from '#network/sesiones/actions/desconectar_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
@@ -559,7 +560,11 @@ const servicios: Ruta[] = [
         'desconectar',
         'serviciosDesconectar',
         'servicios.desconectar',
-        'Desconectar la sesión PPPoE',
+        'Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa)',
+        async (entrada, ctx) => {
+            await new DesconectarServicio().execute(entrada, ctx.contextoAccion())
+            return verServicio(entrada.id)
+        },
     ),
 ]
 
