@@ -72,8 +72,49 @@ const seguimiento = useSeguimientoReactivacion()
 const itemsMetodo: SelectItem[] = METODOS_COBRO.map(m => ({ label: m.etiqueta, value: m.metodo, icon: m.icono }))
 
 const montoValido = computed(() => /^\d{1,12}(\.\d{1,2})?$/.test(estado.monto.trim()))
-/** Cuánto quedaría debiendo con el monto escrito, o el saldo a favor si paga de más. */
-const restante = computed(() => (resumen.value && montoValido.value ? resumen.value.pendiente.minus(new Decimal(estado.monto.trim())) : null))
+
+/**
+ * Facturas elegidas para este pago, en el orden de la pantalla (así se mandan en `facturas[]`).
+ * Por defecto, las vencidas; el monto sugerido es la suma de las marcadas y sigue editable.
+ */
+const marcadas = ref<number[]>([])
+const totalMarcadas = computed(() => (resumen.value ? sumaMarcadas(resumen.value.facturas, marcadas.value) : null))
+/** Cómo aplicará la API el monto escrito (pedidas primero, luego las demás, luego anticipo). */
+const distribucion = computed(() => (resumen.value && montoValido.value && marcadas.value.length
+    ? distribuirPago(new Decimal(estado.monto.trim()), resumen.value.facturas, marcadas.value)
+    : null))
+/** Sin facturas marcadas: cuánto quedaría debiendo, o el saldo a favor si paga de más. */
+const restante = computed(() => (resumen.value && montoValido.value && !marcadas.value.length ? resumen.value.pendiente.minus(new Decimal(estado.monto.trim())) : null))
+
+const nombresServicio = computed(() => new Map(servicios.value.map(s => [s.id, s.user_ppp])))
+
+function servicioDeFactura(factura: { servicio_id: number | null }): string | null {
+    if (factura.servicio_id === null) {
+        return null
+    }
+    return nombresServicio.value.get(factura.servicio_id) ?? `servicio ${factura.servicio_id}`
+}
+
+function marcar(facturaId: number, valor: boolean | 'indeterminate') {
+    if (!resumen.value) {
+        return
+    }
+    const elegidas = new Set(marcadas.value)
+    if (valor === true) {
+        elegidas.add(facturaId)
+    }
+    else {
+        elegidas.delete(facturaId)
+    }
+    marcadas.value = resumen.value.facturas.filter(f => elegidas.has(f.id)).map(f => f.id)
+}
+
+/** Al cambiar las marcadas, el monto vuelve a ser su suma (el cajero puede editarlo después). */
+watch(marcadas, () => {
+    if (totalMarcadas.value && !pago.value) {
+        estado.monto = totalMarcadas.value.gt(0) ? totalMarcadas.value.toFixed(2) : ''
+    }
+})
 
 /** Caja del recibo: la elegida, o "Caja principal" si el cobro en efectivo no eligió ninguna. */
 const nombreCaja = computed(() => {
@@ -133,7 +174,8 @@ async function cargarServicios() {
 }
 
 function limpiarFormulario() {
-    estado.monto = resumen.value ? montoSugerido(resumen.value) : ''
+    marcadas.value = resumen.value ? marcadasPorDefecto(resumen.value, hoyGuatemala()) : []
+    estado.monto = totalMarcadas.value?.gt(0) ? totalMarcadas.value.toFixed(2) : ''
     estado.metodo = 'caja'
     estado.referencia = ''
     estado.nota = ''
@@ -180,6 +222,8 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         referencia: datos.referencia || null,
         caja_id: datos.metodo === 'caja' ? datos.caja_id : null,
         nota: datos.nota || null,
+        // En el orden de la pantalla; sin marcadas, la API aplica a la más antigua.
+        ...(marcadas.value.length ? { facturas: [...marcadas.value] } : {}),
     }, claveIdempotencia)
     enviando.value = false
 
@@ -380,30 +424,57 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                 Saldo a favor {{ formatearQuetzales(saldoAFavor) }}: se aplica solo a los próximos avisos.
                             </p>
 
-                            <ul
+                            <div
                                 v-if="resumen.facturas.length"
-                                class="flex flex-col divide-y divide-default rounded-md border border-default"
+                                class="flex flex-col gap-1"
                             >
-                                <li
-                                    v-for="factura in resumen.facturas"
-                                    :key="factura.id"
-                                    class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                                <p class="text-xs text-muted">
+                                    Marca las facturas que paga; se aplican en este orden.
+                                </p>
+                                <ul
+                                    class="flex flex-col divide-y divide-default rounded-md border border-default"
+                                    aria-label="Facturas pendientes"
                                 >
-                                    <div class="flex min-w-0 flex-col">
-                                        <span class="text-highlighted">Aviso #{{ factura.id }} · {{ formatearFecha(factura.periodo).slice(3) }}</span>
-                                        <span class="text-xs text-muted">Vence {{ formatearFecha(factura.vence_en) }}<template v-if="factura.servicio_id"> · servicio {{ factura.servicio_id }}</template></span>
-                                    </div>
-                                    <div class="flex shrink-0 items-center gap-2">
-                                        <UBadge
-                                            :label="ESTADOS_FACTURA[factura.estado].etiqueta"
-                                            :color="ESTADOS_FACTURA[factura.estado].color"
-                                            variant="subtle"
-                                            size="sm"
+                                    <li
+                                        v-for="factura in resumen.facturas"
+                                        :key="factura.id"
+                                        class="flex items-start gap-3 px-3 py-2 text-sm"
+                                        :class="facturaVencida(factura, hoyGuatemala()) ? 'border-l-2 border-l-error' : ''"
+                                        :data-factura="factura.id"
+                                    >
+                                        <UCheckbox
+                                            :model-value="marcadas.includes(factura.id)"
+                                            :aria-label="`Pagar el aviso ${factura.id}`"
+                                            class="mt-0.5"
+                                            @update:model-value="marcar(factura.id, $event)"
                                         />
-                                        <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(saldoFactura(factura)) }}</span>
-                                    </div>
-                                </li>
-                            </ul>
+                                        <div class="flex min-w-0 flex-1 flex-col">
+                                            <span class="text-highlighted">
+                                                Aviso #{{ factura.id }} · {{ etiquetaPeriodo(factura.periodo) }}
+                                            </span>
+                                            <span class="text-xs text-muted">
+                                                <template v-if="servicioDeFactura(factura)">{{ servicioDeFactura(factura) }} · </template>Vence {{ formatearFecha(factura.vence_en) }} · total {{ formatearQuetzales(factura.total) }}
+                                            </span>
+                                        </div>
+                                        <div class="flex shrink-0 flex-col items-end gap-1">
+                                            <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(saldoFactura(factura)) }}</span>
+                                            <UBadge
+                                                :label="facturaVencida(factura, hoyGuatemala()) ? 'Vencida' : ESTADOS_FACTURA[factura.estado].etiqueta"
+                                                :color="facturaVencida(factura, hoyGuatemala()) ? 'error' : ESTADOS_FACTURA[factura.estado].color"
+                                                variant="subtle"
+                                                size="sm"
+                                            />
+                                        </div>
+                                    </li>
+                                </ul>
+                                <p
+                                    v-if="totalMarcadas"
+                                    class="text-xs text-muted"
+                                    data-prueba="total-marcadas"
+                                >
+                                    {{ marcadas.length }} {{ marcadas.length === 1 ? 'marcada' : 'marcadas' }} · {{ formatearQuetzales(totalMarcadas) }}
+                                </p>
+                            </div>
                             <p
                                 v-else
                                 class="flex items-center gap-2 text-sm text-success"
@@ -522,6 +593,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     :pago="pago"
                     :cliente="cliente"
                     :facturas="facturasAntes"
+                    :servicios="servicios"
                     :caja="nombreCaja"
                     :cajero="usuario?.nombre ?? null"
                     :reactivados="seguimiento.reactivados.value"
@@ -561,7 +633,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         label="Monto"
                         name="monto"
                         required
-                        :help="resumen ? `Vencido ${formatearQuetzales(resumen.vencido)} · pendiente ${formatearQuetzales(resumen.pendiente)}` : undefined"
+                        :help="resumen ? `Marcadas ${formatearQuetzales(totalMarcadas)} · vencido ${formatearQuetzales(resumen.vencido)} · pendiente ${formatearQuetzales(resumen.pendiente)}` : undefined"
                     >
                         <UInput
                             v-model="estado.monto"
@@ -577,6 +649,43 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                             </template>
                         </UInput>
                     </UFormField>
+
+                    <div
+                        v-if="distribucion"
+                        class="-mt-2 flex flex-col gap-1 text-xs"
+                        data-prueba="distribucion"
+                    >
+                        <p
+                            v-if="distribucion.parcial"
+                            class="text-warning"
+                            data-prueba="aviso-parcial"
+                        >
+                            No alcanza para las marcadas: el aviso #{{ distribucion.parcial.factura.id }} quedará parcial
+                            ({{ formatearQuetzales(distribucion.parcial.aplicado) }} de {{ formatearQuetzales(saldoFactura(distribucion.parcial.factura)) }}).
+                        </p>
+                        <p
+                            v-if="distribucion.sinCubrir.length"
+                            class="text-warning"
+                            data-prueba="aviso-sin-cubrir"
+                        >
+                            {{ distribucion.sinCubrir.length === 1 ? 'El aviso' : 'Los avisos' }} {{ distribucion.sinCubrir.map(f => `#${f.id}`).join(', ') }} no {{ distribucion.sinCubrir.length === 1 ? 'recibe' : 'reciben' }} nada.
+                        </p>
+                        <p
+                            v-if="distribucion.excedente.gt(0)"
+                            class="text-info"
+                            data-prueba="aviso-excedente"
+                        >
+                            Pasa {{ formatearQuetzales(distribucion.excedente) }} de las marcadas:
+                            <template v-if="distribucion.otras.length">
+                                va a {{ distribucion.otras.map(l => `#${l.factura.id} (${formatearQuetzales(l.aplicado)})`).join(', ') }}<template v-if="distribucion.aFavor.gt(0)">
+                                    y {{ formatearQuetzales(distribucion.aFavor) }} a saldo a favor
+                                </template>.
+                            </template>
+                            <template v-else>
+                                queda como saldo a favor.
+                            </template>
+                        </p>
+                    </div>
 
                     <p
                         v-if="restante && restante.lt(0)"

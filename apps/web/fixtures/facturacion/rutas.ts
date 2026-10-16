@@ -130,15 +130,33 @@ function validar(cuerpo: Record<string, unknown>): Errores {
     if (typeof nota === 'string' && nota.length > 500) {
         errores.push({ field: 'nota', message: 'Máximo 500 caracteres', rule: 'maxLength' })
     }
+    // Como `facturasPendientes`: cada factura pedida debe ser del cliente y tener saldo.
+    if (Array.isArray(cuerpo.facturas) && typeof clienteId === 'number') {
+        const pendientes = new Set(pendientesDe(clienteId).map(f => f.id))
+        for (const id of cuerpo.facturas) {
+            if (!pendientes.has(Number(id))) {
+                errores.push({ field: 'facturas', message: `La factura ${String(id)} no es del cliente o no tiene saldo pendiente`, rule: 'factura_pendiente' })
+            }
+        }
+    }
     return errores
 }
 
-/** Aplica el monto a las facturas pendientes, la más antigua primero (o a las indicadas). */
-function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null): Pago['aplicaciones'] {
-    const pendientes = bd.facturas
+/** Facturas con saldo del cliente en el orden de `facturasPendientes` (vencimiento, periodo, id). */
+function pendientesDe(clienteId: number) {
+    return bd.facturas
         .filter(f => f.cliente_id === clienteId && f.estado !== 'pagada' && f.estado !== 'anulada')
-        .filter(f => !indicadas || indicadas.includes(f.id))
-        .sort((a, b) => a.periodo.localeCompare(b.periodo) || a.id - b.id)
+        .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
+}
+
+/**
+ * Como `registrarPago`: primero las `facturas` pedidas (en ese orden), luego las demás de la más
+ * antigua a la más nueva; el excedente queda como anticipo.
+ */
+function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null): Pago['aplicaciones'] {
+    const todas = pendientesDe(clienteId)
+    const primero = (indicadas ?? []).map(id => todas.find(f => f.id === id)).filter(f => f !== undefined)
+    const pendientes = [...primero, ...todas.filter(f => !primero.includes(f))]
     const aplicaciones: Pago['aplicaciones'] = []
     let resto = monto
     for (const factura of pendientes) {
