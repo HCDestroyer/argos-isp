@@ -15,6 +15,7 @@ import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import {
     aplicarEstado,
     asegurarVelocidad,
+    enTransicion,
     leerVelocidadRouter,
     limpiarVelocidad,
     fabricaPorDefecto,
@@ -147,8 +148,13 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         fila.avisos = [...fila.avisos, ...velocidad.avisos]
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
                         if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
-                        const despues = await leerVelocidadRouter(cliente)
-                        fila.cambios.push(...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)))
+                        // Durante un cambio de modo, lo del modo anterior lo borra el cambio al final.
+                        if (!(await enTransicion(routerId))) {
+                            const despues = await leerVelocidadRouter(cliente)
+                            fila.cambios.push(
+                                ...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)),
+                            )
+                        }
                     } else {
                         fila.cambios = await aplicarEstado(cliente, estado, ctx)
                     }

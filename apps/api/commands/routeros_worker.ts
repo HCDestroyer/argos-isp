@@ -27,8 +27,13 @@ export default class RouterOSWorker extends BaseCommand {
     declare sinEventos?: boolean
 
     async run() {
-        const { crearWorkerRouterOS, ejecutarCronRouterOS, programarCronsRouterOS, NOMBRE_COLA_ROUTEROS } =
-            await import('#network/routeros/jobs')
+        const {
+            crearWorkerRouterOS,
+            ejecutarCronRouterOS,
+            programarCronsRouterOS,
+            cerrarColaCambios,
+            NOMBRE_COLA_ROUTEROS,
+        } = await import('#network/routeros/jobs')
 
         if (this.unaVez) {
             const salida = await ejecutarCronRouterOS(this.unaVez)
@@ -58,6 +63,7 @@ export default class RouterOSWorker extends BaseCommand {
             await worker.close()
             await prefijos.close()
             await cerrarColaPrefijos()
+            await cerrarColaCambios()
             await cola.close()
             await this.terminate()
         }

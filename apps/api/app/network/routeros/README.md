@@ -70,6 +70,19 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 - Orden: tipos → globales → nodos → mangle → listas por servicio; los sobrantes se borran al revés (mangle, nodos de plan, globales, tipos). El falso rechaza un nodo con `parent` o `queue` inexistente y el borrado de un tipo en uso o de un nodo con hijos.
 - Los tipos se reconocen por nombre (`argosisp-plan-<id>-…`, `id > 0`): el ejemplo de `lab.rsc` (plan `0`) no se toca.
 
+### Cambio de modo (`router.control_cambiado`)
+
+`POST /routers/:id/cambiar-control-velocidad` (A1, permiso `routers.cambiar_control_velocidad`) cambia el campo y emite `router.control_cambiado`. El consumidor `routeros` encola el job `cambiar_control` en `routeros-cron` (`jobId` = el evento) y el worker lo ejecuta con `cambio_control.ts`, paso a paso con `MigrarControlRouterOS` (`routeros.cambiar_control`), cada paso en su transacción:
+
+1. **preparar**: crea los objetos del modo nuevo (árbol, PCQ y mangle; o padres y perfiles) sin tocar los del anterior. El router queda marcado en transición (`marcarTransicion`, Redis, vence en 1 h): los eventos de sus servicios aplican el modo nuevo pero no borran lo del anterior.
+2. **lotes** de 50 servicios con 2 s de pausa: estado deseado de cada servicio en el modo nuevo (cola simple ↔ entradas de lista) y Disconnect de sus sesiones PPPoE (`sesion.desconexion_solicitada`, lo ejecuta `coa`) para que entren con los atributos del modo nuevo.
+3. **terminar** (tras otra pausa): recalcula y borra lo que sobra del modo anterior. Un padre de `simple` con sesiones todavía colgando se conserva hasta su `sesion.terminada`.
+
+- Cada paso deja una fila en `audit.red` (`comando.operacion = cambiar_control`, `fase`, `de`, `a`, `lote`/`lotes`; `respuesta` con creados, actualizados, borrados y desconexiones) además de cada escritura. El mismo evento otra vez no se repite (fila `terminar` con ese `evento_id`).
+- Reversible: volver es el mismo cambio con `de` y `a` invertidos (prueba de ida y vuelta sin colas huérfanas en `tests/network/routeros_cambio_control.spec.ts`). Si el router no responde a mitad: `routeros.fallido`, queda pendiente y el reconciliador termina de converger al modo vigente (las desconexiones PPPoE que falten no se repiten: esas sesiones conservan su cola hasta reconectar).
+- Solo capacidad (`de = a`): reconcilia el router (padres globales).
+- **Vista previa**: `GET /api/v1/routers/:id/vista-previa-control?a=simple|arbol_pcq` (mismo permiso), schema `VistaPreviaControl`: `crear`, `actualizar` y `borrar` (`ruta`, `clave` = comment o name, `nombre`), conteos por menú (`menus`), `servicios`, `lotes` y `sesiones_a_desconectar`. Se calcula con Postgres, sin tocar el router.
+
 ## Eventos
 
 | Consume (grupo `routeros`)                                                                       | Hace                                                                                                                                                                              |
@@ -92,7 +105,7 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 
 ## Pendiente (tanda 2)
 
-- `router.control_cambiado` (cambio de modo por lotes con vista previa).
+- Verificar en el equipo físico los dos modos y el cambio entre ellos (filas en `.claude/integration/a2.md`).
 - IPv6 en la address-list de corte (`/ipv6/firewall/address-list`): fuera de los menús administrados de la tarea 1.
 
 ## Pruebas

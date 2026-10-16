@@ -21,6 +21,7 @@ import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
     aplicarEstado,
     asegurarVelocidad,
+    enTransicion,
     fabricaPorDefecto,
     leerVelocidadRouter,
     limpiarVelocidad,
@@ -37,7 +38,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control'
     evento_id?: string | null
 }
 
@@ -168,7 +169,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                         ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
                     )
                 }
-                if (velocidad) {
+                if (velocidad && !(await enTransicion(input.router_id))) {
                     const despues = await leerVelocidadRouter(cliente)
                     salida.correcciones.push(
                         ...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)),

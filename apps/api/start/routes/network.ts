@@ -21,6 +21,7 @@ import {
     RedIpv4,
     Router,
     Sesion,
+    VistaPreviaControl,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
 import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
@@ -34,6 +35,7 @@ import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesione
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
+import { vistaPreviaControl } from '#network/routeros/cambio_control'
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
@@ -108,6 +110,25 @@ const routers: Ruta[] = [
                 { ...cuerpo, id: Number(params.id) },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+    // A2: vista previa del cambio de modo (lo ejecuta el worker de RouterOS con el evento).
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/vista-previa-control',
+        operacion: 'routersVistaPreviaControl',
+        resumen: 'Vista previa del cambio de control de velocidad (qué se crea y qué se borra)',
+        descripcion:
+            'Calcula, con los datos vigentes y sin tocar el router, los objetos que el cambio a `a` crea, ' +
+            'corrige y borra (colas, árbol, PCQ, mangle, address-lists, perfiles PPP), los lotes y las ' +
+            'sesiones PPPoE que reciben Disconnect. Con `a` igual al modo actual, todo vacío. 404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.cambiar_control_velocidad',
+        query: v.vistaPreviaControlValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaControl },
+        handler: (ctx, { query, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return vistaPreviaControl(Number(params.id), query.a)
         },
     }),
     definirRuta({

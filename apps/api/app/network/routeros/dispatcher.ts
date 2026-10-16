@@ -53,7 +53,7 @@ export const bitacoraRed: Bitacora = {
 export async function registrarFallo(datos: {
     router_id: number
     servicio_id: number | null
-    operacion: 'aplicar' | 'reconciliar'
+    operacion: 'aplicar' | 'reconciliar' | 'cambiar_control'
     evento_id: string | null
     request_id: string
     error: Error
@@ -124,6 +124,28 @@ export async function quitarPendiente(routerId: number): Promise<void> {
 export async function routersPendientes(): Promise<number[]> {
     const ids = await redis().smembers(clavePendientes())
     return ids.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+}
+
+/**
+ * Router en cambio de modo de control (`router.control_cambiado`, `cambio_control.ts`): mientras
+ * dura, los eventos y el reconciliador no borran los objetos del modo anterior (los servicios que
+ * faltan migrar todavía cuelgan de ellos); la limpieza la hace el último paso del cambio. Es un
+ * candado de trabajo, no una caché: vence en una hora por si el worker muere a mitad.
+ */
+export function claveTransicion(routerId: number): string {
+    return `${prefijoColas()}:routeros:transicion:${routerId}`
+}
+
+export async function marcarTransicion(routerId: number): Promise<void> {
+    await redis().set(claveTransicion(routerId), String(Date.now()), 'EX', 3600)
+}
+
+export async function quitarTransicion(routerId: number): Promise<void> {
+    await redis().del(claveTransicion(routerId))
+}
+
+export async function enTransicion(routerId: number): Promise<boolean> {
+    return (await redis().exists(claveTransicion(routerId))) === 1
 }
 
 export interface Cambio {

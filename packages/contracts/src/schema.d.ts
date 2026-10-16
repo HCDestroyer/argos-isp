@@ -2053,6 +2053,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/vista-previa-control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vista previa del cambio de control de velocidad (qué se crea y qué se borra)
+         * @description Calcula, con los datos vigentes y sin tocar el router, los objetos que el cambio a `a` crea, corrige y borra (colas, árbol, PCQ, mangle, address-lists, perfiles PPP), los lotes y las sesiones PPPoE que reciben Disconnect. Con `a` igual al modo actual, todo vacío. 404 si el router no existe.
+         */
+        get: operations["routersVistaPreviaControl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios": {
         parameters: {
             query?: never;
@@ -4329,6 +4349,42 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VistaPreviaControl: {
+            router_id: number;
+            /** @enum {string} */
+            de: "simple" | "arbol_pcq";
+            /** @enum {string} */
+            a: "simple" | "arbol_pcq";
+            servicios: number;
+            /** @description Lotes en que el worker migra los servicios (con pausa entre lotes) */
+            lotes: number;
+            /** @description Sesiones PPPoE abiertas que reciben Disconnect para entrar con el perfil del modo nuevo */
+            sesiones_a_desconectar: number;
+            menus: {
+                ruta: string;
+                crear: number;
+                actualizar: number;
+                borrar: number;
+            }[];
+            crear: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            actualizar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            borrar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
         };
         Zona: {
             id: number;
@@ -12022,6 +12078,66 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso redes.crear */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersVistaPreviaControl: {
+        parameters: {
+            query: {
+                a: "simple" | "arbol_pcq";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaControl"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad */
             403: {
                 headers: {
                     [name: string]: unknown;

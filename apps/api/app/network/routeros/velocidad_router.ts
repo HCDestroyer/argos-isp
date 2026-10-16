@@ -217,7 +217,18 @@ export function estadoVelocidadRouter(
     const presentes: ObjetoVelocidad[] = []
     const avisos: string[] = []
     const conservar: string[] = []
-    if (router.control === 'arbol_pcq') return estadoArbol(router, planes)
+    if (router.control === 'arbol_pcq') {
+        // Padres de `simple` con sesiones PPPoE todavía colgando (cambio de modo en curso): quedan
+        // hasta que la sesión reconecte; los borra el `sesion.terminada` de la última.
+        const arbol = estadoArbol(router, planes)
+        for (const nombre of hijasDinamicas(lectura).keys()) {
+            const id = /^argosisp-plan-(\d+)$/.exec(nombre)?.[1]
+            if (!id) continue
+            arbol.conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(Number(id)) })}`)
+            arbol.conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(Number(id)) })}`)
+        }
+        return arbol
+    }
 
     const dinamicas = hijasDinamicas(lectura)
     const base = perfilBase(lectura)
