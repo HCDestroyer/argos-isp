@@ -7735,6 +7735,11 @@
                     "format": "ipv4",
                     "description": "IP fija; si no viene se asigna de las redes del router"
                   },
+                  "red_ipv4_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena)"
+                  },
                   "ipv6_modo": {
                     "type": "string",
                     "enum": [

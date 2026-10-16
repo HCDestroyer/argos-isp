@@ -28,6 +28,8 @@ export interface EntradaCrearServicio {
     costo_override?: string | null
     excluir_firewall?: boolean
     ipv4?: string
+    /** red IPv4 del router de la que asignar (pedido de A4); si no viene, la regla general */
+    red_ipv4_id?: number
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
@@ -126,6 +128,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             plan,
             modo,
             ipv4: input.ipv4,
+            redIpv4Id: input.red_ipv4_id,
             prefijoEstatico: input.prefijo_delegado_v6,
         })
 

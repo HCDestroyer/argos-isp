@@ -6238,6 +6238,8 @@ export interface operations {
                      * @description IP fija; si no viene se asigna de las redes del router
                      */
                     ipv4?: string;
+                    /** @description Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena) */
+                    red_ipv4_id?: number;
                     /** @enum {string} */
                     ipv6_modo?: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
                     ipv6_duid?: string | null;

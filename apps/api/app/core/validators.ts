@@ -179,6 +179,9 @@ export const crearServicioValidator = vine.compile(
         ipv4: ipv4()
             .optional()
             .meta({ description: 'IP fija; si no viene se asigna de las redes del router' }),
+        red_ipv4_id: idEntidad().optional().meta({
+            description: 'Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena)',
+        }),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional().meta({ description: 'Solo modo estatico' }),
