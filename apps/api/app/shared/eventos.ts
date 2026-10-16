@@ -74,8 +74,21 @@ export interface CatalogoEventos {
     // aaa (A2)
     'sesion.iniciada': PayloadSesion
     'sesion.terminada': PayloadSesion
-    'coa.fallido': { servicio_id: number; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
-    'aaa.caido': { nodo: string; desde: string }
+    /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
+    'sesion.desconexion_solicitada': {
+        sesion_id: number
+        servicio_id: number | null
+        nas_ip: string
+        acct_session_id: string
+        user_ppp: string
+        motivo: string
+    }
+    /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
+    'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
+    /** `aaa` no respondió su health check durante el umbral (60 s). `desde` = primer fallo. */
+    'aaa.caido': { nodo: string; desde: string; ultimo_error?: string | null }
+    /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
+    'aaa.recuperado': { nodo: string; desde: string; hasta: string; ultimo_error: string | null }
 
     // billing (A3)
     'factura.emitida': PayloadFactura
@@ -116,8 +129,10 @@ export const EVENTOS = [
     'asignacion.cambiada',
     'sesion.iniciada',
     'sesion.terminada',
+    'sesion.desconexion_solicitada',
     'coa.fallido',
     'aaa.caido',
+    'aaa.recuperado',
     'factura.emitida',
     'factura.vencida',
     'factura.anulada',

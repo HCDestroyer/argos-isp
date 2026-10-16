@@ -948,7 +948,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Desconectar la sesión PPPoE */
+        /** Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa) */
         post: operations["serviciosDesconectar"];
         delete?: never;
         options?: never;
@@ -1067,7 +1067,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Desconectar sesión (Disconnect-Request al NAS) */
+        /**
+         * Desconectar sesión (Disconnect-Request al NAS)
+         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
+         */
         post: operations["sesionesDesconectar"];
         delete?: never;
         options?: never;
@@ -6456,15 +6459,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     serviciosLimitar: {
@@ -6903,15 +6897,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     sesionesDesconectar: {
@@ -6981,15 +6966,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
