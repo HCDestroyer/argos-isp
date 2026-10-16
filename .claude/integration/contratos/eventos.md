@@ -27,6 +27,11 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | --- | --- | --- | --- |
 | `sesion.desconexion_solicitada` | A2 (`DesconectarSesion`, `DesconectarServicio`) | `sesion_id`, `servicio_id` (null si el `user_ppp` no existe), `nas_ip`, `acct_session_id`, `user_ppp`, `motivo` | `coa`: Disconnect-Request a esa sesión si sigue abierta; envío y respuesta en `audit.red` (`comando.evento` = este nombre, `comando.razon` = `manual: <motivo>`), `coa.fallido` si no hay ACK |
 
+| `aaa.caido` | A2 (`node ace aaa:vigilar`, `RegistrarCaidaAaa`) | `nodo`, `desde` (ISO, primer health check fallido), `ultimo_error` (p. ej. `ECONNREFUSED`, `HTTP 503`, `sin respuesta en 2000 ms`) | A6 (`notify`): alerta por Telegram al equipo |
+| `aaa.recuperado` | A2 (`RegistrarRecuperacionAaa`) | `nodo`, `desde` (el de la caída), `hasta` (ISO, primer health check bueno), `ultimo_error` | A6 (`notify`): aviso de recuperación |
+
+`aaa.caido` se emite cuando un nodo lleva `AAA_CAIDO_TRAS_MS` (60 s) sin responder `GET /health` con 2xx; una sola vez por caída (las acciones miran el último evento del nodo en `audit.outbox`), y `aaa.recuperado` solo después de un `aaa.caido`. El payload de la tabla de `CLAUDE.md` (`nodo`, `desde`) sigue valiendo: `ultimo_error` es un campo más.
+
 `coa.fallido` admite `servicio_id: null` solo en una desconexión manual de una sesión sin servicio conocido.
 
 ## Consumo

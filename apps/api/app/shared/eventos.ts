@@ -85,7 +85,10 @@ export interface CatalogoEventos {
     }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
     'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
-    'aaa.caido': { nodo: string; desde: string }
+    /** `aaa` no respondió su health check durante el umbral (60 s). `desde` = primer fallo. */
+    'aaa.caido': { nodo: string; desde: string; ultimo_error?: string | null }
+    /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
+    'aaa.recuperado': { nodo: string; desde: string; hasta: string; ultimo_error: string | null }
 
     // billing (A3)
     'factura.emitida': PayloadFactura
@@ -129,6 +132,7 @@ export const EVENTOS = [
     'sesion.desconexion_solicitada',
     'coa.fallido',
     'aaa.caido',
+    'aaa.recuperado',
     'factura.emitida',
     'factura.vencida',
     'factura.anulada',

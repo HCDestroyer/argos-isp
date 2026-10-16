@@ -9,7 +9,7 @@ Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabiliz
 | `POST /aaa/post-auth`  | `post-auth` (no bloqueante)       | 204, solo registra           |
 | `POST /aaa/accounting` | `accounting` (Start/Interim/Stop) | hecho (tarea 4): encola      |
 
-Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accounting de `apps/api` (`app/network/sesiones`) a partir de lo que encola `aaa`; `aaa.caido` llega en la tarea 9. No consume eventos: la caché la mantiene A1.
+Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accounting de `apps/api` (`app/network/sesiones`) a partir de lo que encola `aaa`; `aaa.caido` / `aaa.recuperado` los emite el vigía de `apps/api` (`node ace aaa:vigilar`, que sondea `GET /health` de cada nodo; ver `apps/api/app/network/sesiones/README.md`). No consume eventos: la caché la mantiene A1.
 
 ## `/aaa/authorize`
 

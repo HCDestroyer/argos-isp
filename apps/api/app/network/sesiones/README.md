@@ -30,8 +30,22 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 
 Desconectar no habla con el NAS: emite `sesion.desconexion_solicitada` (`sesion_id`, `servicio_id`, `nas_ip`, `acct_session_id`, `user_ppp`, `motivo`) en la misma transacción que la auditoría, y `services/coa` manda el Disconnect-Request y deja envío y respuesta en `audit.red`. La sesión se cierra con el Stop que manda el NAS al cortar. No cambia el estado del servicio.
 
+## Vigía de `aaa` (tarea 9)
+
+`node ace aaa:vigilar` (`commands/aaa_vigilar.ts`, `vigia_aaa.ts`) hace `GET <url>/health` a cada nodo de `AAA_SALUD_NODOS` (`nombre=url,…`) cada `AAA_SALUD_CADA_MS` (5 s, timeout 2 s, conexión nueva por sondeo).
+
+| Condición                                                           | Acción                     | Evento                                                |
+| ------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------- |
+| `AAA_CAIDO_TRAS_MS` (60 s) seguidos sin 2xx (timeout, rechazo, 5xx) | `RegistrarCaidaAaa`        | `aaa.caido { nodo, desde, ultimo_error }`             |
+| primer 2xx de un nodo caído                                         | `RegistrarRecuperacionAaa` | `aaa.recuperado { nodo, desde, hasta, ultimo_error }` |
+
+- Un solo vigía activo: lock `<COLAS_PREFIJO>:lock:aaa-vigia` con dueño y renovación (30 s). Se pueden correr varios; el que no tiene el lock no sondea.
+- "Está caído" sale del último `aaa.caido`/`aaa.recuperado` del nodo en `audit.outbox`; las acciones toman un advisory lock por nodo y no repiten el evento. En Redis solo está la racha de fallos en curso (`<COLAS_PREFIJO>:aaa-salud:<nodo>`, sin TTL, se borra con el primer 2xx), para que otro vigía siga contando desde el mismo primer fallo.
+- Las dos acciones se auditan en `audit.acciones` (canal `cron`, actor `sistema`).
+
 ## Pruebas
 
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).
+- `tests/network/vigia_aaa.spec.ts`: caída a los 60 s, una sola alerta, recuperación, fallo corto sin alerta, dos vigías con lock y racha compartida, racha perdida sin duplicar, `sondeoHttp` contra un servidor real.
 - `tests/network/sesiones.spec.ts`: acciones de accounting (Postgres real) y worker (BullMQ real con prefijo propio).
 - `tests/network/coa.spec.ts` (tarea 6, de punta a punta): `CambiarEstadoServicio` → `audit.outbox` → XADD a un stream propio (lo que hará el relay de A1) → `services/coa` como proceso → NAS simulado por UDP (`services/coa/test/nas_simulado.ts`, también proceso) → `audit.red` y `coa.fallido`. La sesión la abre `IniciarSesion`. Cubre suspender (CoA, ACK en < 5 s, evento duplicado sin reenvío), reactivar (Disconnect), limitar y volver (CoA de velocidad), cambio de prefijo (Disconnect), desconexión manual (Disconnect), NAK y NAS que no responde.
