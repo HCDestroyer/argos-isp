@@ -2274,6 +2274,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.",
         "tags": [
           "facturacion"
         ],
@@ -2385,20 +2386,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/corte": {
@@ -11874,6 +11865,20 @@
             ],
             "format": "date-time",
             "description": "Cuándo se marcó vencida"
+          },
+          "anulada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",

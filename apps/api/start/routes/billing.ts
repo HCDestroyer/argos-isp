@@ -14,6 +14,7 @@ import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
+import AnularFactura from '#billing/actions/anular_factura'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
 import { cajaDelCajero } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
@@ -163,7 +164,17 @@ const facturas: Ruta[] = [
         permiso: 'facturas.anular',
         cuerpo: v.anularFacturaValidator,
         idempotente: true,
+        descripcion:
+            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.',
         respuesta: { status: 200, descripcion: 'Factura anulada', esquema: Factura },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            return new AnularFactura().execute(
+                { factura_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
     }),
 ]
 

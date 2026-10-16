@@ -295,7 +295,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anular factura (asiento de reverso) */
+        /**
+         * Anular factura (asiento de reverso)
+         * @description Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.
+         */
         post: operations["facturasAnular"];
         delete?: never;
         options?: never;
@@ -1541,6 +1544,12 @@ export interface components {
              * @description Cuándo se marcó vencida
              */
             vencida_en?: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo se anuló
+             */
+            anulada_en?: string | null;
+            motivo_anulacion?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3364,15 +3373,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

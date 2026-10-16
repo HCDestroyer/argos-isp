@@ -52,6 +52,10 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 - `facturas.tipo`: `servicio` (periodo) o `mora` (recargo, ver tarea 5). Solo `servicio` cuenta para limitar/cortar.
 - Estado según lo pagado (`estadoSegunPago`): `pagada` si `pagado = total`; si ya pasó por `vencerFacturas` (`vencida_en`), `vencida`; si no, `parcial` o `emitida`.
 
+## Anular factura
+
+`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5.
+
 ## Vencimiento y mora (tarea 5)
 
 | Acción                       | Archivo                      | Qué hace                                                                                                                                                  |
@@ -148,6 +152,6 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`. Próximas tareas: `factura.anulada`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`.
 
 Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

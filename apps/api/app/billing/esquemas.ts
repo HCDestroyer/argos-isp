@@ -125,9 +125,11 @@ export const Factura = definirEsquema(
             },
             factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
+            anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
+            motivo_anulacion: nulable(texto),
             ...auditable,
         },
-        ['tipo', 'factura_origen_id', 'vencida_en'],
+        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion'],
     ),
 )
 
