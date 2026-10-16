@@ -65,12 +65,12 @@ describe('tarea 10 · facturas', () => {
         }
 
         const otraVez = await useFacturas().anular(210, 'Repetida', nuevaClaveIdempotencia())
-        expect(!otraVez.ok && otraVez.problema.status).toBe(409)
+        expect(!otraVez.ok && otraVez.problema.status).toBe(422)
     })
 
-    it('una factura con pagos no se anula (409) y el motivo es obligatorio (422)', async () => {
+    it('una factura con pagos no se anula y el motivo es obligatorio (422)', async () => {
         const pagada = await useFacturas().anular(109, 'Prueba de anulación', nuevaClaveIdempotencia())
-        expect(!pagada.ok && pagada.problema.status).toBe(409)
+        expect(!pagada.ok && pagada.problema.type).toBe('urn:argosisp:problema:factura_con_pagos')
 
         const sinMotivo = await useFacturas().anular(210, 'no', nuevaClaveIdempotencia())
         expect(!sinMotivo.ok && sinMotivo.problema.status).toBe(422)

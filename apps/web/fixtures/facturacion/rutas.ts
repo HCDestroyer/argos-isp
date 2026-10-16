@@ -1,6 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
-import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import {
     ahora,
@@ -12,7 +12,6 @@ import {
     noEncontrado,
     numeroQuery,
     paginar,
-    problema,
     registrarAccion,
     usuariosPorToken,
 } from '../comun'
@@ -33,6 +32,12 @@ const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verifi
 
 function usuarioDe(solicitud: SolicitudFixture): number | null {
     return solicitud.token ? (usuariosPorToken[solicitud.token]?.id ?? null) : null
+}
+
+/** Como `ReglaNegocio` de la API: 422 con `type` `urn:argosisp:problema:<codigo>`. */
+function reglaNegocio(codigo: string, detalle: string): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: 'Regla de negocio', status: 422, detail: detalle }
+    return { status: 422, cuerpo }
 }
 
 /** Motivo de anulación: 3 a 500 caracteres, como los validadores de anular de la API. */
@@ -297,7 +302,7 @@ export const rutasFacturacion: RutasFixture = {
             return datosInvalidos(motivo)
         }
         if (pago.estado === 'anulado') {
-            return problema(409, 'Pago ya anulado', `El pago ${pago.id} ya estaba anulado.`)
+            return reglaNegocio('pago_anulado', `El pago ${pago.id} ya está anulado`)
         }
         const momento = ahora()
         desaplicar(pago)
@@ -334,7 +339,7 @@ export const rutasFacturacion: RutasFixture = {
 
     /**
      * Hoy 501 en la API (A3, día 4). Aquí el camino feliz: una factura con pagos aplicados no se
-     * anula (primero se anulan los pagos); al anular se revierte su asiento.
+     * anula (422, primero se anulan los pagos); al anular se revierte su asiento.
      */
     'POST /api/v1/facturas/:id/anular': conPermiso('facturas.anular', conIdempotencia((solicitud) => {
         const factura = bd.facturas.find(f => f.id === idDe(solicitud))
@@ -346,10 +351,10 @@ export const rutasFacturacion: RutasFixture = {
             return datosInvalidos(motivo)
         }
         if (factura.estado === 'anulada') {
-            return problema(409, 'Factura ya anulada', `La factura ${factura.id} ya estaba anulada.`)
+            return reglaNegocio('factura_anulada', `La factura ${factura.id} ya está anulada`)
         }
         if (new Decimal(factura.pagado).gt(0)) {
-            return problema(409, 'La factura tiene pagos', `La factura ${factura.id} tiene pagos aplicados: anula primero esos pagos.`)
+            return reglaNegocio('factura_con_pagos', `La factura ${factura.id} tiene pagos aplicados: anula primero esos pagos`)
         }
         const momento = ahora()
         Object.assign(factura, { estado: 'anulada', version: factura.version + 1, updated_at: momento })

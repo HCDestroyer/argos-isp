@@ -15,8 +15,8 @@ const props = withDefaults(defineProps<{
 
 const columnas: TableColumn<MovimientoAsiento>[] = [
     { accessorKey: 'cuenta_codigo', header: 'Cuenta' },
-    { accessorKey: 'debe', header: 'Debe', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'haber', header: 'Haber', meta: { class: { th: 'text-right', td: 'text-right' } } },
+    { accessorKey: 'debe', header: 'Debe', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
+    { accessorKey: 'haber', header: 'Haber', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
 ]
 
 const totales = computed(() => totalesPartida(props.asiento.movimientos))
@@ -67,7 +67,10 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
             <template #cuenta_codigo-cell="{ row }">
                 <div class="flex min-w-0 flex-col">
                     <span class="font-mono text-xs text-muted">{{ row.original.cuenta_codigo }}</span>
-                    <span class="truncate text-sm">{{ row.original.cuenta_nombre }}<template v-if="row.original.cliente_id"> · cliente {{ row.original.cliente_id }}</template></span>
+                    <span class="text-sm whitespace-normal">{{ row.original.cuenta_nombre }}<template v-if="row.original.cliente_id"> · cliente {{ row.original.cliente_id }}</template></span>
+                    <span class="text-xs tabular-nums text-muted sm:hidden">
+                        {{ montoLado(row.original.debe) ? `Debe ${montoLado(row.original.debe)}` : `Haber ${montoLado(row.original.haber)}` }}
+                    </span>
                 </div>
             </template>
             <template #debe-cell="{ row }">
@@ -78,8 +81,8 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
             </template>
         </UTable>
 
-        <footer class="flex items-center justify-end gap-4 border-t border-default pt-2 text-sm">
-            <span class="text-muted">Totales</span>
+        <footer class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 border-t border-default pt-2 text-sm">
+            <span class="text-muted">Debe / Haber</span>
             <span
                 class="tabular-nums font-medium"
                 data-prueba="total-debe"
