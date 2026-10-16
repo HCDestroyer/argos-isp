@@ -61,9 +61,19 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
 | Datos de depósito: cuentas de A3 e instrucciones de pago del panel (`GET /portal/empresa`) | `app/components/corte/DatosDeposito.vue` |
-| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante y promesa (día 4) deshabilitadas; contacto por teléfono o correo | `app/pages/corte.vue` |
+| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante deshabilitado (siguiente tanda); "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
 | Estado en vivo: `GET /api/v1/portal/estado` cada 5 s hasta 2 min, tras una acción del cliente ("Ya pagué: revisar mi servicio"; luego comprobante, promesa y pago), al volver a la pestaña o con promesa activa. Al ver `activo`: "Ya tienes servicio" y "Seguir navegando" (`NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL`) | `app/composables/useEstadoServicio.ts`, `app/components/corte/EstadoEnVivo.vue`, `app/components/corte/ServicioReactivado.vue` |
 | Fixtures tipados contra el contrato (`?fixture=reactivacion` simula la reactivación) | `fixtures/corte.ts` |
+
+### Promesa de pago (tarea 4)
+
+| Pieza | Dónde |
+| --- | --- |
+| Modal "Solicitar promesa de pago" (en `/corte` por IP y en `/cuenta` con `servicioId` y la sesión): al abrir lee `GET /portal/promesas/condiciones` y muestra los límites antes de enviar (plazo y fecha máxima, monto máximo, abono inicial, si requiere aprobación); prellena la fecha máxima y el saldo vencido | `app/components/promesa/Solicitar.vue`, `useSolicitudPromesa` en `app/composables/usePromesas.ts` |
+| `UForm` + zod espejo de `solicitarPromesaValidator` más los límites leídos (la decisión es del backend); un 422 de la API queda en su campo | `app/utils/promesa.ts` |
+| `POST /portal/promesas` con `Idempotency-Key` (UUID v4 con `getRandomValues`: `randomUUID` no existe por HTTP); la misma clave en el reintento de un envío sin respuesta, otra cuando la API respondió | `useSolicitudPromesa().solicitar`, `claveIdempotencia` |
+| **Aprobada**: cierra el modal, aviso en la página y el estado en vivo hasta "Ya tienes servicio" (`/corte`); en `/cuenta` recarga la cuenta y dice "Ya tienes servicio" si el servicio quedó activo. **Rechazada**: el `motivo` de la API en palabras del cliente y "Cambiar fecha o monto". **Pendiente**: aviso en el modal y en la página; no ofrece otra | `app/pages/corte.vue`, `app/pages/cuenta.vue` |
+| Fixtures: `?promesa=` (`aprobada`, `rechazada`, `pendiente_aprobacion`, `con_promesa`) (por defecto aprobada; `fijarPromesaFixture` en pruebas) | `fixtures/promesas.ts`, `fixtures/index.ts` |
 
 Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos personales completos.
 

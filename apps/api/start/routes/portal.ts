@@ -14,22 +14,26 @@ import {
     EstadoPortal,
     PlantillaDocumento,
     PortalContacto,
+    PortalCondicionesPromesa,
     PortalCuenta,
     PortalFactura,
     PortalFacturaDetalle,
     PortalPago,
     PortalPromesa,
+    PortalPromesaSolicitada,
     PortalSesion,
     PortalSolicitudCodigo,
     QuienSoy,
 } from '#portal/esquemas'
 import {
+    condicionesPromesaValidator,
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
     solicitarCodigoValidator,
+    solicitarPromesaValidator,
     verificarCodigoValidator,
 } from '#portal/validators'
 import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
@@ -58,6 +62,14 @@ import {
     type DocumentoPdf,
 } from '#portal/documentos/render'
 import { VARIABLES_AVISO_COBRO, vistaDeEjemplo } from '#portal/documentos/variables'
+import {
+    condicionesPromesa,
+    errorParaCliente,
+    promesaParaCliente,
+    servicioDeLaPeticion,
+    venceAlFinalDelDia,
+} from '#portal/promesas'
+import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
 
@@ -396,6 +408,71 @@ const documentos: Ruta[] = [
     }),
 ]
 
+const SOBRE_LA_IDENTIFICACION =
+    'Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` ' +
+    'si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, ' +
+    '401 sin ella) y que el servicio sea del cliente (404 si no).'
+
+const promesas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/promesas/condiciones',
+        operacion: 'portalPromesaCondiciones',
+        resumen: 'Límites de una promesa de pago desde el portal (antes de enviarla)',
+        descripcion:
+            'Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si ' +
+            'requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las ' +
+            `dice el resultado de \`POST /portal/promesas\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        query: condicionesPromesaValidator,
+        respuesta: { status: 200, descripcion: 'Condiciones', esquema: PortalCondicionesPromesa },
+        handler: async (ctx, { query }) => {
+            const ip = await ipDelCliente(ctx, 'promesas-condiciones')
+            return condicionesPromesa(await servicioDeLaPeticion(ctx, ip, query.servicio_id))
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/promesas',
+        operacion: 'portalSolicitarPromesa',
+        resumen: 'El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)',
+        descripcion:
+            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa ' +
+            'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
+            '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
+            '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
+            `pasó. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        idempotente: true,
+        permiso: null,
+        cuerpo: solicitarPromesaValidator,
+        respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: PortalPromesaSolicitada },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'promesas')
+            const servicioId = await servicioDeLaPeticion(ctx, ip, cuerpo.servicio_id)
+            try {
+                const promesa = await new CrearPromesaPago().execute(
+                    {
+                        servicio_id: servicioId,
+                        vence_en: venceAlFinalDelDia(cuerpo.vence_el),
+                        monto: cuerpo.monto,
+                        canal: 'portal',
+                    },
+                    ctx.contextoAccion('portal'),
+                )
+                return promesaParaCliente(promesa)
+            } catch (error) {
+                throw errorParaCliente(error)
+            }
+        },
+    }),
+]
+
 const empresa: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -441,6 +518,6 @@ const empresa: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas, ...documentos, ...empresa]
+const portal: Ruta[] = [...publicas, ...autenticadas, ...promesas, ...documentos, ...empresa]
 
 export default portal

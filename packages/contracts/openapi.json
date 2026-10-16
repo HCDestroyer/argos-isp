@@ -7833,6 +7833,160 @@
           }
         },
         "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalSolicitarPromesa",
+        "summary": "El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)",
+        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "vence_el": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo con la sesión del portal; sin él se identifica por la IP de origen"
+                  }
+                },
+                "required": [
+                  "vence_el",
+                  "monto"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Promesa evaluada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalPromesaSolicitada"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/promesas/condiciones": {
+      "get": {
+        "operationId": "portalPromesaCondiciones",
+        "summary": "Límites de una promesa de pago desde el portal (antes de enviarla)",
+        "description": "Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo con la sesión del portal; sin él se identifica por la IP de origen",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Condiciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCondicionesPromesa"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
       }
     },
     "/api/v1/portal/quien-soy": {
@@ -15651,6 +15805,139 @@
           }
         }
       },
+      "PortalCondicionesPromesa": {
+        "type": "object",
+        "required": [
+          "disponible",
+          "motivo",
+          "promesa_abierta",
+          "fecha_minima",
+          "fecha_maxima",
+          "plazo_max_dias",
+          "monto_maximo",
+          "monto_sugerido",
+          "abono_inicial",
+          "requiere_aprobacion"
+        ],
+        "properties": {
+          "disponible": {
+            "type": "boolean",
+            "description": "Se puede enviar una solicitud ahora"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no está disponible, en palabras del cliente"
+          },
+          "promesa_abierta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "estado",
+              "vence_en",
+              "monto"
+            ],
+            "properties": {
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "activa",
+                  "pendiente_aprobacion"
+                ]
+              },
+              "vence_en": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          },
+          "fecha_minima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Primer día de pago admitido (hoy en Guatemala)"
+          },
+          "fecha_maxima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Último día de pago admitido: plazo máximo del canal portal y antes de la siguiente factura"
+          },
+          "plazo_max_dias": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "monto_maximo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Deuda pendiente del servicio"
+          },
+          "monto_sugerido": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saldo vencido (o pendiente si no hay vencido)"
+          },
+          "abono_inicial": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "porcentaje",
+              "requerido",
+              "abonado",
+              "faltante"
+            ],
+            "properties": {
+              "porcentaje": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "requerido": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "abonado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "faltante": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "La plantilla exige abonar este porcentaje de la deuda antes de prometer"
+          },
+          "requiere_aprobacion": {
+            "type": "boolean",
+            "description": "La promesa quedará pendiente de aprobación"
+          }
+        }
+      },
       "PortalContacto": {
         "type": "object",
         "required": [
@@ -16009,6 +16296,53 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PortalPromesaSolicitada": {
+        "type": "object",
+        "required": [
+          "id",
+          "resultado",
+          "vence_en",
+          "monto",
+          "motivo",
+          "servicio_estado"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion"
+            ]
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "motivo": {
+            "type": "string",
+            "description": "Resultado en palabras del cliente (nunca el código de la regla)"
+          },
+          "servicio_estado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstadoServicio"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estado del servicio tras la promesa (solo si quedó aprobada)"
           }
         }
       },

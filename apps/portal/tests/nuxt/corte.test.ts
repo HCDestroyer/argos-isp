@@ -32,7 +32,7 @@ describe('página /corte', () => {
 
         expect(boton(wrapper, 'Pagar en línea')?.attributes('disabled')).toBeDefined()
         expect(boton(wrapper, 'Subir comprobante')?.attributes('disabled')).toBeDefined()
-        expect(boton(wrapper, 'Solicitar promesa')?.attributes('disabled')).toBeDefined()
+        expect(boton(wrapper, 'Solicitar promesa')?.attributes('disabled')).toBeUndefined()
         expect(boton(wrapper, 'Ver datos de depósito')?.attributes('disabled')).toBeUndefined()
         expect(texto).toContain('Llamar a soporte: 7765-4321')
     })

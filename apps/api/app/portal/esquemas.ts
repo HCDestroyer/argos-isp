@@ -203,6 +203,57 @@ export const PortalPromesa = definirEsquema(
     }),
 )
 
+export const PortalCondicionesPromesa = definirEsquema(
+    'PortalCondicionesPromesa',
+    objeto({
+        disponible: { ...booleano, description: 'Se puede enviar una solicitud ahora' },
+        motivo: { ...nulable(texto), description: 'Por qué no está disponible, en palabras del cliente' },
+        promesa_abierta: nulable(
+            objeto({
+                estado: enumerado(['activa', 'pendiente_aprobacion']),
+                vence_en: instante,
+                monto: Dinero,
+            }),
+        ),
+        fecha_minima: { ...nulable(fecha), description: 'Primer día de pago admitido (hoy en Guatemala)' },
+        fecha_maxima: {
+            ...nulable(fecha),
+            description:
+                'Último día de pago admitido: plazo máximo del canal portal y antes de la siguiente factura',
+        },
+        plazo_max_dias: nulable({ ...entero, minimum: 0 }),
+        monto_maximo: { ...nulable(Dinero), description: 'Deuda pendiente del servicio' },
+        monto_sugerido: { ...nulable(Dinero), description: 'Saldo vencido (o pendiente si no hay vencido)' },
+        abono_inicial: {
+            ...nulable(
+                objeto({
+                    porcentaje: { ...entero, minimum: 1, maximum: 100 },
+                    requerido: Dinero,
+                    abonado: Dinero,
+                    faltante: Dinero,
+                }),
+            ),
+            description: 'La plantilla exige abonar este porcentaje de la deuda antes de prometer',
+        },
+        requiere_aprobacion: { ...booleano, description: 'La promesa quedará pendiente de aprobación' },
+    }),
+)
+
+export const PortalPromesaSolicitada = definirEsquema(
+    'PortalPromesaSolicitada',
+    objeto({
+        id,
+        resultado: enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
+        vence_en: instante,
+        monto: Dinero,
+        motivo: { ...texto, description: 'Resultado en palabras del cliente (nunca el código de la regla)' },
+        servicio_estado: {
+            ...nulable(EstadoServicio),
+            description: 'Estado del servicio tras la promesa (solo si quedó aprobada)',
+        },
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Configuración de empresa (tarea 9)
