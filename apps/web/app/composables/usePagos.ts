@@ -2,10 +2,14 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type Pago = Schema<'Pago'>
 export type MetodoPago = Pago['metodo']
+export type EstadoPago = Pago['estado']
 /** Cuerpo exacto de `POST /pagos` según `packages/contracts` (A3). */
 export type DatosPago = paths['/api/v1/pagos']['post']['requestBody']['content']['application/json']
+export type FiltrosPagos = Omit<NonNullable<paths['/api/v1/pagos']['get']['parameters']['query']>, 'cursor'>
 
-/** Pagos: registro (cobro) y consulta. */
+export const LIMITE_PAGOS = 25
+
+/** Pagos: registro (cobro), consulta y anulación. */
 export function usePagos() {
     const api = useApi()
 
@@ -25,5 +29,36 @@ export function usePagos() {
         return resolver(api.GET('/api/v1/pagos/{id}', { params: { path: { id } } }))
     }
 
-    return { registrar, ver }
+    function listar(filtros: FiltrosPagos = {}, cursor?: string): Promise<Resultado<Pagina<Pago>>> {
+        const query: FiltrosPagos & { cursor?: string } = { limit: LIMITE_PAGOS, ...filtros }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/pagos', { params: { query } }))
+    }
+
+    /**
+     * `POST /pagos/:id/anular` con motivo (`pagos.anular`): la API revierte el asiento, devuelve
+     * el saldo a las facturas y vuelve a evaluar los servicios.
+     */
+    function anular(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Pago>> {
+        return resolver(api.POST('/api/v1/pagos/{id}/anular', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    /**
+     * Pagos que aplicaron a una factura. `GET /pagos` no filtra por factura (pedido a A3), así
+     * que se leen los últimos 200 del cliente y se filtran por `aplicaciones[].factura_id`.
+     */
+    async function deFactura(clienteId: number, facturaId: number): Promise<Resultado<Pago[]>> {
+        const resultado = await listar({ cliente_id: clienteId, limit: 200 })
+        if (!resultado.ok) {
+            return resultado
+        }
+        return { ok: true, data: resultado.data.data.filter(p => p.aplicaciones.some(a => a.factura_id === facturaId)) }
+    }
+
+    return { registrar, ver, listar, anular, deFactura }
 }

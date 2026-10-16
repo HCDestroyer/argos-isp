@@ -4,6 +4,7 @@ export type Servicio = Schema<'Servicio'>
 export type CredencialesPpp = Schema<'CredencialesPpp'>
 export type DatosServicio = paths['/api/v1/servicios']['post']['requestBody']['content']['application/json']
 export type ModoIpv6 = Servicio['ipv6_modo']
+export type TramoAsignacion = Schema<'TramoAsignacion'>
 export type FiltrosServicios = Omit<NonNullable<paths['/api/v1/servicios']['get']['parameters']['query']>, 'cursor'>
 
 /** Tamaño de página de la lista de servicios. */
@@ -58,6 +59,15 @@ export function useServicios() {
         }))
     }
 
+    /** Historial de asignaciones (router, plan, IPv4, prefijos), del tramo más reciente al más viejo. */
+    function asignaciones(id: number, cursor?: string): Promise<Resultado<Pagina<TramoAsignacion>>> {
+        const query: { limit: number, cursor?: string } = { limit: 20 }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/servicios/{id}/asignaciones', { params: { path: { id }, query } }))
+    }
+
     /** Usuario y contraseña PPPoE en claro (`servicios.ver_credenciales`). Cada consulta queda auditada. */
     function credenciales(id: number): Promise<Resultado<CredencialesPpp>> {
         return resolver(api.GET('/api/v1/servicios/{id}/credenciales', { params: { path: { id } } }))
@@ -74,5 +84,5 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, credenciales, ejecutar }
+    return { listar, ver, crear, credenciales, ejecutar, asignaciones }
 }
