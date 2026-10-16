@@ -82,6 +82,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 | Prueba de carga: 200 reconexiones PPPoE simultáneas dual-stack | A2 + PM | Cero rechazos por timeout; p95 de autorización < 100 ms |
 | IPv6 por DUID (DHCPv6-PD estático) y prefijo estático ruteado vía API RouterOS | A6 | Un cliente sin PPPoE recibe su /56 y navega |
 | **Servicios WISP sin PPPoE** (decisión del PM, día 4): conexión `ip_estatica` y `dhcp_fija` (lease por MAC), velocidad por cola simple, corte por address-list `suspendidos` vía API REST de RouterOS, amarre IP-MAC opcional. Contrato en `.claude/integration/contratos/routeros.md` | A1 (modelo) + A2 (control del router) + A4 (alta) + A6 (`lab.rsc`) | Un cliente con IP estática y otro con DHCP fijo se limitan, cortan (llegan a `/corte`) y reactivan por evento en menos de 30 s; el reconciliador corrige una cola o address-list borrada a mano |
+| **Control de velocidad** (decisión del PM, día 4): por router `simple` (cola por servicio) o `arbol_pcq` (queue tree + PCQ por plan), reuso `1:N` por plan con colas padre recalculadas por evento, CIR/MIR, ráfaga y prioridad, IPv6 incluido, FastTrack excluido. Contrato en `.claude/integration/contratos/velocidad.md` | A1 (plan, router, función de rate-limit) + A2 (`aaa`, perfiles PPP y dispatcher) + A4 (formularios de plan y router, vista del árbol) + A6 (`lab.rsc`, alerta de colas) | En el laboratorio, 4 clientes de un plan 1:4 de 20 Mbps comparten 20 Mbps; uno solo alcanza 20 Mbps; el límite aplica también por IPv6; cambiar el modo del router no deja colas huérfanas |
 | Modo pool del router para IPv6 (`Framed-IPv6-Pool`, `Delegated-IPv6-Pool`) | A2 | El accounting registra el prefijo que entregó el router |
 | Telegram: bot, vinculación desde el portal, avisos al cliente y alertas internas | A6 | Cliente vinculado recibe su recordatorio; el equipo recibe alerta si `aaa` no responde |
 | Reportes: cartera vencida por antigüedad, ingresos por periodo y método, facturado vs cobrado, cobranza y cierre de caja, IVA del periodo, promesas, altas y bajas, egresos; exportación Excel y CSV | A3 | Cada reporte cuadra contra el libro con datos de prueba |
@@ -132,7 +133,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 5. Operaciones de campo: órdenes de trabajo (instalación, visita, retiro), agenda, técnicos, saga de instalación completada, tickets y departamentos.
 6. Migraciones masivas entre routers: plan, vista previa con conflictos, lotes con pausas, verificación, reversión.
 7. Contabilidad avanzada: estado de resultados, balance general, conciliación bancaria, centros de costo, exportación al software del contador. Notas de crédito NCRE en FEL.
-8. Cobro: agentes y bancos externos, débito automático con tarjeta tokenizada. App de técnicos (PWA sin conexión). Reuso 1:N con colas estáticas.
+8. Cobro: agentes y bancos externos, débito automático con tarjeta tokenizada. App de técnicos (PWA sin conexión). (El reuso 1:N pasó a la semana 2.)
 
 ## Riesgos
 
