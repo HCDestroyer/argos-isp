@@ -276,6 +276,9 @@ test.group('notify · vigilancia de crons', (group) => {
 
     test('cron horario atrasado: avisa una vez y avisa al volver a correr', async ({ assert }) => {
         const cola = new ColaFalsa()
+        // Recién desplegado (migraciones de esta corrida): un cron que no corrió aún no es una falla
+        const r0 = await ejecutarVigilancia(cola, DateTime.utc().plus({ minutes: 5 }).toISO()!)
+        assert.notInclude(r0.atrasados, 'cron:facturas.vencer_pendientes')
         // Tres horas en el futuro: la última corrida real (si hubo) quedó atrás del límite.
         const tarde = DateTime.utc().plus({ hours: 3 }).toISO()!
         const r1 = await ejecutarVigilancia(cola, tarde)

@@ -58,6 +58,8 @@ x-api-env: &api-env
   NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
   # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+  # Bearer de GET /metrics (Prometheus, perfil monitoreo). Vacío = /metrics responde 404.
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
   AAA_PPP_KEY: ${AAA_PPP_KEY:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
   # /portal/quien-soy: confiar en X-Forwarded-For solo si la conexión viene de la red de compose
@@ -484,6 +486,37 @@ services:
       retries: 5
       start_period: 10s
 
+  # Perfil monitoreo: Prometheus con las métricas de la API y las reglas de infra/monitoring.
+  prometheus:
+    profiles: [monitoreo]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    # El token no puede ir en prometheus.yml (no expande variables): se escribe a un archivo al arrancar.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        printf '%s' "$$METRICS_TOKEN" > /tmp/metrics_token &&
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml
+        --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=$${PROMETHEUS_RETENCION:-30d}
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      PROMETHEUS_RETENCION: ${PROMETHEUS_RETENCION:-30d}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/reglas.yml:/etc/prometheus/reglas.yml:ro
+      - promdata:/prometheus
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT_HOST:-9090}:9090
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9090/-/ready']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 # Red por defecto con subred fija: PORTAL_PROXIES_CONFIABLES de la API la usa para confiar en el
 # X-Forwarded-For que agrega el portal. IPv6 en la red: COMPOSE_IPV6=true (perfil lab, ver infra/README.md).
 networks:
@@ -497,3 +530,4 @@ networks:
 volumes:
   pgdata:
   redisdata:
+  promdata:

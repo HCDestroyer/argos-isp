@@ -32,7 +32,12 @@ export class ConsumidorAlertas implements ConsumidorEventos {
         await this.cola.encolar(resultado.encolar)
         if (resultado.alerta) {
             logger.warn(
-                { outboxId: evento.id, evento: evento.evento, incidenteId: resultado.incidenteId },
+                {
+                    outboxId: evento.id,
+                    evento: evento.evento,
+                    incidenteId: resultado.incidenteId,
+                    requestId: evento.requestId ?? null,
+                },
                 'Alerta interna al equipo',
             )
         }

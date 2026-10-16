@@ -75,10 +75,15 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
             if (envio?.estado === 'encolado') resultado.encolar.push(envio.id)
         }
 
+        // Un cron que nunca corrió se mide desde el último despliegue (última migración): recién
+        // levantado el sistema, billing-worker aún no tuvo tiempo de correr y no es una falla.
+        const despliegue = await ultimoDespliegue(t.trx)
         for (const cron of CRONS_VIGILADOS) {
             const clave = `cron:${cron.accion}`
             const ultima = await ultimaCorrida(t.trx, cron.accion, ahora)
             const limite = ahora.minus({ minutes: cron.cadaMin + tolerancia })
+            const referencia = ultima ?? despliegue
+            if (!ultima && referencia && referencia >= limite) continue
             if (!ultima || ultima < limite) {
                 resultado.atrasados.push(clave)
                 const { incidente, nuevo } = await abrirIncidente(t.trx, {
@@ -188,6 +193,14 @@ async function ultimaCorrida(
         .where('created_at', '<=', ahora.toJSDate())
         .max('created_at as ultima')
         .first()) as { ultima: Date | null } | null
+    return fila?.ultima ? DateTime.fromJSDate(fila.ultima) : null
+}
+
+/** Instante de la última migración aplicada (`adonis_schema.migration_time`). */
+async function ultimoDespliegue(trx: TransactionClientContract): Promise<DateTime | null> {
+    const fila = (await trx.from('adonis_schema').max('migration_time as ultima').first()) as {
+        ultima: Date | null
+    } | null
     return fila?.ultima ? DateTime.fromJSDate(fila.ultima) : null
 }
 

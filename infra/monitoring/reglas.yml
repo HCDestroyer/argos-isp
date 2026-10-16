@@ -1,0 +1,50 @@
+# Reglas de alerta de Prometheus. Las alertas de negocio que el equipo debe ver en Telegram las
+# manda notify (aaa caído, CoA fallido, caja con diferencia, crons atrasados); estas cubren lo que
+# notify no puede ver de sí mismo (la API o Redis caídos, colas atascadas).
+groups:
+  - name: argosisp
+    rules:
+      - alert: ApiSinMetricas
+        expr: up{job="api"} == 0
+        for: 2m
+        annotations:
+          summary: La API no responde /metrics
+
+      - alert: SeccionDeMetricasFallando
+        expr: argosisp_metricas_error == 1
+        for: 5m
+        annotations:
+          summary: 'No se puede leer la sección {{ $labels.seccion }} (Postgres o Redis)'
+
+      - alert: ColaAtascada
+        expr: argosisp_cola_trabajos{estado="waiting"} > 500
+        for: 10m
+        annotations:
+          summary: 'Cola {{ $labels.cola }} con {{ $value }} trabajos esperando'
+
+      - alert: TrabajosFallidos
+        expr: increase(argosisp_cola_trabajos{estado="failed"}[30m]) > 20
+        annotations:
+          summary: 'Cola {{ $labels.cola }}: más de 20 trabajos fallidos en 30 min'
+
+      - alert: GrupoDeEventosAtrasado
+        expr: argosisp_eventos_lag > 1000 or argosisp_eventos_pendientes > 100
+        for: 5m
+        annotations:
+          summary: 'El grupo {{ $labels.grupo }} no consume argos:eventos'
+
+      - alert: OutboxSinPublicar
+        expr: argosisp_outbox_sin_publicar > 100
+        for: 5m
+        annotations:
+          summary: 'audit.outbox acumula {{ $value }} eventos sin publicar (¿relay detenido?)'
+
+      - alert: CronDeFacturacionAtrasado
+        expr: time() - argosisp_cron_ultima_ejecucion_timestamp_seconds{cron=~"facturas.generar|facturas.vencer_pendientes"} > 2 * 3600
+        annotations:
+          summary: '{{ $labels.cron }} no corre hace más de 2 h'
+
+      - alert: CronDeNotifyAtrasado
+        expr: time() - argosisp_cron_ultima_ejecucion_timestamp_seconds{cron=~"notificaciones.recordatorios|notificaciones.vigilar_crons"} > 900
+        annotations:
+          summary: '{{ $labels.cron }} no corre hace más de 15 min (¿worker de notify detenido?)'
