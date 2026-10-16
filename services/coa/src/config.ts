@@ -6,6 +6,18 @@ export interface PerfilSuspendido {
     filterId: string
 }
 
+/**
+ * Cómo se suspende una sesión que tiene IPv6 (`prefijo_enlace_v6` o `prefijo_delegado_v6`):
+ * - `coa` (por defecto): CoA con el perfil de corte, sin reconectar. IPv6 queda bloqueado por
+ *   `Filter-Id`, pero RouterOS no agrega el /64 ni el /56 a la address-list IPv6 por CoA, así que el
+ *   router no puede hacer dst-nat de IPv6 a `/corte` (TCP recibe reset).
+ * - `disconnect`: Disconnect-Request; al reconectar `aaa` entrega `Mikrotik-Group=suspendido` y el
+ *   perfil PPP mete IPv4, /64 y /56 en `suspendidos` (IPv4 e IPv6), con lo que `lab.rsc` puede
+ *   redirigir HTTP por IPv6 al portal. Las sesiones solo IPv4 siguen por CoA.
+ * Ver `infra/mikrotik/README.md` ("Corte IPv6 hacia /corte").
+ */
+export type ModoSuspensionIpv6 = 'coa' | 'disconnect'
+
 export interface Config {
     port: number
     host: string
@@ -29,6 +41,7 @@ export interface Config {
         origen: string | undefined
     }
     suspendido: PerfilSuspendido
+    suspenderConIpv6: ModoSuspensionIpv6
 }
 
 function numero(valor: string | undefined, porDefecto: number): number {
@@ -36,6 +49,12 @@ function numero(valor: string | undefined, porDefecto: number): number {
     const n = Number(valor)
     if (!Number.isFinite(n)) throw new Error(`valor numérico inválido: ${valor}`)
     return n
+}
+
+function modoSuspensionIpv6(valor: string | undefined): ModoSuspensionIpv6 {
+    if (valor === undefined || valor === '' || valor === 'coa') return 'coa'
+    if (valor === 'disconnect') return 'disconnect'
+    throw new Error(`COA_SUSPENDER_CON_IPV6 inválido: ${valor} (coa | disconnect)`)
 }
 
 export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -74,5 +93,6 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             addressList: env.COA_SUSPENDIDO_ADDRESS_LIST ?? 'suspendidos',
             filterId: env.COA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',
         },
+        suspenderConIpv6: modoSuspensionIpv6(env.COA_SUSPENDER_CON_IPV6),
     }
 }

@@ -49,16 +49,29 @@ export async function liberarIpv4(
     return filas[0]?.ip ?? null
 }
 
+/** 422 en `red_ipv4_id` si la red no existe o no es del router. */
+async function exigirRedDelRouter(trx: TransactionClientContract, redId: number, routerId: number) {
+    const red = (await trx.from('network.redes_ipv4').where('id', redId).select('router_id').first()) as {
+        router_id: number
+    } | null
+    if (!red || Number(red.router_id) !== routerId) {
+        const mensaje = red ? 'La red IPv4 no es del router del servicio' : 'La red IPv4 no existe'
+        throw new ValidacionFallida([{ field: 'red_ipv4_id', message: mensaje, rule: 'red' }], mensaje)
+    }
+}
+
 /**
- * Asigna una IPv4 al servicio en el router: la pedida (`ip`) o la primera libre. Si el servicio ya
- * tiene esa misma IP vigente en el router, la conserva. Lanza 422 si no hay IPs o la IP no es de
- * una red del router, y 409 si está ocupada por otro servicio.
+ * Asigna una IPv4 al servicio en el router: la pedida (`ip`) o la primera libre (de `redId` si
+ * viene; si no, de cualquier red del router). Si el servicio ya tiene esa misma IP vigente en el
+ * router (o una de `redId`), la conserva. Lanza 422 si no hay IPs, si la IP no es de una red del
+ * router (o de `redId`) o si `redId` no es del router, y 409 si la IP está ocupada por otro servicio.
  */
 export async function asignarIpv4(
     trx: TransactionClientContract,
-    entrada: { servicioId: number; routerId: number; ip?: string | null },
+    entrada: { servicioId: number; routerId: number; ip?: string | null; redId?: number | null },
 ): Promise<Ipv4Asignada> {
     await bloquearRouter(trx, entrada.routerId)
+    if (entrada.redId) await exigirRedDelRouter(trx, entrada.redId, entrada.routerId)
     const actual = await ipv4Vigente(trx, entrada.servicioId)
 
     if (entrada.ip) {
@@ -75,6 +88,18 @@ export async function asignarIpv4(
             throw new ValidacionFallida(
                 [{ field: 'ipv4', message: 'La IP no pertenece a ninguna red IPv4 del router', rule: 'red' }],
                 'La IP no pertenece a ninguna red IPv4 del router',
+            )
+        }
+        if (entrada.redId && red.id !== entrada.redId) {
+            throw new ValidacionFallida(
+                [
+                    {
+                        field: 'ipv4',
+                        message: 'La IP no pertenece a la red indicada en red_ipv4_id',
+                        rule: 'red',
+                    },
+                ],
+                'La IP no pertenece a la red indicada en red_ipv4_id',
             )
         }
         const reservada = red.es_red || red.es_broadcast || red.es_gateway
@@ -118,7 +143,7 @@ export async function asignarIpv4(
             .where('id', actual.red_id)
             .where('router_id', entrada.routerId)
             .first()
-        if (enRouter) return actual
+        if (enRouter && (!entrada.redId || Number(actual.red_id) === entrada.redId)) return actual
         await liberarIpv4(trx, entrada.servicioId)
     }
 
@@ -131,6 +156,7 @@ export async function asignarIpv4(
                      ELSE (2::bigint ^ (32 - masklen(r.cidr)))::bigint - 2 END
            ) AS g(n)
           WHERE r.router_id = ?
+            AND (?::bigint = 0 OR r.id = ?::bigint)
             AND (r.gateway IS NULL OR set_masklen(network(r.cidr)::inet, 32) + g.n <> set_masklen(r.gateway, 32))
             AND NOT EXISTS (
                 SELECT 1 FROM network.ipv4_asignaciones a
@@ -138,9 +164,15 @@ export async function asignarIpv4(
             )
           ORDER BY (r.tipo = 'estatico') DESC, r.id, g.n
           LIMIT 1`,
-        [entrada.routerId],
+        [entrada.routerId, entrada.redId ?? 0, entrada.redId ?? 0],
     )) as { rows: Array<{ red_id: number; ip: string }> }
     const libre = rows[0]
+    if (!libre && entrada.redId) {
+        throw new ValidacionFallida(
+            [{ field: 'red_ipv4_id', message: 'La red IPv4 no tiene IPs libres', rule: 'llena' }],
+            'La red IPv4 indicada está llena',
+        )
+    }
     if (!libre) {
         throw new ReglaNegocio('El router no tiene IPv4 libres en sus redes', 'sin_ipv4_libres')
     }

@@ -10,6 +10,7 @@ import { cifrar } from '#shared/cifrado'
 import { insertarEvento } from '#shared/outbox'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
+import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { contextoPrueba, unico } from '#tests/ayudas'
 import { crearClienteFila, crearPlanFila, crearRouterFila, crearServicioFila } from '#tests/core/fabricas'
 
@@ -128,7 +129,12 @@ async function escenario(nasIp: string) {
         },
         contextoPrueba(),
     )
-    return { servicioId, userPpp, acctSessionId, routerId }
+    const sesion = (await db
+        .from('network.sesiones')
+        .where('acct_session_id', acctSessionId)
+        .select('id')
+        .firstOrFail()) as { id: number }
+    return { servicioId, userPpp, acctSessionId, routerId, sesionId: Number(sesion.id) }
 }
 
 test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Disconnect)', (group) => {
@@ -141,7 +147,11 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
     async function relayar(servicioId: number, desdeId = 0): Promise<number[]> {
         const filas = (await db
             .from('audit.outbox')
-            .whereIn('evento', ['servicio.estado_cambiado', 'servicio.config_cambiada'])
+            .whereIn('evento', [
+                'servicio.estado_cambiado',
+                'servicio.config_cambiada',
+                'sesion.desconexion_solicitada',
+            ])
             .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [servicioId])
             .where('id', '>', desdeId)
             .orderBy('id')) as Array<{
@@ -394,5 +404,32 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
                 .first(),
         )
         assert.equal(fallido.payload.error, 'timeout')
+    })
+
+    test('desconexión manual (DesconectarSesion) → Disconnect-Request a la sesión y audit.red con el motivo', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        const ultimo = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+        await new DesconectarSesion().execute(
+            { id: e.sesionId, motivo: 'reinicio pedido por el cliente' },
+            contextoPrueba(),
+        )
+        const [eventoId] = await relayar(e.servicioId, Number(ultimo.id ?? 0))
+        const inicio = Date.now()
+        const { final, filas } = await respuestaFinal(eventoId!)
+        assert.isBelow(Date.now() - inicio, 5000)
+        assert.lengthOf(filas, 1)
+        assert.equal(final.tipo, 'disconnect')
+        assert.isTrue(final.ok)
+        assert.equal(final.respuesta.codigo, 'Disconnect-ACK')
+        assert.equal(Number(final.servicio_id), e.servicioId)
+        assert.equal(final.comando.evento, 'sesion.desconexion_solicitada')
+        assert.equal(final.comando.razon, 'manual: reinicio pedido por el cliente')
+        const paquete = await esperarHasta<PaqueteNas>(() =>
+            nasAck.json<PaqueteNas>().find((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
+        )
+        assert.equal(paquete.codigo, 'Disconnect-Request')
+        assert.isTrue(paquete.firmaValida)
     })
 })

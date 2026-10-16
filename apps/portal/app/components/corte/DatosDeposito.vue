@@ -1,12 +1,18 @@
 <script setup lang="ts">
 /**
- * Cuentas bancarias para pagar por depósito. Hoy salen de la configuración del portal
- * (`NUXT_PUBLIC_DEPOSITO_*`); en la tarea 9 se configuran desde el panel.
+ * Cómo pagar por depósito: cuentas bancarias activas (fuente única `billing.cuentas_bancarias`, A3)
+ * e instrucciones de pago, ambas configuradas en el panel (`GET /portal/empresa`).
+ *
+ * Sin cuentas no se muestra la sección de cuentas (nunca datos inventados). Si no se pudo leer
+ * la configuración, error con "Reintentar".
  */
 const open = defineModel<boolean>('open', { default: false })
 
-const { deposito, empresa } = useRuntimeConfig().public
+const { empresa, problema, cargando, recargar } = useEmpresa()
 const toast = useToast()
+
+const cuentas = computed(() => empresa.value?.cuentas_deposito ?? [])
+const contacto = computed(() => enlacesContacto(empresa.value).find(enlace => enlace.tipo === 'telefono') ?? null)
 
 async function copiar(numero: string) {
     try {
@@ -23,15 +29,35 @@ async function copiar(numero: string) {
     <UModal
         v-model:open="open"
         title="Datos para depósito"
-        description="Deposita a cualquiera de estas cuentas y guarda tu comprobante."
+        :description="cuentas.length > 0
+            ? 'Deposita a cualquiera de estas cuentas y guarda tu comprobante.'
+            : 'Así puedes pagar tu saldo.'"
     >
         <template #body>
             <div
-                v-if="deposito.cuentas.length > 0"
+                v-if="cargando"
+                class="flex flex-col gap-3"
+            >
+                <USkeleton class="h-20 w-full" />
+                <USkeleton class="h-20 w-full" />
+            </div>
+
+            <UAlert
+                v-else-if="problema"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-cloud-off"
+                title="No pudimos cargar los datos de pago"
+                :description="mensajeProblema(problema)"
+                :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => recargar() }]"
+            />
+
+            <div
+                v-else
                 class="flex flex-col gap-3"
             >
                 <div
-                    v-for="cuenta in deposito.cuentas"
+                    v-for="cuenta in cuentas"
                     :key="`${cuenta.banco}-${cuenta.numero}`"
                     class="rounded-lg border border-default p-3"
                     data-testid="cuenta-deposito"
@@ -42,7 +68,7 @@ async function copiar(numero: string) {
                                 {{ cuenta.banco }}
                             </p>
                             <p class="text-sm text-muted">
-                                {{ cuenta.tipo }} · {{ cuenta.titular }}
+                                {{ cuenta.alias }} · {{ cuenta.moneda === 'USD' ? 'Dólares' : 'Quetzales' }}
                             </p>
                             <p class="mt-1 font-mono text-lg tabular-nums text-default break-all">
                                 {{ cuenta.numero }}
@@ -59,23 +85,24 @@ async function copiar(numero: string) {
                 </div>
 
                 <p
-                    v-if="deposito.instrucciones"
+                    v-if="empresa?.instrucciones_pago"
                     class="text-sm text-muted"
+                    data-testid="instrucciones-pago"
                 >
-                    {{ deposito.instrucciones }}
+                    {{ empresa.instrucciones_pago }}
                 </p>
-            </div>
 
-            <UAlert
-                v-else
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-landmark"
-                title="Datos de depósito no disponibles"
-                :description="empresa.telefono
-                    ? `Llámanos al ${empresa.telefono} y te damos los datos de la cuenta.`
-                    : 'Comunícate con nosotros y te damos los datos de la cuenta.'"
-            />
+                <UAlert
+                    v-if="cuentas.length === 0 && !empresa?.instrucciones_pago"
+                    color="neutral"
+                    variant="subtle"
+                    icon="i-lucide-landmark"
+                    title="Datos de depósito no disponibles"
+                    :description="contacto
+                        ? `Llámanos al ${contacto.valor} y te damos los datos de la cuenta.`
+                        : 'Comunícate con nosotros y te damos los datos de la cuenta.'"
+                />
+            </div>
         </template>
     </UModal>
 </template>

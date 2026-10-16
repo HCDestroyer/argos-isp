@@ -26,25 +26,41 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
 import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
+import DesconectarServicio from '#network/sesiones/actions/desconectar_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
+import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
+import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
+import AsignarResponsablePago from '#core/actions/asignar_responsable_pago'
+import QuitarResponsablePago from '#core/actions/quitar_responsable_pago'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
-import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
+import {
+    buscarClientes,
+    dimensionesDeCliente,
+    listarDependientes,
+    listarZonas,
+    verCliente,
+} from '#core/consultas/clientes'
 import { NoEncontrado, Problema } from '#shared/errores'
 import { construirRegistroAaa } from '#core/aaa'
 import { resolverIp } from '#network/consultas/ip'
+import { listarTramos } from '#network/historial'
+import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import {
     AaaServicio,
     AccionAuditoria,
     CambioAuditoria,
     Cliente,
+    ConfiguracionEfectivaServicio,
+    DependientePago,
     CredencialesPpp,
     Me,
     Permiso,
@@ -299,6 +315,103 @@ const clientes: Ruta[] = [
         },
     }),
     definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/vincular-telegram',
+        operacion: 'clientesVincularTelegram',
+        resumen: 'Vincular el chat de Telegram del cliente',
+        descripcion:
+            'Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.vincular_telegram',
+        cuerpo: v.vincularTelegramValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente con el chat vinculado', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new VincularTelegramCliente().execute(
+                { id, chat_id: cuerpo.chat_id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/desvincular-telegram',
+        operacion: 'clientesDesvincularTelegram',
+        resumen: 'Quitar el chat de Telegram del cliente',
+        etiqueta: 'clientes',
+        permiso: 'clientes.desvincular_telegram',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente sin chat de Telegram', esquema: Cliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/responsable-pago',
+        operacion: 'clientesAsignarResponsablePago',
+        resumen: 'Asignar el responsable de pago del cliente',
+        descripcion:
+            'Fija el cliente que paga por este. Un solo nivel: el responsable no puede tener ' +
+            'responsable y un cliente con dependientes no puede tenerlo. 422 si es él mismo, si el ' +
+            'responsable no existe o si se formaría un ciclo o un segundo nivel. Solo sugiere en el ' +
+            'cobro: cualquiera puede pagar cualquier factura.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.asignar_responsable_pago',
+        cuerpo: v.asignarResponsablePagoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente con su responsable de pago', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            // el responsable también debe estar en el alcance; si no existe, la acción responde 422
+            const delResponsable = await dimensionesDeCliente(cuerpo.responsable_id).catch((e: unknown) => {
+                if (e instanceof NoEncontrado) return null
+                throw e
+            })
+            if (delResponsable) exigirAlcance(ctx.alcance, delResponsable)
+            return new AsignarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/quitar-responsable-pago',
+        operacion: 'clientesQuitarResponsablePago',
+        resumen: 'Quitar el responsable de pago del cliente',
+        etiqueta: 'clientes',
+        permiso: 'clientes.quitar_responsable_pago',
+        cuerpo: v.quitarResponsablePagoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente sin responsable de pago', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new QuitarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/dependientes',
+        operacion: 'clientesDependientes',
+        resumen: 'Clientes de los que es responsable de pago',
+        descripcion:
+            'Dependientes con su número de servicios no retirados y el estado resumido. ' +
+            'El cobro (A4) muestra sus facturas debajo del pagador.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.listarDependientesValidator,
+        respuesta: { status: 200, descripcion: 'Página de dependientes', esquema: pagina(DependientePago) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return listarDependientes(id, query, ctx.alcance)
+        },
+    }),
+    definirRuta({
         metodo: 'get',
         ruta: '/zonas',
         operacion: 'zonasListar',
@@ -393,7 +506,8 @@ const servicios: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             const cliente = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => ({ zona: [] }))
             exigirAlcance(ctx.alcance, { router: [cuerpo.router_id], zona: cliente.zona ?? [] })
-            return new CrearServicio().execute(cuerpo, ctx.contextoAccion())
+            // sin plantilla_facturacion_id → plantilla por defecto (app/core/plantilla_por_defecto.ts)
+            return new CrearServicio().execute({ ...cuerpo, plantillaPorDefecto: true }, ctx.contextoAccion())
         },
     }),
     definirRuta({
@@ -408,6 +522,42 @@ const servicios: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
             return verServicio(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/configuracion-efectiva',
+        operacion: 'serviciosConfiguracionEfectiva',
+        resumen: 'Configuración efectiva: plan en su router y plantilla con excepciones aplicadas',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: {
+            status: 200,
+            descripcion: 'Plan efectivo y facturación efectiva del servicio',
+            esquema: ConfiguracionEfectivaServicio,
+        },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return configuracionEfectivaPublica(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/asignaciones',
+        operacion: 'serviciosAsignaciones',
+        resumen: 'Historial de router, plan, IPv4 y prefijos IPv6 del servicio',
+        descripcion:
+            'Tramos del más reciente al más viejo; el vigente tiene `fin: null`. Cada cambio de router, ' +
+            'plan, IPv4 o prefijos cierra un tramo y abre otro.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: v.listarPaginadoValidator,
+        respuesta: { status: 200, descripcion: 'Página de tramos', esquema: pagina(TramoAsignacion) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return listarTramos(id, query)
         },
     }),
     definirRuta({
@@ -480,7 +630,11 @@ const servicios: Ruta[] = [
         'desconectar',
         'serviciosDesconectar',
         'servicios.desconectar',
-        'Desconectar la sesión PPPoE',
+        'Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa)',
+        async (entrada, ctx) => {
+            await new DesconectarServicio().execute(entrada, ctx.contextoAccion())
+            return verServicio(entrada.id)
+        },
     ),
 ]
 

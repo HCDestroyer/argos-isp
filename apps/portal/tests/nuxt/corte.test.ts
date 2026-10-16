@@ -34,7 +34,7 @@ describe('página /corte', () => {
         expect(boton(wrapper, 'Subir comprobante')?.attributes('disabled')).toBeDefined()
         expect(boton(wrapper, 'Solicitar promesa')?.attributes('disabled')).toBeDefined()
         expect(boton(wrapper, 'Ver datos de depósito')?.attributes('disabled')).toBeUndefined()
-        expect(texto).toContain('Contacta a soporte')
+        expect(texto).toContain('Llamar a soporte: 7765-4321')
     })
 
     it('"Pagar en línea" apagado se ve apagado: neutro, sin el azul primario, y dice que llega pronto', async () => {

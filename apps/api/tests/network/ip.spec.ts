@@ -49,10 +49,12 @@ test.group('Red · GET /ip/{ip}', () => {
         const planId = await crearPlanFila({ bajada_limitada_kbps: 1024, subida_limitada_kbps: 512 })
         const clienteId = await crearClienteFila()
         const s = await cuerpo(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: clienteId, router_id: routerId, plan_id: planId }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: routerId,
+                plan_id: planId,
+            }),
             201,
         )
 
