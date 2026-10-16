@@ -356,8 +356,12 @@ test.group('notify · Telegram · webhook del bot', (group) => {
             200,
         )
         assert.isNull(await chatDe(clienteId))
-        const accion = await db.from('audit.acciones').where('request_id', requestId).firstOrFail()
-        assert.equal(accion.accion, 'clientes.desvincular_telegram')
+        // Desvincular anula también los códigos pendientes (otra acción con el mismo request_id)
+        const acciones = await db.from('audit.acciones').where('request_id', requestId).select('accion')
+        assert.include(
+            acciones.map((a) => a.accion),
+            'clientes.desvincular_telegram',
+        )
         await estado(webhook(client, actualizacion(chat, '/estado')), 200)
         assert.match(bot.mensajes()[0]!.text, /^Listo\. Este chat ya no recibirá avisos/)
         assert.match(bot.mensajes()[1]!.text, /^Este chat no está vinculado/)
