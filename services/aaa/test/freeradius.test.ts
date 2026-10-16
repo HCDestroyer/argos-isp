@@ -7,6 +7,8 @@ import type { ColaAccounting, RegistroAccounting } from '../src/accounting.ts'
 import { crearApp } from '../src/app.ts'
 import { cifrar } from '../src/cifrado.ts'
 import { FuenteFixtures, ResolutorServicios } from '../src/fuentes.ts'
+import { leerAtributos } from '../src/radius.ts'
+import { idDerivado } from '../src/request_id.ts'
 import { borrarPrefijo, CLAVE, PERFIL, prefijoDePrueba, redisDePrueba, servicio } from './ayudas.ts'
 import { CONF, exec, IMAGEN_FREERADIUS, motivoSinDocker } from './docker.ts'
 
@@ -51,6 +53,8 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
     const contenedor = `a2-freeradius-prueba-${randomBytes(3).toString('hex')}`
     let app: ReturnType<typeof crearApp>
     const encolados: RegistroAccounting[] = []
+    /** X-Request-Id que mandó FreeRADIUS y el que aaa derivaría del mismo paquete. */
+    const ids: { ruta: string; cabecera: unknown; derivado: string | null }[] = []
     const cola: ColaAccounting = {
         encolar: async (r) => {
             encolados.push(r)
@@ -93,6 +97,13 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
             perfil: PERFIL,
             logLevel: 'silent',
             cola,
+        })
+        app.addHook('preHandler', async (req) => {
+            ids.push({
+                ruta: req.routeOptions.url ?? '',
+                cabecera: req.headers['x-request-id'],
+                derivado: idDerivado(leerAtributos(req.body)),
+            })
         })
         // 0.0.0.0: el contenedor llega al host por host-gateway (sin --network host, sin chocar con 1812 del host).
         await app.listen({ port: 0, host: '0.0.0.0' })
@@ -277,6 +288,28 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
         assert.equal(interino?.bytes_out, '4294967296')
         assert.equal(fin?.duracion_s, 600)
         assert.equal(fin?.causa_fin, 'User-Request')
+        // Mismo request_id en los tres paquetes de la sesión (NAS + Acct-Session-Id).
+        const esperado = idDerivado(
+            new Map([
+                ['NAS-IP-Address', '127.0.0.1'],
+                ['Acct-Session-Id', '81a0000f'],
+            ]),
+        )
+        assert.deepEqual(
+            encolados.map((r) => r.request_id),
+            [esperado, esperado, esperado],
+        )
+    })
+
+    it('X-Request-Id: FreeRADIUS lo manda en authorize, post-auth y accounting, igual al que deriva aaa', () => {
+        const rutas = new Set(ids.map((i) => i.ruta))
+        for (const ruta of ['/aaa/authorize', '/aaa/post-auth', '/aaa/accounting']) {
+            assert.ok(rutas.has(ruta), `sin peticiones a ${ruta}`)
+        }
+        for (const { ruta, cabecera, derivado } of ids) {
+            assert.match(String(cabecera), /^rad-[0-9a-f]{32}$/, ruta)
+            assert.equal(cabecera, derivado, ruta)
+        }
     })
 
     it('accounting sin cola disponible → sin Accounting-Response (el NAS reintenta)', async () => {

@@ -18,6 +18,7 @@ import {
     Plan,
     PlanEfectivo,
     PlanRouter,
+    VistaPreviaVelocidad,
     RedIpv4,
     Router,
     Sesion,
@@ -26,7 +27,7 @@ import {
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
 import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
 import { listarBloques, listarPools, verBloque } from '#network/consultas/ipv6'
-import CrearPlan from '#network/actions/crear_plan'
+import CrearPlan, { exigirVelocidadValida } from '#network/actions/crear_plan'
 import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
 import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementacion_plan'
@@ -35,6 +36,7 @@ import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesione
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
+import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
@@ -257,6 +259,29 @@ const planes: Ruta[] = [
         cuerpo: v.crearPlanValidator,
         respuesta: { status: 201, descripcion: 'Plan creado', esquema: Plan },
         handler: (ctx, { cuerpo }) => new CrearPlan().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/planes/vista-previa',
+        operacion: 'planesVistaPrevia',
+        resumen: 'Vista previa del rate-limit de un plan (no guarda)',
+        descripcion:
+            'Calcula con `app/network/velocidad.ts` (la misma función que usan aaa y el dispatcher) el ' +
+            '`Mikrotik-Rate-Limit` activo y limitado y los límites de la cola padre con `activos` servicios. ' +
+            '422 por campo con las mismas reglas que crear el plan (`validarVelocidad`).',
+        etiqueta: 'planes',
+        permiso: 'planes.ver',
+        cuerpo: v.vistaPreviaPlanValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaVelocidad },
+        handler: async (_ctx, { cuerpo }) => {
+            const { activos, ...campos } = cuerpo
+            const plan = {
+                ...VELOCIDAD_POR_DEFECTO,
+                ...Object.fromEntries(Object.entries(campos).filter(([, valor]) => valor !== undefined)),
+            } as VelocidadPlan
+            exigirVelocidadValida(plan)
+            return vistaPreviaVelocidad(plan, activos ?? 1)
+        },
     }),
     definirRuta({
         metodo: 'get',

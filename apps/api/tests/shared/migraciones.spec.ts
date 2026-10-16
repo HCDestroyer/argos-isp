@@ -41,7 +41,7 @@ test.group('Migraciones', () => {
             'servicios_user_ppp_unico',
             'facturas_clave_unica',
             'pagos_metodo_referencia',
-            'idempotency_keys_clave_actor_id_key',
+            'idempotency_keys_clave_actor_alcance_key',
         ])
     })
 

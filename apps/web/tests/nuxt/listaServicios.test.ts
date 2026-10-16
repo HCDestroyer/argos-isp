@@ -60,7 +60,7 @@ describe('lista de servicios · filtros del contrato', () => {
     })
 
     it('sin nombres en la respuesta, muestra el id', () => {
-        const servicio = { cliente_id: 4, plan_id: 2, router_id: 1 }
+        const servicio = { cliente_id: 4, cliente_nombre: '', plan_id: 2, plan_nombre: '', router_id: 1, router_nombre: '', zona_nombre: null }
         expect(nombreCliente(servicio)).toBe('Cliente #4')
         expect(nombrePlan(servicio)).toBe('Plan #2')
         expect(nombreRouter(servicio)).toBe('Router #1')

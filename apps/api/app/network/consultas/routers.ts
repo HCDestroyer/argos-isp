@@ -24,6 +24,16 @@ export interface RouterVista {
     /** techo del padre global; null = sin techo */
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
+    /** `https://host:puerto` de la API REST; null = `https://<host>` */
+    api_url: string | null
+    /** verificar el certificado TLS del router */
+    api_tls_verificar: boolean
+    /** CA en PEM para routers con certificado propio (en auditoría: `***`) */
+    api_ca: string | null
+    /** `server` del lease DHCP de `dhcp_fija`; null = `ROUTEROS_DHCP_SERVIDOR` (o `all`) */
+    dhcp_servidor: string | null
+    /** interfaz del ARP estático del amarre IP-MAC; null = `ROUTEROS_INTERFAZ_CLIENTES` */
+    interfaz_clientes: string | null
     /** @deprecated derivado de `control_velocidad` (`arbol_pcq` → `pcq`) */
     modo_velocidad: 'simple' | 'pcq'
     activo: boolean
@@ -55,6 +65,11 @@ const COLUMNAS_ROUTER = [
     'control_velocidad',
     'capacidad_bajada_kbps',
     'capacidad_subida_kbps',
+    'api_url',
+    'api_tls_verificar',
+    'api_ca',
+    'dhcp_servidor',
+    'interfaz_clientes',
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
     'activo',
     'version',

@@ -16,6 +16,7 @@
         "verificar:permisos": "node scripts/verificar-permisos.mjs",
         "demo:datos": "node scripts/demo/datos.mjs",
         "importar": "pnpm --filter @argosisp/api importar",
+        "aaa:verificar-router": "pnpm --filter @argosisp/api exec node ace aaa:verificar-router",
         "aaa:carga": "AAA_CARGA=1 pnpm --filter @argosisp/api exec node ace test --files tests/network/carga_radius.spec.ts"
     },
     "devDependencies": {

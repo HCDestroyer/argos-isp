@@ -194,7 +194,7 @@ export const crearServicioValidator = vine.compile(
         amarre_ip_mac: amarreIpMac().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional().meta({
             description:
-                'Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla',
+                'Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla',
         }),
         user_ppp: vine
             .string()
@@ -419,5 +419,28 @@ export const listarCambiosValidator = vine.compile(
 export const aaaServicioValidator = vine.compile(
     vine.object({
         user_ppp: vine.string().trim().minLength(1).maxLength(64),
+    }),
+)
+
+/**
+ * `POST /internal/aaa/servicios` (carga por lotes, pedido de A2): `user_ppp` o `servicio_ids`
+ * (hasta 100, sin paginar) o, sin ninguno, la página `cursor`/`limit` de todos los servicios
+ * `pppoe` por `servicio_id` ascendente.
+ */
+export const aaaServiciosLoteValidator = vine.compile(
+    vine.object({
+        user_ppp: vine
+            .array(vine.string().trim().minLength(1).maxLength(64))
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Hasta 100 user_ppp; los inexistentes se omiten' }),
+        servicio_ids: vine
+            .array(vine.number().withoutDecimals().min(1))
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten' }),
+        ...reglasPaginacion,
     }),
 )
