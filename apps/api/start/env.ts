@@ -126,6 +126,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_CABECERA_IP: Env.schema.string.optional(),
     /** Límite por IP de los endpoints públicos del portal (`app/portal/limite_peticiones.ts`) y prefijo en Redis. */
     PORTAL_LIMITE_PETICIONES: Env.schema.number.optional(),
+    // límite de POST /auth/login (A1, `app/core/auth/limite_login.ts`)
+    LOGIN_LIMITE_IP: Env.schema.number.optional(),
+    LOGIN_LIMITE_USUARIO: Env.schema.number.optional(),
+    LOGIN_LIMITE_VENTANA_S: Env.schema.number.optional(),
+    LOGIN_LIMITE_PREFIJO: Env.schema.string.optional(),
     PORTAL_LIMITE_VENTANA_S: Env.schema.number.optional(),
     PORTAL_REDIS_PREFIJO: Env.schema.string.optional(),
     /** Ventana de auditoría de quien-soy y estado (`app/portal/auditoria_unica.ts`). */

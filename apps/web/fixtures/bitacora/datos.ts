@@ -10,7 +10,7 @@ function mas(fecha: string, horas: number): string {
 
 let siguiente = 1
 
-function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id'> & Partial<Pick<Accion, 'resultado' | 'error'>>): Accion {
+function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre'>>): Accion {
     const id = siguiente++
     return {
         id,

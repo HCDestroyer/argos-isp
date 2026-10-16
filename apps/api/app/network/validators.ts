@@ -234,6 +234,23 @@ const camposPlan = {
 
 export const crearPlanValidator = vine.compile(vine.object(camposPlan))
 
+/** `POST /planes/vista-previa`: los campos de velocidad del formulario de planes, sin guardar. */
+export const vistaPreviaPlanValidator = vine.compile(
+    vine.object({
+        bajada_kbps: kbps(),
+        subida_kbps: kbps(),
+        bajada_limitada_kbps: kbps().min(1),
+        subida_limitada_kbps: kbps().min(1),
+        ...camposVelocidadPlan(),
+        rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
+            description: 'Como en planes_routers: reemplaza la cadena de estado activo',
+        }),
+        activos: vine.number().withoutDecimals().min(0).max(100_000).optional().meta({
+            description: 'Servicios activos del plan en el router para la cola padre (por defecto 1)',
+        }),
+    }),
+)
+
 export const editarPlanValidator = vine.compile(
     vine.object({
         version: versionEsperada(),

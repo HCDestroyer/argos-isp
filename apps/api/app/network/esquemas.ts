@@ -23,62 +23,44 @@ const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero),
 
 export const Router = definirEsquema(
     'Router',
-    objeto(
-        {
-            id,
-            nombre: texto,
-            host: texto,
-            api_usuario: nulable(texto),
-            tiene_api_password: booleano,
-            tiene_radius_secret: booleano,
-            nas_ip: texto,
-            modo_seguridad: enumerado(['radius', 'api']),
-            control_velocidad: {
-                ...enumerado(['simple', 'arbol_pcq']),
-                description:
-                    'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
-            },
-            capacidad_bajada_kbps: kbpsNulable(
-                'Capacidad del enlace (techo del padre global); null = sin techo',
-            ),
-            capacidad_subida_kbps: kbpsNulable(
-                'Capacidad del enlace (techo del padre global); null = sin techo',
-            ),
-            api_url: {
-                ...nulable(texto),
-                description: 'https://host:puerto de la API REST; null = https://<host>',
-            },
-            api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
-            api_ca: { ...nulable(texto), description: 'CA en PEM para routers con certificado propio' },
-            dhcp_servidor: {
-                ...nulable(texto),
-                description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
-            },
-            interfaz_clientes: {
-                ...nulable(texto),
-                description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
-            },
-            modo_velocidad: {
-                ...enumerado(['simple', 'pcq']),
-                deprecated: true,
-                description:
-                    'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
-            },
-            activo: booleano,
-            ...auditable,
+    objeto({
+        id,
+        nombre: texto,
+        host: texto,
+        api_usuario: nulable(texto),
+        tiene_api_password: booleano,
+        tiene_radius_secret: booleano,
+        nas_ip: texto,
+        modo_seguridad: enumerado(['radius', 'api']),
+        control_velocidad: {
+            ...enumerado(['simple', 'arbol_pcq']),
+            description:
+                'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
         },
-        // aditivos (semana 2): la API siempre los envía
-        [
-            'control_velocidad',
-            'capacidad_bajada_kbps',
-            'capacidad_subida_kbps',
-            'api_url',
-            'api_tls_verificar',
-            'api_ca',
-            'dhcp_servidor',
-            'interfaz_clientes',
-        ],
-    ),
+        capacidad_bajada_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
+        capacidad_subida_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
+        api_url: {
+            ...nulable(texto),
+            description: 'https://host:puerto de la API REST; null = https://<host>',
+        },
+        api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
+        api_ca: { ...nulable(texto), description: 'CA en PEM para routers con certificado propio' },
+        dhcp_servidor: {
+            ...nulable(texto),
+            description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
+        },
+        interfaz_clientes: {
+            ...nulable(texto),
+            description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
+        },
+        modo_velocidad: {
+            ...enumerado(['simple', 'pcq']),
+            deprecated: true,
+            description: 'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
+        },
+        activo: booleano,
+        ...auditable,
+    }),
 )
 
 export const RedIpv4 = definirEsquema(
@@ -128,98 +110,88 @@ const velocidadPlan = {
     rafaga_segundos: { type: 'integer', minimum: 1, description: 'burst-time en segundos' },
     prioridad: { type: 'integer', minimum: 1, maximum: 8, description: '1 (alta) a 8 (baja)' },
 } satisfies Record<string, EsquemaJson>
-const CAMPOS_VELOCIDAD_PLAN = Object.keys(velocidadPlan)
 
 export const Plan = definirEsquema(
     'Plan',
-    objeto(
-        {
-            id,
-            nombre: texto,
-            precio: Dinero,
-            bajada_kbps: entero,
-            subida_kbps: entero,
-            bajada_limitada_kbps: entero,
-            subida_limitada_kbps: entero,
-            reuso: entero,
-            ...velocidadPlan,
-            dual_stack: enumerado(['ambos', 'v4', 'v6']),
-            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-            global: booleano,
-            activo: booleano,
-            ...auditable,
-        },
-        CAMPOS_VELOCIDAD_PLAN,
-    ),
+    objeto({
+        id,
+        nombre: texto,
+        precio: Dinero,
+        bajada_kbps: entero,
+        subida_kbps: entero,
+        bajada_limitada_kbps: entero,
+        subida_limitada_kbps: entero,
+        reuso: entero,
+        ...velocidadPlan,
+        dual_stack: enumerado(['ambos', 'v4', 'v6']),
+        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+        global: booleano,
+        activo: booleano,
+        ...auditable,
+    }),
 )
 
 export const PlanRouter = definirEsquema(
     'PlanRouter',
-    objeto(
-        {
-            id,
-            plan_id: id,
-            router_id: id,
-            profile_ppp: nulable(texto),
-            pool_ipv4: nulable(texto),
-            pool_ipv6_enlace: nulable(texto),
-            pool_ipv6_delegacion: nulable(texto),
-            local_address: nulable(texto),
-            no_crear_reglas: booleano,
-            rate_limit_override: nulable(texto),
-            // excepciones de velocidad (semana 2): null = hereda del plan
-            reuso: { ...nulable(entero), description: 'null = hereda del plan' },
-            garantizado_pct: { ...nulable({ type: 'number' }), description: 'null = hereda del plan' },
-            rafaga_bajada_kbps: kbpsNulable('null = hereda del plan'),
-            rafaga_subida_kbps: kbpsNulable('null = hereda del plan'),
-            rafaga_umbral_pct: { ...nulable(entero), description: 'null = hereda del plan' },
-            rafaga_segundos: { ...nulable(entero), description: 'null = hereda del plan' },
-            prioridad: { ...nulable(entero), description: 'null = hereda del plan' },
-            ...auditable,
-        },
-        ['reuso', ...CAMPOS_VELOCIDAD_PLAN],
-    ),
+    objeto({
+        id,
+        plan_id: id,
+        router_id: id,
+        profile_ppp: nulable(texto),
+        pool_ipv4: nulable(texto),
+        pool_ipv6_enlace: nulable(texto),
+        pool_ipv6_delegacion: nulable(texto),
+        local_address: nulable(texto),
+        no_crear_reglas: booleano,
+        rate_limit_override: nulable(texto),
+        // excepciones de velocidad (semana 2): null = hereda del plan
+        reuso: { ...nulable(entero), description: 'null = hereda del plan' },
+        garantizado_pct: { ...nulable({ type: 'number' }), description: 'null = hereda del plan' },
+        rafaga_bajada_kbps: kbpsNulable('null = hereda del plan'),
+        rafaga_subida_kbps: kbpsNulable('null = hereda del plan'),
+        rafaga_umbral_pct: { ...nulable(entero), description: 'null = hereda del plan' },
+        rafaga_segundos: { ...nulable(entero), description: 'null = hereda del plan' },
+        prioridad: { ...nulable(entero), description: 'null = hereda del plan' },
+        ...auditable,
+    }),
 )
 
 /** Plan con su configuración efectiva en un router (plantilla + `planes_routers`). */
 export const PlanEfectivo = definirEsquema(
     'PlanEfectivo',
-    objeto(
-        {
-            id,
-            nombre: texto,
-            precio: Dinero,
-            bajada_kbps: entero,
-            subida_kbps: entero,
-            bajada_limitada_kbps: entero,
-            subida_limitada_kbps: entero,
-            reuso: { ...entero, description: 'Reuso efectivo en el router' },
-            ...velocidadPlan,
-            dual_stack: enumerado(['ambos', 'v4', 'v6']),
-            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-            global: booleano,
-            activo: booleano,
-            ...auditable,
-            router_id: id,
-            implementacion: nulable(PlanRouter),
-            rate_limit: {
-                type: 'string',
-                description:
-                    'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
-            },
-            rate_limit_limitado: {
-                type: 'string',
-                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
-            },
-            profile_ppp: nulable(texto),
-            pool_ipv4: nulable(texto),
-            pool_ipv6_enlace: nulable(texto),
-            pool_ipv6_delegacion: nulable(texto),
-            local_address: nulable(texto),
-            no_crear_reglas: booleano,
+    objeto({
+        id,
+        nombre: texto,
+        precio: Dinero,
+        bajada_kbps: entero,
+        subida_kbps: entero,
+        bajada_limitada_kbps: entero,
+        subida_limitada_kbps: entero,
+        reuso: { ...entero, description: 'Reuso efectivo en el router' },
+        ...velocidadPlan,
+        dual_stack: enumerado(['ambos', 'v4', 'v6']),
+        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+        global: booleano,
+        activo: booleano,
+        ...auditable,
+        router_id: id,
+        implementacion: nulable(PlanRouter),
+        rate_limit: {
+            type: 'string',
+            description:
+                'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
         },
-        CAMPOS_VELOCIDAD_PLAN,
-    ),
+        rate_limit_limitado: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+        },
+        profile_ppp: nulable(texto),
+        pool_ipv4: nulable(texto),
+        pool_ipv6_enlace: nulable(texto),
+        pool_ipv6_delegacion: nulable(texto),
+        local_address: nulable(texto),
+        no_crear_reglas: booleano,
+    }),
 )
 
 export const Sesion = definirEsquema(
@@ -291,5 +263,38 @@ export const VistaPreviaControl = definirEsquema(
         crear: lista(objetoVistaPrevia),
         actualizar: lista(objetoVistaPrevia),
         borrar: lista(objetoVistaPrevia),
+    }),
+)
+
+const parKbps = objeto({ subida: entero, bajada: entero })
+
+/** Resultado de `POST /planes/vista-previa` (`vistaPreviaVelocidad` de `app/network/velocidad.ts`). */
+export const VistaPreviaVelocidad = definirEsquema(
+    'VistaPreviaVelocidad',
+    objeto({
+        rate_limit: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override)',
+        },
+        rate_limit_limitado: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+        },
+        garantizado_pct_efectivo: {
+            type: 'number',
+            description: 'garantizado_pct o 100 / reuso, con 2 decimales hacia abajo',
+        },
+        limit_at_servicio_kbps: { ...parKbps, description: 'CIR (limit-at) de cada servicio' },
+        padre: objeto({
+            max_limit: {
+                type: 'string',
+                description: 'max-limit subida/bajada: MIR × activos / reuso, hacia arriba',
+            },
+            limit_at: { type: 'string', description: 'limit-at subida/bajada: CIR × activos' },
+            prioridad: entero,
+            max_limit_kbps: parKbps,
+            limit_at_kbps: parKbps,
+            activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
+        }),
     }),
 )
