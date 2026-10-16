@@ -140,6 +140,8 @@ function alAprobar(promesa: Promesa) {
 
 watch([estado, clienteId, servicioId], aplicarFiltros)
 
+const simuladorAbierto = ref(false)
+
 onMounted(async () => {
     void lista.recargar()
     if (clienteId.value) {
@@ -157,6 +159,17 @@ onMounted(async () => {
         titulo="Promesas"
         icono="i-lucide-calendar-clock"
     >
+        <template #acciones>
+            <UButton
+                label="Simular"
+                icon="i-lucide-flask-conical"
+                color="neutral"
+                variant="outline"
+                data-prueba="abrir-simulador"
+                @click="simuladorAbierto = true"
+            />
+        </template>
+
         <div class="flex flex-col gap-4">
             <div
                 class="flex flex-wrap gap-2"
@@ -407,6 +420,12 @@ onMounted(async () => {
             placeholder="Ej.: el cliente ya no puede pagar en esa fecha"
             :ejecutar="ejecutarCierre"
             @hecho="alCerrar"
+        />
+
+        <PromesaSimularModal
+            v-model:open="simuladorAbierto"
+            :cliente-inicial="clienteElegido"
+            @creada="lista.recargar()"
         />
     </PanelPagina>
 </template>

@@ -6,9 +6,11 @@ export type CanalPromesa = Promesa['canal']
 export type DatosPromesa = paths['/api/v1/promesas']['post']['requestBody']['content']['application/json']
 export type FiltrosPromesas = Omit<NonNullable<paths['/api/v1/promesas']['get']['parameters']['query']>, 'cursor'>
 
+export type SimulacionPromesa = Schema<'SimulacionPromesa'>
+
 export const LIMITE_PROMESAS = 25
 
-/** Promesas de pago: lista, alta (la API evalúa las reglas de la plantilla), aprobación, rechazo y cancelación. */
+/** Promesas de pago: lista, alta (la API evalúa las reglas de la plantilla), simulación, aprobación, rechazo y cancelación. */
 export function usePromesas() {
     const api = useApi()
 
@@ -58,5 +60,13 @@ export function usePromesas() {
         }))
     }
 
-    return { listar, crear, aprobar, rechazar, cancelar }
+    /**
+     * `POST /promesas/simular` (`promesas.ver`): evalúa todas las reglas sin crear nada ni dejar
+     * auditoría. `resultado` y `regla` son los mismos que daría `POST /promesas`.
+     */
+    function simular(datos: CuerpoSimulacion): Promise<Resultado<SimulacionPromesa>> {
+        return resolver(api.POST('/api/v1/promesas/simular', { body: datos }))
+    }
+
+    return { listar, crear, aprobar, rechazar, cancelar, simular }
 }

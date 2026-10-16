@@ -43,6 +43,8 @@ useHead(() => ({ title: `${servicio.value?.user_ppp ?? 'Servicio'} · ArgosIsp` 
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
 
 const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const puedeSimular = computed(() => puede('promesas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const simuladorAbierto = ref(false)
 
 const filtrosLinea = computed<FiltrosAcciones>(() => ({ entidad_tipo: 'servicio', entidad_id: servicioId.value }))
 
@@ -257,7 +259,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedePromesa"
+                v-if="acciones.length || puedePromesa || puedeSimular"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -278,6 +280,15 @@ onMounted(cargar)
                     color="info"
                     variant="outline"
                     @click="abrirPromesa"
+                />
+                <UButton
+                    v-if="puedeSimular"
+                    label="Simular promesa"
+                    icon="i-lucide-flask-conical"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-simulador"
+                    @click="simuladorAbierto = true"
                 />
             </div>
             <p
@@ -556,6 +567,12 @@ onMounted(cargar)
                     etiqueta="Historial del servicio"
                 />
             </section>
+
+            <PromesaSimularModal
+                v-model:open="simuladorAbierto"
+                :servicio="servicio"
+                @creada="alCrearPromesa"
+            />
 
             <PromesaCrearModal
                 v-model:open="promesaAbierta"
