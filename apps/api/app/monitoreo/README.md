@@ -5,6 +5,7 @@
 - **Acceso.** `Authorization: Bearer <METRICS_TOKEN>`. Sin `METRICS_TOKEN` responde 404 (apagado); con otro token, 401.
 - **Sin estado en memoria.** Todo se lee en el scrape (Redis y Postgres), así varias réplicas de la API dicen lo mismo y no hay contadores que se pierdan al reiniciar. Sin dependencias nuevas (el formato lo arma `prometheus.ts`).
 - **Una sección que falla no tumba las demás**: queda `argosisp_metricas_error{seccion}` en 1.
+- **Secciones de otros módulos**: `registrarSeccionMetricas(nombre, leer)` (A2 registra `routeros` desde `start/routes/network.ts`). En pruebas, quien reemplace una sección real la guarda con `seccionMetricas(nombre)` y la devuelve al terminar (`tests/monitoreo/metricas.spec.ts` lo hace en cada prueba y en el teardown del grupo); `quitarSeccionMetricas` la borra para el resto de la corrida.
 
 | Métrica                                                                                   | Etiquetas        | Fuente                                                                                                                                                                                                                                        |
 | ----------------------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

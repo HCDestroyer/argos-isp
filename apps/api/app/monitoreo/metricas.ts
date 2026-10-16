@@ -154,6 +154,15 @@ export function quitarSeccionMetricas(seccion: string) {
     seccionesExtra.delete(seccion)
 }
 
+/**
+ * Para pruebas: la función registrada hoy para `seccion` (o `undefined`). Una prueba que reemplaza
+ * una sección real (p. ej. `routeros`, que registra `start/routes/network.ts`) la guarda con esto y
+ * la devuelve al terminar con `registrarSeccionMetricas`, para no romper otras pruebas de la corrida.
+ */
+export function seccionMetricas(seccion: string): (() => Promise<MetricaExtra[]>) | undefined {
+    return seccionesExtra.get(seccion)
+}
+
 /** Arma el texto de exposición. Una sección que falla no tumba las demás. */
 export async function recolectarMetricas(): Promise<string> {
     const exp = new Exposicion()
