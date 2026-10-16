@@ -11,6 +11,7 @@ import {
     type Incidente,
 } from '#notify/alertas'
 import { ZONA } from '#notify/formato'
+import { horasDeCorte } from '#billing/cortes'
 
 /**
  * Crons de billing (A3) que se vigilan por su corrida en `audit.acciones` (las registra
@@ -36,9 +37,6 @@ export interface ResultadoVigilar {
     recuperados: string[]
     encolar: number[]
 }
-
-/** Hora de corte efectiva de un servicio: la excepción o la de su plantilla (igual que `EjecutarCorte`). */
-const HORA_EFECTIVA = `coalesce(left(e.valor #>> '{}', 5), to_char(p.hora_corte, 'HH24:MI'))`
 
 /**
  * `notificaciones.vigilar_crons` (cron cada 5 min en `notify:worker`): avisa al equipo cuando un
@@ -133,7 +131,7 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
         const vencidas = local.minus({ minutes: tolerancia }).toFormat('HH:mm')
         // Horas de corte de hoy que ya debieron correr (solo si no cruzamos la medianoche al restar).
         const horas =
-            local.minus({ minutes: tolerancia }).toISODate() === hoy ? await horasDeCorte(trx, vencidas) : []
+            local.minus({ minutes: tolerancia }).toISODate() === hoy ? await horasDeCorte(vencidas, trx) : []
         const ejecutadas = await horasEjecutadas(trx, hoy)
 
         const descripcion = (hora: string) => `El corte de las ${hora}`
@@ -202,20 +200,6 @@ async function ultimoDespliegue(trx: TransactionClientContract): Promise<DateTim
         ultima: Date | null
     } | null
     return fila?.ultima ? DateTime.fromJSDate(fila.ultima) : null
-}
-
-/** Horas de corte (HH:MM) de los servicios vigentes que ya llegaron (`<= hasta`). */
-async function horasDeCorte(trx: TransactionClientContract, hasta: string): Promise<string[]> {
-    const { rows } = (await trx.rawQuery(
-        `SELECT DISTINCT ${HORA_EFECTIVA} AS hora
-           FROM core.servicios s
-           JOIN billing.plantillas_facturacion p ON p.id = s.plantilla_facturacion_id
-           LEFT JOIN core.servicios_excepciones e ON e.servicio_id = s.id AND e.campo = 'hora_corte'
-          WHERE s.estado IN ('activo', 'limitado', 'suspendido') AND ${HORA_EFECTIVA} <= ?
-          ORDER BY 1`,
-        [hasta],
-    )) as { rows: Array<{ hora: string }> }
-    return rows.map((f) => f.hora)
 }
 
 /** Horas de corte procesadas por corridas del cron en la fecha local `fecha`. */

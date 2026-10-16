@@ -231,3 +231,38 @@ export const listarCuentasBancariasValidator = vine.compile(
         activa: vine.boolean().optional().meta({ description: 'Solo activas (true) o inactivas' }),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Comprobantes de depósito
+|--------------------------------------------------------------------------
+*/
+
+export const listarComprobantesValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        estado: vine.enum(['pendiente', 'aprobado', 'rechazado'] as const).optional(),
+        cliente_id: idEntidad().optional(),
+    }),
+)
+
+export const aprobarComprobanteValidator = vine.compile(
+    vine.object({
+        facturas: vine.array(idEntidad()).optional().meta({
+            description:
+                'Facturas a las que aplicar el pago; por defecto las del servicio del comprobante y luego la más antigua',
+        }),
+        nota: vine.string().trim().maxLength(400).nullable().optional(),
+    }),
+)
+
+export const rechazarComprobanteValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/*
+|--------------------------------------------------------------------------
+| Rechazar y cancelar promesas
+|--------------------------------------------------------------------------
+*/
+
+export const rechazarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))
+export const cancelarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))

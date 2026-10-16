@@ -59,6 +59,14 @@ interface PayloadPromesa {
     monto: Dinero
 }
 
+/** Comprobante de depósito (A3, día 4). `pago_id` solo al aprobar; `motivo` solo al rechazar. */
+interface PayloadComprobante {
+    comprobante_id: number
+    cliente_id: number
+    pago_id: number | null
+    motivo: string | null
+}
+
 interface PayloadSesion {
     servicio_id: number | null
     nas_ip: string
@@ -117,6 +125,12 @@ export interface CatalogoEventos {
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
+    /** el cliente (portal) o un operador (panel) subió un comprobante; queda pendiente de revisión */
+    'comprobante.recibido': PayloadComprobante
+    /** se aprobó y ya es un pago (`pago_id`); el pago emite además `pago.registrado` */
+    'comprobante.aprobado': PayloadComprobante
+    /** se rechazó con `motivo`; la referencia queda libre para subirlo de nuevo */
+    'comprobante.rechazado': PayloadComprobante
 
     // ledger (A3)
     'caja.cerrada': {
@@ -159,6 +173,9 @@ export const EVENTOS = [
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
+    'comprobante.recibido',
+    'comprobante.aprobado',
+    'comprobante.rechazado',
     'caja.cerrada',
     'notificacion.enviada',
 ] as const satisfies readonly NombreEvento[]

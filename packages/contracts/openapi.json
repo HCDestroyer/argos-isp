@@ -2289,6 +2289,520 @@
         "x-implementado": true
       }
     },
+    "/api/v1/comprobantes": {
+      "get": {
+        "operationId": "comprobantesListar",
+        "summary": "Cola de comprobantes de depósito (portal y panel)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "aprobado",
+                "rechazado"
+              ]
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de comprobantes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Comprobante"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}": {
+      "get": {
+        "operationId": "comprobantesVer",
+        "summary": "Ver comprobante de depósito",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comprobante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comprobante"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}/aprobar": {
+      "post": {
+        "operationId": "comprobantesAprobar",
+        "summary": "Aprobar comprobante: registra el pago con sus datos y reactiva",
+        "description": "Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Facturas a las que aplicar el pago; por defecto las del servicio del comprobante y luego la más antigua"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 400
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Comprobante aprobado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comprobante"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.aprobar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.aprobar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}/archivo": {
+      "get": {
+        "operationId": "comprobantesArchivo",
+        "summary": "Foto o PDF del comprobante",
+        "description": "Responde el archivo con su Content-Type (image/jpeg, image/png, image/webp o application/pdf) y `Content-Disposition: inline`. 404 si el archivo ya no está en el almacenamiento.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo (el generador de OpenAPI declara application/json)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}/rechazar": {
+      "post": {
+        "operationId": "comprobantesRechazar",
+        "summary": "Rechazar comprobante con motivo (se notifica al cliente)",
+        "description": "Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Comprobante rechazado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comprobante"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.rechazar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.rechazar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cuentas-bancarias": {
       "get": {
         "operationId": "cuentasBancariasListar",
@@ -8331,6 +8845,250 @@
         "x-implementado": true
       }
     },
+    "/api/v1/promesas/{id}/cancelar": {
+      "post": {
+        "operationId": "promesasCancelar",
+        "summary": "Cancelar promesa activa o pendiente (el servicio se re-evalúa)",
+        "description": "Una activa o pendiente_aprobacion queda cancelada con el motivo en `resultado_evaluacion.cierre`. Si estaba activa, el servicio se re-evalúa en la misma transacción (puede limitarse o cortarse, respetando la hora de corte). 409 promesa_no_pendiente si ya estaba cerrada.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promesa cancelada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.cancelar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.cancelar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/promesas/{id}/rechazar": {
+      "post": {
+        "operationId": "promesasRechazar",
+        "summary": "Rechazar promesa pendiente de aprobación",
+        "description": "Solo una pendiente_aprobacion: queda rechazada con el motivo en `resultado_evaluacion.cierre`. 409 promesa_no_pendiente en otro estado.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Promesa rechazada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.rechazar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.rechazar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/roles": {
       "get": {
         "operationId": "rolesListar",
@@ -8427,6 +9185,9 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "comprobantes.aprobar",
+                        "comprobantes.rechazar",
+                        "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
                         "documentos.editar",
@@ -8454,7 +9215,9 @@
                         "plantillas.editar",
                         "plantillas.ver",
                         "promesas.aprobar",
+                        "promesas.cancelar",
                         "promesas.crear",
+                        "promesas.rechazar",
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
@@ -8603,6 +9366,9 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "comprobantes.aprobar",
+                        "comprobantes.rechazar",
+                        "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
                         "documentos.editar",
@@ -8630,7 +9396,9 @@
                         "plantillas.editar",
                         "plantillas.ver",
                         "promesas.aprobar",
+                        "promesas.cancelar",
                         "promesas.crear",
+                        "promesas.rechazar",
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
@@ -11920,6 +12688,9 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "comprobantes.aprobar",
+                            "comprobantes.rechazar",
+                            "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
                             "documentos.editar",
@@ -11947,7 +12718,9 @@
                             "plantillas.editar",
                             "plantillas.ver",
                             "promesas.aprobar",
+                            "promesas.cancelar",
                             "promesas.crear",
+                            "promesas.rechazar",
                             "promesas.ver",
                             "redes.crear",
                             "redes.ver",
@@ -13649,6 +14422,193 @@
               "null"
             ],
             "description": "Nombre del responsable de pago (solo lectura)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Comprobante": {
+        "type": "object",
+        "required": [
+          "id",
+          "cliente_id",
+          "cliente_nombre",
+          "servicio_id",
+          "metodo",
+          "cuenta_bancaria_id",
+          "cuenta_bancaria_nombre",
+          "banco_origen_id",
+          "banco_origen_nombre",
+          "referencia",
+          "monto",
+          "fecha_deposito",
+          "archivo_tipo",
+          "archivo_tamano",
+          "archivo_nombre",
+          "canal",
+          "nota",
+          "estado",
+          "motivo_rechazo",
+          "pago_id",
+          "registrado_por",
+          "verificado_por",
+          "verificado_en",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "deposito",
+              "transferencia",
+              "ach",
+              "remesa"
+            ]
+          },
+          "cuenta_bancaria_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Cuenta bancaria propia de destino"
+          },
+          "cuenta_bancaria_nombre": {
+            "type": "string",
+            "description": "Banco y alias de la cuenta de destino"
+          },
+          "banco_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Banco de origen (transferencia, ach)"
+          },
+          "banco_origen_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fecha_deposito": {
+            "type": "string",
+            "format": "date"
+          },
+          "archivo_tipo": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "application/pdf"
+            ]
+          },
+          "archivo_tamano": {
+            "type": "integer",
+            "description": "Bytes (máximo 5 MB)"
+          },
+          "archivo_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre original del archivo subido"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "panel"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "aprobado",
+              "rechazado"
+            ]
+          },
+          "motivo_rechazo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Pago creado al aprobarlo"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "verificado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Quién lo aprobó o rechazó"
+          },
+          "verificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pago": {
+            "$ref": "#/components/schemas/Pago",
+            "description": "Solo al aprobar: el pago registrado (aplicaciones y servicios)"
           },
           "version": {
             "type": "integer",
