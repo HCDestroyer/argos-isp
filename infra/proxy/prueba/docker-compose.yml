@@ -1,0 +1,53 @@
+# Prueba del proxy con el webhook de la pasarela (infra/proxy/probar-webhook.sh), en un proyecto
+# aparte: `proxy` extiende el servicio real (misma imagen y Caddyfile); `api` es un eco que
+# verifica la firma HMAC sobre el cuerpo crudo; `web` es un marcador para el panel.
+name: argosisp-prueba-proxy
+
+x-eco: &eco
+  image: node:22-alpine
+  environment:
+    PASARELA_FALSA_SECRETO: secreto-de-prueba-del-proxy
+  volumes:
+    - ./:/prueba:ro
+
+services:
+  api:
+    <<: *eco
+    command: [node, /prueba/api-eco.mjs]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:3333/health']
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  web:
+    <<: *eco
+    command: [node, -e, "require('node:http').createServer((q,r)=>r.end('panel')).listen(3000)"]
+
+  proxy:
+    extends:
+      file: ../../docker-compose.yml
+      service: proxy
+    profiles: !reset []
+    restart: 'no'
+    ports: !reset []
+    healthcheck:
+      interval: 2s
+      retries: 15
+    depends_on: !reset
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  cliente:
+    <<: *eco
+    profiles: [cliente]
+    command: [node, /prueba/cliente.mjs]
+    depends_on:
+      proxy:
+        condition: service_healthy
+
+volumes:
+  caddydata:
+  caddyconfig:

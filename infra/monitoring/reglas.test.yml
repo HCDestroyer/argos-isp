@@ -99,3 +99,49 @@ tests:
               alertname: AaaLatenciaAlta
             exp_annotations:
               summary: 'p95 de autorización de aaa en 240ms (objetivo < 100 ms)'
+
+  # Modo degradado de aaa: degradado 1 min → crítica; espejo de hace más de 30 min → aviso
+  - interval: 1m
+    input_series:
+      - series: 'argosisp_aaa_degradado{instance="aaa:3100"}'
+        values: '0 0 1 1 1 1'
+      - series: 'argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds{instance="aaa:3100"}'
+        values: '0+0x60'
+      - series: 'argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds{instance="aaa2:3100"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AaaDegradado
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: AaaDegradado
+        exp_alerts:
+          - exp_labels:
+              alertname: AaaDegradado
+              instance: aaa:3100
+              severidad: critica
+            exp_annotations:
+              summary: 'aaa (aaa:3100) en modo degradado: sin Redis ni API, autoriza con el último perfil conocido (docs/runbooks/aaa-caido.md)'
+      # timestamp 0 = sin espejo todavía: no alerta
+      - eval_time: 45m
+        alertname: AaaEspejoViejo
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      # espejo a los 60 s y nunca más
+      - series: 'argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds{instance="aaa:3100"}'
+        values: '60x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AaaEspejoViejo
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: AaaEspejoViejo
+        exp_alerts:
+          - exp_labels:
+              alertname: AaaEspejoViejo
+              instance: aaa:3100
+              severidad: aviso
+            exp_annotations:
+              summary: 'aaa (aaa:3100): el último perfil conocido no se actualiza hace más de 30 min; el modo degradado tendría datos viejos'

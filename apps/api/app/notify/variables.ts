@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import { DateTime } from 'luxon'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
+import { CAMPOS_EMPRESA, verEmpresa } from '#portal/empresa'
 import type { CanalNotificacion } from '#shared/eventos'
 import {
     diasEntre,
@@ -101,12 +102,18 @@ export async function cargarDestinatario(
     }
 }
 
-export function variablesEmpresa(): Variables {
-    return {
-        nombre: env.get('NOTIFY_EMPRESA_NOMBRE') ?? 'ArgosIsp',
-        telefono: env.get('NOTIFY_EMPRESA_TELEFONO') ?? '',
-        portal_url: env.get('NOTIFY_PORTAL_URL') ?? '',
-    }
+/**
+ * `{{empresa.*}}`: los datos de `core.empresa` que se editan en el panel (`verEmpresa` de
+ * `#portal/empresa`; sin fila usa `NOTIFY_EMPRESA_NOMBRE` y `NOTIFY_EMPRESA_TELEFONO`) más
+ * `portal_url` (`NOTIFY_PORTAL_URL`). Los campos vacíos van como `''` para que las secciones
+ * Mustache (`{{#empresa.telefono}}`) no se muestren.
+ */
+export async function variablesEmpresa(cliente: QueryClientContract): Promise<Variables> {
+    const empresa = await verEmpresa(cliente)
+    const variables: Variables = {}
+    for (const campo of CAMPOS_EMPRESA) variables[campo] = empresa[campo] ?? ''
+    variables.portal_url = env.get('NOTIFY_PORTAL_URL') ?? ''
+    return variables
 }
 
 /** Variables de una factura: del payload, completadas con la fila de `billing.facturas` si existe. */
@@ -294,7 +301,7 @@ export async function construirVariables(
 ): Promise<Variables> {
     const variables: Variables = {
         evento,
-        empresa: variablesEmpresa(),
+        empresa: await variablesEmpresa(cliente),
         cliente: {
             id: destinatario.clienteId,
             nombre: destinatario.nombre,

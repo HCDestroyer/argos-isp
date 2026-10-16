@@ -6,6 +6,12 @@ global:
 rule_files:
   - /etc/prometheus/reglas.yml
 
+# Alertmanager (mismo perfil): manda las alertas al chat del equipo por Telegram.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # API: colas BullMQ, lag del stream argos:eventos, outbox, última corrida de cada cron, incidentes.
   # El token (METRICS_TOKEN) lo escribe el entrypoint del servicio en /tmp/metrics_token.

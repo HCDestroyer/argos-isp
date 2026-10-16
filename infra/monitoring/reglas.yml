@@ -1,6 +1,7 @@
 # Reglas de alerta de Prometheus. Las alertas de negocio que el equipo debe ver en Telegram las
 # manda notify (aaa caído, CoA fallido, caja con diferencia, crons atrasados); estas cubren lo que
-# notify no puede ver de sí mismo (la API o Redis caídos, colas atascadas).
+# notify no puede ver de sí mismo (la API o Redis caídos, colas atascadas) y las envía Alertmanager
+# (alertmanager/, receptor telegram_configs) al mismo chat del equipo.
 groups:
   - name: argosisp
     rules:
@@ -74,6 +75,24 @@ groups:
         for: 1m
         annotations:
           summary: 'aaa ({{ $labels.instance }}) sin Redis: autoriza por el respaldo de la API'
+
+      # Modo degradado de aaa (A2, semana 3): Redis y API caídos para aaa; autoriza con el último
+      # perfil conocido. Crítica: los cambios de estado no llegan a las reconexiones.
+      - alert: AaaDegradado
+        expr: argosisp_aaa_degradado == 1
+        for: 1m
+        labels:
+          severidad: critica
+        annotations:
+          summary: 'aaa ({{ $labels.instance }}) en modo degradado: sin Redis ni API, autoriza con el último perfil conocido (docs/runbooks/aaa-caido.md)'
+
+      # El espejo del último perfil conocido no se actualiza hace más de 30 min (con espejo previo)
+      - alert: AaaEspejoViejo
+        expr: (time() - argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds > 1800) and argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds > 0
+        labels:
+          severidad: aviso
+        annotations:
+          summary: 'aaa ({{ $labels.instance }}): el último perfil conocido no se actualiza hace más de 30 min; el modo degradado tendría datos viejos'
 
       # Objetivo de A2: p95 de /aaa/authorize por debajo de 100 ms
       - alert: AaaLatenciaAlta
