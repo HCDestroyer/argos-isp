@@ -3,6 +3,7 @@ import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, fechaIso, idEntidad, instanteIso, motivo, versionEsperada } from '#shared/validadores'
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
 import { METODOS_PAGO } from '#shared/eventos'
+import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
 
 /*
 |--------------------------------------------------------------------------
@@ -278,3 +279,95 @@ export const rechazarComprobanteValidator = vine.compile(vine.object({ motivo: m
 
 export const rechazarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))
 export const cancelarPromesaValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/*
+|--------------------------------------------------------------------------
+| Reportes
+|--------------------------------------------------------------------------
+*/
+
+const formato = vine
+    .enum(['json', 'csv', 'xlsx'] as const)
+    .optional()
+    .meta({ description: 'json (por defecto), csv o xlsx (descarga con Content-Disposition)' })
+const rango = {
+    desde: fechaIso().optional().meta({ description: 'Por defecto: el día 1 del mes de hace 11 meses' }),
+    hasta: fechaIso().optional().meta({ description: 'Por defecto: hoy (Guatemala)' }),
+}
+const dimensiones = {
+    cliente_id: idEntidad().optional(),
+    zona_id: idEntidad().optional(),
+    router_id: idEntidad().optional(),
+    plan_id: idEntidad().optional(),
+}
+
+export const reporteCarteraValidator = vine.compile(
+    vine.object({
+        formato,
+        ...dimensiones,
+        corte: fechaIso()
+            .optional()
+            .meta({ description: 'Día de referencia de la antigüedad (hoy por defecto)' }),
+        agrupar: vine.enum(['cliente', 'zona', 'router', 'plan'] as const).optional(),
+    }),
+)
+
+export const reporteIngresosValidator = vine.compile(
+    vine.object({
+        formato,
+        ...rango,
+        cliente_id: idEntidad().optional(),
+        zona_id: idEntidad().optional(),
+        metodo: vine.enum(METODOS_PAGO).optional(),
+        agrupar: vine.enum(['mes', 'dia'] as const).optional(),
+    }),
+)
+
+export const reporteFacturadoValidator = vine.compile(
+    vine.object({
+        formato,
+        ...rango,
+        ...dimensiones,
+        tipo: vine.enum(['servicio', 'mora'] as const).optional(),
+    }),
+)
+
+export const reporteCobranzaValidator = vine.compile(
+    vine.object({
+        formato,
+        desde: fechaIso().optional().meta({ description: 'Por defecto: el día 1 del mes de hasta' }),
+        hasta: fechaIso().optional(),
+        caja_id: idEntidad().optional(),
+        metodo: vine.enum(METODOS_PAGO).optional(),
+    }),
+)
+
+export const reporteIvaValidator = vine.compile(vine.object({ formato, ...rango }))
+
+export const reportePromesasValidator = vine.compile(
+    vine.object({
+        formato,
+        ...rango,
+        ...dimensiones,
+        canal: vine.enum(['portal', 'ia', 'operador', 'supervisor'] as const).optional(),
+    }),
+)
+
+export const reporteAltasValidator = vine.compile(
+    vine.object({
+        formato,
+        ...rango,
+        zona_id: idEntidad().optional(),
+        router_id: idEntidad().optional(),
+        plan_id: idEntidad().optional(),
+    }),
+)
+
+export const reporteEgresosValidator = vine.compile(
+    vine.object({
+        formato,
+        ...rango,
+        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
+        metodo: vine.enum(['caja', 'banco', 'cuenta_bancaria'] as const).optional(),
+    }),
+)

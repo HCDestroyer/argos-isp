@@ -440,6 +440,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * KPIs del dashboard y series de 12 meses (vistas refrescadas por evento)
+         * @description Lee solo vistas materializadas que el grupo billing refresca al recibir factura.*, pago.*, promesa.* y servicio.estado_cambiado (nunca por intervalo). actualizado_en dice cuándo se refrescó cada una.
+         */
+        get: operations["dashboardResumen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documentos/aviso-cobro/{facturaId}": {
         parameters: {
             query?: never;
@@ -1497,6 +1517,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/altas-bajas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Altas, bajas, suspensiones y reactivaciones por mes
+         * @description Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesAltasBajas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cartera-vencida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cartera vencida por antigüedad (0-30, 31-60, 61-90, +90 días)
+         * @description Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCarteraVencida"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cierres-caja": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cierres de caja: esperado, contado y diferencia por turno
+         * @description Turnos cerrados en el rango (por defecto el mes en curso). Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCierresCaja"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cobranza-diaria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cobranza por día, método y caja
+         * @description Por defecto el mes en curso. Los anulados van aparte. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCobranzaDiaria"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/egresos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Egresos por categoría y mes
+         * @description Egresos vigentes (sin anular) por mes contable. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesEgresos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/facturado-vs-cobrado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Facturado vs cobrado por periodo de factura
+         * @description Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesFacturadoCobrado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/ingresos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ingresos (pagos vigentes) por periodo y método
+         * @description Por mes (o día con agrupar=dia) de Guatemala. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesIngresos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/iva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * IVA del periodo (débito fiscal) por mes contable
+         * @description Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesIva"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/promesas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Promesas: creadas, cumplidas, incumplidas y tasa de cumplimiento
+         * @description Por mes de creación y canal, con su estado actual. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesPromesas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles": {
         parameters: {
             query?: never;
@@ -2155,6 +2355,12 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ColumnaReporte: {
+            clave: string;
+            titulo: string;
+            /** @enum {string} */
+            tipo: "texto" | "dinero" | "entero" | "fecha" | "porcentaje" | "id";
         };
         Comprobante: {
             id: number;
@@ -3088,6 +3294,298 @@ export interface components {
                 };
             };
         };
+        ReporteAltasBajas: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                altas: number;
+                bajas: number;
+                suspensiones: number;
+                limitaciones: number;
+                reactivaciones: number;
+                neto: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                altas: number | null;
+                bajas: number | null;
+                suspensiones: number | null;
+                limitaciones: number | null;
+                reactivaciones: number | null;
+                neto: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCarteraVencida: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                grupo_id: number | null;
+                grupo: string;
+                facturas: number;
+                por_vencer: components["schemas"]["Dinero"];
+                dias_0_30: components["schemas"]["Dinero"];
+                dias_31_60: components["schemas"]["Dinero"];
+                dias_61_90: components["schemas"]["Dinero"];
+                dias_mas_90: components["schemas"]["Dinero"];
+                vencido: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                grupo_id: number | null;
+                grupo: number | null;
+                facturas: number | null;
+                por_vencer: components["schemas"]["Dinero"] | null;
+                dias_0_30: components["schemas"]["Dinero"] | null;
+                dias_31_60: components["schemas"]["Dinero"] | null;
+                dias_61_90: components["schemas"]["Dinero"] | null;
+                dias_mas_90: components["schemas"]["Dinero"] | null;
+                vencido: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCierresCaja: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                turno_id: number;
+                caja_id: number;
+                caja: string;
+                abierto_en: string;
+                cerrado_en: string;
+                abierto_por: string | null;
+                cerrado_por: string | null;
+                fondo_inicial: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                egresos: components["schemas"]["Dinero"];
+                esperado: components["schemas"]["Dinero"];
+                contado: components["schemas"]["Dinero"];
+                diferencia: components["schemas"]["Dinero"];
+                motivo: string | null;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                turno_id: number | null;
+                caja_id: number | null;
+                caja: number | null;
+                abierto_en: number | null;
+                cerrado_en: number | null;
+                abierto_por: number | null;
+                cerrado_por: number | null;
+                fondo_inicial: components["schemas"]["Dinero"] | null;
+                cobrado: components["schemas"]["Dinero"] | null;
+                egresos: components["schemas"]["Dinero"] | null;
+                esperado: components["schemas"]["Dinero"] | null;
+                contado: components["schemas"]["Dinero"] | null;
+                diferencia: components["schemas"]["Dinero"] | null;
+                motivo: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCobranzaDiaria: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                /** Format: date */
+                fecha: string;
+                metodo: string;
+                caja_id: number | null;
+                caja: string | null;
+                pagos: number;
+                monto: components["schemas"]["Dinero"];
+                anulados: number;
+                monto_anulado: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                fecha: number | null;
+                metodo: number | null;
+                caja_id: number | null;
+                caja: number | null;
+                pagos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+                anulados: number | null;
+                monto_anulado: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteEgresos: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                categoria: string;
+                categoria_nombre: string;
+                cuenta_codigo: string;
+                egresos: number;
+                monto: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                categoria: number | null;
+                categoria_nombre: number | null;
+                cuenta_codigo: number | null;
+                egresos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteFacturadoCobrado: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                facturas: number;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                pendiente: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                cobranza_pct: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                facturas: number | null;
+                facturado: components["schemas"]["Dinero"] | null;
+                cobrado: components["schemas"]["Dinero"] | null;
+                pendiente: components["schemas"]["Dinero"] | null;
+                cobranza_pct: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteIngresos: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                metodo: string;
+                pagos: number;
+                monto: components["schemas"]["Dinero"];
+                comision: components["schemas"]["Dinero"];
+                neto: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                metodo: number | null;
+                pagos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+                comision: components["schemas"]["Dinero"] | null;
+                neto: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteIva: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                facturas: number;
+                base: components["schemas"]["Dinero"];
+                iva_facturado: components["schemas"]["Dinero"];
+                facturas_anuladas: number;
+                base_anulada: components["schemas"]["Dinero"];
+                iva_anulado: components["schemas"]["Dinero"];
+                iva_neto: components["schemas"]["Dinero"];
+                iva_libro: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                facturas: number | null;
+                base: components["schemas"]["Dinero"] | null;
+                iva_facturado: components["schemas"]["Dinero"] | null;
+                facturas_anuladas: number | null;
+                base_anulada: components["schemas"]["Dinero"] | null;
+                iva_anulado: components["schemas"]["Dinero"] | null;
+                iva_neto: components["schemas"]["Dinero"] | null;
+                iva_libro: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReportePromesas: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                canal: string;
+                creadas: number;
+                rechazadas: number;
+                pendientes: number;
+                activas: number;
+                cumplidas: number;
+                incumplidas: number;
+                canceladas: number;
+                monto_prometido: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                tasa_cumplimiento: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                canal: number | null;
+                creadas: number | null;
+                rechazadas: number | null;
+                pendientes: number | null;
+                activas: number | null;
+                cumplidas: number | null;
+                incumplidas: number | null;
+                canceladas: number | null;
+                monto_prometido: components["schemas"]["Dinero"] | null;
+                tasa_cumplimiento: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ResolucionIp: {
             servicio_id: number;
             cliente_id: number;
@@ -3120,6 +3618,64 @@ export interface components {
             moras: number;
             /** @description Facturas que no se pudieron procesar (ver log) */
             errores: number;
+        };
+        ResumenDashboard: {
+            servicios: {
+                activos: number;
+                limitados: number;
+                suspendidos: number;
+                retirados: number;
+            };
+            /** @description Clientes con al menos un servicio en ese estado */
+            clientes: {
+                activos: number;
+                limitados: number;
+                cortados: number;
+            };
+            mes: {
+                periodo: string;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                cobranza_pct: number;
+            };
+            cartera_vencida: {
+                monto: components["schemas"]["Dinero"];
+                facturas: number;
+                clientes: number;
+                pendiente_total: components["schemas"]["Dinero"];
+            };
+            hoy: {
+                /** Format: date */
+                fecha: string;
+                cobrado: components["schemas"]["Dinero"];
+                pagos: number;
+            };
+            promesas_activas: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Últimos 12 meses (YYYY-MM), el actual al final */
+            series: {
+                periodo: string;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                facturas: number;
+                pagos: number;
+            }[];
+            /** @description Último refresco de cada vista (por evento) */
+            actualizado_en: {
+                /** Format: date-time */
+                resumen_mensual: string | null;
+                /** Format: date-time */
+                resumen_cobros_diarios: string | null;
+                /** Format: date-time */
+                resumen_servicios: string | null;
+                /** Format: date-time */
+                resumen_cartera: string | null;
+                /** Format: date-time */
+                resumen_promesas: string | null;
+            };
         };
         Rol: {
             id: number;
@@ -5035,6 +5591,44 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    dashboardResumen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenDashboard"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8935,6 +9529,516 @@ export interface operations {
             };
         };
     };
+    reportesAltasBajas: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteAltasBajas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCarteraVencida: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                /** @description Día de referencia de la antigüedad (hoy por defecto) */
+                corte?: string;
+                agrupar?: "cliente" | "zona" | "router" | "plan";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCarteraVencida"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCierresCaja: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hasta */
+                desde?: string;
+                hasta?: string;
+                caja_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCierresCaja"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCobranzaDiaria: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hasta */
+                desde?: string;
+                hasta?: string;
+                caja_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCobranzaDiaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesEgresos: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                metodo?: "caja" | "banco" | "cuenta_bancaria";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteEgresos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesFacturadoCobrado: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                tipo?: "servicio" | "mora";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteFacturadoCobrado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesIngresos: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+                agrupar?: "mes" | "dia";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteIngresos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesIva: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteIva"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesPromesas: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                canal?: "portal" | "ia" | "operador" | "supervisor";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportePromesas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     rolesListar: {
         parameters: {
             query?: never;
@@ -8985,7 +10089,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -9043,7 +10147,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -10811,7 +11915,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

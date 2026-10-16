@@ -71,6 +71,7 @@ export const PERMISOS = {
     'egresos.ver': 'Ver egresos y sus categorías',
     'egresos.registrar': 'Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)',
     'egresos.anular': 'Anular egresos con asiento de reverso',
+    'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
 
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
@@ -227,6 +228,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.ver',
             'egresos.registrar',
             'egresos.anular',
+            'reportes.ver',
             'bitacora.ver',
         ],
     },

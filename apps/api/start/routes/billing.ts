@@ -43,6 +43,32 @@ import {
     verComprobante,
 } from '#billing/comprobantes'
 import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
+import type { Reporte } from '#billing/reportes/definicion'
+import { TIPOS_CONTENIDO, exportar } from '#billing/reportes/exportar'
+import { resumenDashboard } from '#billing/reportes/resumenes'
+import {
+    altasBajas,
+    carteraVencida,
+    cierresCaja,
+    cobranzaDiaria,
+    egresosPorCategoria,
+    facturadoVsCobrado,
+    ingresos,
+    ivaDelPeriodo,
+    promesas as reportePromesas,
+} from '#billing/reportes/reportes'
+import {
+    ReporteAltasBajas,
+    ReporteCarteraVencida,
+    ReporteCierresCaja,
+    ReporteCobranzaDiaria,
+    ReporteEgresos,
+    ReporteFacturadoCobrado,
+    ReporteIngresos,
+    ReporteIva,
+    ReportePromesas,
+    ResumenDashboard,
+} from '#billing/reportes/esquemas'
 import {
     ArchivoComprobante,
     Comprobante,
@@ -483,6 +509,165 @@ async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<Ca
     return canal
 }
 
+/*
+|--------------------------------------------------------------------------
+| Reportes y dashboard
+|--------------------------------------------------------------------------
+*/
+
+/** JSON, o descarga CSV/XLSX con nombre `<reporte>-<fecha>.<ext>`. */
+function responderReporte(ctx: HttpContext, reporte: Reporte, formato?: 'json' | 'csv' | 'xlsx') {
+    if (!formato || formato === 'json') return Promise.resolve(reporte)
+    const nombre = `${reporte.reporte}-${new Date().toISOString().slice(0, 10)}.${formato}`
+    ctx.response.header('Content-Type', TIPOS_CONTENIDO[formato])
+    ctx.response.header('Content-Disposition', `attachment; filename="${nombre}"`)
+    ctx.response.header('Cache-Control', 'private, no-store')
+    ctx.response.send(exportar(reporte, formato))
+    return Promise.resolve(undefined)
+}
+
+const DESCRIPCION_EXPORTACION =
+    ' Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.'
+
+const reportes: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/cartera-vencida',
+        operacion: 'reportesCarteraVencida',
+        resumen: 'Cartera vencida por antigüedad (0-30, 31-60, 61-90, +90 días)',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteCarteraValidator,
+        descripcion:
+            'Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC.' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCarteraVencida },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await carteraVencida(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/ingresos',
+        operacion: 'reportesIngresos',
+        resumen: 'Ingresos (pagos vigentes) por periodo y método',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteIngresosValidator,
+        descripcion: 'Por mes (o día con agrupar=dia) de Guatemala.' + DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteIngresos },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await ingresos(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/facturado-vs-cobrado',
+        operacion: 'reportesFacturadoCobrado',
+        resumen: 'Facturado vs cobrado por periodo de factura',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteFacturadoValidator,
+        descripcion:
+            'Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente.' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteFacturadoCobrado },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await facturadoVsCobrado(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/cobranza-diaria',
+        operacion: 'reportesCobranzaDiaria',
+        resumen: 'Cobranza por día, método y caja',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteCobranzaValidator,
+        descripcion: 'Por defecto el mes en curso. Los anulados van aparte.' + DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCobranzaDiaria },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await cobranzaDiaria(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/cierres-caja',
+        operacion: 'reportesCierresCaja',
+        resumen: 'Cierres de caja: esperado, contado y diferencia por turno',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteCobranzaValidator,
+        descripcion: 'Turnos cerrados en el rango (por defecto el mes en curso).' + DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCierresCaja },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await cierresCaja(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/iva',
+        operacion: 'reportesIva',
+        resumen: 'IVA del periodo (débito fiscal) por mes contable',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteIvaValidator,
+        descripcion:
+            'Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto.' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteIva },
+        handler: async (ctx, { query }) => responderReporte(ctx, await ivaDelPeriodo(query), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/promesas',
+        operacion: 'reportesPromesas',
+        resumen: 'Promesas: creadas, cumplidas, incumplidas y tasa de cumplimiento',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reportePromesasValidator,
+        descripcion: 'Por mes de creación y canal, con su estado actual.' + DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReportePromesas },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await reportePromesas(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/altas-bajas',
+        operacion: 'reportesAltasBajas',
+        resumen: 'Altas, bajas, suspensiones y reactivaciones por mes',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteAltasValidator,
+        descripcion:
+            'Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado.' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteAltasBajas },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await altasBajas(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/egresos',
+        operacion: 'reportesEgresos',
+        resumen: 'Egresos por categoría y mes',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteEgresosValidator,
+        descripcion: 'Egresos vigentes (sin anular) por mes contable.' + DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteEgresos },
+        handler: async (ctx, { query }) =>
+            responderReporte(ctx, await egresosPorCategoria(query, ctx.alcance), query.formato),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/dashboard/resumen',
+        operacion: 'dashboardResumen',
+        resumen: 'KPIs del dashboard y series de 12 meses (vistas refrescadas por evento)',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        descripcion:
+            'Lee solo vistas materializadas que el grupo billing refresca al recibir factura.*, pago.*, promesa.* y servicio.estado_cambiado (nunca por intervalo). actualizado_en dice cuándo se refrescó cada una.',
+        respuesta: { status: 200, descripcion: 'Resumen', esquema: ResumenDashboard },
+        handler: () => resumenDashboard(),
+    }),
+]
+
 const bancos: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -559,6 +744,7 @@ const estadoCuenta: Ruta[] = [
 ]
 
 export default [
+    ...reportes,
     ...plantillas,
     ...facturas,
     ...pagos,

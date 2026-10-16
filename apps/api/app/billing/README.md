@@ -181,6 +181,30 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
 - Pago de terceros: en el estado de cuenta del dueño, la descripción nombra solo sus facturas y termina en "· pagado por <pagador>".
 
+## Reportes y dashboard (semana 2, `reportes/`)
+
+`GET /api/v1/reportes/<nombre>` con permiso `reportes.ver`, filtros por query y `formato=json|csv|xlsx`. Cada reporte declara sus columnas tipadas (`definicion.ts`): de ahí salen el schema del OpenAPI (`Reporte*`), el CSV y el XLSX. Respuesta `{ reporte, titulo, filtros, columnas, filas, totales, generado_en }`; los totales suman dinero (decimal.js) y enteros.
+
+| Reporte                | Filtros                                                                    | Cuadra con el libro                                                      |
+| ---------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                         |
+| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), cliente, zona             | Σ monto = débitos a Caja, Bancos y Comisiones de los asientos de pago    |
+| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, cliente, zona, router, plan                      | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC     |
+| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                |
+| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)              |
+| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado) = `iva_libro` (2.1.02)  |
+| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)           |
+| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado` |
+| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes             |
+
+Rango por defecto: los últimos 12 meses (cobranza y cierres: el mes en curso). Alcance ACL por zona/router (o caja en cobranza, cierres y egresos).
+
+Exportación sin dependencias (`exportar.ts`): CSV con BOM UTF-8, comillas y fórmulas neutralizadas; XLSX mínimo (ZIP STORE con CRC-32 de `node:zlib`, una hoja, encabezado en negrita y congelado, dinero `#,##0.00`, fila de totales). Se probó que LibreOffice lo abre.
+
+### Dashboard (`resumenes.ts`)
+
+`GET /dashboard/resumen` (`reportes.ver`): servicios y clientes por estado, facturado y cobrado del mes, cartera vencida, cobros de hoy, promesas activas, series de 12 meses y `actualizado_en` por vista. Lee **solo** vistas materializadas `billing.resumen_*` que se refrescan **por evento**: `ConsumidorResumenes` (grupo `billing` en `node ace billing:worker`) refresca las vistas que cada evento puede cambiar (`factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado`) con `REFRESH MATERIALIZED VIEW CONCURRENTLY` vía `billing.refrescar_resumen(vista)` (SECURITY DEFINER: la app no es dueña de las vistas). Recalcular desde las tablas fuente es idempotente: repetir un evento deja lo mismo. `billing.resumenes_refrescos` guarda el último refresco y el último evento.
+
 ## Pruebas (tarea 12)
 
 Japa contra Postgres real; después de cada paso, el SELECT de control del libro (`afirmarLibroCuadrado`: ningún asiento descuadrado y total debe = total haber).
@@ -227,4 +251,4 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 
 Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`.
 
-Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
+Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
