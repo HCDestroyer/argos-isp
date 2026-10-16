@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import db from '@adonisjs/lucid/services/db'
@@ -29,7 +30,9 @@ const CLAVE_VALIDA = /^[\x21-\x7E]{1,255}$/
  *   respuesta 2xx. Si la operación falla, libera la reserva para permitir reintentar.
  * - Repetición con la misma ruta y cuerpo: devuelve la respuesta guardada con
  *   `Idempotent-Replayed: true` sin ejecutar nada.
- * - Misma clave con otra ruta u otro cuerpo: 422. Mientras la primera sigue en curso: 409.
+ * - Misma clave con otra ruta u otro cuerpo: 422. Mientras la primera sigue en curso: 409. En
+ *   multipart, el cuerpo incluye los archivos: campo, nombre, tamaño y sha256 del contenido
+ *   (`huellaArchivos`), así que otro archivo con la misma clave también es 422.
  *
  * Espacio de claves (semana 3): con usuario autenticado, por `actor_id`. Sin usuario (rutas
  * públicas del portal) se acota por `alcance` (`alcanceAnonimo`): la sesión del portal si trae la
@@ -55,6 +58,7 @@ export default class IdempotenciaMiddleware {
         const ruta = ctx.request.url(true)
         const huella = createHash('sha256')
             .update(`${metodo} ${ruta}\n${JSON.stringify(ctx.request.body() ?? {})}`)
+            .update(await huellaArchivos(ctx))
             .digest('hex')
 
         const insertadas = (await db
@@ -137,4 +141,30 @@ export function alcanceAnonimo(ctx: HttpContext): string {
     if (typeof sesion === 'string' && sesion !== '') return `sesion:${hash(sesion)}`
     const ip = ipOrigenDeLaPeticion(ctx) ?? ctx.request.ip()
     return `ip:${hash(ip)}`
+}
+
+/**
+ * Archivos de un cuerpo multipart en la huella (semana 3, `a5.md:26`): por campo (ordenados), el
+ * nombre del cliente, el tamaño y el sha256 del contenido. Vacío si la petición no trae archivos,
+ * así la huella de un JSON no cambia.
+ */
+export async function huellaArchivos(ctx: HttpContext): Promise<string> {
+    const porCampo = ctx.request.allFiles()
+    const campos = Object.keys(porCampo).sort()
+    if (campos.length === 0) return ''
+    const partes: string[] = []
+    for (const campo of campos) {
+        const valor = porCampo[campo]
+        const archivos = Array.isArray(valor) ? valor : valor ? [valor] : []
+        for (const archivo of archivos) {
+            let contenido = 'sin-contenido'
+            if (archivo.tmpPath) {
+                contenido = createHash('sha256')
+                    .update(await readFile(archivo.tmpPath))
+                    .digest('hex')
+            }
+            partes.push(`${campo}\t${archivo.clientName}\t${archivo.size}\t${contenido}`)
+        }
+    }
+    return `\narchivos\n${partes.join('\n')}`
 }

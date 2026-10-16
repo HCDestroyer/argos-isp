@@ -33,6 +33,20 @@ router
     })
     .use([middleware.idempotencia()])
 
+// multipart, como `POST /portal/comprobantes`
+router
+    .post('/__pruebas/idempotente-multipart', async ({ request, response }) => {
+        ejecuciones++
+        response.status(201)
+        const archivo = request.file('archivo')
+        return {
+            ejecucion: ejecuciones,
+            referencia: request.input('referencia'),
+            tamano: archivo?.size ?? null,
+        }
+    })
+    .use([middleware.idempotencia()])
+
 test.group('Idempotency-Key', (group) => {
     group.each.setup(() => {
         ejecuciones = 0
@@ -179,5 +193,30 @@ test.group('Idempotency-Key', (group) => {
         const fila = await db.from('core.idempotency_keys').where('clave', clave).firstOrFail()
         assert.isNull(fila.alcance)
         assert.isNotNull(fila.actor_id)
+    })
+
+    test('multipart: la huella incluye el contenido de los archivos', async ({ client, assert }) => {
+        const clave = unico('clave-multipart')
+        const enviar = (contenido: string, nombre = 'deposito.png') =>
+            client
+                .post('/__pruebas/idempotente-multipart')
+                .header('Idempotency-Key', clave)
+                .header('Cookie', 'argos_portal=pses_multipart')
+                .field('referencia', 'BOLETA-1')
+                .file('archivo', Buffer.from(contenido), { filename: nombre })
+
+        const primera = await estado(enviar('imagen-uno'), 201)
+        assert.equal(primera.body().referencia, 'BOLETA-1')
+        // mismo archivo: repite la respuesta sin ejecutar
+        const repetida = await estado(enviar('imagen-uno'), 201)
+        assert.equal(repetida.header('idempotent-replayed'), 'true')
+        assert.equal(ejecuciones, 1)
+
+        // mismos campos y mismo nombre, otro contenido (mismo tamaño): 422, no la respuesta guardada
+        const otra = await estado(enviar('imagen-dos'), 422)
+        assert.equal(otra.body().type, 'urn:argosisp:problema:idempotency_key_reutilizada')
+        // otro nombre de archivo con el mismo contenido también es otro cuerpo
+        await estado(enviar('imagen-uno', 'otro.png'), 422)
+        assert.equal(ejecuciones, 1)
     })
 })
