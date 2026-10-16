@@ -88,6 +88,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'notificaciones.alertar': 'Alerta al equipo enviada',
     'notificaciones.telegram_codigo': 'Código de Telegram generado',
     'notificaciones.telegram_vincular': 'Telegram vinculado por el bot',
+    'notificaciones.telegram_anular_codigos': 'Códigos de Telegram anulados',
+    'notificaciones.enviar_directo': 'Mensaje directo enviado',
     'notificaciones.vigilar_crons': 'Revisión de tareas automáticas',
     'pasarela.crear_cobro': 'Cobro en línea creado',
     'pasarela.procesar_webhook': 'Aviso de la pasarela de pago procesado',

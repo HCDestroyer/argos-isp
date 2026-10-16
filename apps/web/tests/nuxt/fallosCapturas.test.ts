@@ -97,7 +97,7 @@ describe('fallos de las capturas 06 y 07', () => {
         const declaradas = new Set<string>()
         for (const archivo of archivos) {
             const texto = readFileSync(join(raiz, archivo), 'utf8')
-            for (const [, nombre] of texto.matchAll(/(?:nombre|accion)\s*=\s*'([a-z_0-9]+\.[a-z_0-9]+)'/g)) {
+            for (const [, nombre] of texto.matchAll(/(?:readonly\s+nombre|accion)\s*=\s*'([a-z_0-9]+\.[a-z_0-9]+)'/g)) {
                 if (nombre) {
                     declaradas.add(nombre)
                 }
