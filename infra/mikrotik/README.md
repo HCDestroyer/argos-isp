@@ -149,6 +149,42 @@ Recomendación para `coa`:
 - `/aaa/authorize` de un suspendido: `Mikrotik-Group = "suspendido"` (más `Mikrotik-Rate-Limit` mínimo) cubre IPv4 e IPv6 desde el login.
 - El router solo acepta CoA desde la dirección de un `/radius`: en la prueba, la IP de origen llegó sin NAT y hubo que darla de alta. En producción `coa` sale con la IP del host, que debe ser `radiusAddr`. Si no, `/log` con `topics=radius,debug` muestra `received remote request from <ip> with unknown address, dropping`.
 
+### Corte IPv6 hacia `/corte` (propuesta de A2, día 4; la parte del router es de A6)
+
+Problema (PM, `lideres.md`): un suspendido por IPv6 queda bloqueado pero no llega a `/corte`, porque la cadena `argos-corte` de IPv6 responde `tcp-reset` y no hay redirección. RouterOS 7 sí tiene `/ipv6 firewall nat` con `dst-nat`, pero necesita en `dstnat` algo que identifique al suspendido, y eso depende de cómo se suspendió:
+
+| Cómo entró al corte                                                               | Qué deja en el router (verificado arriba)                                                                                     | ¿Se puede hacer dst-nat IPv6?                                        |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Login con el servicio ya suspendido (`aaa` manda `Mikrotik-Group = "suspendido"`) | IPv4, /64 y /56 en la address-list `suspendidos` de IPv4 **e IPv6**, interfaz en la interface-list `suspendidos`, `Filter-Id` | Sí: `src-address-list=suspendidos` o `in-interface-list=suspendidos` |
+| CoA sobre la sesión viva (`Mikrotik-Address-List` + `Filter-Id`)                  | IPv4 en `suspendidos` (solo IPv4) y la regla dinámica `chain=ppp` de `Filter-Id` (solo en `filter`)                           | No: nada que `dstnat` pueda ver para IPv6                            |
+
+No existe un atributo RADIUS de MikroTik para una address-list IPv6 (el diccionario solo trae `Mikrotik-Address-List`, que en CoA aplica solo a IPv4), así que no se inventa un `Mikrotik-Address-List6`.
+
+**Qué mandan `aaa` y `coa`:**
+
+- `aaa`, Access-Accept de un suspendido (sin cambios): `Mikrotik-Group = "suspendido"`, `Mikrotik-Rate-Limit = "256k/256k"`, `Mikrotik-Address-List = "suspendidos"`, `Filter-Id = "argos-corte.in"`, más su `Framed-IP-Address`, `Framed-IPv6-Prefix` (/64) y `Delegated-IPv6-Prefix` (/56) de siempre (A5 identifica al cliente por esas IPs).
+- `coa`, al suspender una sesión viva:
+    - `COA_SUSPENDER_CON_IPV6=coa` (por defecto, comportamiento del día 3): CoA con `Mikrotik-Rate-Limit`, `Mikrotik-Address-List` y `Filter-Id`. IPv4 aterriza en `/corte` sin reconectar; IPv6 queda bloqueado con reset.
+    - `COA_SUSPENDER_CON_IPV6=disconnect`: si la sesión tiene /64 o /56 en `network.sesiones`, Disconnect-Request; el CPE reconecta en segundos y entra por la primera fila de la tabla (perfil `suspendido` completo en IPv4 e IPv6). Las sesiones solo IPv4 siguen por CoA. Queda en `audit.red` como `disconnect` con `razon` = `suspender: … (sesión con IPv6: reconecta con el perfil suspendido)`.
+- Reactivar sigue siendo Disconnect (la sesión nueva sale sin listas ni reglas).
+
+**Qué falta en `lab.rsc` (A6):** espejo IPv6 del NAT de corte IPv4, con las mismas listas:
+
+```
+/ipv6 firewall nat
+add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT IPv6 por address-list"
+add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT IPv6 por interface-list"
+add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
+add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
+add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=$portalV6 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP IPv6 a /corte"
+```
+
+En IPv6 el parámetro es `to-address` (en IPv4 es `to-addresses`); confirmar la sintaxis en 7.24.5. Después del dst-nat el destino es `portalV6`, que está en `argos-portal`, así que la regla `corte portal` de la cadena `argos-corte` de IPv6 lo acepta; el `tcp-reset` queda para el resto (HTTPS no se puede redirigir, igual que en IPv4). Las reglas `argosisp:top` de NAT IPv6 se mueven al inicio igual que las de IPv4. El portal debe escuchar en `[portalV6]:portalCortePuerto` y responder `/corte` para cualquier `Host` (A5).
+
+**Verificar en el CHR (A6):** con `COA_SUSPENDER_CON_IPV6=disconnect`, suspender desde la API → `audit.red` con Disconnect-ACK → el cliente reconecta → `/ipv6 firewall address-list print where list=suspendidos` muestra el /64 y el /56 → `curl -6 http://example.com` desde el cliente devuelve la página de corte. Con `coa`, el mismo `curl -6` sigue en reset (comportamiento esperado de ese modo).
+
+Si el PM quiere el redirect IPv6 **sin** reconectar, la alternativa es que `coa`, tras el CoA-ACK, agregue el /64 y el /56 de la sesión a `/ipv6/firewall/address-list list=suspendidos` por la API REST de RouterOS (fila `routeros` en `audit.red`) y los quite al reactivar. Más piezas que pueden fallar (credenciales de API, entradas huérfanas si falla el borrado); queda para la semana 2 si se decide.
+
 ## Seguridad
 
 - `radiusSecret` largo y aleatorio (`openssl rand -hex 16`), distinto por router. Nunca en el repo: va en `infra/.env` del servidor y en el router.

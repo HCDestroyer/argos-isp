@@ -32,6 +32,8 @@ export function sesion(parcial: Partial<SesionActiva> = {}): SesionActiva {
         user_ppp: 'cliente-101',
         router_id: 1,
         radius_secret: cifrar(SECRET, CLAVE),
+        prefijo_enlace_v6: null,
+        prefijo_delegado_v6: null,
         ...parcial,
     }
 }

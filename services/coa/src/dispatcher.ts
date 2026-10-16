@@ -1,6 +1,6 @@
 import type { Almacen, SesionActiva } from './almacen.ts'
 import { descifrar } from './cifrado.ts'
-import type { PerfilSuspendido } from './config.ts'
+import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
 import { decidir, EVENTOS_COA, leerDesconexion, leerEvento, type Decision } from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
 
@@ -35,6 +35,8 @@ export interface OpcionesDispatcher {
     nas: ClienteNas
     claveSecretos: Buffer
     suspendido: PerfilSuspendido
+    /** `COA_SUSPENDER_CON_IPV6` (ver `config.ts`); por defecto `coa` */
+    suspenderConIpv6?: ModoSuspensionIpv6
     puertoNas: number
     timeoutMs: number
     reintentos: number
@@ -93,10 +95,39 @@ export class Dispatcher {
         const resultados: ResultadoSesion[] = []
         for (const sesion of sesiones) {
             resultados.push(
-                await this.#enviarASesion(entrada, eventoId, evento.servicio_id, sesion, decision),
+                await this.#enviarASesion(
+                    entrada,
+                    eventoId,
+                    evento.servicio_id,
+                    sesion,
+                    this.#paraSesion(decision, sesion),
+                ),
             )
         }
         return { decision, sesiones: resultados }
+    }
+
+    /**
+     * Ajuste por sesión: con `suspenderConIpv6 = disconnect`, una sesión con prefijo IPv6 se suspende
+     * con Disconnect (al reconectar entra con el perfil `suspendido`, que sí mete el /64 y el /56 en la
+     * address-list IPv6 y permite el redirect a `/corte`). Sin IPv6 sigue por CoA.
+     */
+    #paraSesion(
+        decision: Exclude<Decision, { accion: 'nada' }>,
+        sesion: SesionActiva,
+    ): Exclude<Decision, { accion: 'nada' }> {
+        if (
+            decision.accion === 'coa' &&
+            decision.suspender &&
+            this.#op.suspenderConIpv6 === 'disconnect' &&
+            (sesion.prefijo_enlace_v6 !== null || sesion.prefijo_delegado_v6 !== null)
+        ) {
+            return {
+                accion: 'disconnect',
+                razon: `${decision.razon} (sesión con IPv6: reconecta con el perfil suspendido)`,
+            }
+        }
+        return decision
     }
 
     /**

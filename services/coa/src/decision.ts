@@ -51,7 +51,13 @@ export interface ServicioActual {
 export type AtributosCoa = Record<string, string>
 
 export type Decision =
-    | { accion: 'coa'; atributos: AtributosCoa; razon: string }
+    | {
+          accion: 'coa'
+          atributos: AtributosCoa
+          razon: string
+          /** CoA de suspensión (perfil de corte); el dispatcher puede cambiarlo por Disconnect en IPv6 */
+          suspender?: true
+      }
     | { accion: 'disconnect'; razon: string }
     | { accion: 'nada'; razon: string }
 
@@ -94,6 +100,7 @@ export function decidir(
             return {
                 accion: 'coa',
                 razon: `suspender: ${evento.de} → suspendido`,
+                suspender: true,
                 atributos: {
                     'Mikrotik-Rate-Limit': suspendido.rateLimit,
                     'Mikrotik-Address-List': suspendido.addressList,

@@ -17,6 +17,8 @@ export interface SesionActiva {
     router_id: number | null
     /** `network.routers.radius_secret` cifrado (v1) o null si el NAS no está dado de alta */
     radius_secret: string | null
+    prefijo_enlace_v6: string | null
+    prefijo_delegado_v6: string | null
 }
 
 /** Sesión abierta buscada por id (desconexión manual); puede no tener servicio conocido. */
@@ -85,7 +87,9 @@ export class AlmacenPg implements Almacen {
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {
         const { rows } = await this.pool.query<SesionActiva>(
             `SELECT ses.id::int AS id, host(ses.nas_ip) AS nas_ip, ses.acct_session_id, ses.user_ppp,
-                    r.id::int AS router_id, r.radius_secret
+                    r.id::int AS router_id, r.radius_secret,
+                    ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
+                    ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
              FROM network.sesiones ses
              LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
              WHERE ses.servicio_id = $1 AND ses.fin IS NULL
@@ -98,7 +102,9 @@ export class AlmacenPg implements Almacen {
     async sesionAbierta(sesionId: number): Promise<SesionPorId | null> {
         const { rows } = await this.pool.query<SesionPorId>(
             `SELECT ses.id::int AS id, ses.servicio_id::int AS servicio_id, host(ses.nas_ip) AS nas_ip,
-                    ses.acct_session_id, ses.user_ppp, r.id::int AS router_id, r.radius_secret
+                    ses.acct_session_id, ses.user_ppp, r.id::int AS router_id, r.radius_secret,
+                    ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
+                    ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
              FROM network.sesiones ses
              LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
              WHERE ses.id = $1 AND ses.fin IS NULL`,
