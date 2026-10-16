@@ -14,7 +14,7 @@ docker build -f apps/web/Dockerfile -t argosisp/web .           # desde la raíz
 Pruebas de flujo (Playwright, `tests/e2e/*.spec.ts`; los navegadores salen de
 `PLAYWRIGHT_BROWSERS_PATH`, no se descargan): `pnpm --filter @argosisp/web test:e2e` levanta el
 panel en modo fixtures en el puerto 3150 (`PW_PUERTO`), o usa `PW_BASE_URL` para uno ya levantado.
-Hoy: prueba obligatoria 3, "Registrar pago y ver el servicio reactivarse", a 1280 y 390 px.
+Las 5 obligatorias, a 1280 y 390 px: 1 `permisos.spec.ts` (el cajero no ve Routers y `/routers` lo manda a `/sin-permiso`), 2 `alta-cliente-servicio.spec.ts`, 3 `cobro-reactivacion.spec.ts`, 4 `promesa.spec.ts` (resultado de la evaluación) y 5 `cierre-caja.spec.ts` (faltante con motivo). Navegan por el menú (`tests/e2e/ayudas.ts`), sin `page.goto` después de entrar.
 
 Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todo) o `cajero@argos.test`
 (los permisos de `ROLES_BASE.cajero` de `apps/api/app/core/permisos.ts`: sin routers, plantillas,
