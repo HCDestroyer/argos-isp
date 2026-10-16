@@ -81,7 +81,10 @@ export function cuerpoRest(
 export class ApiFalsa {
     readonly llamadas: { url: string; auth: string | undefined; requestId?: string }[] = []
     respuestas = new Map<string, { status: number; cuerpo?: unknown }>()
+    /** true: acepta la conexión y nunca responde (API colgada → timeout de `FuenteApi`). */
+    colgada = false
     private servidor: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+        if (this.colgada) return
         const url = new URL(req.url ?? '/', 'http://x')
         const requestId = req.headers['x-request-id']
         this.llamadas.push({
@@ -101,6 +104,7 @@ export class ApiFalsa {
     }
 
     async cerrar(): Promise<void> {
+        this.servidor.closeAllConnections()
         await new Promise<void>((resolve) => this.servidor.close(() => resolve()))
     }
 }

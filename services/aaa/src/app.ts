@@ -1,12 +1,13 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
 import { ErrorAccounting, normalizarAccounting, type ColaAccounting } from './accounting.ts'
 import { descifrar } from './cifrado.ts'
-import type { ResolutorServicios } from './fuentes.ts'
+import { ErrorSinFuentes, type ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
 import { leerAtributos } from './radius.ts'
 import { idDerivado, idEntrante, idNuevo } from './request_id.ts'
 import { esLapida } from './servicio.ts'
 import { MetricasAaa, scrapeAutorizado, type ResultadoAutorizacion } from './metricas.ts'
+import type { UltimoConocido } from './ultimo_conocido.ts'
 
 /**
  * Servicio aaa: endpoints que llama FreeRADIUS (`freeradius/mods-enabled/rest`, `body = 'json'`).
@@ -16,7 +17,8 @@ import { MetricasAaa, scrapeAutorizado, type ResultadoAutorizacion } from './met
  *   activo / limitado / suspendido → 200 con `control:Cleartext-Password` + atributos `reply:`
  *   retirado                       → 401
  *   inexistente (o lápida)         → 404
- *   error de Redis y del respaldo  → 503
+ *   error de Redis y del respaldo  → modo degradado: 200/401/404 con el último perfil conocido
+ *                                    (`ultimo_conocido.ts`); sin él, o con AAA_DEGRADADO=rechazar → 503
  */
 
 export interface DependenciasApp {
@@ -36,6 +38,8 @@ export interface DependenciasApp {
     metricas?: MetricasAaa
     /** `METRICS_TOKEN`: si está, `/metrics` exige `Authorization: Bearer <token>` */
     metricasToken?: string
+    /** Último perfil conocido (el mismo que usa el resolutor): solo para `/metrics` y `/health`. */
+    ultimoConocido?: UltimoConocido
 }
 
 /** Código HTTP de `/aaa/authorize` → resultado de la métrica (mismo mapeo que hace rlm_rest). */
@@ -112,13 +116,29 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         }
         return reply
             .type('text/plain; version=0.0.4; charset=utf-8')
-            .send(metricas.exponer({ redisArriba: deps.redisListo ? deps.redisListo() : false }))
+            .send(
+                metricas.exponer({
+                    redisArriba: deps.redisListo ? deps.redisListo() : false,
+                    ...(deps.ultimoConocido
+                        ? {
+                              ultimoConocido: {
+                                  registros: deps.ultimoConocido.tamano,
+                                  espejoEn: deps.ultimoConocido.ultimoEspejo,
+                              },
+                          }
+                        : {}),
+                }),
+            )
     })
 
+    // 200 también en modo degradado: aaa sigue respondiendo a FreeRADIUS (el vigía no debe declararlo
+    // caído). El modo se ve aquí y en `argosisp_aaa_degradado`.
     app.get('/health', async () => ({
         status: 'ok',
         servicio: 'aaa',
         redis: deps.redisListo ? (deps.redisListo() ? 'ok' : 'caido') : 'desconocido',
+        modo: metricas.enDegradado ? 'degradado' : 'normal',
+        ...(deps.ultimoConocido ? { ultimo_conocido: deps.ultimoConocido.tamano } : {}),
     }))
 
     app.post('/aaa/authorize', async (req, reply) => {
@@ -135,12 +155,56 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         try {
             resuelto = await deps.resolutor.resolver(usuario, { requestId: req.requestId })
         } catch (e) {
-            req.log.error({ usuario, nas, error: (e as Error).message }, 'authorize: sin Redis ni respaldo')
+            const sinPerfil = e instanceof ErrorSinFuentes && e.motivo === 'sin_perfil'
+            if (metricas.degradado(sinPerfil ? 'sin_perfil' : 'desactivado')) {
+                req.log.error({ error: (e as Error).message }, 'modo degradado: inicio')
+            }
+            req.log.error(
+                {
+                    usuario,
+                    nas,
+                    modo: 'degradado',
+                    resultado: sinPerfil ? 'sin_perfil' : 'desactivado',
+                    error: (e as Error).message,
+                },
+                sinPerfil
+                    ? 'authorize: sin Redis ni API y sin último perfil conocido; se rechaza'
+                    : 'authorize: sin Redis ni respaldo',
+            )
             return problema(reply, 503, 'Fuente de servicios no disponible')
         }
-        const { registro, origen, errorRedis } = resuelto
+        const { registro, origen, errorRedis, degradado } = resuelto
         const ms = Math.round((performance.now() - inicio) * 10) / 10
-        if (errorRedis) req.log.warn({ usuario, error: errorRedis }, 'Redis no respondió; se usó el respaldo')
+        if (degradado) {
+            if (metricas.degradado('perfil')) {
+                req.log.error({ error: degradado.error }, 'modo degradado: inicio')
+            }
+            req.log.warn(
+                {
+                    usuario,
+                    nas,
+                    modo: 'degradado',
+                    perfil_visto_en: new Date(degradado.vistoEn).toISOString(),
+                    perfil_edad_s: Math.round((Date.now() - degradado.vistoEn) / 1000),
+                    error: degradado.error,
+                },
+                'authorize: modo degradado, último perfil conocido',
+            )
+        } else {
+            const periodo = metricas.normal()
+            if (periodo) {
+                req.log.warn(
+                    {
+                        desde: new Date(periodo.desde).toISOString(),
+                        duracion_s: Math.round((Date.now() - periodo.desde) / 1000),
+                        atendidas: periodo.atendidas,
+                        origen,
+                    },
+                    'modo degradado: fin',
+                )
+            }
+            if (errorRedis) req.log.warn({ usuario, error: errorRedis }, 'Redis no respondió; se usó el respaldo')
+        }
 
         if (registro === null || esLapida(registro)) {
             req.log.info({ usuario, nas, origen, resultado: 'inexistente', ms }, 'authorize')

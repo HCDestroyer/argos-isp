@@ -294,10 +294,10 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         assert.equal(res.statusCode, 404)
     })
 
-    it('GET /health informa el estado de Redis', async () => {
+    it('GET /health informa el estado de Redis y el modo', async () => {
         const res = await app.inject({ method: 'GET', url: '/health' })
         assert.equal(res.statusCode, 200)
-        assert.deepEqual(res.json(), { status: 'ok', servicio: 'aaa', redis: 'ok' })
+        assert.deepEqual(res.json(), { status: 'ok', servicio: 'aaa', redis: 'ok', modo: 'normal' })
     })
 
     it('post-auth → 204; accounting sin cola configurada → 503', async () => {
