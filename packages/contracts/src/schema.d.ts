@@ -440,6 +440,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * KPIs del dashboard y series de 12 meses (vistas refrescadas por evento)
+         * @description Lee solo vistas materializadas que el grupo billing refresca al recibir factura.*, pago.*, promesa.* y servicio.estado_cambiado (nunca por intervalo). actualizado_en dice cuándo se refrescó cada una.
+         */
+        get: operations["dashboardResumen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documentos/aviso-cobro/{facturaId}": {
         parameters: {
             query?: never;
@@ -495,6 +515,81 @@ export interface paths {
          * @description 422 si la plantilla no es válida. Responde application/pdf.
          */
         post: operations["documentosPlantillaVistaPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/egresos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar egresos */
+        get: operations["egresosListar"];
+        put?: never;
+        /**
+         * Registrar egreso (asiento Gasto / Caja o Banco)
+         * @description La categoría decide la cuenta de gasto. Con metodo caja el efectivo sale del turno abierto de la caja (baja el esperado del cierre); sin caja_id, la caja del turno abierto del usuario o la principal. 422 con un error por campo (no_aplica si se manda el origen de otro método).
+         */
+        post: operations["egresosRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/egresos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver egreso */
+        get: operations["egresosVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/egresos/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular egreso (asiento de reverso)
+         * @description El reverso va con fecha de hoy (periodo abierto). 409 egreso_anulado si ya lo estaba.
+         */
+        post: operations["egresosAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/egresos/categorias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Categorías de egreso con su cuenta de gasto */
+        get: operations["egresosCategorias"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -736,6 +831,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/periodos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cierres mensuales y reaperturas (el más reciente primero) */
+        get: operations["libroPeriodos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/periodos/cerrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar un mes del libro
+         * @description Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.
+         */
+        post: operations["libroCerrarPeriodo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/periodos/reabrir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reabrir un mes cerrado (con motivo)
+         * @description No borra el cierre: registra la reapertura con motivo (auditada). Se puede volver a cerrar. 409 periodo_abierto si el mes no está cerrado.
+         */
+        post: operations["libroReabrirPeriodo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -887,6 +1039,141 @@ export interface paths {
         put?: never;
         /** Anular pago (asiento de reverso y re-evaluación) */
         post: operations["pagosAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/cobros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cobros en línea */
+        get: operations["pasarelaListarCobros"];
+        put?: never;
+        /**
+         * Crear cobro en línea ("Pagar en línea"): devuelve la url de pago del proveedor
+         * @description No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.
+         */
+        post: operations["pasarelaCrearCobro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/cobros/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver cobro en línea (estado y pago) */
+        get: operations["pasarelaVerCobro"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/conciliaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Corridas de la conciliación con sus diferencias */
+        get: operations["pasarelaConciliaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/conciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conciliar los cobros en línea de un día contra el proveedor
+         * @description Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.
+         */
+        post: operations["pasarelaConciliar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/falsa/{cobro}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Laboratorio: página de pago de la pasarela falsa
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón "Pagar (simulado)".
+         */
+        get: operations["pasarelaFalsaPagina"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/falsa/{cobro}/pagar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.
+         */
+        post: operations["pasarelaFalsaPagar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/webhook/{proveedor}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook del proveedor de pago (firmado con HMAC)
+         * @description Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.
+         */
+        post: operations["pasarelaWebhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1422,6 +1709,206 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/promesas/simular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simular una promesa: evalúa todas las reglas sin crear nada
+         * @description Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.
+         */
+        post: operations["promesasSimular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/altas-bajas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Altas, bajas, suspensiones y reactivaciones por mes
+         * @description Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesAltasBajas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cartera-vencida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cartera vencida por antigüedad (0-30, 31-60, 61-90, +90 días)
+         * @description Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCarteraVencida"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cierres-caja": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cierres de caja: esperado, contado y diferencia por turno
+         * @description Turnos cerrados en el rango (por defecto el mes en curso). Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCierresCaja"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cobranza-diaria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cobranza por día, método y caja
+         * @description Por defecto el mes en curso. Los anulados van aparte. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesCobranzaDiaria"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/egresos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Egresos por categoría y mes
+         * @description Egresos vigentes (sin anular) por mes contable. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesEgresos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/facturado-vs-cobrado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Facturado vs cobrado por periodo de factura
+         * @description Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesFacturadoCobrado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/ingresos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ingresos (pagos vigentes) por periodo y método
+         * @description Por mes (o día con agrupar=dia) de Guatemala. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesIngresos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/iva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * IVA del periodo (débito fiscal) por mes contable
+         * @description Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesIva"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/promesas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Promesas: creadas, cumplidas, incumplidas y tasa de cumplimiento
+         * @description Por mes de creación y canal, con su estado actual. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesPromesas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles": {
         parameters: {
             query?: never;
@@ -1493,6 +1980,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/cambiar-control-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el control de velocidad del router (simple o arbol_pcq)
+         * @description Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.
+         */
+        post: operations["routersCambiarControlVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/ipv6-bloques": {
         parameters: {
             query?: never;
@@ -1556,7 +2063,7 @@ export interface paths {
         /** Listar servicios */
         get: operations["serviciosListar"];
         put?: never;
-        /** Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp) */
+        /** Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe) */
         post: operations["serviciosCrear"];
         delete?: never;
         options?: never;
@@ -1914,6 +2421,11 @@ export interface components {
             pass_ppp: string;
             estado: components["schemas"]["EstadoServicio"];
             router_id: number;
+            /**
+             * @description network.routers.control_velocidad del router del servicio
+             * @enum {string}
+             */
+            control_velocidad: "simple" | "arbol_pcq";
             plan: {
                 id: number;
                 subida_kbps: number;
@@ -1922,6 +2434,12 @@ export interface components {
                 bajada_limitada_kbps: number;
                 rate_limit_override: string | null;
                 profile_ppp: string | null;
+                /** @description Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override) */
+                rate_limit: string;
+                /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
+                rate_limit_limitado: string;
+                /** @description Reuso efectivo 1:N en el router */
+                reuso: number;
             };
             ipv4: {
                 /** @enum {string} */
@@ -2004,9 +2522,14 @@ export interface components {
             id: number;
             nombre: string;
             cajero_id: number | null;
+            /** @description Cajero asignado a la caja */
+            cajero_nombre?: string | null;
             cuenta_id: number;
             activa: boolean;
             turno_abierto_id: number | null;
+            /** @description Usuario que abrió el turno abierto */
+            turno_abierto_por?: number | null;
+            turno_abierto_por_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2030,6 +2553,8 @@ export interface components {
             abierto_por?: number | null;
             /** @description Usuario que cerró el turno */
             cerrado_por?: number | null;
+            abierto_por_nombre?: string | null;
+            cerrado_por_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2054,6 +2579,35 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        CategoriaEgreso: {
+            id: number;
+            /** @enum {string} */
+            clave: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+            nombre: string;
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+        };
+        CierrePeriodo: {
+            id: number;
+            /** @description YYYY-MM */
+            periodo: string;
+            /** @enum {string} */
+            estado: "cerrado" | "reabierto";
+            /** Format: date-time */
+            cerrado_en: string;
+            cerrado_por: number | null;
+            cerrado_por_nombre: string | null;
+            /** @description Al cerrar: desde, hasta, asientos, debe, haber y cuentas[] (codigo, nombre, debe, haber) del mes */
+            resumen: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            reabierto_en: string | null;
+            reabierto_por: number | null;
+            reabierto_por_nombre: string | null;
+            motivo_reapertura: string | null;
+        };
         Cliente: {
             id: number;
             nombre: string;
@@ -2075,15 +2629,53 @@ export interface components {
             canal_preferido: "correo" | "telegram" | "whatsapp";
             telegram_chat_id: string | null;
             /** @description Cliente que paga por este (responsable de pago); null si paga él mismo */
-            responsable_pago_id?: number | null;
+            responsable_pago_id: number | null;
             /** @description Nombre del responsable de pago (solo lectura) */
-            responsable_pago_nombre?: string | null;
+            responsable_pago_nombre: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        CobroPasarela: {
+            id: number;
+            proveedor: string;
+            /** @description Id del cobro en el proveedor */
+            id_proveedor: string | null;
+            cliente_id: number;
+            cliente_nombre: string;
+            servicio_id: number | null;
+            monto: components["schemas"]["Dinero"];
+            facturas: number[];
+            /** @enum {string} */
+            estado: "pendiente" | "pagado" | "fallido" | "expirado";
+            /** @description Adonde se manda al cliente para pagar */
+            url_pago: string | null;
+            /** Format: date-time */
+            expira_en: string | null;
+            canal: string;
+            /** @description Pago registrado al llegar el webhook */
+            pago_id: number | null;
+            monto_pagado: components["schemas"]["Dinero"] | null;
+            comision: components["schemas"]["Dinero"];
+            /** Format: date-time */
+            pagado_en: string | null;
+            /** Format: date-time */
+            conciliado_en: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ColumnaReporte: {
+            clave: string;
+            titulo: string;
+            /** @enum {string} */
+            tipo: "texto" | "dinero" | "entero" | "fecha" | "porcentaje" | "id";
         };
         Comprobante: {
             id: number;
@@ -2130,6 +2722,28 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ConciliacionPasarela: {
+            id: number;
+            proveedor: string;
+            /** Format: date */
+            fecha: string;
+            revisados: number;
+            conciliados: number;
+            cobros_conciliados: number[];
+            diferencias: {
+                /** @enum {string} */
+                tipo: "pago_sin_registrar" | "pago_sin_cobro_en_proveedor" | "monto_distinto" | "pago_anulado" | "pago_sin_cobro" | "error_consulta";
+                cobro_id: number | null;
+                pago_id: number | null;
+                id_proveedor: string | null;
+                nuestro: components["schemas"]["Dinero"] | null;
+                proveedor: components["schemas"]["Dinero"] | null;
+                detalle: string;
+            }[];
+            ejecutado_por?: number | null;
+            /** Format: date-time */
+            created_at?: string;
         };
         ConfiguracionEfectivaServicio: {
             servicio_id: number;
@@ -2232,6 +2846,47 @@ export interface components {
          * @example 150.00
          */
         Dinero: string;
+        Egreso: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            /** @enum {string} */
+            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+            categoria_nombre: string;
+            /** @description Cuenta de gasto del plan */
+            cuenta_codigo: string;
+            proveedor: string | null;
+            descripcion: string | null;
+            /** @description Número o serie del documento del proveedor */
+            comprobante: string | null;
+            monto: components["schemas"]["Dinero"];
+            /** @enum {string} */
+            metodo: "caja" | "banco" | "cuenta_bancaria";
+            caja_id: number | null;
+            caja_nombre: string | null;
+            /** @description Turno de caja abierto cuando salió el efectivo */
+            turno_id: number | null;
+            banco_id: number | null;
+            banco_nombre: string | null;
+            cuenta_bancaria_id: number | null;
+            cuenta_bancaria_nombre: string | null;
+            asiento_id: number | null;
+            /** @enum {string} */
+            estado: "registrado" | "anulado";
+            registrado_por: number | null;
+            registrado_por_nombre: string | null;
+            /** Format: date-time */
+            anulado_en: string | null;
+            anulado_por: number | null;
+            motivo_anulacion: string | null;
+            asiento_reverso_id: number | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         Empresa: {
             nombre: string;
             nit: string | null;
@@ -2332,6 +2987,7 @@ export interface components {
         Factura: {
             id: number;
             cliente_id: number;
+            cliente_nombre?: string;
             servicio_id: number | null;
             /** Format: date */
             periodo: string;
@@ -2459,6 +3115,8 @@ export interface components {
             debe: components["schemas"]["Dinero"];
             haber: components["schemas"]["Dinero"];
             cliente_id: number | null;
+            /** @description Cliente del auxiliar (CxC, anticipos) */
+            cliente_nombre?: string | null;
         };
         MovimientoEstadoCuenta: {
             /** Format: date */
@@ -2474,6 +3132,8 @@ export interface components {
         Pago: {
             id: number;
             cliente_id: number;
+            /** @description Nombre del pagador */
+            cliente_nombre?: string;
             /** @enum {string} */
             metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
             monto: components["schemas"]["Dinero"];
@@ -2492,7 +3152,7 @@ export interface components {
              */
             anulado_en?: string | null;
             motivo_anulacion?: string | null;
-            /** @description Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata) */
+            /** @description Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte) */
             servicios?: components["schemas"]["ServicioEvaluado"][];
             /** @description Banco de origen (transferencia, ach) */
             banco_origen_id?: number | null;
@@ -2522,6 +3182,18 @@ export interface components {
             bajada_limitada_kbps: number;
             subida_limitada_kbps: number;
             reuso: number;
+            /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
+            garantizado_pct?: number | null;
+            /** @description burst-limit de bajada; null = sin ráfaga */
+            rafaga_bajada_kbps?: number | null;
+            /** @description burst-limit de subida; null = sin ráfaga */
+            rafaga_subida_kbps?: number | null;
+            /** @description burst-threshold como % del MIR */
+            rafaga_umbral_pct?: number;
+            /** @description burst-time en segundos */
+            rafaga_segundos?: number;
+            /** @description 1 (alta) a 8 (baja) */
+            prioridad?: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -2543,7 +3215,20 @@ export interface components {
             subida_kbps: number;
             bajada_limitada_kbps: number;
             subida_limitada_kbps: number;
+            /** @description Reuso efectivo en el router */
             reuso: number;
+            /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
+            garantizado_pct?: number | null;
+            /** @description burst-limit de bajada; null = sin ráfaga */
+            rafaga_bajada_kbps?: number | null;
+            /** @description burst-limit de subida; null = sin ráfaga */
+            rafaga_subida_kbps?: number | null;
+            /** @description burst-threshold como % del MIR */
+            rafaga_umbral_pct?: number;
+            /** @description burst-time en segundos */
+            rafaga_segundos?: number;
+            /** @description 1 (alta) a 8 (baja) */
+            prioridad?: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -2558,9 +3243,9 @@ export interface components {
             updated_at: string;
             router_id: number;
             implementacion: components["schemas"]["PlanRouter"] | null;
-            /** @description rate-limit MikroTik subida/bajada: "5000k/20000k" */
+            /** @description Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override */
             rate_limit: string;
-            /** @description rate-limit en estado limitado */
+            /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
             rate_limit_limitado: string;
             profile_ppp: string | null;
             pool_ipv4: string | null;
@@ -2580,6 +3265,20 @@ export interface components {
             local_address: string | null;
             no_crear_reglas: boolean;
             rate_limit_override: string | null;
+            /** @description null = hereda del plan */
+            reuso?: number | null;
+            /** @description null = hereda del plan */
+            garantizado_pct?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_bajada_kbps?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_subida_kbps?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_umbral_pct?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_segundos?: number | null;
+            /** @description null = hereda del plan */
+            prioridad?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2615,6 +3314,8 @@ export interface components {
             /** @enum {string} */
             certificar_al: "emitir" | "pagar" | "nunca";
             reglas_promesa: components["schemas"]["ReglasPromesa"];
+            /** @description Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una) */
+            por_defecto?: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2851,6 +3552,7 @@ export interface components {
             id: number;
             servicio_id: number;
             cliente_id: number;
+            cliente_nombre?: string;
             /** Format: date-time */
             vence_en: string;
             monto: components["schemas"]["Dinero"];
@@ -2916,6 +3618,20 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ReglaSimulada: {
+            regla: string;
+            ok: boolean;
+            /** @description false: la configuración no exige esta regla */
+            aplica: boolean;
+            /** @description Lo medido (días, monto, cantidad, %) */
+            valor: string | number | boolean | null;
+            /** @description Límite aplicado (null = sin límite) */
+            limite: string | number | boolean | null;
+            /** @description general o el canal cuyo límite reemplazó al general */
+            origen: string;
+            /** @description Explicación para la pantalla */
+            detalle: string;
+        };
         ReglasPromesa: {
             habilitadas: boolean;
             /** @description Promesas por periodo de facturación */
@@ -2968,6 +3684,298 @@ export interface components {
                 };
             };
         };
+        ReporteAltasBajas: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                altas: number;
+                bajas: number;
+                suspensiones: number;
+                limitaciones: number;
+                reactivaciones: number;
+                neto: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                altas: number | null;
+                bajas: number | null;
+                suspensiones: number | null;
+                limitaciones: number | null;
+                reactivaciones: number | null;
+                neto: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCarteraVencida: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                grupo_id: number | null;
+                grupo: string;
+                facturas: number;
+                por_vencer: components["schemas"]["Dinero"];
+                dias_0_30: components["schemas"]["Dinero"];
+                dias_31_60: components["schemas"]["Dinero"];
+                dias_61_90: components["schemas"]["Dinero"];
+                dias_mas_90: components["schemas"]["Dinero"];
+                vencido: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                grupo_id: number | null;
+                grupo: number | null;
+                facturas: number | null;
+                por_vencer: components["schemas"]["Dinero"] | null;
+                dias_0_30: components["schemas"]["Dinero"] | null;
+                dias_31_60: components["schemas"]["Dinero"] | null;
+                dias_61_90: components["schemas"]["Dinero"] | null;
+                dias_mas_90: components["schemas"]["Dinero"] | null;
+                vencido: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCierresCaja: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                turno_id: number;
+                caja_id: number;
+                caja: string;
+                abierto_en: string;
+                cerrado_en: string;
+                abierto_por: string | null;
+                cerrado_por: string | null;
+                fondo_inicial: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                egresos: components["schemas"]["Dinero"];
+                esperado: components["schemas"]["Dinero"];
+                contado: components["schemas"]["Dinero"];
+                diferencia: components["schemas"]["Dinero"];
+                motivo: string | null;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                turno_id: number | null;
+                caja_id: number | null;
+                caja: number | null;
+                abierto_en: number | null;
+                cerrado_en: number | null;
+                abierto_por: number | null;
+                cerrado_por: number | null;
+                fondo_inicial: components["schemas"]["Dinero"] | null;
+                cobrado: components["schemas"]["Dinero"] | null;
+                egresos: components["schemas"]["Dinero"] | null;
+                esperado: components["schemas"]["Dinero"] | null;
+                contado: components["schemas"]["Dinero"] | null;
+                diferencia: components["schemas"]["Dinero"] | null;
+                motivo: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteCobranzaDiaria: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                /** Format: date */
+                fecha: string;
+                metodo: string;
+                caja_id: number | null;
+                caja: string | null;
+                pagos: number;
+                monto: components["schemas"]["Dinero"];
+                anulados: number;
+                monto_anulado: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                fecha: number | null;
+                metodo: number | null;
+                caja_id: number | null;
+                caja: number | null;
+                pagos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+                anulados: number | null;
+                monto_anulado: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteEgresos: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                categoria: string;
+                categoria_nombre: string;
+                cuenta_codigo: string;
+                egresos: number;
+                monto: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                categoria: number | null;
+                categoria_nombre: number | null;
+                cuenta_codigo: number | null;
+                egresos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteFacturadoCobrado: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                facturas: number;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                pendiente: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                cobranza_pct: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                facturas: number | null;
+                facturado: components["schemas"]["Dinero"] | null;
+                cobrado: components["schemas"]["Dinero"] | null;
+                pendiente: components["schemas"]["Dinero"] | null;
+                cobranza_pct: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteIngresos: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                metodo: string;
+                pagos: number;
+                monto: components["schemas"]["Dinero"];
+                comision: components["schemas"]["Dinero"];
+                neto: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                metodo: number | null;
+                pagos: number | null;
+                monto: components["schemas"]["Dinero"] | null;
+                comision: components["schemas"]["Dinero"] | null;
+                neto: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteIva: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                facturas: number;
+                base: components["schemas"]["Dinero"];
+                iva_facturado: components["schemas"]["Dinero"];
+                facturas_anuladas: number;
+                base_anulada: components["schemas"]["Dinero"];
+                iva_anulado: components["schemas"]["Dinero"];
+                iva_neto: components["schemas"]["Dinero"];
+                iva_libro: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                facturas: number | null;
+                base: components["schemas"]["Dinero"] | null;
+                iva_facturado: components["schemas"]["Dinero"] | null;
+                facturas_anuladas: number | null;
+                base_anulada: components["schemas"]["Dinero"] | null;
+                iva_anulado: components["schemas"]["Dinero"] | null;
+                iva_neto: components["schemas"]["Dinero"] | null;
+                iva_libro: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReportePromesas: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                periodo: string;
+                canal: string;
+                creadas: number;
+                rechazadas: number;
+                pendientes: number;
+                activas: number;
+                cumplidas: number;
+                incumplidas: number;
+                canceladas: number;
+                monto_prometido: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                tasa_cumplimiento: number;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                periodo: number | null;
+                canal: number | null;
+                creadas: number | null;
+                rechazadas: number | null;
+                pendientes: number | null;
+                activas: number | null;
+                cumplidas: number | null;
+                incumplidas: number | null;
+                canceladas: number | null;
+                monto_prometido: components["schemas"]["Dinero"] | null;
+                tasa_cumplimiento: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ResolucionIp: {
             servicio_id: number;
             cliente_id: number;
@@ -3001,6 +4009,75 @@ export interface components {
             /** @description Facturas que no se pudieron procesar (ver log) */
             errores: number;
         };
+        ResultadoWebhookPasarela: {
+            recibido: boolean;
+            /** @description El evento ya se había procesado (no se registra otro pago) */
+            duplicado: boolean;
+            id_evento: string;
+            cobro_id: number | null;
+            pago_id: number | null;
+            estado: string;
+            /** @description cobro_desconocido o cobro_ya_pagado */
+            ignorado?: string;
+        };
+        ResumenDashboard: {
+            servicios: {
+                activos: number;
+                limitados: number;
+                suspendidos: number;
+                retirados: number;
+            };
+            /** @description Clientes con al menos un servicio en ese estado */
+            clientes: {
+                activos: number;
+                limitados: number;
+                cortados: number;
+            };
+            mes: {
+                periodo: string;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                /** @description Porcentaje 0–100 con 2 decimales */
+                cobranza_pct: number;
+            };
+            cartera_vencida: {
+                monto: components["schemas"]["Dinero"];
+                facturas: number;
+                clientes: number;
+                pendiente_total: components["schemas"]["Dinero"];
+            };
+            hoy: {
+                /** Format: date */
+                fecha: string;
+                cobrado: components["schemas"]["Dinero"];
+                pagos: number;
+            };
+            promesas_activas: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Últimos 12 meses (YYYY-MM), el actual al final */
+            series: {
+                periodo: string;
+                facturado: components["schemas"]["Dinero"];
+                cobrado: components["schemas"]["Dinero"];
+                facturas: number;
+                pagos: number;
+            }[];
+            /** @description Último refresco de cada vista (por evento) */
+            actualizado_en: {
+                /** Format: date-time */
+                resumen_mensual: string | null;
+                /** Format: date-time */
+                resumen_cobros_diarios: string | null;
+                /** Format: date-time */
+                resumen_servicios: string | null;
+                /** Format: date-time */
+                resumen_cartera: string | null;
+                /** Format: date-time */
+                resumen_promesas: string | null;
+            };
+        };
         Rol: {
             id: number;
             nombre: string;
@@ -3023,7 +4100,20 @@ export interface components {
             nas_ip: string;
             /** @enum {string} */
             modo_seguridad: "radius" | "api";
-            /** @enum {string} */
+            /**
+             * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
+             * @enum {string}
+             */
+            control_velocidad?: "simple" | "arbol_pcq";
+            /** @description Capacidad del enlace (techo del padre global); null = sin techo */
+            capacidad_bajada_kbps?: number | null;
+            /** @description Capacidad del enlace (techo del padre global); null = sin techo */
+            capacidad_subida_kbps?: number | null;
+            /**
+             * @deprecated
+             * @description Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad
+             * @enum {string}
+             */
             modo_velocidad: "simple" | "pcq";
             activo: boolean;
             /** @description Control optimista: envíala al editar */
@@ -3045,7 +4135,15 @@ export interface components {
             /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
             suspension_manual?: boolean;
             suspension_manual_motivo?: string | null;
-            user_ppp: string;
+            /**
+             * @description pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS
+             * @enum {string}
+             */
+            tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @description null fuera de pppoe */
+            user_ppp: string | null;
+            /** @description ARP estático IP-MAC en el router (solo sin PPPoE) */
+            amarre_ip_mac?: boolean;
             mac: string | null;
             direccion: string | null;
             coordenadas: string | null;
@@ -3063,7 +4161,7 @@ export interface components {
             plan_nombre?: string;
             router_nombre?: string;
             zona_nombre?: string | null;
-            excepciones?: components["schemas"]["ExcepcionesServicio"];
+            excepciones: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3102,6 +4200,75 @@ export interface components {
             /** @description Token Bearer opaco */
             token: string;
             usuario: components["schemas"]["Me"];
+        };
+        SimulacionPromesa: {
+            servicio_id: number;
+            cliente_id: number;
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            vence_en: string;
+            monto: components["schemas"]["Dinero"];
+            /** Format: date-time */
+            evaluada_en: string;
+            /**
+             * @description Lo que deciden las reglas (igual que al crear con estos datos)
+             * @enum {string}
+             */
+            resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
+            /** @description Primera regla que falla o requiere_aprobacion */
+            regla: string | null;
+            motivo: string;
+            /**
+             * @description error: crear respondería 422/409 por alguna validación
+             * @enum {string}
+             */
+            resultado_creacion: "aprobada" | "rechazada" | "pendiente_aprobacion" | "error";
+            /** @description Todas las reglas, en el orden en que se evalúan */
+            reglas: components["schemas"]["ReglaSimulada"][];
+            validaciones: {
+                /** @enum {string} */
+                campo: "monto" | "vence_en" | "servicio_id";
+                ok: boolean;
+                regla: string;
+                detalle: string;
+            }[];
+            deuda: {
+                pendiente: components["schemas"]["Dinero"];
+                vencida: components["schemas"]["Dinero"];
+                pagado_pendientes: components["schemas"]["Dinero"];
+                facturas_vencidas: number;
+            };
+            historial: {
+                ventana: number;
+                resueltas: number;
+                cumplidas: number;
+                cumplimiento_pct: number | null;
+            };
+            /** Format: date */
+            siguiente_facturacion: string | null;
+            limites: {
+                habilitadas: boolean;
+                permitido: boolean;
+                requiere_aprobacion: boolean;
+                plazo_max_dias: number;
+                /**
+                 * Format: date
+                 * @description Último día en que puede vencer
+                 */
+                fecha_maxima: string;
+                /** Format: date */
+                siguiente_facturacion: string | null;
+                deuda_pendiente: components["schemas"]["Dinero"];
+                deuda_vencida: components["schemas"]["Dinero"];
+                deuda_maxima: components["schemas"]["Dinero"] | null;
+                abono_requerido: components["schemas"]["Dinero"];
+                abono_pagado: components["schemas"]["Dinero"];
+                max_por_periodo: number;
+                en_periodo: number;
+            };
+            /** @description Suspendido a mano: la promesa no lo reactivaría */
+            suspension_manual: boolean;
         };
         TelegramWebhookRespuesta: {
             ok: boolean;
@@ -4927,6 +6094,44 @@ export interface operations {
             };
         };
     };
+    dashboardResumen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenDashboard"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     documentosAvisoCobroPdf: {
         parameters: {
             query?: never;
@@ -5164,6 +6369,325 @@ export interface operations {
             };
         };
     };
+    egresosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                desde?: string;
+                hasta?: string;
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                metodo?: "caja" | "banco" | "cuenta_bancaria";
+                estado?: "registrado" | "anulado";
+                caja_id?: number;
+                cuenta_bancaria_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de egresos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Egreso"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    egresosRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Categoría (GET /egresos/categorias)
+                     * @enum {string}
+                     */
+                    categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /**
+                     * @description De dónde sale el dinero: caja (efectivo), banco (del libro) o cuenta_bancaria propia
+                     * @enum {string}
+                     */
+                    metodo: "caja" | "banco" | "cuenta_bancaria";
+                    /**
+                     * Format: date
+                     * @description Fecha contable (por defecto hoy; no futura)
+                     */
+                    fecha?: string;
+                    /** @description Con caja; sin ella, la del turno abierto del usuario o la principal */
+                    caja_id?: number | null;
+                    /** @description Con banco; por defecto el banco principal */
+                    banco_id?: number | null;
+                    /** @description Obligatoria con cuenta_bancaria (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    proveedor?: string | null;
+                    descripcion?: string | null;
+                    /** @description Número o serie del documento del proveedor (opcional) */
+                    comprobante?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Egreso registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Egreso"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.registrar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    egresosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Egreso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Egreso"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    egresosAnular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Egreso anulado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Egreso"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.anular */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    egresosCategorias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Categorías */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriaEgreso"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     empresaVer: {
         parameters: {
             query?: never;
@@ -5286,6 +6810,8 @@ export interface operations {
                 servicio_id?: number;
                 estado?: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
                 periodo?: string;
+                /** @description servicio = factura del periodo; mora = recargo por vencimiento */
+                tipo?: "servicio" | "mora";
             };
             header?: never;
             path?: never;
@@ -5925,6 +7451,8 @@ export interface operations {
                 desde?: string;
                 hasta?: string;
                 origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste";
+                /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
+                origen_id?: number;
             };
             header?: never;
             path?: never;
@@ -6012,6 +7540,195 @@ export interface operations {
             };
             /** @description Sin el permiso libro.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroPeriodos: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "cerrado" | "reabierto";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de cierres */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CierrePeriodo"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroCerrarPeriodo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    anio: number;
+                    mes: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Mes cerrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CierrePeriodo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.cerrar_periodo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroReabrirPeriodo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    anio: number;
+                    mes: number;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Mes reabierto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CierrePeriodo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.reabrir_periodo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6366,6 +8083,8 @@ export interface operations {
                 estado?: "registrado" | "pendiente_verificacion" | "anulado";
                 desde?: string;
                 hasta?: string;
+                /** @description Solo los pagos aplicados a esta factura */
+                factura_id?: number;
             };
             header?: never;
             path?: never;
@@ -6622,6 +8341,426 @@ export interface operations {
             };
         };
     };
+    pasarelaListarCobros: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                estado?: "pendiente" | "pagado" | "fallido" | "expirado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de cobros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CobroPasarela"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaCrearCobro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente_id: number;
+                    /**
+                     * @description Por defecto lo pendiente de las facturas pedidas o de todo el cliente
+                     * @example 150.00
+                     */
+                    monto?: string | null;
+                    /** @description Facturas a pagar (primero) */
+                    facturas?: number[];
+                    servicio_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.registrar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaVerCobro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cobro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaConciliaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                fecha?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de conciliaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConciliacionPasarela"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaConciliar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date
+                     * @description Día (Guatemala) a conciliar; por defecto ayer
+                     */
+                    fecha?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConciliacionPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaPagina: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página HTML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaPagar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado?: "pagado" | "fallido";
+                    /**
+                     * @description Simular un pago por otro monto
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /** @description false simula un webhook perdido */
+                    notificar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del webhook */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoWebhookPasarela"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proveedor: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook procesado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoWebhookPasarela"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     permisosListar: {
         parameters: {
             query?: never;
@@ -6737,7 +8876,20 @@ export interface operations {
                     subida_kbps: number;
                     bajada_limitada_kbps: number;
                     subida_limitada_kbps: number;
+                    /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
                     /** @enum {string} */
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
@@ -6859,7 +9011,20 @@ export interface operations {
                     subida_kbps?: number;
                     bajada_limitada_kbps?: number;
                     subida_limitada_kbps?: number;
+                    /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
                     /** @enum {string} */
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
@@ -6997,7 +9162,22 @@ export interface operations {
                     /** Format: ipv4 */
                     local_address?: string | null;
                     no_crear_reglas?: boolean;
+                    /** @description Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo */
                     rate_limit_override?: string | null;
+                    /** @description N de 1:N (1 = dedicado) */
+                    reuso?: number | null;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number | null;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number | null;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number | null;
                 };
             };
         };
@@ -7191,6 +9371,8 @@ export interface operations {
                             };
                         };
                     };
+                    /** @description Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior */
+                    por_defecto?: boolean;
                 };
             };
         };
@@ -7380,6 +9562,8 @@ export interface operations {
                             };
                         };
                     };
+                    /** @description true la marca por defecto (desmarca la anterior); false le quita la marca */
+                    por_defecto?: boolean;
                 };
             };
         };
@@ -8489,6 +10673,589 @@ export interface operations {
             };
         };
     };
+    promesasSimular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    servicio_id: number;
+                    /**
+                     * @description Por defecto el de la petición (portal/ia por X-Canal) u operador
+                     * @enum {string}
+                     */
+                    canal?: "portal" | "ia" | "operador" | "supervisor";
+                    /**
+                     * Format: date-time
+                     * @description Por defecto: el fin de mañana (Guatemala)
+                     */
+                    vence_en?: string;
+                    /**
+                     * @description Por defecto: la deuda pendiente del servicio
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /**
+                     * Format: date-time
+                     * @description Simular como si fuera este instante (por defecto ahora)
+                     */
+                    evaluar_en?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Simulación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulacionPromesa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso promesas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesAltasBajas: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteAltasBajas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCarteraVencida: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                /** @description Día de referencia de la antigüedad (hoy por defecto) */
+                corte?: string;
+                agrupar?: "cliente" | "zona" | "router" | "plan";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCarteraVencida"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCierresCaja: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hasta */
+                desde?: string;
+                hasta?: string;
+                caja_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCierresCaja"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCobranzaDiaria: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hasta */
+                desde?: string;
+                hasta?: string;
+                caja_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCobranzaDiaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesEgresos: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                metodo?: "caja" | "banco" | "cuenta_bancaria";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteEgresos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesFacturadoCobrado: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                tipo?: "servicio" | "mora";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteFacturadoCobrado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesIngresos: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+                agrupar?: "mes" | "dia";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteIngresos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesIva: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteIva"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesPromesas: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                cliente_id?: number;
+                zona_id?: number;
+                router_id?: number;
+                plan_id?: number;
+                canal?: "portal" | "ia" | "operador" | "supervisor";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportePromesas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     rolesListar: {
         parameters: {
             query?: never;
@@ -8539,7 +11306,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -8597,7 +11364,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -8736,8 +11503,15 @@ export interface operations {
                     nas_ip: string;
                     /** @enum {string} */
                     modo_seguridad?: "radius" | "api";
-                    /** @enum {string} */
-                    modo_velocidad?: "simple" | "pcq";
+                    /**
+                     * @description simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad
+                     * @enum {string}
+                     */
+                    control_velocidad?: "simple" | "arbol_pcq";
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_bajada_kbps?: number | null;
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_subida_kbps?: number | null;
                     activo?: boolean;
                 };
             };
@@ -8853,8 +11627,10 @@ export interface operations {
                     nas_ip?: string;
                     /** @enum {string} */
                     modo_seguridad?: "radius" | "api";
-                    /** @enum {string} */
-                    modo_velocidad?: "simple" | "pcq";
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_bajada_kbps?: number | null;
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_subida_kbps?: number | null;
                     activo?: boolean;
                 };
             };
@@ -8879,6 +11655,83 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso routers.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersCambiarControlVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @enum {string} */
+                    control_velocidad: "simple" | "arbol_pcq";
+                    motivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Router con el control nuevo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Router"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9210,6 +12063,7 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                 /** @description Zona del cliente */
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
@@ -9278,11 +12132,18 @@ export interface operations {
                     cliente_id: number;
                     router_id: number;
                     plan_id: number;
+                    /**
+                     * @description Por defecto pppoe
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
                     /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     user_ppp?: string;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -9443,6 +12304,16 @@ export interface operations {
                     router_id?: number;
                     plan_id?: number;
                     plantilla_facturacion_id?: number | null;
+                    /**
+                     * @description pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
+                    /** @description Solo al cambiar a pppoe; se genera si no viene */
+                    user_ppp?: string;
+                    /** @description Solo pppoe; al cambiar a pppoe se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -10408,7 +13279,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
