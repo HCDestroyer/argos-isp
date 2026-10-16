@@ -83,6 +83,7 @@
       "post": {
         "operationId": "authLogin",
         "summary": "Iniciar sesión",
+        "description": "Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.",
         "tags": [
           "auth"
         ],
@@ -125,6 +126,16 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
             "content": {
               "application/problem+json": {
                 "schema": {

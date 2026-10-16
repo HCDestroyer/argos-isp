@@ -12,6 +12,7 @@ import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
+import { conLimiteLogin } from '#core/auth/limite_login'
 import CerrarSesion from '#core/actions/cerrar_sesion'
 import CrearUsuario from '#core/actions/crear_usuario'
 import EditarUsuario from '#core/actions/editar_usuario'
@@ -89,9 +90,16 @@ const auth: Ruta[] = [
         etiqueta: 'auth',
         seguridad: 'publico',
         permiso: null,
+        descripcion:
+            'Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con ' +
+            '`Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.',
         cuerpo: v.loginValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Sesión iniciada', esquema: Sesion },
-        handler: (ctx, { cuerpo }) => new IniciarSesion().execute(cuerpo, ctx.contextoAccion()),
+        handler: (ctx, { cuerpo }) =>
+            conLimiteLogin(ctx, cuerpo.email, () =>
+                new IniciarSesion().execute(cuerpo, ctx.contextoAccion()),
+            ),
     }),
     definirRuta({
         metodo: 'post',

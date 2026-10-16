@@ -13,7 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Iniciar sesión */
+        /**
+         * Iniciar sesión
+         * @description Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
+         */
         post: operations["authLogin"];
         delete?: never;
         options?: never;
@@ -4657,6 +4660,15 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
