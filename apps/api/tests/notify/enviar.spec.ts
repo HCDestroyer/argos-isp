@@ -7,6 +7,7 @@ import { CanalTelegram } from '#notify/canales/telegram'
 import { ConsumidorNotify } from '#notify/consumidor'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import {
+    PAGO_SIN_COMPROBANTE,
     CanalFalso,
     ColaFalsa,
     crearCliente,
@@ -18,7 +19,13 @@ import {
 /** Programa un `pago.registrado` para un cliente nuevo y devuelve el envío creado. */
 async function programar(datos: Parameters<typeof crearCliente>[0] = {}) {
     const clienteId = await crearCliente(datos)
-    const payload = { pago_id: 1, cliente_id: clienteId, monto: '25.00', metodo: 'caja', facturas: [1] }
+    const payload = {
+        pago_id: PAGO_SIN_COMPROBANTE,
+        cliente_id: clienteId,
+        monto: '25.00',
+        metodo: 'caja',
+        facturas: [1],
+    }
     const outboxId = await eventoOutbox('pago.registrado', payload)
     const cola = new ColaFalsa()
     await new ConsumidorNotify(cola).procesar({ id: outboxId, evento: 'pago.registrado', payload })

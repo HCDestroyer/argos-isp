@@ -79,6 +79,15 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
             '\nFalló tras 3 reintentos; el reconciliador corrige el router cuando vuelva a responder. Los siguientes fallos de este router en {{alerta.ventana_min}} min no se repiten aquí (quedan en audit.red).',
     },
     {
+        evento: 'alerta.routeros.velocidad',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · Configuración de velocidad inválida en el router {{alerta.router}}\nValidación: {{alerta.validacion}}' +
+            '{{#alerta.servicio_id}}\nServicio: {{alerta.servicio_id}}{{/alerta.servicio_id}}\nDetalle: {{alerta.error}}' +
+            '\nEl router responde: hay que corregir el plan o el modo de control de velocidad (contratos/velocidad.md). Los siguientes fallos de esta validación en {{alerta.ventana_min}} min no se repiten aquí.',
+    },
+    {
         evento: 'alerta.caja.diferencia',
         canal: 'telegram',
         asunto: null,

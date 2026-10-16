@@ -4,6 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
 import type { EstadoServicio } from '#shared/eventos'
 import { prefijoColas, redis } from '#shared/redis'
+import { codificarCursor, decodificarCursor, type Pagina } from '#shared/paginacion'
 import type { Transaccion } from '#shared/domain_action'
 import type { ModoIpv6 } from '#core/consultas/servicios'
 import {
@@ -262,6 +263,35 @@ export async function registrosAaaPorServicio(
     return filas.map(aRegistro)
 }
 
+/** Registros de varios `user_ppp` (los inexistentes se omiten), en el orden pedido. */
+export async function registrosAaaPorUserPpp(
+    usuarios: string[],
+    cliente: QueryClientContract = db.connection(),
+): Promise<RegistroAaa[]> {
+    const unicos = [...new Set(usuarios)]
+    if (unicos.length === 0) return []
+    const filas = (await consultaBase(cliente).whereIn('s.user_ppp', unicos)) as FilaAaa[]
+    const porUsuario = new Map(filas.map((f) => [f.user_ppp, aRegistro(f)]))
+    return unicos.flatMap((u) => porUsuario.get(u) ?? [])
+}
+
+/**
+ * Página de registros de todos los servicios `pppoe` (también retirados), por `servicio_id`
+ * ascendente: base de `POST /internal/aaa/servicios` sin lista y de `node ace aaa:repoblar`.
+ */
+export async function paginaRegistrosAaa(
+    opciones: { cursor?: string | null; limit: number },
+    cliente: QueryClientContract = db.connection(),
+): Promise<Pagina<RegistroAaa>> {
+    const consulta = consultaBase(cliente)
+    if (opciones.cursor) consulta.where('s.id', '>', decodificarCursor(opciones.cursor))
+    const filas = (await consulta.orderBy('s.id', 'asc').limit(opciones.limit + 1)) as FilaAaa[]
+    const hayMas = filas.length > opciones.limit
+    const data = (hayMas ? filas.slice(0, opciones.limit) : filas).map(aRegistro)
+    const ultimo = data.at(-1)
+    return { data, nextCursor: hayMas && ultimo ? codificarCursor(ultimo.servicio_id) : null }
+}
+
 /**
  * SET condicionado: no reemplaza un registro (o lápida) del MISMO servicio con `version` mayor.
  * KEYS[1] = clave; ARGV = json, servicio_id, version.
@@ -292,12 +322,30 @@ export function valorRedis(registro: RegistroAaa): RegistroAaa | LapidaAaa {
     return registro
 }
 
-/** SET condicionado por `version` de cada valor (ver `SCRIPT_SET`). */
-export async function escribirRegistrosAaa(valores: Array<RegistroAaa | LapidaAaa>): Promise<void> {
-    if (valores.length === 0) return
+export interface ResultadoEscritura {
+    /** claves escritas */
+    escritos: number
+    /** no escritas porque Redis ya tenía una `version` mayor del mismo servicio */
+    omitidos: number
+}
+
+/**
+ * SET condicionado por `version` de cada valor (ver `SCRIPT_SET`). Con `forzar`, SET simple:
+ * solo para repoblar tras restaurar la base desde un respaldo (las versiones en Redis podrían ser
+ * mayores que las de Postgres).
+ */
+export async function escribirRegistrosAaa(
+    valores: Array<RegistroAaa | LapidaAaa>,
+    opciones: { forzar?: boolean } = {},
+): Promise<ResultadoEscritura> {
+    if (valores.length === 0) return { escritos: 0, omitidos: 0 }
     const conexion = redis()
     const tuberia = conexion.pipeline()
     for (const valor of valores) {
+        if (opciones.forzar) {
+            tuberia.set(claveAaa(valor.user_ppp), JSON.stringify(valor))
+            continue
+        }
         tuberia.eval(
             SCRIPT_SET,
             1,
@@ -310,6 +358,90 @@ export async function escribirRegistrosAaa(valores: Array<RegistroAaa | LapidaAa
     const resultados = (await tuberia.exec()) ?? []
     const error = resultados.find(([e]) => e)?.[0]
     if (error) throw error
+    const escritos = resultados.filter(([, r]) => r === 1 || r === 'OK').length
+    return { escritos, omitidos: valores.length - escritos }
+}
+
+export interface ResumenRepoblado {
+    /** servicios `pppoe` leídos de Postgres (incluye retirados) */
+    servicios: number
+    /** de ellos, retirados (se escriben como lápida) */
+    lapidas: number
+    escritos: number
+    /** no escritos: Redis tenía una `version` mayor (cambio posterior a la lectura) */
+    omitidos: number
+    lotes: number
+    /** claves `aaa:user:*` sin servicio `pppoe` con ese `user_ppp` que no son lápida (solo se informan) */
+    huerfanas: string[]
+    duracion_ms: number
+}
+
+/**
+ * Reescribe en Redis todas las claves `aaa:user:*` desde Postgres, por lotes de `lote` servicios
+ * (`node ace aaa:repoblar`). Idempotente: usa el mismo SET condicionado que el write-through, así
+ * que puede correr con la API atendiendo (nunca deja un dato más viejo que el que había). Al
+ * final busca claves huérfanas (sin servicio y que no son lápida) y las informa sin borrarlas.
+ */
+export async function repoblarAaa(
+    opciones: { lote?: number; forzar?: boolean; alAvanzar?: (resumen: ResumenRepoblado) => void } = {},
+): Promise<ResumenRepoblado> {
+    const inicio = Date.now()
+    const lote = opciones.lote ?? 500
+    const resumen: ResumenRepoblado = {
+        servicios: 0,
+        lapidas: 0,
+        escritos: 0,
+        omitidos: 0,
+        lotes: 0,
+        huerfanas: [],
+        duracion_ms: 0,
+    }
+    const usuarios = new Set<string>()
+    let cursor: string | null = null
+    do {
+        const pagina: Pagina<RegistroAaa> = await paginaRegistrosAaa({ cursor, limit: lote })
+        const valores = pagina.data.map(valorRedis)
+        const resultado = await escribirRegistrosAaa(valores, { forzar: opciones.forzar })
+        for (const r of pagina.data) usuarios.add(r.user_ppp)
+        resumen.servicios += pagina.data.length
+        resumen.lapidas += valores.filter((v) => 'eliminado' in v).length
+        resumen.escritos += resultado.escritos
+        resumen.omitidos += resultado.omitidos
+        resumen.lotes++
+        opciones.alAvanzar?.(resumen)
+        cursor = pagina.nextCursor
+    } while (cursor)
+
+    resumen.huerfanas = await clavesHuerfanas(usuarios)
+    resumen.duracion_ms = Date.now() - inicio
+    return resumen
+}
+
+/** `user_ppp` de claves `aaa:user:*` que no están en `conocidos` y no son lápida. */
+async function clavesHuerfanas(conocidos: Set<string>): Promise<string[]> {
+    const conexion = redis()
+    const prefijo = prefijoAaa()
+    const patron = `${prefijo.replace(/[*?[\]\\]/g, '\\$&')}*`
+    const huerfanas: string[] = []
+    let cursor = '0'
+    do {
+        const [siguiente, claves] = await conexion.scan(cursor, 'MATCH', patron, 'COUNT', 1000)
+        cursor = siguiente
+        const candidatas = claves.filter((c) => !conocidos.has(c.slice(prefijo.length)))
+        if (candidatas.length === 0) continue
+        const valores = await conexion.mget(...candidatas)
+        candidatas.forEach((clave, i) => {
+            const valor = valores[i]
+            if (valor === null || valor === undefined) return
+            try {
+                if ((JSON.parse(valor) as { eliminado?: boolean }).eliminado === true) return
+            } catch {
+                // un valor que no es JSON también es huérfano
+            }
+            huerfanas.push(clave.slice(prefijo.length))
+        })
+    } while (cursor !== '0')
+    return huerfanas.sort()
 }
 
 /** Lee de Postgres y escribe en Redis los registros de esos servicios (write-through). */

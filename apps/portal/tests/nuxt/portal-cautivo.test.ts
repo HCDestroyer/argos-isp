@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
     RUTAS_DETECCION,
+    SONDAS,
+    esSonda,
     hostsDelPortal,
     nombreHost,
     redireccionPortalCautivo,
@@ -26,25 +28,35 @@ describe('nombreHost', () => {
 })
 
 describe('redireccionPortalCautivo', () => {
-    it('las rutas de detección de Android, Apple, Windows y Firefox redirigen a /corte con cualquier Host', () => {
-        const casos = [
-            ['connectivitycheck.gstatic.com', '/generate_204'],
-            ['clients3.google.com', '/gen_204'],
-            ['captive.apple.com', '/hotspot-detect.html'],
-            ['www.apple.com', '/library/test/success.html'],
-            ['www.msftncsi.com', '/ncsi.txt'],
-            ['www.msftconnecttest.com', '/connecttest.txt'],
-            ['detectportal.firefox.com', '/success.txt'],
-            ['nmcheck.gnome.org', '/check_network_status.txt'],
-        ]
-        for (const [host, ruta] of casos) {
-            expect(redireccionPortalCautivo({ host, ruta: ruta! }, CON_URL)).toBe('http://portal.argosisp.example/corte')
-            expect(redireccionPortalCautivo({ host, ruta: ruta! }, SIN_URL)).toBe('/corte')
+    it.each(SONDAS.map(sonda => [sonda.sistema, sonda.host, sonda.ruta] as const))(
+        'sonda de %s (%s%s) redirige a /corte',
+        (_sistema, host, ruta) => {
+            expect(redireccionPortalCautivo({ host, ruta }, CON_URL)).toBe('http://portal.argosisp.example/corte')
+            expect(redireccionPortalCautivo({ host, ruta }, SIN_URL)).toBe('/corte')
+            // Incluso si la sonda llega con el Host del portal (IPv4, IPv6 o nombre).
+            for (const propio of ['portal.argosisp.example', '192.0.2.20', '[2001:db8:ffff::20]:80', 'localhost:3001']) {
+                expect(redireccionPortalCautivo({ host: propio, ruta }, CON_URL)).toBe('http://portal.argosisp.example/corte')
+                expect(redireccionPortalCautivo({ host: propio, ruta }, SIN_URL)).toBe('/corte')
+            }
+        },
+    )
+
+    it('las sondas cubren Android, Apple, Windows, Firefox y Linux, y se reconocen sin mayúsculas ni barra final', () => {
+        const rutas = [...RUTAS_DETECCION]
+        for (const ruta of ['/generate_204', '/hotspot-detect.html', '/connecttest.txt', '/ncsi.txt', '/success.txt', '/check_network_status.txt']) {
+            expect(rutas).toContain(ruta)
         }
-        // Incluso si la prueba llega con el Host del portal.
-        expect(redireccionPortalCautivo({ host: 'portal.argosisp.example', ruta: '/generate_204' }, CON_URL))
-            .toBe('http://portal.argosisp.example/corte')
-        expect(RUTAS_DETECCION.size).toBeGreaterThanOrEqual(10)
+        expect(esSonda('/Generate_204')).toBe(true)
+        expect(esSonda('/hotspot-detect.html/')).toBe(true)
+        expect(esSonda('/')).toBe(false)
+        expect(esSonda('/corte')).toBe(false)
+    })
+
+    it('las sondas que piden la raíz de su host también aterrizan en /corte', () => {
+        for (const host of ['captive.apple.com', 'networkcheck.kde.org', 'connectivity-check.ubuntu.com', 'neverssl.com']) {
+            expect(redireccionPortalCautivo({ host, ruta: '/' }, CON_URL)).toBe('http://portal.argosisp.example/corte')
+            expect(redireccionPortalCautivo({ host, ruta: '/' }, SIN_URL)).toBe('/corte')
+        }
     })
 
     it('cualquier Host ajeno y cualquier ruta aterrizan en /corte', () => {

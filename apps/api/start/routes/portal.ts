@@ -124,15 +124,25 @@ const SOBRE_LA_IP =
 
 const SOBRE_LA_SESION =
     'Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` ' +
-    '(sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.'
+    '(sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de ' +
+    'peticiones por IP como las rutas sin sesión (429).'
 
-/** IP de origen ya resuelta y con el límite de peticiones aplicado. */
+/**
+ * IP de origen ya resuelta y con el límite de peticiones aplicado. Todas las rutas `/portal/*` la
+ * llaman (también las de la sesión): son públicas en el walled garden. Cada endpoint tiene su contador.
+ */
 async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string> {
     ctx.response.header('Cache-Control', 'no-store')
     const ip = ipOrigenDeLaPeticion(ctx)
     if (!ip) throw new Error('La conexión no trae una IP de origen válida')
     await limitarPorIp(ctx, endpoint, ip)
     return ip
+}
+
+/** Límite por IP y luego la sesión del portal (401 sin ella). */
+async function clienteDeLaSesionLimitada(ctx: HttpContext, endpoint: string): Promise<number> {
+    await ipDelCliente(ctx, endpoint)
+    return clienteDeLaSesion(ctx)
 }
 
 const publicas: Ruta[] = [
@@ -221,7 +231,7 @@ const publicas: Ruta[] = [
         operacion: 'portalVerificarCodigo',
         resumen: 'Verifica el código y abre la sesión del portal (cookie httpOnly)',
         descripcion:
-            'Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca ' +
+            'Pone la cookie httpOnly `argos_portal` (SameSite=Strict, ruta /api/v1/portal). El token nunca ' +
             'va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): ' +
             `422 \`codigo_invalido\`. ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
@@ -252,8 +262,10 @@ const autenticadas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
         handler: async (ctx) => {
+            await ipDelCliente(ctx, 'salir')
             const sesion = await exigirSesionPortal(ctx)
             await new CerrarSesionPortal().execute(
                 { sesionId: sesion.id, clienteId: sesion.clienteId },
@@ -271,8 +283,9 @@ const autenticadas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Cuenta del cliente', esquema: PortalCuenta },
-        handler: async (ctx) => cuentaPortal(await clienteDeLaSesion(ctx)),
+        handler: async (ctx) => cuentaPortal(await clienteDeLaSesionLimitada(ctx, 'cuenta')),
     }),
     definirRuta({
         metodo: 'get',
@@ -284,8 +297,10 @@ const autenticadas: Ruta[] = [
         seguridad: 'publico',
         permiso: null,
         query: paginaPortalValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Página de facturas', esquema: pagina(PortalFactura) },
-        handler: async (ctx, { query }) => facturasPortal(await clienteDeLaSesion(ctx), query),
+        handler: async (ctx, { query }) =>
+            facturasPortal(await clienteDeLaSesionLimitada(ctx, 'facturas'), query),
     }),
     definirRuta({
         metodo: 'get',
@@ -296,8 +311,10 @@ const autenticadas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Factura con líneas', esquema: PortalFacturaDetalle },
-        handler: async (ctx, { params }) => facturaPortal(await clienteDeLaSesion(ctx), Number(params.id)),
+        handler: async (ctx, { params }) =>
+            facturaPortal(await clienteDeLaSesionLimitada(ctx, 'factura'), Number(params.id)),
     }),
     definirRuta({
         metodo: 'get',
@@ -309,8 +326,9 @@ const autenticadas: Ruta[] = [
         seguridad: 'publico',
         permiso: null,
         query: paginaPortalValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Página de pagos', esquema: pagina(PortalPago) },
-        handler: async (ctx, { query }) => pagosPortal(await clienteDeLaSesion(ctx), query),
+        handler: async (ctx, { query }) => pagosPortal(await clienteDeLaSesionLimitada(ctx, 'pagos'), query),
     }),
     definirRuta({
         metodo: 'get',
@@ -322,8 +340,10 @@ const autenticadas: Ruta[] = [
         seguridad: 'publico',
         permiso: null,
         query: paginaPortalValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Página de promesas', esquema: pagina(PortalPromesa) },
-        handler: async (ctx, { query }) => promesasPortal(await clienteDeLaSesion(ctx), query),
+        handler: async (ctx, { query }) =>
+            promesasPortal(await clienteDeLaSesionLimitada(ctx, 'promesas-lista'), query),
     }),
     definirRuta({
         metodo: 'put',
@@ -338,8 +358,10 @@ const autenticadas: Ruta[] = [
         permiso: null,
         versionada: true,
         cuerpo: editarContactoValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Contacto actualizado', esquema: PortalContacto },
         handler: async (ctx, { cuerpo }) => {
+            await ipDelCliente(ctx, 'contacto')
             const sesion = await exigirSesionPortal(ctx)
             return new EditarContactoPortal().execute(
                 { ...cuerpo, clienteId: sesion.clienteId },
@@ -361,8 +383,9 @@ const telegram: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
-        handler: async (ctx) => estadoTelegram(await clienteDeLaSesion(ctx)),
+        handler: async (ctx) => estadoTelegram(await clienteDeLaSesionLimitada(ctx, 'telegram')),
     }),
     definirRuta({
         metodo: 'post',
@@ -398,8 +421,10 @@ const telegram: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
         handler: async (ctx) => {
+            await ipDelCliente(ctx, 'telegram-desvincular')
             const sesion = await exigirSesionPortal(ctx)
             return new DesvincularTelegramPortal().execute(
                 { clienteId: sesion.clienteId },
@@ -419,9 +444,10 @@ const documentos: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
         handler: async (ctx, { params }) => {
-            const clienteId = await clienteDeLaSesion(ctx)
+            const clienteId = await clienteDeLaSesionLimitada(ctx, 'factura-pdf')
             enviarPdf(ctx, await avisoCobroPdf(Number(params.id), { clienteId }))
         },
     }),
@@ -746,8 +772,10 @@ const comprobantes: Ruta[] = [
         seguridad: 'publico',
         permiso: null,
         query: paginaPortalValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(PortalComprobante) },
-        handler: async (ctx, { query }) => comprobantesPortal(await clienteDeLaSesion(ctx), query),
+        handler: async (ctx, { query }) =>
+            comprobantesPortal(await clienteDeLaSesionLimitada(ctx, 'comprobantes-lista'), query),
     }),
 ]
 

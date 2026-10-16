@@ -4,6 +4,7 @@ import { Agent as AgenteHttps, request as solicitudHttps } from 'node:https'
 import type { Redis } from 'ioredis'
 import { cifrar } from './cifrado.ts'
 import { parsearRegistro, type RegistroAaa } from './servicio.ts'
+import type { UltimoConocido } from './ultimo_conocido.ts'
 
 /**
  * De dónde sale el servicio de un `user_ppp`:
@@ -12,10 +13,15 @@ import { parsearRegistro, type RegistroAaa } from './servicio.ts'
  *      publique el endpoint) y se cachea con `SET NX` para no pisar una escritura más nueva de A1.
  */
 
+/** Datos de la petición que viajan al respaldo (hoy, el `request_id` para correlacionar logs). */
+export interface ContextoConsulta {
+    requestId?: string
+}
+
 /** Fuente de respaldo: devuelve el registro o null si el usuario no existe. */
 export interface FuenteRespaldo {
     readonly nombre: 'api' | 'fixtures'
-    obtener(userPpp: string): Promise<RegistroAaa | null>
+    obtener(userPpp: string, contexto?: ContextoConsulta): Promise<RegistroAaa | null>
 }
 
 export class ErrorFuente extends Error {}
@@ -51,10 +57,11 @@ export class FuenteApi implements FuenteRespaldo {
             : new AgenteHttp(conexiones)
     }
 
-    async obtener(userPpp: string): Promise<RegistroAaa | null> {
+    async obtener(userPpp: string, contexto: ContextoConsulta = {}): Promise<RegistroAaa | null> {
         const url = new URL('internal/aaa/servicio', this.base)
         url.searchParams.set('user_ppp', userPpp)
-        const { status, cuerpo } = await this.get(url)
+        // La API usa el mismo `request_id` en su log de acceso (`request_id_middleware.ts`).
+        const { status, cuerpo } = await this.get(url, contexto.requestId)
         if (status === 404) return null
         if (status !== 200) throw new ErrorFuente(`API interna respondió ${status}`)
         let datos: unknown
@@ -83,14 +90,19 @@ export class FuenteApi implements FuenteRespaldo {
         this.agente.destroy()
     }
 
-    private get(url: URL): Promise<{ status: number; cuerpo: string }> {
+    private get(url: URL, requestId?: string): Promise<{ status: number; cuerpo: string }> {
         const solicitar = url.protocol === 'https:' ? solicitudHttps : solicitudHttp
+        const headers: Record<string, string> = {
+            authorization: `Bearer ${this.token}`,
+            accept: 'application/json',
+        }
+        if (requestId) headers['x-request-id'] = requestId
         return new Promise((resolver, rechazar) => {
             const req = solicitar(
                 url,
                 {
                     agent: this.agente,
-                    headers: { authorization: `Bearer ${this.token}`, accept: 'application/json' },
+                    headers,
                 },
                 (res) => {
                     const partes: Buffer[] = []
@@ -153,17 +165,43 @@ export class FuenteFixtures implements FuenteRespaldo {
     }
 }
 
-export type Origen = 'redis' | 'api' | 'fixtures'
+export type Origen = 'redis' | 'api' | 'fixtures' | 'degradado'
+
+/** Qué hacer si Redis y el respaldo no pueden dar el servicio (`AAA_DEGRADADO`). */
+export type ModoDegradado = 'aceptar' | 'rechazar'
 
 export interface Resuelto {
     registro: RegistroAaa | null
     origen: Origen
     /** Error de Redis si lo hubo (se usó el respaldo). */
     errorRedis?: string
+    /** Solo con `origen = 'degradado'`: por qué y de cuándo es el perfil. */
+    degradado?: { error: string; vistoEn: number }
+}
+
+/** Ni Redis ni el respaldo respondieron, y no hay último perfil conocido utilizable. */
+export class ErrorSinFuentes extends Error {
+    readonly motivo: 'sin_perfil' | 'rechazar'
+
+    constructor(message: string, motivo: 'sin_perfil' | 'rechazar') {
+        super(message)
+        this.motivo = motivo
+    }
 }
 
 export interface Logger {
     warn(obj: object, msg: string): void
+}
+
+export interface OpcionesResolutor {
+    redis: Redis
+    prefijo: string
+    respaldo: FuenteRespaldo
+    log: Logger
+    /** Copia del último perfil conocido; sin ella no hay modo degradado (503 → Reject). */
+    ultimoConocido?: UltimoConocido
+    /** `aceptar` (por defecto): usa el último perfil conocido. `rechazar`: 503 como antes. */
+    modoDegradado?: ModoDegradado
 }
 
 export class ResolutorServicios {
@@ -171,19 +209,23 @@ export class ResolutorServicios {
     private readonly prefijo: string
     private readonly respaldo: FuenteRespaldo
     private readonly log: Logger
+    private readonly ultimoConocido: UltimoConocido | undefined
+    private readonly modoDegradado: ModoDegradado
 
-    constructor(opciones: { redis: Redis; prefijo: string; respaldo: FuenteRespaldo; log: Logger }) {
+    constructor(opciones: OpcionesResolutor) {
         this.redis = opciones.redis
         this.prefijo = opciones.prefijo
         this.respaldo = opciones.respaldo
         this.log = opciones.log
+        this.ultimoConocido = opciones.ultimoConocido
+        this.modoDegradado = opciones.modoDegradado ?? 'aceptar'
     }
 
     clave(userPpp: string): string {
         return `${this.prefijo}${userPpp}`
     }
 
-    async resolver(userPpp: string): Promise<Resuelto> {
+    async resolver(userPpp: string, contexto: ContextoConsulta = {}): Promise<Resuelto> {
         const clave = this.clave(userPpp)
         let errorRedis: string | undefined
         let crudo: string | null = null
@@ -195,20 +237,27 @@ export class ResolutorServicios {
 
         if (crudo !== null) {
             try {
-                return { registro: parsearRegistro(JSON.parse(crudo)), origen: 'redis' }
+                const registro = parsearRegistro(JSON.parse(crudo))
+                this.ultimoConocido?.guardar(registro)
+                return { registro, origen: 'redis' }
             } catch (e) {
                 // Un valor corrupto no debe dejar al cliente sin servicio: se consulta el respaldo.
                 // No se sobrescribe: la clave es de A1 y la corrige su próximo evento.
+                errorRedis = `registro inválido en Redis: ${(e as Error).message}`
                 this.log.warn(
                     { clave, error: (e as Error).message },
                     'registro inválido en Redis; se usa el respaldo',
                 )
-                const registro = await this.respaldo.obtener(userPpp)
-                return { registro, origen: this.respaldo.nombre }
+                const resuelto = await this.consultarRespaldo(userPpp, contexto, errorRedis)
+                // Redis sí respondió: el aviso "se usó el respaldo" ya salió arriba.
+                if (resuelto.origen !== 'degradado') delete resuelto.errorRedis
+                return resuelto
             }
         }
 
-        const registro = await this.respaldo.obtener(userPpp)
+        const resuelto = await this.consultarRespaldo(userPpp, contexto, errorRedis)
+        if (resuelto.origen === 'degradado') return resuelto
+        const { registro } = resuelto
         if (registro !== null && errorRedis === undefined) {
             // Sin TTL (CLAUDE.md regla 5). NX: si A1 escribió mientras consultábamos, gana A1.
             // Los inexistentes no se cachean: A1 no tendría cómo invalidarlos al crear el servicio.
@@ -218,6 +267,37 @@ export class ResolutorServicios {
                 this.log.warn({ clave, error: (e as Error).message }, 'no se pudo cachear en Redis')
             }
         }
+        return resuelto
+    }
+
+    /**
+     * Respaldo (API o fixtures). Si responde, su respuesta es definitiva (también el 404) y se guarda
+     * como último perfil conocido. Si no responde: modo degradado con el último perfil conocido.
+     */
+    private async consultarRespaldo(
+        userPpp: string,
+        contexto: ContextoConsulta,
+        errorRedis: string | undefined,
+    ): Promise<Resuelto> {
+        let registro: RegistroAaa | null
+        try {
+            registro = await this.respaldo.obtener(userPpp, contexto)
+        } catch (e) {
+            const error = `${errorRedis ? `Redis: ${errorRedis}; ` : ''}${this.respaldo.nombre}: ${(e as Error).message}`
+            if (this.modoDegradado === 'rechazar' || !this.ultimoConocido) {
+                throw new ErrorSinFuentes(error, 'rechazar')
+            }
+            const conocido = this.ultimoConocido.obtener(userPpp)
+            if (!conocido) throw new ErrorSinFuentes(error, 'sin_perfil')
+            return {
+                registro: conocido.registro,
+                origen: 'degradado',
+                ...(errorRedis ? { errorRedis } : {}),
+                degradado: { error, vistoEn: conocido.vistoEn },
+            }
+        }
+        if (registro === null) this.ultimoConocido?.olvidar(userPpp)
+        else this.ultimoConocido?.guardar(registro)
         return { registro, origen: this.respaldo.nombre, ...(errorRedis ? { errorRedis } : {}) }
     }
 }

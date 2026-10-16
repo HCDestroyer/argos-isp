@@ -8,6 +8,7 @@ import { CanalCorreo } from '#notify/canales/correo'
 import { CanalTelegram } from '#notify/canales/telegram'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import {
+    PAGO_SIN_COMPROBANTE,
     CanalFalso,
     crearCliente,
     crearFactura,
@@ -65,7 +66,13 @@ test.group('notify · cola BullMQ', (group) => {
     test('reintenta con backoff y entrega al tercer intento', async ({ assert }) => {
         correo.fallar = (llamada) => (llamada < 3 ? { permanente: false } : null)
         const clienteId = await crearCliente({ email: 'reintentos@prueba.local' })
-        const payload = { pago_id: 1, cliente_id: clienteId, monto: '10.00', metodo: 'caja', facturas: [] }
+        const payload = {
+            pago_id: PAGO_SIN_COMPROBANTE,
+            cliente_id: clienteId,
+            monto: '10.00',
+            metodo: 'caja',
+            facturas: [],
+        }
         const outboxId = await eventoOutbox('pago.registrado', payload)
 
         await relayar(new ConsumidorNotify(cola), outboxId)
@@ -80,7 +87,13 @@ test.group('notify · cola BullMQ', (group) => {
 
     test('encolar dos veces el mismo envío no lo entrega dos veces', async ({ assert }) => {
         const clienteId = await crearCliente()
-        const payload = { pago_id: 1, cliente_id: clienteId, monto: '10.00', metodo: 'caja', facturas: [] }
+        const payload = {
+            pago_id: PAGO_SIN_COMPROBANTE,
+            cliente_id: clienteId,
+            monto: '10.00',
+            metodo: 'caja',
+            facturas: [],
+        }
         const outboxId = await eventoOutbox('pago.registrado', payload)
         const consumidor = new ConsumidorNotify(cola)
 

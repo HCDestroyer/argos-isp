@@ -19,6 +19,7 @@ const BASE: Accion = {
     id: 1,
     actor_tipo: 'sistema',
     actor_id: null,
+    actor_nombre: null,
     canal: 'cron',
     accion: 'servicios.cambiar_estado',
     entidad_tipo: 'servicio',

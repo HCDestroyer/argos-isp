@@ -25,7 +25,7 @@ const etiquetaVencidas = computed(() => {
                     class="mt-1 text-3xl font-bold tabular-nums text-highlighted"
                     data-testid="monto-adeudado"
                 >
-                    {{ formatearQuetzales(corte.monto_adeudado ?? '0') }}
+                    {{ corte.monto_adeudado === null ? 'No disponible' : formatearQuetzales(corte.monto_adeudado) }}
                 </p>
             </div>
             <EstadoServicioBadge
@@ -52,8 +52,9 @@ const etiquetaVencidas = computed(() => {
                     {{ formatearQuetzales(vencidas?.total) }}
                 </span>
             </div>
+            <!-- Sin el dato de vencidas no se afirma "Sin facturas vencidas". -->
             <p
-                v-else
+                v-else-if="vencidas"
                 class="flex items-center gap-2 text-sm text-muted"
             >
                 <UIcon

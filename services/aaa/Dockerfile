@@ -19,8 +19,11 @@ RUN pnpm --filter @argosisp/aaa build \
     && pnpm --filter @argosisp/aaa deploy --legacy --prod /out
 
 FROM ${NODE_IMAGE} AS runtime
-ENV NODE_ENV=production PORT=3100
+ENV NODE_ENV=production PORT=3100 AAA_DEGRADADO_RUTA=/var/lib/argosisp-aaa/ultimo-conocido.json
 WORKDIR /app
+# Último perfil conocido del modo degradado (README, "Modo degradado"). Un volumen montado aquí hereda
+# el dueño node y sobrevive a recrear el contenedor.
+RUN mkdir -p /var/lib/argosisp-aaa && chown node:node /var/lib/argosisp-aaa
 COPY --from=build --chown=node:node /out/package.json ./package.json
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/services/aaa/dist ./dist

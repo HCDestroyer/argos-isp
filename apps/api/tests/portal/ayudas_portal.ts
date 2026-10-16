@@ -21,6 +21,10 @@ export interface OpcionesServicio {
     email?: string | null
     telegram?: string | null
     canal?: 'correo' | 'telegram' | 'whatsapp'
+    /** Otro servicio del mismo cliente (no se crea cliente nuevo). */
+    clienteId?: number
+    /** Sin facturas: servicio al día. */
+    sinFacturas?: boolean
 }
 
 /** NIT guatemalteco válido y aleatorio (cuerpo de 8 dígitos + verificador módulo 11). */
@@ -48,18 +52,20 @@ export async function crearServicio(opciones: OpcionesServicio = {}) {
         .table('network.planes')
         .insert({ nombre: `plan-${sufijo}`, precio: '150.00', bajada_kbps: 20000, subida_kbps: 5000 })
         .returning('id')
-    const [cliente] = await db
-        .table('core.clientes')
-        .insert({
-            nombre: opciones.nombre ?? 'María José García López',
-            email: opciones.email === undefined ? 'maria@example.com' : opciones.email,
-            telefono: '5555-1234',
-            nit_cui: opciones.nit ?? '1234567-8',
-            telegram_chat_id: opciones.telegram ?? null,
-            canal_preferido: opciones.canal ?? 'correo',
-            direccion: '5a avenida 10-20 zona 1',
-        })
-        .returning('id')
+    const [cliente] = opciones.clienteId
+        ? [{ id: opciones.clienteId }]
+        : await db
+              .table('core.clientes')
+              .insert({
+                  nombre: opciones.nombre ?? 'María José García López',
+                  email: opciones.email === undefined ? 'maria@example.com' : opciones.email,
+                  telefono: '5555-1234',
+                  nit_cui: opciones.nit ?? '1234567-8',
+                  telegram_chat_id: opciones.telegram ?? null,
+                  canal_preferido: opciones.canal ?? 'correo',
+                  direccion: '5a avenida 10-20 zona 1',
+              })
+              .returning('id')
     const [servicio] = await db
         .table('core.servicios')
         .insert({
@@ -84,14 +90,16 @@ export async function crearServicio(opciones: OpcionesServicio = {}) {
         total,
         pagado,
     })
-    await db.table('billing.facturas').multiInsert([
-        factura('2026-07-01', '2026-07-10', 'vencida', '150.00'),
-        // parcial ya pasada su fecha aunque el cron aún no la marque vencida
-        factura('2026-08-01', '2026-08-10', 'parcial', '200.00', '50.25'),
-        factura('2099-01-01', '2099-01-10', 'emitida', '100.00'),
-        factura('2026-06-01', '2026-06-10', 'pagada', '150.00', '150.00'),
-        factura('2026-05-01', '2026-05-10', 'anulada', '999.00'),
-    ])
+    if (!opciones.sinFacturas) {
+        await db.table('billing.facturas').multiInsert([
+            factura('2026-07-01', '2026-07-10', 'vencida', '150.00'),
+            // parcial ya pasada su fecha aunque el cron aún no la marque vencida
+            factura('2026-08-01', '2026-08-10', 'parcial', '200.00', '50.25'),
+            factura('2099-01-01', '2099-01-10', 'emitida', '100.00'),
+            factura('2026-06-01', '2026-06-10', 'pagada', '150.00', '150.00'),
+            factura('2026-05-01', '2026-05-10', 'anulada', '999.00'),
+        ])
+    }
     if (opciones.promesa) {
         await db.table('billing.promesas').insert({
             servicio_id: servicio.id,

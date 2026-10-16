@@ -9,6 +9,11 @@
 #    post-auth   → POST /aaa/post-auth   solo en Access-Reject (registro; no bloqueante)
 #    accounting  → POST /aaa/accounting  (Start / Interim-Update / Stop)
 #
+#  X-Request-Id: antes de cada `rest` se pone `control:REST-HTTP-Header` (rlm_rest lo consume en cada
+#  llamada). Es `rad-` + md5("<NAS-IP>|<Acct-Session-Id>"), o md5("<NAS-IP>|u:<User-Name>") sin
+#  sesión: estable, el mismo para el authorize y todo el accounting de una sesión PPPoE. aaa calcula
+#  lo mismo si la cabecera no llega (services/aaa/src/request_id.ts); cambiar los dos a la vez.
+#
 server default {
 
 listen {
@@ -36,6 +41,9 @@ authorize {
 
 	#  aaa decide: activo, limitado o suspendido → 200 con atributos (el suspendido se ACEPTA con
 	#  el perfil de corte); retirado o inexistente → 401 (reject) o 404 (notfound).
+	update control {
+		&REST-HTTP-Header := "X-Request-Id: rad-%{md5:%{%{NAS-IP-Address}:-%{NAS-IPv6-Address}}|%{%{Acct-Session-Id}:-u:%{User-Name}}}"
+	}
 	rest
 	if (fail || notfound || invalid || userlock) {
 		reject
@@ -62,6 +70,9 @@ preacct {
 
 accounting {
 	#  Si aaa falla no se responde Accounting-Response y el NAS reintenta: es lo que queremos.
+	update control {
+		&REST-HTTP-Header := "X-Request-Id: rad-%{md5:%{%{NAS-IP-Address}:-%{NAS-IPv6-Address}}|%{%{Acct-Session-Id}:-u:%{User-Name}}}"
+	}
 	rest
 }
 
@@ -73,6 +84,9 @@ post-auth {
 	ok
 
 	Post-Auth-Type REJECT {
+		update control {
+			&REST-HTTP-Header := "X-Request-Id: rad-%{md5:%{%{NAS-IP-Address}:-%{NAS-IPv6-Address}}|%{%{Acct-Session-Id}:-u:%{User-Name}}}"
+		}
 		rest {
 			fail = 1
 			notfound = 1

@@ -43,6 +43,21 @@ Desconectar no habla con el NAS: emite `sesion.desconexion_solicitada` (`sesion_
 - "Está caído" sale del último `aaa.caido`/`aaa.recuperado` del nodo en `audit.outbox`; las acciones toman un advisory lock por nodo y no repiten el evento. En Redis solo está la racha de fallos en curso (`<COLAS_PREFIJO>:aaa-salud:<nodo>`, sin TTL, se borra con el primer 2xx), para que otro vigía siga contando desde el mismo primer fallo.
 - Las dos acciones se auditan en `audit.acciones` (canal `cron`, actor `sistema`).
 
+## Verificación previa a migrar un router (semana 3)
+
+`node ace aaa:verificar-router <router_id> [--salida informe.md]` (`pnpm aaa:verificar-router <id>` desde la raíz; lógica en `verificacion_migracion.ts`). Solo lee Postgres y Redis. Informe en Markdown con OK / AVISO / FALLA por comprobación; sale con 1 si hay alguna falla:
+
+| Comprobación           | Falla si                                                                                                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Router                 | no existe, está inactivo o no está en modo `radius`                                                                                                                                                                                 |
+| Secreto RADIUS         | no hay `radius_secret`, no descifra con `AAA_PPP_KEY` o `pnpm aaa:clients` lo rechazaría (< 8 caracteres, caracteres de control)                                                                                                    |
+| Registros `aaa:user:*` | un servicio PPPoE no retirado no tiene clave, tiene lápida, JSON inválido, `version` menor que Postgres, u otra `pass_ppp`, estado o plan                                                                                           |
+| Contraseñas PPPoE      | `pass_ppp` no descifra con `AAA_PPP_KEY` (`aaa` respondería 500)                                                                                                                                                                    |
+| Planes con perfil      | un plan en uso no tiene fila en `planes_routers` con `profile_ppp` (salvo reuso > 1 en `simple`: perfil `plan-<id>`), o hay servicios en `radius_pool` sin pools IPv6. Avisos: sin velocidad limitada, sin IPv4 fija ni `pool_ipv4` |
+| `user_ppp` únicos      | dos servicios no retirados (de cualquier router) con el mismo `user_ppp` sin distinguir mayúsculas ni espacios, o con espacios o caracteres de control                                                                              |
+
+Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
+
 ## Pruebas
 
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).

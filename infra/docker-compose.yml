@@ -50,6 +50,8 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Raíz de la Bot API (vacío = https://api.telegram.org); la misma usa alertmanager
+  TELEGRAM_API_ROOT: ${TELEGRAM_API_ROOT:-}
   # Bot (POST /api/v1/telegram/webhook, contratos/telegram.md): usuario del bot sin @, secreto del
   # header X-Telegram-Bot-Api-Secret-Token y URL pública HTTPS para `node ace telegram:webhook`.
   TELEGRAM_BOT_NOMBRE: ${TELEGRAM_BOT_NOMBRE:-}
@@ -74,6 +76,15 @@ x-api-env: &api-env
   PORTAL_CABECERA_IP: x-forwarded-for
   SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+  # Pasarela de pago en línea (A3, app/billing/pasarelas; a3.md). La imagen corre con
+  # NODE_ENV=production: sin PASARELA_PROVEEDOR no hay pasarela (503). En el laboratorio,
+  # PASARELA_PROVEEDOR=falsa con su secreto HMAC y la URL pública de la API (página de pago simulada).
+  # El webhook del proveedor entra por POST /api/v1/pasarela/webhook/<proveedor>: el proxy debe
+  # pasar el cuerpo crudo (servicio proxy, infra/proxy/Caddyfile). billing-worker corre el cron
+  # diario de conciliación con estas mismas variables.
+  PASARELA_PROVEEDOR: ${PASARELA_PROVEEDOR:-}
+  PASARELA_FALSA_SECRETO: ${PASARELA_FALSA_SECRETO:-}
+  PASARELA_URL_PUBLICA: ${PASARELA_URL_PUBLICA:-${API_PUBLIC_URL:-http://localhost:3333}}
   # Comprobantes de depósito (A3, billing/comprobantes_archivos.ts): fuera de Postgres, en el volumen
   # `comprobantes` (o COMPROBANTES_HOST_DIR) montado solo en api, que los guarda y los sirve
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
@@ -323,7 +334,8 @@ services:
   # crons del reconciliador (cola routeros-cron) y prefijo delegado de las sesiones en modo
   # radius_pool (cola routeros-prefijos). Una réplica: los crons llevan lock. Debe alcanzar la API
   # REST de los routers (HTTPS, servicio www-ssl): en el laboratorio, por la LAN o el túnel WireGuard.
-  # Usuario y contraseña de cada router salen de network.routers (cifrados con AAA_PPP_KEY).
+  # Usuario y contraseña de cada router salen de network.routers (cifrados con AAA_PPP_KEY); la
+  # verificación TLS también es por router (api_tls_verificar, api_ca), no por variable de entorno.
   routeros-worker:
     <<: *proceso-fondo
     command: [node, ace.js, routeros:worker]
@@ -331,7 +343,6 @@ services:
       replicas: 1
     environment:
       <<: *api-env
-      ROUTEROS_TLS_VERIFICAR: ${ROUTEROS_TLS_VERIFICAR:-true}
       ROUTEROS_TIMEOUT_MS: ${ROUTEROS_TIMEOUT_MS:-5000}
       ROUTEROS_REINTENTOS: ${ROUTEROS_REINTENTOS:-3}
       ROUTEROS_ESPERA_MS: ${ROUTEROS_ESPERA_MS:-500}
@@ -453,6 +464,11 @@ services:
       AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
       # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+    # Último perfil conocido del modo degradado (A2: AAA_DEGRADADO_RUTA de la imagen,
+    # /var/lib/argosisp-aaa/ultimo-conocido.json, dueño node, 0600). Con un segundo nodo, un volumen
+    # propio por nodo (aaa2-datos).
+    volumes:
+      - aaa-datos:/var/lib/argosisp-aaa
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
@@ -505,10 +521,13 @@ services:
       # Prefijo de aaa:user:<user_ppp> en Redis (mismo que aaa y la API): rate-limit de los CoA de velocidad
       AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
       # Respaldo por la API interna (A2) cuando Redis no tiene el servicio: GET /internal/aaa/servicio
-      # con Authorization: Bearer <INTERNAL_TOKEN> (el mismo token que aaa y la API).
+      # con Authorization: Bearer <AAA_INTERNAL_TOKEN> (= INTERNAL_TOKEN de la API y el de aaa).
+      # Nombres de services/coa/.env.example.
       API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
-      AAA_API_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
-      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      COA_API_TIMEOUT_MS: ${COA_API_TIMEOUT_MS:-2000}
+      COA_API_REINTENTOS: ${COA_API_REINTENTOS:-3}
+      COA_API_ESPERA_MS: ${COA_API_ESPERA_MS:-500}
       # GET /metrics (job coa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
     ports:
@@ -518,6 +537,9 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      # Respaldo del rate-limit por la API interna (no bloquea si la API tarda: service_started)
+      api:
+        condition: service_started
     healthcheck:
       <<: *node-healthcheck
       test:
@@ -559,6 +581,34 @@ services:
       retries: 5
       start_period: 10s
 
+  # Perfil publico: proxy con TLS para la API (incluido el webhook de la pasarela, con el cuerpo
+  # crudo) y el panel. El portal no pasa por aquí (necesita la IP real del cliente). infra/proxy/
+  proxy:
+    profiles: [publico]
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      PROXY_DOMINIO_API: ${PROXY_DOMINIO_API:-api.localhost}
+      PROXY_DOMINIO_PANEL: ${PROXY_DOMINIO_PANEL:-panel.localhost}
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      # En producción 80 y 443 en la IP pública (distinta de PORTAL_BIND_IP, que usa el 80 del portal)
+      - ${PROXY_BIND_IP:-127.0.0.1}:${PROXY_HTTP_PORT:-8080}:80
+      - ${PROXY_BIND_IP:-127.0.0.1}:${PROXY_HTTPS_PORT:-8443}:443
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
   # Perfil monitoreo: Prometheus con las métricas de la API y las reglas de infra/monitoring.
   prometheus:
     profiles: [monitoreo]
@@ -590,6 +640,32 @@ services:
       timeout: 3s
       retries: 5
 
+  # Perfil monitoreo: Alertmanager manda las alertas de Prometheus al chat del equipo por Telegram
+  # (receptor nativo telegram_configs, no la API: debe avisar justo cuando la API o Redis se caen).
+  # Mismo bot (TELEGRAM_BOT_TOKEN) y chat (TELEGRAM_CHAT_EQUIPO) que las alertas de negocio de notify.
+  # Configuración en infra/monitoring/alertmanager/; prueba de punta a punta: infra/monitoring/probar-alertas.sh
+  alertmanager:
+    profiles: [monitoreo]
+    # Imagen oficial en quay.io (el mismo build que prom/alertmanager, sin el límite de Docker Hub)
+    image: quay.io/prometheus/alertmanager:v0.28.1
+    restart: unless-stopped
+    entrypoint: [/bin/sh, /etc/alertmanager/entrypoint.sh]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+      TELEGRAM_API_ROOT: ${TELEGRAM_API_ROOT:-}
+      ALERTMANAGER_RETENCION: ${ALERTMANAGER_RETENCION:-120h}
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - amdata:/alertmanager
+    ports:
+      - 127.0.0.1:${ALERTMANAGER_PORT_HOST:-9093}:9093
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9093/-/ready']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 # Red por defecto con subred fija: PORTAL_PROXIES_CONFIABLES de la API la usa para confiar en el
 # X-Forwarded-For que agrega el portal. IPv6 en la red: COMPOSE_IPV6=true (perfil lab, ver infra/README.md).
 networks:
@@ -604,5 +680,11 @@ volumes:
   pgdata:
   redisdata:
   promdata:
+  amdata:
+  # Certificados y estado de Caddy (servicio proxy)
+  caddydata:
+  caddyconfig:
+  # Último perfil conocido de aaa (modo degradado)
+  aaa-datos:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:

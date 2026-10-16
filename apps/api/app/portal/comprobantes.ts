@@ -8,6 +8,7 @@ import { listarComprobantes, type ComprobanteVista } from '#billing/comprobantes
 import { exigirSesionPortal } from '#portal/acceso/sesion'
 import { servicioDeLaPeticion } from '#portal/promesas'
 import type { ArchivoComprobante } from '#billing/actions/registrar_comprobante'
+import { TAMANO_MAXIMO_COMPROBANTE } from '#billing/comprobantes_archivos'
 
 /**
  * Comprobantes de depósito desde el portal (tarea 5). La acción es `RegistrarComprobante` de A3
@@ -95,12 +96,34 @@ export async function titularDeLaPeticion(
 
 /**
  * Archivo del campo `archivo` del multipart. Sin archivo devuelve contenido vacío: la acción
- * responde 422 `archivo` `required` junto con el resto de errores del formulario. El tamaño y el
- * tipo los decide la acción (por el contenido, no por la extensión).
+ * responde 422 `archivo` `required` junto con el resto de errores del formulario. El tipo lo decide
+ * la acción por el contenido (firma de los primeros bytes), nunca por la extensión ni por el
+ * `Content-Type` que manda el navegador.
+ *
+ * Antes de leerlo a memoria se rechaza aquí (422 en `archivo`) lo que la acción rechazaría igual:
+ * más de 5 MB (`TAMANO_MAXIMO_COMPROBANTE` de A3; el bodyparser acepta hasta 20 MB) o más de un
+ * archivo en el campo.
  */
 export async function archivoDeLaPeticion(ctx: HttpContext): Promise<ArchivoComprobante> {
-    const archivo = ctx.request.file('archivo')
+    const archivos = ctx.request.files('archivo')
+    if (archivos.length > 1) {
+        throw errorComprobanteParaCliente(
+            new ValidacionFallida([{ field: 'archivo', rule: 'unico', message: 'Más de un archivo' }]),
+        )
+    }
+    const archivo = archivos[0]
     if (!archivo?.tmpPath) return { contenido: new Uint8Array(), nombre: null }
+    if (archivo.size > TAMANO_MAXIMO_COMPROBANTE) {
+        throw errorComprobanteParaCliente(
+            new ValidacionFallida([
+                {
+                    field: 'archivo',
+                    rule: 'tamano',
+                    message: `El archivo pesa ${(archivo.size / 1024 / 1024).toFixed(1)} MB; el máximo es 5 MB`,
+                },
+            ]),
+        )
+    }
     return { contenido: await readFile(archivo.tmpPath), nombre: archivo.clientName }
 }
 
@@ -122,6 +145,7 @@ function mensajeCampo(error: ErrorCampo): string {
         case 'archivo':
             if (regla === 'tamano') return `${error.message}. Toma la foto con menor resolución o recórtala.`
             if (regla === 'tipo') return 'Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.'
+            if (regla === 'unico') return 'Sube un solo archivo: la foto o el PDF del comprobante.'
             return 'Adjunta la foto o el PDF del comprobante.'
         case 'cuenta_bancaria_id':
             if (regla === 'required') return 'Elige la cuenta a la que depositaste.'
