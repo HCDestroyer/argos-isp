@@ -123,6 +123,67 @@ const ACTORES: Record<Accion['actor_tipo'], string> = {
     sistema: 'Sistema',
 }
 
+/** Acciones conocidas para el filtro de la bitácora, ordenadas por nombre técnico. */
+export const ACCIONES_CONOCIDAS: { accion: string, etiqueta: string }[] = Object.entries(ETIQUETAS_ACCION)
+    .map(([accion, etiqueta]) => ({ accion, etiqueta }))
+    .sort((a, b) => a.accion.localeCompare(b.accion))
+
+/** Canales del filtro (`canal` del contrato) con su etiqueta. */
+export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker', 'webhook', 'interno', 'consola'] as const
+
+/** Tipos de entidad que registran las acciones (`t.fijarEntidad`) y dónde se ven en el panel. */
+export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
+    cliente: { etiqueta: 'Cliente', ruta: id => `/clientes/${id}` },
+    servicio: { etiqueta: 'Servicio', ruta: id => `/servicios/${id}` },
+    factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },
+    pago: { etiqueta: 'Pago', ruta: id => `/pagos/${id}` },
+    promesa: { etiqueta: 'Promesa' },
+    caja: { etiqueta: 'Caja', ruta: id => `/caja?caja=${id}` },
+    asiento: { etiqueta: 'Asiento' },
+    sesion: { etiqueta: 'Sesión PPPoE' },
+    plan: { etiqueta: 'Plan' },
+    plan_router: { etiqueta: 'Plan en router' },
+    plantilla_facturacion: { etiqueta: 'Plantilla de facturación' },
+    plantilla_notificacion: { etiqueta: 'Plantilla de notificación' },
+    recordatorio: { etiqueta: 'Recordatorio' },
+    envio: { etiqueta: 'Envío de notificación' },
+    router: { etiqueta: 'Router' },
+    zona: { etiqueta: 'Zona' },
+    usuario: { etiqueta: 'Usuario' },
+    rol: { etiqueta: 'Rol' },
+    token_api: { etiqueta: 'Token de API' },
+}
+
+/** Enlace del panel a una entidad de la bitácora, o `null`. */
+export function rutaEntidad(tipo: string | null, id: number | null): string | null {
+    if (!tipo || id === null) {
+        return null
+    }
+    return ENTIDADES_BITACORA[tipo]?.ruta?.(id) ?? null
+}
+
+/**
+ * Valor de un campo en el historial de cambios: `***` (dato sensible) tal cual, `null` como
+ * "vacío", textos sin comillas y lo demás en JSON.
+ */
+export function valorCambio(valor: unknown): string {
+    if (valor === null || valor === undefined || valor === '') {
+        return 'vacío'
+    }
+    if (typeof valor === 'string') {
+        return valor
+    }
+    return JSON.stringify(valor)
+}
+
+/** Entrada o resultado de una acción, en JSON legible. */
+export function jsonLegible(valor: unknown): string {
+    if (valor === null || valor === undefined) {
+        return '—'
+    }
+    return JSON.stringify(valor, null, 2)
+}
+
 /** `servicios.suspender` → `Servicio suspendido`; nombres desconocidos, tal cual. */
 export function etiquetaAccion(accion: string): string {
     return ETIQUETAS_ACCION[accion] ?? accion

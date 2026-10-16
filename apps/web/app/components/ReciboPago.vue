@@ -13,6 +13,8 @@ const props = withDefaults(defineProps<{
     facturas?: Schema<'Factura'>[]
     caja?: string | null
     cajero?: string | null
+    /** Servicios del cliente, para nombrar el servicio de cada factura pagada. */
+    servicios?: Servicio[]
     /** Servicios que el pago reactivó (`Pago.servicios[]`). */
     reactivados?: Servicio[]
     /** Servicios suspendidos a mano: el pago no los reactiva y el recibo lo dice. */
@@ -21,6 +23,7 @@ const props = withDefaults(defineProps<{
     facturas: () => [],
     caja: null,
     cajero: null,
+    servicios: () => [],
     reactivados: () => [],
     suspendidosManual: () => [],
 })
@@ -32,7 +35,11 @@ const aFavor = computed(() => new Decimal(props.pago.monto).minus(aplicado.value
 
 function periodo(facturaId: number): string {
     const factura = periodos.value.get(facturaId)
-    return factura ? `Aviso #${facturaId} · ${formatearFecha(factura.periodo).slice(3)}` : `Aviso #${facturaId}`
+    if (!factura) {
+        return `Aviso #${facturaId}`
+    }
+    const servicio = props.servicios.find(s => s.id === factura.servicio_id)
+    return `Aviso #${facturaId} · ${formatearFecha(factura.periodo).slice(3)}${servicio ? ` · ${servicio.user_ppp}` : ''}`
 }
 </script>
 
