@@ -13012,6 +13012,92 @@
         "x-implementado": true
       }
     },
+    "/api/v1/telegram/webhook": {
+      "post": {
+        "operationId": "telegramWebhook",
+        "summary": "Webhook del bot de Telegram (lo llama Telegram, no el panel)",
+        "description": "Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "update_id": {
+                    "type": "integer"
+                  },
+                  "message": {
+                    "type": "object",
+                    "properties": {
+                      "message_id": {
+                        "type": "integer"
+                      },
+                      "chat": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "maxLength": 20
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "message_id",
+                      "chat"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "update_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actualización procesada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramWebhookRespuesta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/tokens": {
       "get": {
         "operationId": "tokensListar",
@@ -19002,6 +19088,17 @@
           },
           "usuario": {
             "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "TelegramWebhookRespuesta": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
           }
         }
       },

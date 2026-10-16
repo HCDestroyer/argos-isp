@@ -64,6 +64,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     MAIL_FROM: Env.schema.string.optional(),
     TELEGRAM_BOT_TOKEN: Env.schema.string.optional(),
     TELEGRAM_API_ROOT: Env.schema.string.optional(),
+    /** Bot (webhook y vinculación, `contratos/telegram.md`) */
+    TELEGRAM_BOT_NOMBRE: Env.schema.string.optional(),
+    TELEGRAM_WEBHOOK_SECRET: Env.schema.string.optional(),
+    TELEGRAM_WEBHOOK_URL: Env.schema.string.optional(),
+    TELEGRAM_CODIGO_VIGENCIA_S: Env.schema.number.optional(),
     NOTIFY_INTENTOS: Env.schema.number.optional(),
     NOTIFY_EMPRESA_NOMBRE: Env.schema.string.optional(),
     NOTIFY_EMPRESA_TELEFONO: Env.schema.string.optional(),

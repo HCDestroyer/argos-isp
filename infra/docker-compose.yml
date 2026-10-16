@@ -50,6 +50,12 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Bot (POST /api/v1/telegram/webhook, contratos/telegram.md): usuario del bot sin @, secreto del
+  # header X-Telegram-Bot-Api-Secret-Token y URL pública HTTPS para `node ace telegram:webhook`.
+  TELEGRAM_BOT_NOMBRE: ${TELEGRAM_BOT_NOMBRE:-}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+  TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+  TELEGRAM_CODIGO_VIGENCIA_S: ${TELEGRAM_CODIGO_VIGENCIA_S:-900}
   # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
   TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
   NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}

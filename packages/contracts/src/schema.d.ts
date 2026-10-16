@@ -1835,6 +1835,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telegram/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook del bot de Telegram (lo llama Telegram, no el panel)
+         * @description Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.
+         */
+        post: operations["telegramWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tokens": {
         parameters: {
             query?: never;
@@ -3162,6 +3182,9 @@ export interface components {
             /** @description Token Bearer opaco */
             token: string;
             usuario: components["schemas"]["Me"];
+        };
+        TelegramWebhookRespuesta: {
+            ok: boolean;
         };
         TokenApi: {
             id: number;
@@ -10399,6 +10422,49 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    telegramWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    update_id: number;
+                    message?: {
+                        message_id: number;
+                        chat: {
+                            id: number;
+                            type: string;
+                        };
+                        text?: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Actualización procesada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramWebhookRespuesta"];
                 };
             };
             /** @description Datos inválidos */

@@ -54,3 +54,24 @@ export const editarRecordatorioValidator = vine.compile(
         activo: vine.boolean().optional(),
     }),
 )
+
+/**
+ * Actualización de Telegram que entra por el webhook del bot. Solo lo que usa el bot (`message`
+ * con `chat` y `text`); VineJS descarta el resto de campos. Otros tipos de actualización
+ * (editados, callbacks) llegan sin `message` y se ignoran.
+ */
+export const telegramActualizacionValidator = vine.compile(
+    vine.object({
+        update_id: vine.number().withoutDecimals(),
+        message: vine
+            .object({
+                message_id: vine.number().withoutDecimals(),
+                chat: vine.object({
+                    id: vine.number().withoutDecimals(),
+                    type: vine.string().maxLength(20),
+                }),
+                text: vine.string().maxLength(4096).optional(),
+            })
+            .optional(),
+    }),
+)
