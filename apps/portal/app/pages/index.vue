@@ -25,10 +25,10 @@ useHead({ title: `Portal del cliente · ${empresa.nombre}` })
 
         <UPageCard
             title="Mi cuenta"
-            description="Facturas, pagos y datos de contacto con un código enviado a tu teléfono o correo. Disponible pronto."
+            description="Facturas, pagos y datos de contacto. Entras con un código que te enviamos a tu correo o Telegram registrado."
             icon="i-lucide-user-round"
+            to="/cuenta"
             variant="outline"
-            class="opacity-75"
         />
     </div>
 </template>

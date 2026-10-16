@@ -179,6 +179,18 @@ const contacto = computed(() => {
             />
 
             <UButton
+                v-if="identificado"
+                data-testid="ver-mi-cuenta"
+                label="Ver mis facturas y pagos"
+                icon="i-lucide-receipt"
+                color="neutral"
+                variant="outline"
+                size="lg"
+                to="/entrar?por_ip=1"
+                block
+            />
+
+            <UButton
                 :label="contacto?.label ?? 'Contacta a soporte'"
                 :icon="contacto?.icon ?? 'i-lucide-phone'"
                 :to="contacto?.to"

@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import { resolverIp } from '#network/consultas/ip'
 
 /**
  * Lecturas públicas del portal por IP de origen (`quien-soy` y `estado`). Son de solo lectura;
@@ -119,43 +120,13 @@ export async function leerEstado(
 }
 
 /**
- * Servicio de una IP, en orden:
- * 1. `network.sesiones` activas (`fin IS NULL`): `ipv4` igual, o la IPv6 contenida en
- *    `prefijo_enlace_v6` o `prefijo_delegado_v6`. Gana la sesión más reciente.
- * 2. Asignaciones vigentes (`fin IS NULL`): `network.ipv4_asignaciones.ip` igual o
- *    `network.ipv6_asignaciones.prefijo` que contenga la IP (servicio sin sesión viva, IP fija).
- *
- * NEEDS(A1): reemplazar por `GET /ip/{ip}` (acción de A1) cuando se publique.
+ * Servicio de una IP con `resolverIp` de A1 (`GET /ip/{ip}`, tarea 13), sin pasar por HTTP porque
+ * este endpoint es público: sesiones activas y asignaciones vigentes, gana el prefijo más largo
+ * y, a igual longitud, la sesión activa y la más reciente.
  */
 export async function resolverServicio(cliente: QueryClientContract, ip: string): Promise<number | null> {
-    const sesion = (await cliente
-        .from('network.sesiones')
-        .whereNull('fin')
-        .whereNotNull('servicio_id')
-        .where((q) => {
-            q.whereRaw('ipv4 = ?::inet', [ip])
-                .orWhereRaw('prefijo_enlace_v6 >>= ?::inet', [ip])
-                .orWhereRaw('prefijo_delegado_v6 >>= ?::inet', [ip])
-        })
-        .orderBy('inicio', 'desc')
-        .orderBy('id', 'desc')
-        .select('servicio_id')
-        .first()) as { servicio_id: number } | null
-    if (sesion) return Number(sesion.servicio_id)
-
-    const asignacion = (await cliente
-        .from('network.ipv4_asignaciones')
-        .whereNull('fin')
-        .whereRaw('ip = ?::inet', [ip])
-        .select('servicio_id')
-        .unionAll((q) => {
-            q.from('network.ipv6_asignaciones')
-                .whereNull('fin')
-                .whereRaw('prefijo >>= ?::inet', [ip])
-                .select('servicio_id')
-        })
-        .first()) as { servicio_id: number } | null
-    return asignacion ? Number(asignacion.servicio_id) : null
+    const resolucion = await resolverIp(ip, cliente)
+    return resolucion?.servicio_id ?? null
 }
 
 export interface SaldoServicio {

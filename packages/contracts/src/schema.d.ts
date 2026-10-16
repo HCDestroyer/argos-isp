@@ -687,6 +687,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/codigo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pide un código de acceso al portal (correo o Telegram registrado del cliente)
+         * @description Con `identificador` (NIT/CUI o usuario PPPoE) o `por_ip: true` (desde /corte). El código (6 dígitos, `PORTAL_CODIGO_VIGENCIA_S`) va SIEMPRE al destino registrado del cliente. Por identificador responde igual exista o no el cliente; por IP responde 422 `no_identificado` o `sin_destino`. Máximo `PORTAL_CODIGO_MAX_HORA` códigos por cliente por hora; 503 si el canal no acepta el mensaje. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalSolicitarCodigo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/contacto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * El cliente edita su correo, teléfonos y canal preferido
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
+         */
+        put: operations["portalEditarContacto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/cuenta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos de contacto, servicios y saldo del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalCuenta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/estado": {
         parameters: {
             query?: never;
@@ -699,6 +759,86 @@ export interface paths {
          * @description Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalEstado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Facturas (avisos de cobro) del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalFacturas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de una factura del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404.
+         */
+        get: operations["portalFactura"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/pagos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pagos del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalPagos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/promesas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Promesas de pago del cliente de la sesión (solo lectura)
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalPromesas"];
         put?: never;
         post?: never;
         delete?: never;
@@ -721,6 +861,46 @@ export interface paths {
         get: operations["portalQuienSoy"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/salir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierra la sesión del portal
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        post: operations["portalSalir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verifica el código y abre la sesión del portal (cookie httpOnly)
+         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalVerificarCodigo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1708,6 +1888,125 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PortalContacto: {
+            nombre: string;
+            nit_cui: string | null;
+            email: string | null;
+            telefono: string | null;
+            movil: string | null;
+            /** @enum {string} */
+            canal_preferido: "correo" | "telegram" | "whatsapp";
+            telegram_vinculado: boolean;
+            /** @description Envíala al editar (409 si cambió) */
+            version: number;
+        };
+        PortalCuenta: {
+            cliente: components["schemas"]["PortalContacto"];
+            servicios: components["schemas"]["PortalServicio"][];
+            /** @description Saldo pendiente de todos los servicios */
+            monto_adeudado: components["schemas"]["Dinero"];
+        };
+        PortalFactura: {
+            id: number;
+            /** @description Serie-número FEL si está certificada; si no, número del aviso */
+            numero: string;
+            /**
+             * @description factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto
+             * @enum {string}
+             */
+            documento: "aviso_cobro" | "factura";
+            /** @enum {string} */
+            tipo: "servicio" | "mora";
+            servicio_id: number | null;
+            /** Format: date */
+            periodo: string;
+            /** Format: date-time */
+            emitida_en: string;
+            /** Format: date */
+            vence_en: string;
+            /** @enum {string} */
+            estado: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+            subtotal: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+            pagado: components["schemas"]["Dinero"];
+            /** @description total - pagado (0.00 si está anulada) */
+            saldo: components["schemas"]["Dinero"];
+            fel_uuid: string | null;
+            fel_serie: string | null;
+            fel_numero: string | null;
+        };
+        PortalFacturaDetalle: components["schemas"]["PortalFactura"] & {
+            lineas: components["schemas"]["PortalFacturaLinea"][];
+        };
+        PortalFacturaLinea: {
+            concepto: string;
+            /** @description Decimal con hasta 3 decimales */
+            cantidad: string;
+            precio_unitario: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+        };
+        PortalPago: {
+            id: number;
+            /** @enum {string} */
+            metodo: "caja" | "pasarela" | "deposito" | "agente" | "debito";
+            monto: components["schemas"]["Dinero"];
+            referencia: string | null;
+            /** @enum {string} */
+            estado: "registrado" | "pendiente_verificacion" | "anulado";
+            /** Format: date-time */
+            created_at: string;
+            aplicaciones: {
+                factura_id: number;
+                monto: components["schemas"]["Dinero"];
+            }[];
+        };
+        PortalPromesa: {
+            id: number;
+            servicio_id: number;
+            /** Format: date-time */
+            vence_en: string;
+            monto: components["schemas"]["Dinero"];
+            /** @enum {string} */
+            estado: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            created_at: string;
+        };
+        PortalServicio: {
+            id: number;
+            estado: components["schemas"]["EstadoServicio"];
+            plan: string | null;
+            direccion: string | null;
+            promesa_activa: boolean;
+            monto_adeudado: components["schemas"]["Dinero"];
+        };
+        PortalSesion: {
+            cliente: {
+                nombre_parcial: string | null;
+            };
+            /**
+             * Format: date-time
+             * @description Vence por inactividad; cada consulta la extiende
+             */
+            expira_en: string;
+        };
+        PortalSolicitudCodigo: {
+            /**
+             * Format: uuid
+             * @description Se envía con el código a POST /portal/verificar
+             */
+            solicitud: string;
+            /**
+             * Format: date-time
+             * @description Hasta cuándo vale el código
+             */
+            expira_en: string;
+            /** @description Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente */
+            destino: string | null;
         };
         Problem: {
             type: string;
@@ -5027,6 +5326,124 @@ export interface operations {
             };
         };
     };
+    portalSolicitarCodigo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description NIT/CUI o usuario PPPoE. Omitir con `por_ip: true` */
+                    identificador?: string;
+                    /** @description Identificar por la IP de origen (página de corte) */
+                    por_ip?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Código enviado (o solicitud ciega) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSolicitudCodigo"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalEditarContacto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** Format: email */
+                    email?: string | null;
+                    telefono?: string | null;
+                    movil?: string | null;
+                    /** @enum {string} */
+                    canal_preferido?: "correo" | "telegram" | "whatsapp";
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalContacto"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCuenta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuenta del cliente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCuenta"];
+                };
+            };
+        };
+    };
     portalEstado: {
         parameters: {
             query?: never;
@@ -5056,6 +5473,148 @@ export interface operations {
             };
         };
     };
+    portalFacturas: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de facturas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalFactura"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalFactura: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Factura con líneas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalFacturaDetalle"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPagos: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de pagos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPago"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPromesas: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de promesas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPromesa"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalQuienSoy: {
         parameters: {
             query?: never;
@@ -5072,6 +5631,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuienSoy"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSalir: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión cerrada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    portalVerificarCodigo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description Devuelta por POST /portal/codigo
+                     */
+                    solicitud: string;
+                    /** @description Código de 6 dígitos */
+                    codigo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSesion"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
