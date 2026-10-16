@@ -7,6 +7,9 @@ import type { Log } from '../src/dispatcher.ts'
 export const CLAVE = randomBytes(32)
 export const SECRET = 'secreto-del-router'
 
+export const RATE_ACTIVO = '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k'
+export const RATE_LIMITADO = '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k'
+
 export const SUSPENDIDO = { rateLimit: '256k/256k', addressList: 'suspendidos', filterId: 'argos-corte.in' }
 
 export const silencio: Log = { info: () => {}, warn: () => {}, error: () => {} }
@@ -15,11 +18,9 @@ export function servicio(parcial: Partial<ServicioActual> = {}): ServicioActual 
     return {
         servicio_id: 101,
         estado: 'activo',
-        subida_kbps: 5120,
-        bajada_kbps: 20480,
-        subida_limitada_kbps: 1024,
-        bajada_limitada_kbps: 2048,
-        rate_limit_override: null,
+        // Cadenas de `velocidad.ts` (A1) para un plan 5M/20M con limitado 1M/2M, reuso 1 y prioridad 8
+        rate_limit: RATE_ACTIVO,
+        rate_limit_limitado: RATE_LIMITADO,
         ...parcial,
     }
 }

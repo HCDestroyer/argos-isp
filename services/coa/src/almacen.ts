@@ -1,7 +1,7 @@
-import type { Redis } from 'ioredis'
 import pg from 'pg'
 import type { EstadoServicio, ServicioActual } from './decision.ts'
 import type { TipoPaquete } from './nas.ts'
+import type { FuenteRateLimits } from './registro.ts'
 
 /**
  * Lo que `coa` lee y escribe en Postgres. `coa` no pasa por `apps/api`: lee el estado vigente del
@@ -56,68 +56,38 @@ export interface Almacen {
 
 export class AlmacenPg implements Almacen {
     readonly pool: pg.Pool
-    readonly #aaa: { redis: Redis; prefijo: string } | null
+    readonly #rateLimits: FuenteRateLimits | null
 
     /**
-     * `aaa`: Redis y prefijo de `aaa:user:<user_ppp>` para leer las cadenas de rate-limit que
-     * publica A1 (las mismas que entrega `aaa`). Sin él, las velocidades se arman con kbps.
+     * `rateLimits`: de dónde salen las cadenas completas de `Mikrotik-Rate-Limit` (Redis
+     * `aaa:user:*` y, si falta, la API interna; `registro.ts`). Sin fuente, los CoA de velocidad fallan.
      */
-    constructor(config: pg.PoolConfig, aaa: { redis: Redis; prefijo: string } | null = null) {
+    constructor(config: pg.PoolConfig, rateLimits: FuenteRateLimits | null = null) {
         this.pool = new pg.Pool({ max: 5, ...config })
-        this.#aaa = aaa
+        this.#rateLimits = rateLimits
         this.pool.on('error', () => {
             // Una conexión inactiva que se cae no debe tumbar el proceso; la siguiente consulta reconecta.
         })
     }
 
     async servicio(servicioId: number): Promise<ServicioActual | null> {
-        const { rows } = await this.pool.query<{
-            user_ppp: string | null
-            estado: EstadoServicio
-            subida_kbps: number
-            bajada_kbps: number
-            subida_limitada_kbps: number
-            bajada_limitada_kbps: number
-            rate_limit_override: string | null
-        }>(
-            `SELECT s.user_ppp, s.estado, p.subida_kbps, p.bajada_kbps, p.subida_limitada_kbps, p.bajada_limitada_kbps,
-                    pr.rate_limit_override
-             FROM core.servicios s
-             JOIN network.planes p ON p.id = s.plan_id
-             LEFT JOIN network.planes_routers pr ON pr.plan_id = s.plan_id AND pr.router_id = s.router_id
-             WHERE s.id = $1`,
+        const { rows } = await this.pool.query<{ user_ppp: string | null; estado: EstadoServicio }>(
+            `SELECT s.user_ppp, s.estado FROM core.servicios s WHERE s.id = $1`,
             [servicioId],
         )
         const fila = rows[0]
         if (!fila) return null
-        const { user_ppp: userPpp, ...datos } = fila
-        return { servicio_id: servicioId, ...datos, ...(await this.#rateLimits(servicioId, userPpp)) }
-    }
-
-    /** Cadenas de `aaa:user:<user_ppp>` si el registro es de este servicio; si Redis falla, nada. */
-    async #rateLimits(
-        servicioId: number,
-        userPpp: string | null,
-    ): Promise<{ rate_limit?: string; rate_limit_limitado?: string }> {
-        if (!this.#aaa || !userPpp) return {}
-        try {
-            const crudo = await this.#aaa.redis.get(`${this.#aaa.prefijo}${userPpp}`)
-            if (!crudo) return {}
-            const r = JSON.parse(crudo) as {
-                servicio_id?: unknown
-                plan?: { rate_limit?: unknown; rate_limit_limitado?: unknown }
-            }
-            if (Number(r.servicio_id) !== servicioId) return {}
-            const salida: { rate_limit?: string; rate_limit_limitado?: string } = {}
-            if (typeof r.plan?.rate_limit === 'string' && r.plan.rate_limit)
-                salida.rate_limit = r.plan.rate_limit
-            if (typeof r.plan?.rate_limit_limitado === 'string' && r.plan.rate_limit_limitado) {
-                salida.rate_limit_limitado = r.plan.rate_limit_limitado
-            }
-            return salida
-        } catch {
-            return {}
+        const servicio: ServicioActual = {
+            servicio_id: servicioId,
+            estado: fila.estado,
+            rate_limit: null,
+            rate_limit_limitado: null,
         }
+        // Solo activo y limitado llevan rate-limit por CoA; sin user_ppp no hay sesión PPPoE.
+        if ((fila.estado !== 'activo' && fila.estado !== 'limitado') || !fila.user_ppp) return servicio
+        if (!this.#rateLimits) return { ...servicio, error_rate_limit: 'coa sin fuente de rate-limit' }
+        const r = await this.#rateLimits.obtener(servicioId, fila.user_ppp)
+        return r.ok ? { ...servicio, ...r.valor } : { ...servicio, error_rate_limit: r.error }
     }
 
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {

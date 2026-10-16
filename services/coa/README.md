@@ -30,7 +30,7 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 - Suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` (por defecto) manda el CoA de la tabla; `disconnect` manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
 - Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).
-- Velocidades: mismas reglas que `services/aaa/src/perfil.ts` (velocidad limitada en 0 → la del plan).
+- Velocidades: la cadena completa de `Mikrotik-Rate-Limit` que calcula A1 con `apps/api/app/network/velocidad.ts` (`plan.rate_limit` en activo, `plan.rate_limit_limitado` en limitado), la misma que entrega `aaa`. Sale de Redis `aaa:user:<user_ppp>` y, si falta, no es de este servicio o no trae las cadenas, de `GET ${API_INTERNAL_URL}internal/aaa/servicio?user_ppp=` con `AAA_INTERNAL_TOKEN` (`src/registro.ts`; reintentos `COA_API_REINTENTOS` ante red, timeout o 5xx). `coa` nunca arma `subida/bajada` por su cuenta: si ninguna fuente responde, no envía nada, deja `resultado = sin_rate_limit` en `audit.red` y emite `coa.fallido`.
 
 ## Envío, reintentos y auditoría
 

@@ -16,6 +16,9 @@ import type { PerfilSuspendido } from './config.ts'
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  *
+ * El rate-limit es siempre la cadena completa de A1 (`registro.ts`); si no se puede leer, el CoA
+ * de velocidad se registra como fallido (`coa.fallido`) en vez de mandar uno distinto.
+ *
  * Un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual se ignora: llegó tarde y otro
  * evento posterior describe el estado vigente (el relay entrega al menos una vez y en orden, pero
  * un reintento puede llegar después).
@@ -36,23 +39,20 @@ export type EventoServicio =
       }
     | { evento: 'servicio.config_cambiada'; servicio_id: number; campos: CampoConfig[] }
 
-/** Lo que hay que saber del servicio hoy (lectura de Postgres). */
+/** Lo que hay que saber del servicio hoy (Postgres + registro de `aaa`, ver `registro.ts`). */
 export interface ServicioActual {
     servicio_id: number
     estado: EstadoServicio
-    subida_kbps: number
-    bajada_kbps: number
-    subida_limitada_kbps: number
-    bajada_limitada_kbps: number
-    /** `planes_routers.rate_limit_override` del router del servicio */
-    rate_limit_override: string | null
     /**
      * Cadenas completas de `Mikrotik-Rate-Limit` que calcula A1 (`apps/api/app/network/velocidad.ts`)
-     * y publica en `aaa:user:<user_ppp>`: las mismas que entrega `aaa` al conectar. Si faltan, se
-     * arma `subida/bajada` como antes.
+     * y publica en `aaa:user:<user_ppp>` y en `GET /internal/aaa/servicio`: las mismas que entrega
+     * `aaa` al conectar (`rate_limit` ya incluye `rate_limit_override`). null si no se pudieron leer
+     * o el servicio no las necesita (suspendido, retirado, sin PPPoE).
      */
-    rate_limit?: string | null
-    rate_limit_limitado?: string | null
+    rate_limit: string | null
+    rate_limit_limitado: string | null
+    /** Por qué faltan las cadenas (Redis y API sin respuesta); el CoA de velocidad falla con esto. */
+    error_rate_limit?: string | null
 }
 
 export type AtributosCoa = Record<string, string>
@@ -64,37 +64,40 @@ export type Decision =
           razon: string
           /** CoA de suspensión (perfil de corte); el dispatcher puede cambiarlo por Disconnect en IPv6 */
           suspender?: true
+          /** No se pudo armar el CoA (falta el rate-limit de A1): se registra el fallo sin enviar. */
+          error?: string
       }
     | { accion: 'disconnect'; razon: string }
     | { accion: 'nada'; razon: string }
 
-function rateLimit(subida: number, bajada: number): string {
-    return `${subida}k/${bajada}k`
-}
-
-/** Igual que `services/aaa/src/perfil.ts` para activo y limitado. */
+/**
+ * Rate-limit del estado actual, tal cual lo publica A1 (igual que `services/aaa/src/perfil.ts`).
+ * Nunca se arma uno propio: sin las cadenas devuelve null y el CoA falla con `coa.fallido`.
+ */
 export function rateLimitDe(servicio: ServicioActual): string | null {
     switch (servicio.estado) {
         case 'activo':
-            return (
-                servicio.rate_limit ??
-                servicio.rate_limit_override ??
-                rateLimit(servicio.subida_kbps, servicio.bajada_kbps)
-            )
+            return servicio.rate_limit
         case 'limitado':
-            if (
-                servicio.rate_limit_limitado &&
-                servicio.subida_limitada_kbps > 0 &&
-                servicio.bajada_limitada_kbps > 0
-            ) {
-                return servicio.rate_limit_limitado
-            }
-            return servicio.subida_limitada_kbps > 0 && servicio.bajada_limitada_kbps > 0
-                ? rateLimit(servicio.subida_limitada_kbps, servicio.bajada_limitada_kbps)
-                : rateLimit(servicio.subida_kbps, servicio.bajada_kbps)
+            return servicio.rate_limit_limitado
         default:
             return null
     }
+}
+
+/** CoA de velocidad del estado actual, o el error si no hay cadena de A1. */
+function coaVelocidad(servicio: ServicioActual, razon: string): Decision {
+    const rate = rateLimitDe(servicio)
+    if (!rate) {
+        return {
+            accion: 'coa',
+            razon,
+            atributos: {},
+            error:
+                servicio.error_rate_limit || `sin rate-limit de A1 para el servicio ${servicio.servicio_id}`,
+        }
+    }
+    return { accion: 'coa', razon, atributos: { 'Mikrotik-Rate-Limit': rate } }
 }
 
 export function decidir(
@@ -126,11 +129,7 @@ export function decidir(
                 },
             }
         }
-        return {
-            accion: 'coa',
-            razon: `velocidad: ${evento.de} → ${evento.a}`,
-            atributos: { 'Mikrotik-Rate-Limit': rateLimitDe(servicio)! },
-        }
+        return coaVelocidad(servicio, `velocidad: ${evento.de} → ${evento.a}`)
     }
 
     const campos = new Set(evento.campos)
@@ -138,14 +137,13 @@ export function decidir(
     if (reconectar.length > 0) return { accion: 'disconnect', razon: `cambió ${reconectar.join(', ')}` }
     if (!campos.has('plan')) return { accion: 'nada', razon: 'sin campos que afecten a la sesión' }
     if (!servicio) return { accion: 'nada', razon: 'servicio inexistente' }
-    const rate = rateLimitDe(servicio)
-    if (!rate) {
+    if (servicio.estado !== 'activo' && servicio.estado !== 'limitado') {
         return {
             accion: 'nada',
             razon: `plan cambiado con el servicio ${servicio.estado}: se aplica al reconectar`,
         }
     }
-    return { accion: 'coa', razon: 'cambió el plan', atributos: { 'Mikrotik-Rate-Limit': rate } }
+    return coaVelocidad(servicio, 'cambió el plan')
 }
 
 /**

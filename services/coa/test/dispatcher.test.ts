@@ -4,7 +4,17 @@ import { decidir, EventoInvalido, leerEvento, type EventoServicio } from '../src
 import { leerConfig } from '../src/config.ts'
 import { Dispatcher } from '../src/dispatcher.ts'
 import { ClienteNasUdp } from '../src/nas.ts'
-import { AlmacenMemoria, CLAVE, SECRET, servicio, sesion, silencio, SUSPENDIDO } from './ayudas.ts'
+import {
+    AlmacenMemoria,
+    CLAVE,
+    RATE_ACTIVO,
+    RATE_LIMITADO,
+    SECRET,
+    servicio,
+    sesion,
+    silencio,
+    SUSPENDIDO,
+} from './ayudas.ts'
 import { NasSimulado } from './nas_simulado.ts'
 
 function estado(de: string, a: string): EventoServicio {
@@ -33,8 +43,8 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
                 'Filter-Id': 'argos-corte.in',
             },
         ],
-        ['activo', 'limitado', 'coa', { 'Mikrotik-Rate-Limit': '1024k/2048k' }],
-        ['limitado', 'activo', 'coa', { 'Mikrotik-Rate-Limit': '5120k/20480k' }],
+        ['activo', 'limitado', 'coa', { 'Mikrotik-Rate-Limit': RATE_LIMITADO }],
+        ['limitado', 'activo', 'coa', { 'Mikrotik-Rate-Limit': RATE_ACTIVO }],
         ['suspendido', 'activo', 'disconnect', null],
         ['suspendido', 'limitado', 'disconnect', null],
         ['activo', 'retirado', 'disconnect', null],
@@ -48,16 +58,30 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         })
     }
 
-    it('rate_limit_override del router al volver a activo', () => {
+    it('la cadena de A1 tal cual (con override o ráfaga), sin recalcular', () => {
         const d = decidir(
             estado('limitado', 'activo'),
-            servicio({ rate_limit_override: '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' }),
+            servicio({ rate_limit: '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' }),
             SUSPENDIDO,
         )
         assert.deepEqual(d, {
             accion: 'coa',
             razon: 'velocidad: limitado → activo',
             atributos: { 'Mikrotik-Rate-Limit': '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' },
+        })
+    })
+
+    it('sin la cadena de A1: CoA con error, nunca un rate-limit armado con kbps', () => {
+        const d = decidir(
+            estado('activo', 'limitado'),
+            servicio({ estado: 'limitado', rate_limit_limitado: null, error_rate_limit: 'API caída' }),
+            SUSPENDIDO,
+        )
+        assert.deepEqual(d, {
+            accion: 'coa',
+            razon: 'velocidad: activo → limitado',
+            atributos: {},
+            error: 'API caída',
         })
     })
 
@@ -78,7 +102,7 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         assert.deepEqual(decidir(config(['plan']), servicio({ estado: 'limitado' }), SUSPENDIDO), {
             accion: 'coa',
             razon: 'cambió el plan',
-            atributos: { 'Mikrotik-Rate-Limit': '1024k/2048k' },
+            atributos: { 'Mikrotik-Rate-Limit': RATE_LIMITADO },
         })
         assert.equal(decidir(config(['plan']), servicio({ estado: 'suspendido' }), SUSPENDIDO).accion, 'nada')
         assert.equal(decidir(config([]), servicio(), SUSPENDIDO).accion, 'nada')
@@ -311,13 +335,20 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('desconexión con payload inválido: EventoInvalido (se descarta)', async () => {
         await assert.rejects(
-            dispatcher.procesar({ id: 23, evento: 'sesion.desconexion_solicitada', payload: { sesion_id: 0 } }),
+            dispatcher.procesar({
+                id: 23,
+                evento: 'sesion.desconexion_solicitada',
+                payload: { sesion_id: 0 },
+            }),
             EventoInvalido,
         )
     })
 
     it('suspender una sesión con IPv6: CoA por defecto; Disconnect con COA_SUSPENDER_CON_IPV6=disconnect', async () => {
-        const conV6 = sesion({ prefijo_enlace_v6: '2001:db8:101:1::/64', prefijo_delegado_v6: '2001:db8:300:100::/56' })
+        const conV6 = sesion({
+            prefijo_enlace_v6: '2001:db8:101:1::/64',
+            prefijo_delegado_v6: '2001:db8:300:100::/56',
+        })
         const soloV4 = sesion({ id: 2, acct_session_id: '81a00004' })
         almacen.sesiones.set(101, [conV6, soloV4])
 
