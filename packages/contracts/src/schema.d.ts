@@ -1980,6 +1980,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/cambiar-control-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el control de velocidad del router (simple o arbol_pcq)
+         * @description Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.
+         */
+        post: operations["routersCambiarControlVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/ipv6-bloques": {
         parameters: {
             query?: never;
@@ -2043,7 +2063,7 @@ export interface paths {
         /** Listar servicios */
         get: operations["serviciosListar"];
         put?: never;
-        /** Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp) */
+        /** Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe) */
         post: operations["serviciosCrear"];
         delete?: never;
         options?: never;
@@ -2381,6 +2401,11 @@ export interface components {
             pass_ppp: string;
             estado: components["schemas"]["EstadoServicio"];
             router_id: number;
+            /**
+             * @description network.routers.control_velocidad del router del servicio
+             * @enum {string}
+             */
+            control_velocidad: "simple" | "arbol_pcq";
             plan: {
                 id: number;
                 subida_kbps: number;
@@ -2389,6 +2414,12 @@ export interface components {
                 bajada_limitada_kbps: number;
                 rate_limit_override: string | null;
                 profile_ppp: string | null;
+                /** @description Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override) */
+                rate_limit: string;
+                /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
+                rate_limit_limitado: string;
+                /** @description Reuso efectivo 1:N en el router */
+                reuso: number;
             };
             ipv4: {
                 /** @enum {string} */
@@ -2578,9 +2609,9 @@ export interface components {
             canal_preferido: "correo" | "telegram" | "whatsapp";
             telegram_chat_id: string | null;
             /** @description Cliente que paga por este (responsable de pago); null si paga él mismo */
-            responsable_pago_id?: number | null;
+            responsable_pago_id: number | null;
             /** @description Nombre del responsable de pago (solo lectura) */
-            responsable_pago_nombre?: string | null;
+            responsable_pago_nombre: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3131,6 +3162,18 @@ export interface components {
             bajada_limitada_kbps: number;
             subida_limitada_kbps: number;
             reuso: number;
+            /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
+            garantizado_pct?: number | null;
+            /** @description burst-limit de bajada; null = sin ráfaga */
+            rafaga_bajada_kbps?: number | null;
+            /** @description burst-limit de subida; null = sin ráfaga */
+            rafaga_subida_kbps?: number | null;
+            /** @description burst-threshold como % del MIR */
+            rafaga_umbral_pct?: number;
+            /** @description burst-time en segundos */
+            rafaga_segundos?: number;
+            /** @description 1 (alta) a 8 (baja) */
+            prioridad?: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3152,7 +3195,20 @@ export interface components {
             subida_kbps: number;
             bajada_limitada_kbps: number;
             subida_limitada_kbps: number;
+            /** @description Reuso efectivo en el router */
             reuso: number;
+            /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
+            garantizado_pct?: number | null;
+            /** @description burst-limit de bajada; null = sin ráfaga */
+            rafaga_bajada_kbps?: number | null;
+            /** @description burst-limit de subida; null = sin ráfaga */
+            rafaga_subida_kbps?: number | null;
+            /** @description burst-threshold como % del MIR */
+            rafaga_umbral_pct?: number;
+            /** @description burst-time en segundos */
+            rafaga_segundos?: number;
+            /** @description 1 (alta) a 8 (baja) */
+            prioridad?: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3167,9 +3223,9 @@ export interface components {
             updated_at: string;
             router_id: number;
             implementacion: components["schemas"]["PlanRouter"] | null;
-            /** @description rate-limit MikroTik subida/bajada: "5000k/20000k" */
+            /** @description Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override */
             rate_limit: string;
-            /** @description rate-limit en estado limitado */
+            /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
             rate_limit_limitado: string;
             profile_ppp: string | null;
             pool_ipv4: string | null;
@@ -3189,6 +3245,20 @@ export interface components {
             local_address: string | null;
             no_crear_reglas: boolean;
             rate_limit_override: string | null;
+            /** @description null = hereda del plan */
+            reuso?: number | null;
+            /** @description null = hereda del plan */
+            garantizado_pct?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_bajada_kbps?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_subida_kbps?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_umbral_pct?: number | null;
+            /** @description null = hereda del plan */
+            rafaga_segundos?: number | null;
+            /** @description null = hereda del plan */
+            prioridad?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -4010,7 +4080,20 @@ export interface components {
             nas_ip: string;
             /** @enum {string} */
             modo_seguridad: "radius" | "api";
-            /** @enum {string} */
+            /**
+             * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
+             * @enum {string}
+             */
+            control_velocidad?: "simple" | "arbol_pcq";
+            /** @description Capacidad del enlace (techo del padre global); null = sin techo */
+            capacidad_bajada_kbps?: number | null;
+            /** @description Capacidad del enlace (techo del padre global); null = sin techo */
+            capacidad_subida_kbps?: number | null;
+            /**
+             * @deprecated
+             * @description Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad
+             * @enum {string}
+             */
             modo_velocidad: "simple" | "pcq";
             activo: boolean;
             /** @description Control optimista: envíala al editar */
@@ -4032,7 +4115,15 @@ export interface components {
             /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
             suspension_manual?: boolean;
             suspension_manual_motivo?: string | null;
-            user_ppp: string;
+            /**
+             * @description pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS
+             * @enum {string}
+             */
+            tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @description null fuera de pppoe */
+            user_ppp: string | null;
+            /** @description ARP estático IP-MAC en el router (solo sin PPPoE) */
+            amarre_ip_mac?: boolean;
             mac: string | null;
             direccion: string | null;
             coordenadas: string | null;
@@ -4050,7 +4141,7 @@ export interface components {
             plan_nombre?: string;
             router_nombre?: string;
             zona_nombre?: string | null;
-            excepciones?: components["schemas"]["ExcepcionesServicio"];
+            excepciones: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -8762,7 +8853,20 @@ export interface operations {
                     subida_kbps: number;
                     bajada_limitada_kbps: number;
                     subida_limitada_kbps: number;
+                    /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
                     /** @enum {string} */
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
@@ -8884,7 +8988,20 @@ export interface operations {
                     subida_kbps?: number;
                     bajada_limitada_kbps?: number;
                     subida_limitada_kbps?: number;
+                    /** @description N de 1:N (1 = dedicado) */
                     reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
                     /** @enum {string} */
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
@@ -9022,7 +9139,22 @@ export interface operations {
                     /** Format: ipv4 */
                     local_address?: string | null;
                     no_crear_reglas?: boolean;
+                    /** @description Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo */
                     rate_limit_override?: string | null;
+                    /** @description N de 1:N (1 = dedicado) */
+                    reuso?: number | null;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number | null;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number | null;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number | null;
                 };
             };
         };
@@ -11151,7 +11283,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -11209,7 +11341,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -11348,8 +11480,15 @@ export interface operations {
                     nas_ip: string;
                     /** @enum {string} */
                     modo_seguridad?: "radius" | "api";
-                    /** @enum {string} */
-                    modo_velocidad?: "simple" | "pcq";
+                    /**
+                     * @description simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad
+                     * @enum {string}
+                     */
+                    control_velocidad?: "simple" | "arbol_pcq";
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_bajada_kbps?: number | null;
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_subida_kbps?: number | null;
                     activo?: boolean;
                 };
             };
@@ -11465,8 +11604,10 @@ export interface operations {
                     nas_ip?: string;
                     /** @enum {string} */
                     modo_seguridad?: "radius" | "api";
-                    /** @enum {string} */
-                    modo_velocidad?: "simple" | "pcq";
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_bajada_kbps?: number | null;
+                    /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
+                    capacidad_subida_kbps?: number | null;
                     activo?: boolean;
                 };
             };
@@ -11491,6 +11632,83 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso routers.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersCambiarControlVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @enum {string} */
+                    control_velocidad: "simple" | "arbol_pcq";
+                    motivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Router con el control nuevo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Router"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11822,6 +12040,7 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                 /** @description Zona del cliente */
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
@@ -11890,11 +12109,18 @@ export interface operations {
                     cliente_id: number;
                     router_id: number;
                     plan_id: number;
+                    /**
+                     * @description Por defecto pppoe
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
                     /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     user_ppp?: string;
-                    /** @description Se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -12055,6 +12281,16 @@ export interface operations {
                     router_id?: number;
                     plan_id?: number;
                     plantilla_facturacion_id?: number | null;
+                    /**
+                     * @description pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
+                    amarre_ip_mac?: boolean;
+                    /** @description Solo al cambiar a pppoe; se genera si no viene */
+                    user_ppp?: string;
+                    /** @description Solo pppoe; al cambiar a pppoe se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -12977,7 +13213,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
