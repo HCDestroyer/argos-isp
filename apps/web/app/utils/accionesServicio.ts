@@ -102,9 +102,13 @@ export const BLOQUEADAS_POR_SUSPENSION_MANUAL: readonly AccionServicio[] = ['lim
  */
 export function accionDisponible(
     accion: PresentacionAccionServicio,
-    servicio: Pick<Servicio, 'estado' | 'suspension_manual'>,
+    servicio: Pick<Servicio, 'estado' | 'suspension_manual'> & Partial<Pick<Servicio, 'tipo_conexion'>>,
 ): boolean {
     if (!accion.desde.includes(servicio.estado)) {
+        return false
+    }
+    // Sin PPPoE no hay sesión RADIUS que desconectar.
+    if (accion.accion === 'desconectar' && (servicio.tipo_conexion ?? 'pppoe') !== 'pppoe') {
         return false
     }
     return !(servicio.suspension_manual && BLOQUEADAS_POR_SUSPENSION_MANUAL.includes(accion.accion))

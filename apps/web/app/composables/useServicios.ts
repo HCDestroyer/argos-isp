@@ -84,5 +84,13 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, credenciales, ejecutar, asignaciones }
+    /**
+     * `PUT /servicios/:id` (`servicios.editar`) con la `version` leída: 409 si cambió, 422 por
+     * campo (`validarTipoConexion`). Cambiar el tipo de conexión borra o genera las credenciales.
+     */
+    function editar(id: number, cambios: CambiosServicio): Promise<Resultado<Servicio>> {
+        return resolver(api.PUT('/api/v1/servicios/{id}', { params: { path: { id } }, body: cambios }))
+    }
+
+    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones }
 }
