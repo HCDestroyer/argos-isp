@@ -68,7 +68,10 @@ async function enviado(comprobante: ComprobantePortal) {
                             {{ NOMBRE_METODO[comprobante.metodo] }} · {{ formatearFecha(comprobante.fecha_deposito) }}
                         </p>
                         <p class="truncate text-xs text-muted">
-                            {{ comprobante.cuenta_destino }} · Ref. {{ comprobante.referencia }}
+                            {{ comprobante.cuenta_destino }}
+                        </p>
+                        <p class="text-xs break-all text-muted">
+                            Ref. {{ comprobante.referencia }}
                         </p>
                     </div>
                     <UBadge

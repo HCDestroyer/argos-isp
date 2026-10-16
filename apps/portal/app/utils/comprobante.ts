@@ -117,11 +117,6 @@ export function hoyGuatemala(ahora = new Date()): string {
     }).format(ahora)
 }
 
-/** "Banrural · Monetaria · 3-123-45678-9". */
-export function nombreCuentaDeposito(cuenta: Pick<Schema<'CuentaDeposito'>, 'banco' | 'alias' | 'numero'>): string {
-    return `${cuenta.banco} · ${cuenta.alias} · ${cuenta.numero}`
-}
-
 /** Campos del cuerpo multipart (el archivo va aparte). Sin banco de origen si el método no lo pide. */
 export function camposComprobante(datos: DatosComprobante, servicioId?: number) {
     return {

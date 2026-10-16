@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { Form, FormError, FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { Form, FormError, FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 
 /**
  * Subir el comprobante de un depósito, transferencia, ACH o remesa (tarea 5), en `/corte` (cliente
@@ -55,8 +55,10 @@ function vacio(): FormularioComprobante {
 }
 
 const cuentas = computed(() => empresa.value?.cuentas_deposito ?? [])
-const opcionesCuenta = computed<SelectItem[]>(() => cuentas.value.map(cuenta => ({
-    label: nombreCuentaDeposito(cuenta),
+/** Tarjetas con el número completo a la vista: es lo que el cliente compara con su boleta. */
+const opcionesCuenta = computed<RadioGroupItem[]>(() => cuentas.value.map(cuenta => ({
+    label: `${cuenta.banco} · ${cuenta.alias}`,
+    description: cuenta.numero,
     value: cuenta.id,
 })))
 const opcionesMetodo: SelectItem[] = METODOS_COMPROBANTE.map(m => ({ label: m.label, value: m.value, description: m.descripcion }))
@@ -233,13 +235,13 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     <dt class="text-muted">
                         {{ NOMBRE_METODO[enviado.metodo] }}
                     </dt>
-                    <dd class="min-w-0 truncate text-end text-default">
+                    <dd class="min-w-0 text-end text-pretty text-default">
                         {{ enviado.cuenta_destino }}
                     </dd>
                     <dt class="text-muted">
                         Referencia
                     </dt>
-                    <dd class="min-w-0 truncate text-end font-mono text-default">
+                    <dd class="min-w-0 text-end font-mono break-all text-default">
                         {{ enviado.referencia }}
                     </dd>
                     <dt class="text-muted">
@@ -321,13 +323,13 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     label="Cuenta a la que pagaste"
                     name="cuenta_bancaria_id"
                 >
-                    <USelect
+                    <URadioGroup
                         v-model="estado.cuenta_bancaria_id"
                         :items="opcionesCuenta"
-                        placeholder="Elige la cuenta"
-                        size="xl"
-                        class="w-full"
-                        :ui="{ content: 'min-w-fit' }"
+                        variant="card"
+                        size="lg"
+                        :ui="{ fieldset: 'gap-2', label: 'text-highlighted', description: 'font-mono tabular-nums break-all' }"
+                        data-testid="comprobante-cuentas"
                     />
                 </UFormField>
 
@@ -463,7 +465,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                                     icon="i-lucide-camera"
                                     color="neutral"
                                     variant="outline"
-                                    size="xl"
+                                    size="lg"
                                     block
                                     data-testid="comprobante-camara"
                                     @click="elegir(abrir, true)"
@@ -473,7 +475,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                                     icon="i-lucide-paperclip"
                                     color="neutral"
                                     variant="outline"
-                                    size="xl"
+                                    size="lg"
                                     block
                                     @click="elegir(abrir, false)"
                                 />

@@ -194,6 +194,17 @@ describe('modal "Subir comprobante de pago"', () => {
         expect(texto()).toContain('Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.')
     })
 
+    it('cuentas de destino con el número completo a la vista (nada truncado en el teléfono)', async () => {
+        clearNuxtData('portal:empresa')
+        await montar(SubirComprobante, { props: { open: true } })
+        await esperar()
+        const cuentas = document.querySelector('[data-testid="comprobante-cuentas"]')!.textContent ?? ''
+        expect(cuentas).toContain('Banco Industrial · Monetaria Red Altiplano')
+        expect(cuentas).toContain('123-456789-0')
+        expect(cuentas).toContain('Banrural · Ahorro Red Altiplano')
+        expect(cuentas).toContain('3-033-12345-6')
+    })
+
     it('sin cuentas para depósito: lo dice y no muestra el formulario', async () => {
         fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [] })
         clearNuxtData('portal:empresa')
