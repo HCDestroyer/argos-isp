@@ -4,6 +4,7 @@
  */
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture } from '~/utils/fetchFixtures'
+import { cambios } from './bitacora/cambios'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
@@ -27,6 +28,7 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
+    cambios: Schema<'CambioAuditoria'>[]
     sesiones: Schema<'Sesion'>[]
     facturas: Schema<'Factura'>[]
     pagos: Schema<'Pago'>[]
@@ -58,6 +60,7 @@ function inicial(): BaseFixtures {
         planesPorRouter,
         plantillas,
         acciones,
+        cambios,
         sesiones,
         facturas,
         pagos,

@@ -25,6 +25,7 @@ import { rutasPromesas } from './promesas/rutas'
 import { rutasRouters } from './routers/rutas'
 import { rutasServicios } from './servicios/rutas'
 import { rutasSesiones } from './sesiones/rutas'
+import { rutasUsuarios } from './usuarios/rutas'
 import { rutasZonas } from './zonas/rutas'
 
 export { reiniciarFixtures } from './bd'
@@ -110,4 +111,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasLibro,
     ...rutasCajas,
     ...rutasPromesas,
+    ...rutasUsuarios,
 })
