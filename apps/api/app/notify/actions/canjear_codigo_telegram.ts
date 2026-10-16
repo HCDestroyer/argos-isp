@@ -31,7 +31,7 @@ export class CodigoTelegramInvalido extends ReglaNegocio {
 interface FilaCodigo {
     id: number
     cliente_id: number
-    estado: 'pendiente' | 'usado' | 'reemplazado'
+    estado: 'pendiente' | 'usado' | 'reemplazado' | 'anulado'
     vence_en: Date
     chat_id: string | null
 }

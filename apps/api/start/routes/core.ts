@@ -12,6 +12,7 @@ import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
+import { conLimiteLogin } from '#core/auth/limite_login'
 import CerrarSesion from '#core/actions/cerrar_sesion'
 import CrearUsuario from '#core/actions/crear_usuario'
 import EditarUsuario from '#core/actions/editar_usuario'
@@ -48,8 +49,14 @@ import {
     listarZonas,
     verCliente,
 } from '#core/consultas/clientes'
-import { NoEncontrado, Problema } from '#shared/errores'
-import { construirRegistroAaa } from '#core/aaa'
+import { NoEncontrado, Problema, ValidacionFallida } from '#shared/errores'
+import {
+    construirRegistroAaa,
+    paginaRegistrosAaa,
+    registrosAaaPorServicio,
+    registrosAaaPorUserPpp,
+} from '#core/aaa'
+import { LIMITE_POR_DEFECTO } from '#shared/paginacion'
 import { resolverIp } from '#network/consultas/ip'
 import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
@@ -83,9 +90,16 @@ const auth: Ruta[] = [
         etiqueta: 'auth',
         seguridad: 'publico',
         permiso: null,
+        descripcion:
+            'Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con ' +
+            '`Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.',
         cuerpo: v.loginValidator,
+        limitada: true,
         respuesta: { status: 200, descripcion: 'Sesión iniciada', esquema: Sesion },
-        handler: (ctx, { cuerpo }) => new IniciarSesion().execute(cuerpo, ctx.contextoAccion()),
+        handler: (ctx, { cuerpo }) =>
+            conLimiteLogin(ctx, cuerpo.email, () =>
+                new IniciarSesion().execute(cuerpo, ctx.contextoAccion()),
+            ),
     }),
     definirRuta({
         metodo: 'post',
@@ -703,6 +717,49 @@ const interno: Ruta[] = [
             const registro = await construirRegistroAaa(query.user_ppp)
             if (!registro) throw new NoEncontrado(`El user_ppp ${query.user_ppp} no existe`)
             return registro
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/internal/aaa/servicios',
+        operacion: 'internoAaaServicios',
+        resumen: 'Registros de autorización RADIUS por lotes (servicio aaa)',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        descripcion:
+            'Mismo JSON que `GET /internal/aaa/servicio`, varios a la vez. Con `user_ppp` o `servicio_ids` ' +
+            '(hasta 100, uno de los dos) devuelve los que existen en el orden pedido (`nextCursor: null`). ' +
+            'Sin lista, pagina todos los servicios `pppoe` (también retirados) por `servicio_id` ascendente ' +
+            `con \`cursor\`/\`limit\` (por defecto ${LIMITE_POR_DEFECTO}). No escribe en Redis.`,
+        cuerpo: v.aaaServiciosLoteValidator,
+        respuesta: { status: 200, descripcion: 'Registros de autorización', esquema: pagina(AaaServicio) },
+        handler: async (_ctx, { cuerpo }) => {
+            const listas = (['user_ppp', 'servicio_ids'] as const).filter((c) => cuerpo[c] !== undefined)
+            if (listas.length > 1) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'servicio_ids',
+                        message: 'Envía user_ppp o servicio_ids, no ambos',
+                        rule: 'excluyente',
+                    },
+                ])
+            }
+            if (listas.length === 1 && cuerpo.cursor !== undefined) {
+                throw new ValidacionFallida([
+                    { field: 'cursor', message: 'El cursor solo aplica sin lista', rule: 'excluyente' },
+                ])
+            }
+            if (cuerpo.user_ppp) {
+                return { data: await registrosAaaPorUserPpp(cuerpo.user_ppp), nextCursor: null }
+            }
+            if (cuerpo.servicio_ids) {
+                const pedidos = [...new Set(cuerpo.servicio_ids)]
+                const registros = await registrosAaaPorServicio(pedidos)
+                const porId = new Map(registros.map((r) => [r.servicio_id, r]))
+                return { data: pedidos.flatMap((id) => porId.get(id) ?? []), nextCursor: null }
+            }
+            return paginaRegistrosAaa({ cursor: cuerpo.cursor, limit: cuerpo.limit ?? LIMITE_POR_DEFECTO })
         },
     }),
 ]

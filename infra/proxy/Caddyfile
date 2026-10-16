@@ -1,0 +1,34 @@
+# Proxy público de ArgosIsp (servicio `proxy`, perfil `publico` del compose). infra/proxy/README.md
+#
+# TLS automático (Let's Encrypt con dominios públicos; certificado interno con *.localhost) y
+# reenvío a la API y al panel. El portal NO pasa por aquí: se publica directo para conservar la
+# IP real del cliente suspendido (infra/README.md, "Portal: IP real del cliente").
+# Let's Encrypt no exige correo; para recibir avisos de vencimiento agrega `email tu@correo` en un
+# bloque global { } al inicio de este archivo.
+
+{$PROXY_DOMINIO_API:api.localhost} {
+	# Webhook de la pasarela (A3, a3.md): la firma HMAC va sobre el cuerpo CRUDO. Aquí el cuerpo
+	# pasa byte a byte: sin `encode` (solo comprime respuestas, pero se deja fuera por claridad), sin
+	# `request_body` que lo cambie, sin reescribir Content-Type ni Content-Encoding, y sin buffer
+	# (`flush_interval -1`). No agregar aquí WAF, normalización de JSON ni nada que lo toque.
+	# Prueba: infra/proxy/probar-webhook.sh.
+	@webhook path /api/v1/pasarela/webhook/*
+	handle @webhook {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:3333 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy api:3333
+	}
+}
+
+{$PROXY_DOMINIO_PANEL:panel.localhost} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}

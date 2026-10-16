@@ -252,35 +252,68 @@ export interface RouterDispatcher {
     activo: boolean
 }
 
+interface FilaRouterDispatcher {
+    id: number | string
+    nombre: string
+    activo: boolean
+    host: string
+    api_usuario: string | null
+    api_password: string | null
+    api_url: string | null
+    api_tls_verificar: boolean
+    api_ca: string | null
+    dhcp_servidor: string | null
+    interfaz_clientes: string | null
+    control_velocidad: string
+    capacidad_bajada_kbps: number | null
+    capacidad_subida_kbps: number | null
+}
+
 /**
- * Router con lo necesario para su API REST. Los campos opcionales (`api_url`, `api_tls_verificar`,
- * `api_ca`, `dhcp_servidor`, `interfaz_clientes`) se leen si el modelo los tiene (pedidos a A1 en
- * `.claude/integration/a2.md`); si no, valen los del entorno (`ROUTEROS_*`).
+ * Router con lo necesario para su API REST y su red (columnas de `network.routers`, contrato en
+ * `contratos/routeros.md`, "Conexión del router"). Precedencia de `dhcp_servidor` e
+ * `interfaz_clientes`: columna del router → `predeterminados` del llamador → `ROUTEROS_*` del entorno →
+ * `all` / sin ARP. La verificación TLS es solo la del router (`api_tls_verificar`, NOT NULL).
  */
 export async function routerDispatcher(
     routerId: number,
     cliente: QueryClientContract = db.connection(),
     predeterminados: PredeterminadosRed = {},
 ): Promise<RouterDispatcher | null> {
-    const fila = (await cliente
+    const r = (await cliente
         .from('network.routers as r')
         .where('r.id', routerId)
-        .select(cliente.raw('to_jsonb(r) AS r'))
-        .first()) as { r: Record<string, unknown> } | null
-    if (!fila) return null
-    const r = fila.r
-    const texto = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null)
-    const kbps = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+        .select(
+            'r.id',
+            'r.nombre',
+            'r.activo',
+            'r.host',
+            'r.api_usuario',
+            'r.api_password',
+            'r.api_url',
+            'r.api_tls_verificar',
+            'r.api_ca',
+            'r.dhcp_servidor',
+            'r.interfaz_clientes',
+            'r.control_velocidad',
+            'r.capacidad_bajada_kbps',
+            'r.capacidad_subida_kbps',
+        )
+        .first()) as FilaRouterDispatcher | null
+    if (!r) return null
+    const texto = (v: string | null) => (v !== null && v !== '' ? v : null)
+    const kbps = (v: number | null) => (v === null ? null : Number(v))
+    const control = r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple'
     return {
-        activo: r.activo !== false,
-        nombre: String(r.nombre ?? r.id),
+        activo: r.activo,
+        nombre: r.nombre,
         api: {
             id: Number(r.id),
-            host: String(r.host),
+            host: r.host,
             api_usuario: texto(r.api_usuario),
             api_password: texto(r.api_password),
             api_url: texto(r.api_url),
-            api_tls_verificar: typeof r.api_tls_verificar === 'boolean' ? r.api_tls_verificar : null,
+            api_tls_verificar: r.api_tls_verificar,
             api_ca: texto(r.api_ca),
         },
         red: {
@@ -295,11 +328,11 @@ export async function routerDispatcher(
                 predeterminados.interfaz_clientes ??
                 env.get('ROUTEROS_INTERFAZ_CLIENTES') ??
                 null,
-            control_velocidad: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+            control_velocidad: control,
         },
         velocidad: {
             router_id: Number(r.id),
-            control: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+            control,
             capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
             capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
         },

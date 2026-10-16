@@ -93,7 +93,6 @@ export const fabricaPorDefecto: FabricaClientes = (router) =>
     clienteDeRouter(router, {
         clave: claveDesdeTexto(env.get('AAA_PPP_KEY')),
         bitacora: bitacoraRed,
-        verificarTls: env.get('ROUTEROS_TLS_VERIFICAR') ?? true,
         timeoutMs: env.get('ROUTEROS_TIMEOUT_MS'),
         reintentos: env.get('ROUTEROS_REINTENTOS'),
         esperaMs: env.get('ROUTEROS_ESPERA_MS'),

@@ -6,6 +6,7 @@
 | Prometheus                                                  | servicio `prometheus` del compose, perfil `monitoreo`; configuración en `prometheus.yml`                                          |
 | Métricas de aaa y coa (A2, `GET /metrics`, mismo Bearer)   | jobs `aaa` (`aaa:3100`) y `coa` (`coa:3200`) de `prometheus.yml`; detalle abajo, "aaa y coa"                                       |
 | Reglas de alerta                                            | `reglas.yml` (API, aaa o coa sin métricas, aaa sin Redis o con p95 > 100 ms, coa sin consumir, colas atascadas o con fallos, grupos de eventos atrasados, outbox sin publicar, crons sin correr, routers con más de ~1000 colas simples); pruebas en `reglas.test.yml` (CI) |
+| Alertas de infraestructura al equipo por Telegram           | servicio `alertmanager` (perfil `monitoreo`), configuración en `alertmanager/`; abajo, "Alertmanager"                              |
 | Alertas de negocio al equipo por Telegram                   | `apps/api/app/notify` (aaa caído y recuperado, CoA fallido, RouterOS fallido, caja con diferencia, crons de billing atrasados)    |
 | Health checks                                               | `healthcheck` de cada servicio en `infra/docker-compose.yml`                                                                      |
 | Logs                                                        | JSON a stdout en api (pino), aaa (pino de Fastify) y coa (`docker compose logs -f <servicio>`)                                    |
@@ -16,7 +17,43 @@ COMPOSE_PROFILES=monitoreo docker compose -f infra/docker-compose.yml up -d
 # http://127.0.0.1:9090  (PROMETHEUS_PORT_HOST), retención PROMETHEUS_RETENCION (30d)
 ```
 
-Prometheus no expande variables en su configuración: el `entrypoint` del servicio escribe `METRICS_TOKEN` en `/tmp/metrics_token`, que `prometheus.yml` lee con `credentials_file`. Las reglas no tienen Alertmanager todavía: se ven en `/alerts` de Prometheus. Las alertas que el equipo debe recibir en el teléfono ya salen por Telegram desde notify.
+Prometheus no expande variables en su configuración: el `entrypoint` del servicio escribe `METRICS_TOKEN` en `/tmp/metrics_token`, que `prometheus.yml` lee con `credentials_file`.
+
+## Alertmanager (semana 3)
+
+Las reglas de `reglas.yml` disparan en Prometheus y Alertmanager las manda al chat del equipo por Telegram, con el mismo bot (`TELEGRAM_BOT_TOKEN`) y chat (`TELEGRAM_CHAT_EQUIPO`) que las alertas de negocio de notify.
+
+**Receptor nativo `telegram_configs`, no un webhook a notify.** Las reglas existen para lo que notify no puede ver de sí mismo: la API sin `/metrics`, colas atascadas, el outbox sin publicar, crons sin correr. Si el aviso pasara por un endpoint de la API o por la cola del worker de notify, se caería junto con lo que tiene que avisar (API caída, Redis caído, worker detenido). Alertmanager habla directo con la Bot API y solo depende de sí mismo y de la salida a internet. Lo que se pierde (registro en `notify.envios`, incidentes de notify) no hace falta: Alertmanager agrupa (`group_by: alertname`), repite cada 4 h y avisa cuando se resuelve.
+
+| Archivo | Qué es |
+| --- | --- |
+| `alertmanager/alertmanager.yml` | Rutas (aviso a los 10 s, agrupado por alerta, repetición cada 4 h, aviso de resuelta) y una inhibición: con `ApiSinMetricas` no se repiten las alertas que dependen de la API |
+| `alertmanager/telegram.tmpl` | Mensaje en HTML: estado, alerta, resumen, instancia y hora en UTC. Alertmanager escapa los datos (`<`, `&`); no escapar a mano |
+| `alertmanager/entrypoint.sh` | Alertmanager no expande variables: escribe el token en `/tmp/telegram_token` y arma `/tmp/alertmanager.yml` con el chat. Sin token o sin chat arranca con el receptor vacío y lo dice en el log; un chat no numérico detiene el arranque |
+| `prueba/` y `probar-alertas.sh` | Prueba de punta a punta con un Telegram simulado (abajo) |
+
+```sh
+# infra/.env: TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_EQUIPO (id numérico del grupo, con el bot como miembro)
+COMPOSE_PROFILES=monitoreo docker compose -f infra/docker-compose.yml up -d prometheus alertmanager
+# http://127.0.0.1:9093 (ALERTMANAGER_PORT_HOST): alertas activas y silencios
+
+# Probar en producción: una alerta manual debe llegar al chat del equipo en unos 10 s
+docker compose -f infra/docker-compose.yml exec alertmanager amtool alert add AlertaDePrueba \
+    severity=prueba --annotation=summary='Prueba del equipo' --alertmanager.url=http://127.0.0.1:9093
+
+# Silenciar una alerta durante un mantenimiento (2 h)
+docker compose -f infra/docker-compose.yml exec alertmanager amtool silence add alertname=ApiSinMetricas \
+    --duration=2h --comment='mantenimiento' --alertmanager.url=http://127.0.0.1:9093
+```
+
+**Prueba de punta a punta** (criterio de la semana 3: una alerta de prueba llega en menos de un minuto). `infra/monitoring/probar-alertas.sh` levanta en un proyecto aparte (`argosisp-prueba-alertas`) un Telegram simulado (`prueba/telegram-falso.mjs`, que como Telegram rechaza HTML inválido), Alertmanager y Prometheus **con su configuración real** (`extends` del compose; solo cambian el destino de Telegram y las reglas, por una que siempre dispara), y mide:
+
+1. Prometheus → Alertmanager → Telegram desde que Prometheus está listo: **32 s** (evaluación cada 30 s + `group_wait` de 10 s; el peor caso es ~40 s).
+2. `amtool alert add` → Telegram: **10 s**.
+
+Comprueba también el chat, el token y que el `<` y el `&` del resumen llegan escapados. Corre en CI (job `infra`) y borra todo al terminar. La configuración se valida con `infra/ci/alertmanager-check.sh` (`amtool check-config` con y sin Telegram).
+
+Las alertas de negocio (aaa caído, CoA fallido, RouterOS fallido, caja con diferencia, crons de billing atrasados) siguen saliendo desde notify, con su registro e incidentes.
 
 ## RouterOS y colas (semana 2)
 
@@ -44,6 +81,7 @@ docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prom
 | freeradius                                                | `Status-Server` al 1812                                     |
 | backup                                                    | el último intento de respaldo no falló (`/backups/.estado`) |
 | prometheus                                                | `GET /-/ready`                                              |
+| alertmanager                                              | `GET /-/ready`                                              |
 
 ## Logs y `request_id`
 
@@ -67,4 +105,4 @@ Prometheus raspa `aaa:3100/metrics` y `coa:3200/metrics` con el mismo `METRICS_T
 | `argosisp_coa_envios_total{tipo,resultado}`, `argosisp_coa_rtt_segundos{tipo}` | coa | CoA/Disconnect por resultado (ack, nak, timeout, error, sin_secret) y RTT del NAS |
 | `argosisp_coa_eventos_pendientes`, `argosisp_coa_consumidor_activo` | coa | grupo `coa` de `argos:eventos` |
 
-Reglas: `ServicioSinMetricas` (2 min), `AaaSinRedis` (1 min), `AaaLatenciaAlta` (p95 > 100 ms durante 10 min) y `CoaConsumidorInactivo` (2 min), con pruebas en `reglas.test.yml`. Las colas `routeros-cron` y `routeros-prefijos` del `routeros-worker` aparecen en `argosisp_cola_trabajos` de la API.
+Reglas: `ServicioSinMetricas` (2 min), `AaaSinRedis` (1 min), `AaaDegradado` (modo degradado 1 min, crítica), `AaaEspejoViejo` (último perfil conocido sin actualizar hace más de 30 min), `AaaLatenciaAlta` (p95 > 100 ms durante 10 min) y `CoaConsumidorInactivo` (2 min), con pruebas en `reglas.test.yml`. Qué hacer con cada una: `docs/runbooks/aaa-caido.md`. Las colas `routeros-cron` y `routeros-prefijos` del `routeros-worker` aparecen en `argosisp_cola_trabajos` de la API.

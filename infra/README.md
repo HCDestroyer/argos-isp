@@ -136,6 +136,8 @@ rm infra/backups/config/age.key
 
 Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a publicar lo que quedó en `audit.outbox` sin `publicado_en`, y los crons procesan lo pendiente hasta ahora). La caché `aaa:user:*` se repuebla por evento y con el respaldo de `aaa` a la API.
 
+**Ensayo de restauración** (semana 3): `infra/backups/ensayo.sh` hace todo el ciclo en un compose limpio aparte (restaurar, `migrate`, API, smoke test con login, clientes y estado de cuenta), imprime los tiempos y borra el entorno. Runbook completo, con el desastre paso a paso: `docs/runbooks/restaurar-backup.md`. En CI corre con `--demo` (job `ensayo-restauracion`).
+
 **Probado (día 4):**
 
 - Local, contra la base de pruebas con datos de toda la suite (90 tablas, 4 191 filas, particiones de `audit` incluidas): respaldo cifrado → `restaurar.sh --comparar-con` = filas iguales al dump y al origen. Con una base a la que le faltaba la última migración: restauración + `--migrar` aplicó `notify_alertas`. Una comparación contra una base distinta termina con código 1 y lista las tablas.
@@ -147,6 +149,10 @@ Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a pub
 
 - Compose en entorno limpio (proyecto aparte): `comprobantes-permisos` deja `/comprobantes` a nombre de `node`; la API (usuario `node`) escribe tres archivos; respaldo cifrado con el servicio `backup` (dump + tar, `.conteo` = 3); `down -v` (sin volúmenes); `up postgres`; `restaurar.sh --base argosisp --reemplazar --comprobantes-dir /comprobantes` = 98 tablas iguales al dump y 3 archivos; `up --wait`: api y backup `healthy`, los archivos son de uid 1000 con `u=rwX,g=rX,o=`, la API los lee, escribe uno nuevo y `GET /comprobantes` responde 200.
 - Local: un comprobante de la base sin archivo en el tar, un `.conteo` alterado y un destino no vacío sin `--reemplazar` terminan con código 1; la retención borra también los tar viejos.
+
+## Proxy público y webhook de la pasarela
+
+Perfil `publico`: Caddy con TLS delante de la API y del panel; el webhook de la pasarela pasa con el cuerpo crudo (la firma HMAC va sobre él). Configuración, puertos y prueba en `infra/proxy/README.md`. Variables de la pasarela (`PASARELA_PROVEEDOR`, `PASARELA_FALSA_SECRETO`, `PASARELA_URL_PUBLICA`) en `infra/.env.example`; la imagen de la API corre en producción, así que sin `PASARELA_PROVEEDOR` no hay pasarela (503).
 
 ## Walled garden
 

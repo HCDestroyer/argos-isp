@@ -143,7 +143,7 @@ jobs:
   infra:
     name: docker compose y FreeRADIUS
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -157,6 +157,34 @@ jobs:
         run: |
           docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 check rules /m/reglas.yml
           docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+
+      - name: Alertmanager (amtool check-config)
+        run: infra/ci/alertmanager-check.sh
+
+      # Criterio de la semana 3: Prometheus → Alertmanager → Telegram (simulado) en menos de un minuto
+      - name: Alertas de punta a punta (Telegram simulado)
+        run: infra/monitoring/probar-alertas.sh
+
+      - name: Proxy pasa el cuerpo crudo del webhook de la pasarela
+        run: infra/proxy/probar-webhook.sh
+
+  # Ensayo de restauración (A6): respaldo de un compose con datos de demo → compose limpio →
+  # restaurar.sh → migrate + API → login, clientes y estado de cuenta (infra/backups/ensayo.sh).
+  ensayo-restauracion:
+    name: Ensayo de restauración del respaldo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      # Solo node para scripts/demo/datos.mjs (sin dependencias); sin caché de pnpm, que no se instala aquí
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: infra/backups/ensayo.sh --demo
+        run: infra/backups/ensayo.sh --demo --construir
 
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.

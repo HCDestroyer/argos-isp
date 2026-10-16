@@ -10,6 +10,13 @@ import { unico } from '#tests/ayudas'
  * porque son fixtures de prueba (las acciones de A1/A3 aún no existen).
  */
 
+/**
+ * `pago_id` de los eventos simulados: un id que no existe. Con un id real (p. ej. 1) el resultado
+ * depende de qué pruebas corrieron antes: si ese pago salió de un comprobante, `pago.registrado`
+ * no avisa al pagador (`avisos_pago.ts`) y la prueba no encuentra el envío.
+ */
+export const PAGO_SIN_COMPROBANTE = 1_999_999_999
+
 export interface DatosCliente {
     nombre?: string
     email?: string | null

@@ -35,3 +35,23 @@ Los mismos del catálogo, sin eventos nuevos para el estado: `servicio.creado`, 
 - **Fallo del router:** 3 reintentos con backoff; si se agotan, `routeros.fallido { servicio_id, router_id, operacion, error }` por outbox (alerta al equipo por Telegram, A6).
 - **Reconciliación:** un job con lock compara cada router contra el estado deseado de sus servicios sin PPPoE (por `comment`) y corrige diferencias, auditándolas. Corre al volver un router caído y periódicamente como red de seguridad (no es una caché: no aplica la regla 5).
 - **Credenciales:** usuario y contraseña de la API del router cifrados con `v1` (`api_password`, ya existente); HTTPS con verificación de certificado configurable por router.
+
+## Conexión del router (`network.routers`, A1)
+
+Columnas que lee el cliente REST de A2 (`app/network/routeros/consultas.ts` → `routerDispatcher`). Todas se editan con `POST /routers` y `PUT /routers/:id` (permisos `routers.crear` / `routers.editar`) y salen en la vista `Router`.
+
+| Columna | Tipo | Por defecto | Significado |
+| --- | --- | --- | --- |
+| `host` | `text` NOT NULL | — | Host o IP del router; sin `api_url` la URL es `https://<host>` |
+| `api_usuario` | `text` | null | Usuario de la API REST |
+| `api_password` | `text` (cifrado `v1`, `AAA_PPP_KEY`) | null | Nunca sale por la API (`tiene_api_password`); `***` en auditoría |
+| `api_url` | `text`, CHECK `^https?://host(:puerto)?/?$` | null | URL base explícita (`https://10.0.0.1:8443`); sin ruta. null = `https://<host>` |
+| `api_tls_verificar` | `boolean` NOT NULL | `true` | Verificar el certificado TLS del router. Al ser NOT NULL, `ROUTEROS_TLS_VERIFICAR` ya no se aplica a routers con la columna: para un certificado autofirmado, cargar `api_ca` o poner `false` en ese router |
+| `api_ca` | `text`, CHECK empieza con `-----BEGIN CERTIFICATE-----` | null | CA en PEM para validar el certificado propio del router. Sale en la vista (es pública); en `audit.cambios` y `audit.acciones.entrada` se registra como `***` |
+| `dhcp_servidor` | `text` (1–100) | null | `server` del lease de `dhcp_fija`; null = `ROUTEROS_DHCP_SERVIDOR` o `all` |
+| `interfaz_clientes` | `text` (1–100) | null | Interfaz del ARP estático del amarre IP-MAC; null = `ROUTEROS_INTERFAZ_CLIENTES`; sin ninguno no se crea el ARP |
+
+Reglas:
+
+- Los cambios de estas columnas no emiten evento (no cambian el estado deseado de ningún servicio); el siguiente comando o la reconciliación leen el valor nuevo de Postgres. `dhcp_servidor` e `interfaz_clientes` sí cambian objetos en el router: la reconciliación periódica los corrige.
+- La precedencia para `dhcp_servidor` / `interfaz_clientes` es: columna del router → `PredeterminadosRed` del llamador → entorno (`ROUTEROS_*`) → `all` / sin ARP.

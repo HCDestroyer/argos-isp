@@ -1,0 +1,12 @@
+{{/* Mensaje de Telegram (parse_mode HTML) para el chat del equipo. Horas en UTC. Alertmanager arma
+     este mensaje con html/template: escapa solo los datos (resúmenes con "<" o "&", como
+     "objetivo < 100 ms") y deja las etiquetas de la plantilla. No escapar a mano: quedaría doble. */}}
+{{ define "argosisp.telegram.mensaje" -}}
+{{ if eq .Status "firing" }}<b>[ALERTA]</b>{{ else }}<b>[RESUELTA]</b>{{ end }} · {{ .CommonLabels.alertname }}{{ if gt (len .Alerts) 1 }} ({{ len .Alerts }}){{ end }}
+{{ range .Alerts -}}
+• {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Labels.alertname }}{{ end }}
+  {{- if .Labels.instance }} · <code>{{ .Labels.instance }}</code>{{ end }}
+  {{- if eq .Status "firing" }} · desde {{ .StartsAt.UTC.Format "2006-01-02 15:04" }} UTC{{ else }} · resuelta {{ .EndsAt.UTC.Format "2006-01-02 15:04" }} UTC{{ end }}
+{{ end -}}
+<i>Prometheus · ArgosIsp</i>
+{{- end }}

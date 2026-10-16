@@ -14,6 +14,7 @@ import { ConsumidorRouterOS } from '#network/routeros/consumidor'
 import { ejecutarCronRouterOS } from '#network/routeros/jobs'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
 import { bitacoraRed, clavePendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
+import { routerDispatcher } from '#network/routeros/consultas'
 import { commentServicio, propiedadesCola } from '#network/routeros/estado_deseado'
 import { leerVelocidad, rateLimitServicio } from '#network/velocidad'
 import type { EventoEntrante } from '#shared/eventos_bus'
@@ -251,6 +252,68 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         ] as const) {
             assert.lengthOf(falso.conComment(ruta, comment), 0, ruta)
         }
+    })
+
+    test('conexión y red del router: api_url en vez de host, dhcp_servidor e interfaz_clientes de sus columnas', async ({
+        client,
+        assert,
+    }) => {
+        // `host` inservible: si el cliente lo usara, el comando fallaría (routeros.fallido).
+        await db.from('network.routers').where('id', routerId).update({
+            host: 'no-usar.invalid',
+            api_url: falso.url,
+            dhcp_servidor: 'dhcp-del-router',
+            interfaz_clientes: 'bridge-del-router',
+        })
+        const { servicio, eventos } = await crear(client, {
+            tipo_conexion: 'dhcp_fija',
+            mac: MAC,
+            amarre_ip_mac: true,
+        })
+        await entregar(eventos)
+        const comment = commentServicio(servicio.id)
+        // Las columnas ganan a los predeterminados del llamador (`OPCIONES.red`) y al entorno.
+        assert.containsSubset(falso.conComment('/ip/dhcp-server/lease', comment), [
+            { address: servicio.ipv4, 'mac-address': MAC, server: 'dhcp-del-router' },
+        ])
+        assert.containsSubset(falso.conComment('/ip/arp', comment), [
+            { address: servicio.ipv4, 'mac-address': MAC, interface: 'bridge-del-router' },
+        ])
+        assert.lengthOf(cola(servicio.id), 1)
+        const fallidos = await db
+            .from('audit.outbox')
+            .where('evento', 'routeros.fallido')
+            .whereRaw("payload->>'router_id' = ?", [String(routerId)])
+        assert.lengthOf(fallidos, 0)
+    })
+
+    test('routerDispatcher: precedencia columna → predeterminados → entorno → all / sin ARP; TLS del router', async ({
+        assert,
+    }) => {
+        await db.from('network.routers').where('id', routerId).update({
+            dhcp_servidor: null,
+            interfaz_clientes: null,
+            api_tls_verificar: false,
+            api_ca: null,
+        })
+        const sinNada = await routerDispatcher(routerId)
+        assert.equal(sinNada?.red.dhcp_servidor, env.get('ROUTEROS_DHCP_SERVIDOR') ?? 'all')
+        assert.equal(sinNada?.red.interfaz_clientes, env.get('ROUTEROS_INTERFAZ_CLIENTES') ?? null)
+        assert.isFalse(sinNada?.api.api_tls_verificar)
+        assert.equal(sinNada?.api.api_url, null)
+
+        const conPredeterminados = await routerDispatcher(routerId, undefined, OPCIONES.red)
+        assert.equal(conPredeterminados?.red.dhcp_servidor, 'dhcp-clientes')
+        assert.equal(conPredeterminados?.red.interfaz_clientes, 'ether-clientes')
+
+        await db
+            .from('network.routers')
+            .where('id', routerId)
+            .update({ dhcp_servidor: 'dhcp-propio', interfaz_clientes: 'ether-propia' })
+        const conColumnas = await routerDispatcher(routerId, undefined, OPCIONES.red)
+        assert.equal(conColumnas?.red.dhcp_servidor, 'dhcp-propio')
+        assert.equal(conColumnas?.red.interfaz_clientes, 'ether-propia')
+        assert.isNull(await routerDispatcher(987654321))
     })
 
     test('un servicio PPPoE no toca el router', async ({ client, assert }) => {

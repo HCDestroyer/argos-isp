@@ -83,6 +83,7 @@
       "post": {
         "operationId": "authLogin",
         "summary": "Iniciar sesión",
+        "description": "Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.",
         "tags": [
           "auth"
         ],
@@ -125,6 +126,16 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5118,6 +5129,118 @@
         "x-implementado": true
       }
     },
+    "/api/v1/internal/aaa/servicios": {
+      "post": {
+        "operationId": "internoAaaServicios",
+        "summary": "Registros de autorización RADIUS por lotes (servicio aaa)",
+        "description": "Mismo JSON que `GET /internal/aaa/servicio`, varios a la vez. Con `user_ppp` o `servicio_ids` (hasta 100, uno de los dos) devuelve los que existen en el orden pedido (`nextCursor: null`). Sin lista, pagina todos los servicios `pppoe` (también retirados) por `servicio_id` ascendente con `cursor`/`limit` (por defecto 50). No escribe en Redis.",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "user_ppp": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Hasta 100 user_ppp; los inexistentes se omiten"
+                  },
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten"
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Cursor opaco de la página anterior"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Tamaño de página (por defecto 50)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registros de autorización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AaaServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/ip/{ip}": {
       "get": {
         "operationId": "ipResolver",
@@ -8740,6 +8863,169 @@
           }
         },
         "x-permiso": "planes.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/planes/vista-previa": {
+      "post": {
+        "operationId": "planesVistaPrevia",
+        "summary": "Vista previa del rate-limit de un plan (no guarda)",
+        "description": "Calcula con `app/network/velocidad.ts` (la misma función que usan aaa y el dispatcher) el `Mikrotik-Rate-Limit` activo y limitado y los límites de la cola padre con `activos` servicios. 422 por campo con las mismas reglas que crear el plan (`validarVelocidad`).",
+        "tags": [
+          "planes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bajada_kbps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "subida_kbps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "bajada_limitada_kbps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "subida_limitada_kbps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "reuso": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
+                  },
+                  "rate_limit_override": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Como en planes_routers: reemplaza la cadena de estado activo"
+                  },
+                  "activos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000,
+                    "description": "Servicios activos del plan en el router para la cola padre (por defecto 1)"
+                  }
+                },
+                "required": [
+                  "bajada_kbps",
+                  "subida_kbps",
+                  "bajada_limitada_kbps",
+                  "subida_limitada_kbps"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso planes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "planes.ver",
         "x-implementado": true
       }
     },
@@ -13613,6 +13899,46 @@
                     "maximum": 100000000,
                     "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
                   },
+                  "api_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "pattern": "^https?:\\/\\/[^\\s/]+(:\\d{1,5})?\\/?$",
+                    "description": "https://host:puerto de la API REST; null = https://<host>"
+                  },
+                  "api_tls_verificar": {
+                    "description": "Verificar el certificado TLS del router (por defecto true)",
+                    "type": "boolean"
+                  },
+                  "api_ca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "pattern": "^-----BEGIN CERTIFICATE-----",
+                    "description": "CA en PEM para routers con certificado propio; en auditoría se registra como ***"
+                  },
+                  "dhcp_servidor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all"
+                  },
+                  "interfaz_clientes": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP)"
+                  },
                   "activo": {
                     "type": "boolean"
                   }
@@ -13834,6 +14160,46 @@
                     "minimum": 1,
                     "maximum": 100000000,
                     "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
+                  },
+                  "api_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "pattern": "^https?:\\/\\/[^\\s/]+(:\\d{1,5})?\\/?$",
+                    "description": "https://host:puerto de la API REST; null = https://<host>"
+                  },
+                  "api_tls_verificar": {
+                    "description": "Verificar el certificado TLS del router (por defecto true)",
+                    "type": "boolean"
+                  },
+                  "api_ca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "pattern": "^-----BEGIN CERTIFICATE-----",
+                    "description": "CA en PEM para routers con certificado propio; en auditoría se registra como ***"
+                  },
+                  "dhcp_servidor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all"
+                  },
+                  "interfaz_clientes": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES (sin ninguno no se crea el ARP)"
                   },
                   "activo": {
                     "type": "boolean"
@@ -14799,7 +15165,7 @@
                       "null"
                     ],
                     "minimum": 1,
-                    "description": "Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla"
+                    "description": "Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla"
                   },
                   "user_ppp": {
                     "type": "string",
@@ -18158,6 +18524,7 @@
           "id",
           "actor_tipo",
           "actor_id",
+          "actor_nombre",
           "canal",
           "accion",
           "entidad_tipo",
@@ -18179,7 +18546,8 @@
               "usuario",
               "token",
               "agente",
-              "sistema"
+              "sistema",
+              "cliente"
             ]
           },
           "actor_id": {
@@ -18194,7 +18562,7 @@
               "string",
               "null"
             ],
-            "description": "Nombre del usuario (null para el sistema)"
+            "description": "Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)"
           },
           "canal": {
             "type": "string"
@@ -18599,6 +18967,7 @@
           "despues",
           "actor_tipo",
           "actor_id",
+          "actor_nombre",
           "request_id",
           "created_at"
         ],
@@ -18629,7 +18998,8 @@
               "usuario",
               "token",
               "agente",
-              "sistema"
+              "sistema",
+              "cliente"
             ]
           },
           "actor_id": {
@@ -18644,7 +19014,7 @@
               "string",
               "null"
             ],
-            "description": "Nombre del usuario (null para el sistema)"
+            "description": "Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)"
           },
           "request_id": {
             "type": [
@@ -21132,6 +21502,12 @@
           "bajada_limitada_kbps",
           "subida_limitada_kbps",
           "reuso",
+          "garantizado_pct",
+          "rafaga_bajada_kbps",
+          "rafaga_subida_kbps",
+          "rafaga_umbral_pct",
+          "rafaga_segundos",
+          "prioridad",
           "dual_stack",
           "tamano_prefijo_delegado",
           "global",
@@ -21252,6 +21628,12 @@
           "bajada_limitada_kbps",
           "subida_limitada_kbps",
           "reuso",
+          "garantizado_pct",
+          "rafaga_bajada_kbps",
+          "rafaga_subida_kbps",
+          "rafaga_umbral_pct",
+          "rafaga_segundos",
+          "prioridad",
           "dual_stack",
           "tamano_prefijo_delegado",
           "global",
@@ -21440,6 +21822,13 @@
           "local_address",
           "no_crear_reglas",
           "rate_limit_override",
+          "reuso",
+          "garantizado_pct",
+          "rafaga_bajada_kbps",
+          "rafaga_subida_kbps",
+          "rafaga_umbral_pct",
+          "rafaga_segundos",
+          "prioridad",
           "version",
           "created_at",
           "updated_at"
@@ -25142,6 +25531,14 @@
           "tiene_radius_secret",
           "nas_ip",
           "modo_seguridad",
+          "control_velocidad",
+          "capacidad_bajada_kbps",
+          "capacidad_subida_kbps",
+          "api_url",
+          "api_tls_verificar",
+          "api_ca",
+          "dhcp_servidor",
+          "interfaz_clientes",
           "modo_velocidad",
           "activo",
           "version",
@@ -25203,6 +25600,38 @@
             ],
             "description": "Capacidad del enlace (techo del padre global); null = sin techo"
           },
+          "api_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "https://host:puerto de la API REST; null = https://<host>"
+          },
+          "api_tls_verificar": {
+            "type": "boolean",
+            "description": "Verificar el certificado TLS del router"
+          },
+          "api_ca": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "CA en PEM para routers con certificado propio"
+          },
+          "dhcp_servidor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all"
+          },
+          "interfaz_clientes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES"
+          },
           "modo_velocidad": {
             "type": "string",
             "enum": [
@@ -25240,7 +25669,11 @@
           "plantilla_facturacion_id",
           "estado",
           "promesa_activa",
+          "suspension_manual",
+          "suspension_manual_motivo",
+          "tipo_conexion",
           "user_ppp",
+          "amarre_ip_mac",
           "mac",
           "direccion",
           "coordenadas",
@@ -25252,6 +25685,10 @@
           "prefijo_delegado_v6",
           "ipv6_modo",
           "ipv6_duid",
+          "cliente_nombre",
+          "plan_nombre",
+          "router_nombre",
+          "zona_nombre",
           "excepciones",
           "version",
           "created_at",
@@ -26191,6 +26628,105 @@
                     "null"
                   ]
                 }
+              }
+            }
+          }
+        }
+      },
+      "VistaPreviaVelocidad": {
+        "type": "object",
+        "required": [
+          "rate_limit",
+          "rate_limit_limitado",
+          "garantizado_pct_efectivo",
+          "limit_at_servicio_kbps",
+          "padre"
+        ],
+        "properties": {
+          "rate_limit": {
+            "type": "string",
+            "description": "Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override)"
+          },
+          "rate_limit_limitado": {
+            "type": "string",
+            "description": "Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)"
+          },
+          "garantizado_pct_efectivo": {
+            "type": "number",
+            "description": "garantizado_pct o 100 / reuso, con 2 decimales hacia abajo"
+          },
+          "limit_at_servicio_kbps": {
+            "type": "object",
+            "required": [
+              "subida",
+              "bajada"
+            ],
+            "properties": {
+              "subida": {
+                "type": "integer"
+              },
+              "bajada": {
+                "type": "integer"
+              }
+            },
+            "description": "CIR (limit-at) de cada servicio"
+          },
+          "padre": {
+            "type": "object",
+            "required": [
+              "max_limit",
+              "limit_at",
+              "prioridad",
+              "max_limit_kbps",
+              "limit_at_kbps",
+              "activos"
+            ],
+            "properties": {
+              "max_limit": {
+                "type": "string",
+                "description": "max-limit subida/bajada: MIR × activos / reuso, hacia arriba"
+              },
+              "limit_at": {
+                "type": "string",
+                "description": "limit-at subida/bajada: CIR × activos"
+              },
+              "prioridad": {
+                "type": "integer"
+              },
+              "max_limit_kbps": {
+                "type": "object",
+                "required": [
+                  "subida",
+                  "bajada"
+                ],
+                "properties": {
+                  "subida": {
+                    "type": "integer"
+                  },
+                  "bajada": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "limit_at_kbps": {
+                "type": "object",
+                "required": [
+                  "subida",
+                  "bajada"
+                ],
+                "properties": {
+                  "subida": {
+                    "type": "integer"
+                  },
+                  "bajada": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "activos": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Con 0 se calcula como 1"
               }
             }
           }
