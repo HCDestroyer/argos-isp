@@ -9,7 +9,9 @@ import Decimal from 'decimal.js'
  *
  * Al abrir lee los límites (`GET /portal/promesas/condiciones`) y los muestra antes de enviar.
  * La decisión es del backend: aprobada cierra el modal y la página sigue con el estado en vivo;
- * rechazada y pendiente se muestran aquí con el motivo en palabras del cliente.
+ * rechazada y pendiente se muestran aquí con el motivo en palabras del cliente. "Cambiar fecha o
+ * monto" solo aparece si la regla que rechazó se cumple con otra fecha (`corregible`); si no (cupo,
+ * historial, deuda), se ofrece el contacto.
  *
  * `Idempotency-Key`: la misma clave en los reintentos de un envío que no llegó (sin conexión); una
  * nueva cuando la API respondió.
@@ -175,12 +177,23 @@ function corregir() {
                 </p>
                 <div class="flex flex-col gap-2 sm:flex-row-reverse">
                     <UButton
-                        v-if="resultado.resultado === 'rechazada'"
+                        v-if="resultado.resultado === 'rechazada' && resultado.corregible"
                         label="Cambiar fecha o monto"
                         icon="i-lucide-pencil"
                         size="lg"
                         block
+                        data-testid="promesa-corregir"
                         @click="corregir"
+                    />
+                    <UButton
+                        v-else-if="resultado.resultado === 'rechazada'"
+                        label="Contactar a la oficina"
+                        icon="i-lucide-phone"
+                        to="/contacto"
+                        size="lg"
+                        block
+                        data-testid="promesa-contacto"
+                        @click="open = false"
                     />
                     <UButton
                         :label="resultado.resultado === 'rechazada' ? 'Cerrar' : 'Listo'"

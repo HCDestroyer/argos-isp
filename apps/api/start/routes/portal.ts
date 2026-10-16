@@ -25,6 +25,8 @@ import {
     PortalPromesaSolicitada,
     PortalSesion,
     PortalSolicitudCodigo,
+    PortalTelegram,
+    PortalVinculoTelegram,
     QuienSoy,
 } from '#portal/esquemas'
 import {
@@ -54,6 +56,9 @@ import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
 import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
 import EditarContactoPortal from '#portal/actions/editar_contacto'
+import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
+import DesvincularTelegramPortal from '#portal/actions/desvincular_telegram'
+import { estadoTelegram } from '#portal/acceso/telegram'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
 import EditarEmpresa from '#portal/actions/editar_empresa'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
@@ -327,6 +332,66 @@ const autenticadas: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new EditarContactoPortal().execute(
                 { ...cuerpo, clienteId: sesion.clienteId },
+                ctx.contextoAccion('portal'),
+            )
+        },
+    }),
+]
+
+const SOBRE_TELEGRAM = 'Contrato con el bot en `.claude/integration/contratos/telegram.md`.'
+
+const telegram: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/telegram',
+        operacion: 'portalTelegram',
+        resumen: 'Estado de la vinculación de Telegram del cliente de la sesión',
+        descripcion: `${SOBRE_LA_SESION} El portal la consulta cada 3 s mientras el código está vigente. ${SOBRE_TELEGRAM}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
+        handler: async (ctx) => estadoTelegram(await clienteDeLaSesion(ctx)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/telegram/vincular',
+        operacion: 'portalVincularTelegram',
+        resumen: 'Genera el código de un solo uso y el enlace al bot para vincular Telegram',
+        descripcion:
+            `${SOBRE_LA_SESION} Llama \`GenerarCodigoTelegram\` de A6 (\`notificaciones.telegram_codigo\`, canal ` +
+            'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
+            `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
+        handler: async (ctx) => {
+            await ipDelCliente(ctx, 'telegram-vincular')
+            const sesion = await exigirSesionPortal(ctx)
+            return new GenerarCodigoTelegram().execute(
+                { cliente_id: sesion.clienteId },
+                ctx.contextoAccion('portal'),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/telegram/desvincular',
+        operacion: 'portalDesvincularTelegram',
+        resumen: 'Quita el chat de Telegram del cliente de la sesión',
+        descripcion:
+            `${SOBRE_LA_SESION} Acción \`portal.desvincular_telegram\` sobre \`clientes.desvincular_telegram\`. ` +
+            'Si el canal preferido era Telegram pasa a correo. Idempotente.',
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
+        handler: async (ctx) => {
+            const sesion = await exigirSesionPortal(ctx)
+            return new DesvincularTelegramPortal().execute(
+                { clienteId: sesion.clienteId },
                 ctx.contextoAccion('portal'),
             )
         },
@@ -608,6 +673,14 @@ const comprobantes: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas, ...promesas, ...comprobantes, ...documentos, ...empresa]
+const portal: Ruta[] = [
+    ...publicas,
+    ...autenticadas,
+    ...telegram,
+    ...promesas,
+    ...comprobantes,
+    ...documentos,
+    ...empresa,
+]
 
 export default portal

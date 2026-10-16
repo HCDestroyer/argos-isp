@@ -160,6 +160,11 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
         ]) {
             assert.include(texto, esperado)
         }
+        // Fechas de factura siempre dd/mm/aaaa: emisión, vencimiento y generación, nunca ISO.
+        assert.match(texto, /Emitido: \d{2}\/\d{2}\/\d{4}/)
+        assert.match(texto, /Generado el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/)
+        assert.notMatch(texto, /\d{4}-\d{2}-\d{2}/)
+        assert.notInclude(texto, 'Invalid')
     })
 
     test('factura ajena 404 y sin sesión 401', async ({ client }) => {

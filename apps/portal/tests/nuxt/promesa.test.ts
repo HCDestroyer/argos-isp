@@ -98,7 +98,7 @@ describe('modal "Solicitar promesa de pago"', () => {
         expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
     })
 
-    it('rechazada: motivo legible (nunca el código) y se puede corregir', async () => {
+    it('rechazada por cupo: motivo legible (nunca el código) y contacto en lugar de "Cambiar"', async () => {
         fijarPromesaFixture('rechazada')
         await montarModal()
         await enviarFormulario()
@@ -106,7 +106,17 @@ describe('modal "Solicitar promesa de pago"', () => {
         expect(rechazo).toContain('No pudimos aprobar tu promesa')
         expect(rechazo).toContain('Ya usaste las promesas de pago disponibles para este periodo')
         expect(rechazo).not.toMatch(/max_por_periodo|rechazada/)
-        const corregir = [...document.querySelectorAll('button')].find(b => b.textContent?.includes('Cambiar fecha o monto'))!
+        expect(enDocumento('[data-testid="promesa-corregir"]')).toBeNull()
+        expect(enDocumento('[data-testid="promesa-contacto"]')!.getAttribute('href')).toBe('/contacto')
+    })
+
+    it('rechazada por el plazo: se puede cambiar la fecha', async () => {
+        fijarPromesaFixture('rechazada_fecha')
+        await montarModal()
+        await enviarFormulario()
+        expect(enDocumento('[data-testid="promesa-rechazada"]')!.textContent).toContain('próximos 3 días')
+        expect(enDocumento('[data-testid="promesa-contacto"]')).toBeNull()
+        const corregir = enDocumento('[data-testid="promesa-corregir"]') as HTMLElement
         corregir.click()
         await esperar()
         expect(document.querySelector('form')).not.toBeNull()

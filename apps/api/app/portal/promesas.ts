@@ -199,8 +199,22 @@ export interface PromesaSolicitada {
     vence_en: Date
     monto: string
     motivo: string
+    /** rechazada por una regla que se cumple cambiando la fecha (ofrecer "Cambiar fecha o monto") */
+    corregible: boolean
     /** estado del servicio tras la promesa (solo si quedó aprobada) */
     servicio_estado: EstadoServicio | null
+}
+
+/**
+ * Reglas de la evaluación que el cliente puede cumplir cambiando la fecha o el monto de la misma
+ * solicitud. El resto (cupo del periodo, historial, antigüedad, deuda máxima, abono, canal) no
+ * cambia con otra fecha u otro monto: el portal ofrece el contacto en lugar de "Cambiar".
+ * El monto mayor que la deuda no llega aquí: es un 422 del formulario.
+ */
+const REGLAS_CORREGIBLES = new Set(['plazo_max_dias', 'no_exceder_siguiente_facturacion'])
+
+export function esCorregible(evaluacion: ResultadoEvaluacion): boolean {
+    return evaluacion.resultado === 'rechazada' && REGLAS_CORREGIBLES.has(evaluacion.regla ?? '')
 }
 
 const MESES = [
@@ -283,6 +297,7 @@ export function promesaParaCliente(promesa: ResultadoCrearPromesa): PromesaSolic
         vence_en: promesa.vence_en,
         monto: promesa.monto,
         motivo: motivoParaCliente(evaluacion),
+        corregible: esCorregible(evaluacion),
         servicio_estado: promesa.servicio?.estado ?? null,
     }
 }

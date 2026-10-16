@@ -169,7 +169,8 @@ export async function variablesAvisoCobro(
             numero: numeroFactura({ id, fel_serie: fila.fel_serie, fel_numero: fila.fel_numero }),
             documento: fila.fel_uuid ? 'Factura' : 'Aviso de cobro',
             periodo: fila.tipo === 'mora' ? `Recargo por mora` : mesAnio(fechaCalendario(fila.periodo)),
-            emitida: fechaCorta(DateTime.fromJSDate(fila.emitida_en as Date)),
+            // dd/mm/aaaa en hora de Guatemala; nunca ISO ni "Invalid DateTime" si aún no se emitió.
+            emitida: fila.emitida_en ? fechaCorta(DateTime.fromJSDate(fila.emitida_en as Date)) : '—',
             vence: fechaCorta(fechaCalendario(fila.vence_en)),
             estado: ESTADOS[fila.estado] ?? fila.estado,
             subtotal: quetzales(dec(fila.subtotal).toString()),

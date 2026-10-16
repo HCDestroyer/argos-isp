@@ -59,6 +59,15 @@ describe('portal autenticado /cuenta', () => {
         expect(pdf.text()).toContain('Ver aviso de cobro (PDF)')
     })
 
+    it('"Pagar en línea" aparece apagado con "Pronto" mientras no hay pasarela', async () => {
+        fijarSesionFixture(true)
+        const wrapper = await montarCuenta()
+        const pagar = wrapper.find('[data-testid="pagar-en-linea"]')
+        expect(pagar.attributes('disabled')).toBeDefined()
+        expect(pagar.text()).toContain('Pronto')
+        expect(wrapper.find(`#${pagar.attributes('aria-describedby')}`).text()).toContain('El pago en línea llega pronto')
+    })
+
     it('no usa controles HTML crudos fuera de los de Nuxt UI', async () => {
         fijarSesionFixture(true)
         const wrapper = await montarCuenta()

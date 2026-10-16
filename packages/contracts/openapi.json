@@ -10684,6 +10684,85 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/telegram": {
+      "get": {
+        "operationId": "portalTelegram",
+        "summary": "Estado de la vinculación de Telegram del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de Telegram",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/telegram/desvincular": {
+      "post": {
+        "operationId": "portalDesvincularTelegram",
+        "summary": "Quita el chat de Telegram del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de Telegram",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/telegram/vincular": {
+      "post": {
+        "operationId": "portalVincularTelegram",
+        "summary": "Genera el código de un solo uso y el enlace al bot para vincular Telegram",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "201": {
+            "description": "Enlace al bot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalVinculoTelegram"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/verificar": {
       "post": {
         "operationId": "portalVerificarCodigo",
@@ -21942,6 +22021,7 @@
           "vence_en",
           "monto",
           "motivo",
+          "corregible",
           "servicio_estado"
         ],
         "properties": {
@@ -21967,6 +22047,10 @@
           "motivo": {
             "type": "string",
             "description": "Resultado en palabras del cliente (nunca el código de la regla)"
+          },
+          "corregible": {
+            "type": "boolean",
+            "description": "Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto"
           },
           "servicio_estado": {
             "anyOf": [
@@ -22071,6 +22155,58 @@
               "null"
             ],
             "description": "Destino enmascarado (\"m***a@e***.com\", \"tu Telegram vinculado\"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente"
+          }
+        }
+      },
+      "PortalTelegram": {
+        "type": "object",
+        "required": [
+          "vinculado",
+          "disponible",
+          "bot"
+        ],
+        "properties": {
+          "vinculado": {
+            "type": "boolean",
+            "description": "El cliente tiene un chat de Telegram vinculado"
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "Hay bot configurado: se puede pedir un enlace"
+          },
+          "bot": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Usuario del bot sin @"
+          }
+        }
+      },
+      "PortalVinculoTelegram": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "enlace",
+          "bot",
+          "vence_en"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano"
+          },
+          "enlace": {
+            "type": "string",
+            "description": "https://t.me/<bot>?start=<código>"
+          },
+          "bot": {
+            "type": "string",
+            "description": "Usuario del bot sin @"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -47,6 +47,20 @@ describe('página /corte', () => {
         expect(ayuda.text()).toContain('El pago en línea llega pronto')
     })
 
+    it('accesibilidad: cada botón y enlace tiene nombre y zona de toque de 44 px (min-h-11)', async () => {
+        const wrapper = await montarCorte()
+        const controles = wrapper.findAll('button')
+        expect(controles.length).toBeGreaterThan(4)
+        for (const control of controles) {
+            const nombre = (control.attributes('aria-label') ?? control.text()).trim()
+            expect(nombre, control.html()).not.toBe('')
+            expect(control.classes(), nombre).toContain('min-h-11')
+        }
+        for (const enlace of wrapper.findAll('a')) {
+            expect(enlace.text().trim() || enlace.attributes('aria-label')).toBeTruthy()
+        }
+    })
+
     it('activo con promesa: sin vencidas y sin botón de promesa', async () => {
         const wrapper = await montarCorte('activo')
         const texto = wrapper.text()

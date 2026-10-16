@@ -61,7 +61,7 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
 | Datos de depósito: cuentas de A3 e instrucciones de pago del panel (`GET /portal/empresa`) | `app/components/corte/DatosDeposito.vue` |
-| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante deshabilitado (siguiente tanda); "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
+| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" (`components/pago/EnLinea.vue`, también en `/cuenta` con saldo) hasta que A3 publique el contrato de la pasarela (pedido en `.claude/integration/a5.md`); "Subir comprobante de pago"; "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
 | Estado en vivo: `GET /api/v1/portal/estado` cada 5 s hasta 2 min, tras una acción del cliente ("Ya pagué: revisar mi servicio"; luego comprobante, promesa y pago), al volver a la pestaña o con promesa activa. Al ver `activo`: "Ya tienes servicio" y "Seguir navegando" (`NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL`) | `app/composables/useEstadoServicio.ts`, `app/components/corte/EstadoEnVivo.vue`, `app/components/corte/ServicioReactivado.vue` |
 | Fixtures tipados contra el contrato (`?fixture=reactivacion` simula la reactivación) | `fixtures/corte.ts` |
 
@@ -90,6 +90,29 @@ Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos person
 | Fixtures: el código correcto es `123456`; la sesión es un estado en memoria (`fijarSesionFixture` en pruebas) | `fixtures/cuenta.ts`, `fixtures/index.ts` |
 
 Dependencia nueva: `zod` (misma versión que `apps/web`) para los esquemas de `UForm`.
+
+### Telegram en "Mis datos" (semana 2)
+
+Contrato de A6 en `.claude/integration/contratos/telegram.md`. "Vincular Telegram" pide el código
+(`POST /portal/telegram/vincular`), ofrece "Abrir Telegram" (`t.me/<bot>?start=<código>`) y de respaldo
+`/start <código>`, y consulta `GET /portal/telegram` cada 3 s hasta ver "Vinculado" o hasta que venza.
+Tras recargar sigue esperando (solo `vence_en` en `sessionStorage`, nunca el código). Desvincular pide
+confirmación. Telegram como canal preferido solo se habilita con el chat vinculado.
+
+### Promesa rechazada
+
+"Cambiar fecha o monto" aparece solo si `corregible` (la regla fue el plazo o la próxima factura); por
+cupo, historial o deuda se ofrece "Contactar a la oficina".
+
+## Accesibilidad
+
+- Controles de al menos 44 × 44 px: `min-h-11 min-w-11` en `UButton`, `min-h-11` en `UInput`, `USelect`
+  y `USelectMenu`, casillas del código de 44 px (`app.config.ts`); el logo y el enlace del pie también.
+- Contraste 4.5:1 en claro y oscuro: en claro los colores semánticos usan el tono 700 (verde 800) y
+  `text-dimmed` el slate-500; en oscuro, los 400 (`assets/css/main.css`).
+- Foco visible: el anillo de Nuxt UI en controles y un `outline` del color primario en enlaces.
+- Revisión automática con Playwright (tamaño de toque, nombre accesible, contraste de texto y foco con
+  Tab) en `/corte`, `/entrar`, el paso del código y los modales de promesa, depósito y comprobante.
 
 ## Datos de la empresa y contacto (configurables desde el panel)
 
