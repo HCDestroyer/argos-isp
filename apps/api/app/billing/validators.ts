@@ -31,6 +31,10 @@ const camposPlantilla = {
     reglas_promesa: reglasPromesaSchema()
         .optional()
         .meta({ description: 'Reglas de promesas; las claves que falten toman su valor por defecto' }),
+    por_defecto: vine.boolean().optional().meta({
+        description:
+            'Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior',
+    }),
 }
 
 export const crearPlantillaValidator = vine.compile(vine.object(camposPlantilla))
@@ -58,6 +62,9 @@ export const editarPlantillaValidator = vine.compile(
             description:
                 'Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto)',
         }),
+        por_defecto: vine.boolean().optional().meta({
+            description: 'true la marca por defecto (desmarca la anterior); false le quita la marca',
+        }),
     }),
 )
 
@@ -74,6 +81,10 @@ export const listarFacturasValidator = vine.compile(
         servicio_id: idEntidad().optional(),
         estado: vine.enum(['emitida', 'parcial', 'pagada', 'vencida', 'anulada'] as const).optional(),
         periodo: fechaIso().optional(),
+        tipo: vine
+            .enum(['servicio', 'mora'] as const)
+            .optional()
+            .meta({ description: 'servicio = factura del periodo; mora = recargo por vencimiento' }),
     }),
 )
 
@@ -130,6 +141,7 @@ export const listarPagosValidator = vine.compile(
         estado: vine.enum(['registrado', 'pendiente_verificacion', 'anulado'] as const).optional(),
         desde: instanteIso().optional(),
         hasta: instanteIso().optional(),
+        factura_id: idEntidad().optional().meta({ description: 'Solo los pagos aplicados a esta factura' }),
     }),
 )
 

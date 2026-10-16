@@ -28,6 +28,9 @@ export const diarioValidator = vine.compile(
         origen_tipo: vine
             .enum(['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste'] as const)
             .optional(),
+        origen_id: idEntidad()
+            .optional()
+            .meta({ description: 'Asientos de este origen (con origen_tipo: la factura, el pago…)' }),
     }),
 )
 

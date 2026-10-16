@@ -501,6 +501,7 @@ export interface PromesaVista {
     id: number
     servicio_id: number
     cliente_id: number
+    cliente_nombre: string
     vence_en: Date
     monto: string
     estado: EstadoPromesa
@@ -516,6 +517,7 @@ const COLUMNAS = [
     'p.id',
     'p.servicio_id',
     'p.cliente_id',
+    db.raw('(select cl.nombre from core.clientes cl where cl.id = p.cliente_id) as cliente_nombre'),
     'p.vence_en',
     'p.monto',
     'p.estado',

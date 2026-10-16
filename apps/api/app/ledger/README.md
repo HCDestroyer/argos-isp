@@ -45,7 +45,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 ## Consultas (`consultas.ts`)
 
 - `saldoCliente(cliente_id)`: suma del auxiliar CxC (debe − haber). Positivo = el cliente debe.
-- `libroDiario`, `libroMayor` (saldo acumulado por línea, consistente entre páginas), `listarCuentas`.
+- `libroDiario` (filtros `desde`, `hasta`, `origen_tipo`, `origen_id`; cada movimiento con `cliente_nombre`), `libroMayor` (saldo acumulado por línea, consistente entre páginas), `listarCuentas`.
 
 ## Cajas y turnos (tarea 9, `cajas.ts`)
 
@@ -56,19 +56,20 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 
 - Cada pago en efectivo guarda el turno abierto de su caja (`billing.pagos.turno_id`, con `FOR SHARE` frente al cierre). `POST /pagos` con `caja` sin `caja_id` usa la caja del turno abierto del cajero (`cajaDelCajero`: el que él abrió o una caja asignada a él, dentro de su alcance) y, si no tiene, la principal.
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
+- Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
 
 ## Endpoints
 
-| Método | Ruta                                                                | Permiso        |
-| ------ | ------------------------------------------------------------------- | -------------- |
-| GET    | `/api/v1/libro/cuentas`                                             | `libro.ver`    |
-| GET    | `/api/v1/libro/diario?desde&hasta&origen_tipo&cursor&limit`         | `libro.ver`    |
-| GET    | `/api/v1/libro/mayor?cuenta_id&cliente_id&desde&hasta&cursor&limit` | `libro.ver`    |
-| GET    | `/api/v1/cajas`                                                     | `cajas.ver`    |
-| POST   | `/api/v1/cajas/:id/abrir`                                           | `cajas.abrir`  |
-| POST   | `/api/v1/cajas/:id/cerrar`                                          | `cajas.cerrar` |
-| GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                             | `cajas.ver`    |
+| Método | Ruta                                                                  | Permiso        |
+| ------ | --------------------------------------------------------------------- | -------------- |
+| GET    | `/api/v1/libro/cuentas`                                               | `libro.ver`    |
+| GET    | `/api/v1/libro/diario?desde&hasta&origen_tipo&origen_id&cursor&limit` | `libro.ver`    |
+| GET    | `/api/v1/libro/mayor?cuenta_id&cliente_id&desde&hasta&cursor&limit`   | `libro.ver`    |
+| GET    | `/api/v1/cajas`                                                       | `cajas.ver`    |
+| POST   | `/api/v1/cajas/:id/abrir`                                             | `cajas.abrir`  |
+| POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
+| GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                               | `cajas.ver`    |
 
 ## Eventos
 

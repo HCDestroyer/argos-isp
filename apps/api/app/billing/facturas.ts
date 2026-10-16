@@ -79,6 +79,7 @@ export const ESTADOS_PENDIENTES: readonly EstadoFactura[] = ['emitida', 'parcial
 export interface FacturaFila {
     id: number
     cliente_id: number
+    cliente_nombre: string
     servicio_id: number | null
     tipo: TipoFactura
     factura_origen_id: number | null
@@ -108,6 +109,9 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
     return [
         c('id'),
         c('cliente_id'),
+        cliente.raw(
+            `(select cl.nombre from core.clientes cl where cl.id = ${alias}.cliente_id) as cliente_nombre`,
+        ),
         c('servicio_id'),
         c('tipo'),
         c('factura_origen_id'),
@@ -138,6 +142,7 @@ export interface FiltrosFacturas extends OpcionesPaginacion {
     servicio_id?: number
     estado?: EstadoFactura
     periodo?: string
+    tipo?: TipoFactura
 }
 
 /** Filtros de alcance de una factura: zona del cliente y router del servicio. */
@@ -156,6 +161,7 @@ export async function listarFacturas(filtros: FiltrosFacturas, alcance?: Alcance
         .if(filtros.servicio_id, (q) => q.where('f.servicio_id', filtros.servicio_id!))
         .if(filtros.estado, (q) => q.where('f.estado', filtros.estado!))
         .if(filtros.periodo, (q) => q.where('f.periodo', filtros.periodo!))
+        .if(filtros.tipo, (q) => q.where('f.tipo', filtros.tipo!))
     filtrarPorAlcance(consulta, alcance, dimensionesFactura)
     return paginar<FacturaFila>(consulta, filtros, { columna: 'f.id' })
 }

@@ -37,15 +37,19 @@ export const Cuenta = definirEsquema(
 
 export const Movimiento = definirEsquema(
     'Movimiento',
-    objeto({
-        id,
-        cuenta_id: id,
-        cuenta_codigo: texto,
-        cuenta_nombre: texto,
-        debe: Dinero,
-        haber: Dinero,
-        cliente_id: nulable(id),
-    }),
+    objeto(
+        {
+            id,
+            cuenta_id: id,
+            cuenta_codigo: texto,
+            cuenta_nombre: texto,
+            debe: Dinero,
+            haber: Dinero,
+            cliente_id: nulable(id),
+            cliente_nombre: { ...nulable(texto), description: 'Cliente del auxiliar (CxC, anticipos)' },
+        },
+        ['cliente_nombre'],
+    ),
 )
 
 export const Asiento = definirEsquema(
@@ -98,15 +102,21 @@ export const Mayor = definirEsquema(
 
 export const Caja = definirEsquema(
     'Caja',
-    objeto({
-        id,
-        nombre: texto,
-        cajero_id: nulable(id),
-        cuenta_id: id,
-        activa: booleano,
-        turno_abierto_id: nulable(id),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            nombre: texto,
+            cajero_id: nulable(id),
+            cajero_nombre: { ...nulable(texto), description: 'Cajero asignado a la caja' },
+            cuenta_id: id,
+            activa: booleano,
+            turno_abierto_id: nulable(id),
+            turno_abierto_por: { ...nulable(id), description: 'Usuario que abrió el turno abierto' },
+            turno_abierto_por_nombre: nulable(texto),
+            ...auditable,
+        },
+        ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre'],
+    ),
 )
 
 export const CajaTurno = definirEsquema(
@@ -124,8 +134,10 @@ export const CajaTurno = definirEsquema(
             motivo: nulable(texto),
             abierto_por: { ...nulable(id), description: 'Usuario que abrió el turno' },
             cerrado_por: { ...nulable(id), description: 'Usuario que cerró el turno' },
+            abierto_por_nombre: nulable(texto),
+            cerrado_por_nombre: nulable(texto),
             ...auditable,
         },
-        ['abierto_por', 'cerrado_por'],
+        ['abierto_por', 'cerrado_por', 'abierto_por_nombre', 'cerrado_por_nombre'],
     ),
 )

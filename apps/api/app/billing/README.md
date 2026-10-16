@@ -13,6 +13,8 @@ Campos: `ciclo` (`dia_fijo` con `dia` 1–28, o `aniversario` = día de instalac
 
 Coherencia (`plantillas.ts`, 422 con el campo exacto): `dia_fijo` exige `dia`; `facturas_para_limitar ≤ facturas_para_cortar`; mora `ninguna` ⇒ 0, `fija`/`porcentaje` ⇒ > 0, porcentaje ≤ 100; máximo de promesas con buen historial ≥ máximo base.
 
+`por_defecto` (a lo sumo una, índice único parcial): la plantilla de los servicios creados sin `plantilla_facturacion_id`. Marcar otra (al crear o editar) desmarca la anterior, con su `version` y `audit.cambios`. `plantillaPorDefectoId()` la devuelve (la usa A1).
+
 Las facturas ya emitidas no cambian al editar la plantilla: cada una guarda `reglas_snapshot`. Cada cambio queda en `audit.cambios` (`entidad_tipo = plantilla_facturacion`).
 
 ### Reglas de promesa (`reglas_promesa.ts`)
@@ -153,8 +155,8 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 | `promesas.revisar_cliente`    | `actions/revisar_promesas_cliente.ts` | `ConsumidorBilling` (grupo `billing`, `consumidor.ts`) |
 | `promesas.incumplir`          | `actions/incumplir_promesa.ts`        | `promesas.incumplir_vencidas`                          |
 | `promesas.incumplir_vencidas` | `actions/incumplir_promesas.ts`       | cron `promesas` (cada minuto, con lock)                |
-| `promesas.rechazar` | `actions/rechazar_promesa.ts` | `POST /promesas/:id/rechazar { motivo }` (supervisor) |
-| `promesas.cancelar` | `actions/cancelar_promesa.ts` | `POST /promesas/:id/cancelar { motivo }` (supervisor) |
+| `promesas.rechazar`           | `actions/rechazar_promesa.ts`         | `POST /promesas/:id/rechazar { motivo }` (supervisor)  |
+| `promesas.cancelar`           | `actions/cancelar_promesa.ts`         | `POST /promesas/:id/cancelar { motivo }` (supervisor)  |
 
 - `crearPromesaPago` evalúa las `reglas_promesa` efectivas (plantilla + excepción `reglas_promesa` del servicio) con `evaluarReglas` (`promesas.ts`, pura) en este orden y se detiene en la primera que falla: `habilitadas`, `canal_permitido`, `sin_deuda`, `plazo_max_dias`, `no_exceder_siguiente_facturacion`, `deuda_maxima` (deuda vencida), `abono_inicial_pct` (lo pagado de las facturas pendientes), `antiguedad_minima_dias`, `cumplimiento_minimo_pct` (últimas `historial_ventana` promesas resueltas), `bloqueo_tras_incumplida_dias`, `max_por_periodo` (promesas creadas en el periodo de facturación actual; con cumplimiento ≥ `buen_historial_pct`, `max_por_periodo_buen_historial`). Los límites no nulos del canal reemplazan al general; `requiere_aprobacion` deja la promesa `pendiente_aprobacion`.
 - Siempre guarda la promesa (también la rechazada) con `reglas_snapshot` y `resultado_evaluacion` = `{ resultado, regla, motivo, canal, evaluada_en, reglas[] (regla, ok, valor, limite, origen, detalle), deuda, historial, siguiente_facturacion }`. Al aprobar se agrega `aprobacion`; al cerrar, `cierre`.
@@ -165,6 +167,10 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Vencida sin cumplir → `incumplida`, `promesa.incumplida` y re-evaluación (corta con la hora de corte). Pendiente de aprobación vencida → `cancelada`.
 - Supervisor (`admin`, `contabilidad`): rechazar una `pendiente_aprobacion` → `rechazada`; cancelar una `activa` o `pendiente_aprobacion` → `cancelada` (si estaba activa, re-evaluación en la misma transacción: puede volver a cortarse). Motivo y quién en `resultado_evaluacion.cierre`; 409 `promesa_no_pendiente` en otro estado. Sin evento (el catálogo no tiene `promesa.rechazada` ni `promesa.cancelada`).
 
+## Vistas de lectura
+
+`Factura`, `Pago` (pagador) y `Promesa` traen `cliente_nombre`. Filtros: `GET /facturas?tipo=servicio|mora`, `GET /pagos?factura_id=` (pagos aplicados a esa factura). `POST /pagos/:id/anular` responde `servicios[]` como el registro.
+
 ## Estado de cuenta (tarea 11)
 
 `estado_cuenta.ts`: `GET /clientes/:id/estado-cuenta` (permiso `clientes.estado_cuenta`, alcance por zona/router del cliente). Es el **auxiliar CxC** del libro:
@@ -173,6 +179,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - `saldo_a_favor` (aditivo): anticipos sin aplicar.
 - `facturas_pendientes`: `emitida`/`parcial`/`vencida` (servicio y mora), la más antigua primero.
 - `movimientos`: un renglón por asiento que toca su CxC (fecha, asiento) con `cargo`, `abono` y saldo acumulado; el último es igual a `saldo`. `referencia_id` = id de la factura, pago o mora de origen.
+- Pago de terceros: en el estado de cuenta del dueño, la descripción nombra solo sus facturas y termina en "· pagado por <pagador>".
 
 ## Pruebas (tarea 12)
 

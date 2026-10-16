@@ -1984,9 +1984,14 @@ export interface components {
             id: number;
             nombre: string;
             cajero_id: number | null;
+            /** @description Cajero asignado a la caja */
+            cajero_nombre?: string | null;
             cuenta_id: number;
             activa: boolean;
             turno_abierto_id: number | null;
+            /** @description Usuario que abrió el turno abierto */
+            turno_abierto_por?: number | null;
+            turno_abierto_por_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2010,6 +2015,8 @@ export interface components {
             abierto_por?: number | null;
             /** @description Usuario que cerró el turno */
             cerrado_por?: number | null;
+            abierto_por_nombre?: string | null;
+            cerrado_por_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2312,6 +2319,7 @@ export interface components {
         Factura: {
             id: number;
             cliente_id: number;
+            cliente_nombre?: string;
             servicio_id: number | null;
             /** Format: date */
             periodo: string;
@@ -2439,6 +2447,8 @@ export interface components {
             debe: components["schemas"]["Dinero"];
             haber: components["schemas"]["Dinero"];
             cliente_id: number | null;
+            /** @description Cliente del auxiliar (CxC, anticipos) */
+            cliente_nombre?: string | null;
         };
         MovimientoEstadoCuenta: {
             /** Format: date */
@@ -2454,6 +2464,8 @@ export interface components {
         Pago: {
             id: number;
             cliente_id: number;
+            /** @description Nombre del pagador */
+            cliente_nombre?: string;
             /** @enum {string} */
             metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
             monto: components["schemas"]["Dinero"];
@@ -2472,7 +2484,7 @@ export interface components {
              */
             anulado_en?: string | null;
             motivo_anulacion?: string | null;
-            /** @description Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata) */
+            /** @description Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte) */
             servicios?: components["schemas"]["ServicioEvaluado"][];
             /** @description Banco de origen (transferencia, ach) */
             banco_origen_id?: number | null;
@@ -2595,6 +2607,8 @@ export interface components {
             /** @enum {string} */
             certificar_al: "emitir" | "pagar" | "nunca";
             reglas_promesa: components["schemas"]["ReglasPromesa"];
+            /** @description Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una) */
+            por_defecto?: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2831,6 +2845,7 @@ export interface components {
             id: number;
             servicio_id: number;
             cliente_id: number;
+            cliente_nombre?: string;
             /** Format: date-time */
             vence_en: string;
             monto: components["schemas"]["Dinero"];
@@ -5263,6 +5278,8 @@ export interface operations {
                 servicio_id?: number;
                 estado?: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
                 periodo?: string;
+                /** @description servicio = factura del periodo; mora = recargo por vencimiento */
+                tipo?: "servicio" | "mora";
             };
             header?: never;
             path?: never;
@@ -5902,6 +5919,8 @@ export interface operations {
                 desde?: string;
                 hasta?: string;
                 origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste";
+                /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
+                origen_id?: number;
             };
             header?: never;
             path?: never;
@@ -6343,6 +6362,8 @@ export interface operations {
                 estado?: "registrado" | "pendiente_verificacion" | "anulado";
                 desde?: string;
                 hasta?: string;
+                /** @description Solo los pagos aplicados a esta factura */
+                factura_id?: number;
             };
             header?: never;
             path?: never;
@@ -7168,6 +7189,8 @@ export interface operations {
                             };
                         };
                     };
+                    /** @description Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior */
+                    por_defecto?: boolean;
                 };
             };
         };
@@ -7357,6 +7380,8 @@ export interface operations {
                             };
                         };
                     };
+                    /** @description true la marca por defecto (desmarca la anterior); false le quita la marca */
+                    por_defecto?: boolean;
                 };
             };
         };

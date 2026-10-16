@@ -3818,6 +3818,19 @@
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
               "format": "date"
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "servicio",
+                "mora"
+              ]
+            }
           }
         ],
         "responses": {
@@ -4836,6 +4849,16 @@
                 "ajuste"
               ]
             }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "required": false,
+            "description": "Asientos de este origen (con origen_tipo: la factura, el pago…)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -5664,6 +5687,16 @@
             "schema": {
               "type": "string",
               "format": "date-time"
+            }
+          },
+          {
+            "name": "factura_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los pagos aplicados a esta factura",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         ],
@@ -7242,6 +7275,10 @@
                     "required": [],
                     "additionalProperties": false,
                     "description": "Reglas de promesas; las claves que falten toman su valor por defecto"
+                  },
+                  "por_defecto": {
+                    "description": "Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -7709,6 +7746,10 @@
                     "required": [],
                     "additionalProperties": false,
                     "description": "Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto)"
+                  },
+                  "por_defecto": {
+                    "description": "true la marca por defecto (desmarca la anterior); false le quita la marca",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -14493,6 +14534,13 @@
             ],
             "minimum": 1
           },
+          "cajero_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cajero asignado a la caja"
+          },
           "cuenta_id": {
             "type": "integer",
             "minimum": 1
@@ -14506,6 +14554,20 @@
               "null"
             ],
             "minimum": 1
+          },
+          "turno_abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que abrió el turno abierto"
+          },
+          "turno_abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -14612,6 +14674,18 @@
             ],
             "minimum": 1,
             "description": "Usuario que cerró el turno"
+          },
+          "abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cerrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -15841,6 +15915,9 @@
             "type": "integer",
             "minimum": 1
           },
+          "cliente_nombre": {
+            "type": "string"
+          },
           "servicio_id": {
             "type": [
               "integer",
@@ -16295,6 +16372,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cliente del auxiliar (CxC, anticipos)"
           }
         }
       },
@@ -16369,6 +16453,10 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string",
+            "description": "Nombre del pagador"
           },
           "metodo": {
             "type": "string",
@@ -16454,7 +16542,7 @@
             "items": {
               "$ref": "#/components/schemas/ServicioEvaluado"
             },
-            "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
+            "description": "Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte)"
           },
           "banco_origen_id": {
             "type": [
@@ -16951,6 +17039,10 @@
           },
           "reglas_promesa": {
             "$ref": "#/components/schemas/ReglasPromesa"
+          },
+          "por_defecto": {
+            "type": "boolean",
+            "description": "Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)"
           },
           "version": {
             "type": "integer",
@@ -17852,6 +17944,9 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
           },
           "vence_en": {
             "type": "string",

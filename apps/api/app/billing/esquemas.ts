@@ -57,27 +57,35 @@ export const ReglasPromesa = definirEsquema(
 
 export const PlantillaFacturacion = definirEsquema(
     'PlantillaFacturacion',
-    objeto({
-        id,
-        nombre: texto,
-        ciclo: enumerado(['dia_fijo', 'aniversario']),
-        dia: nulable(entero),
-        prorrateo: booleano,
-        dias_gracia: entero,
-        facturas_para_limitar: entero,
-        facturas_para_cortar: entero,
-        mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
-        mora_valor: Dinero,
-        mora_recurrente: booleano,
-        hora_corte: {
-            type: 'string',
-            pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
-            description: 'HH:MM hora de Guatemala',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            ciclo: enumerado(['dia_fijo', 'aniversario']),
+            dia: nulable(entero),
+            prorrateo: booleano,
+            dias_gracia: entero,
+            facturas_para_limitar: entero,
+            facturas_para_cortar: entero,
+            mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+            mora_valor: Dinero,
+            mora_recurrente: booleano,
+            hora_corte: {
+                type: 'string',
+                pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+                description: 'HH:MM hora de Guatemala',
+            },
+            certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+            reglas_promesa: ReglasPromesa,
+            por_defecto: {
+                ...booleano,
+                description:
+                    'Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)',
+            },
+            ...auditable,
         },
-        certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
-        reglas_promesa: ReglasPromesa,
-        ...auditable,
-    }),
+        ['por_defecto'],
+    ),
 )
 
 export const EstadoFactura = definirEsquema(
@@ -105,6 +113,7 @@ export const Factura = definirEsquema(
         {
             id,
             cliente_id: id,
+            cliente_nombre: texto,
             servicio_id: nulable(id),
             periodo: fecha,
             clave_unica: texto,
@@ -129,7 +138,7 @@ export const Factura = definirEsquema(
             motivo_anulacion: nulable(texto),
             ...auditable,
         },
-        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion'],
+        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion', 'cliente_nombre'],
     ),
 )
 
@@ -203,6 +212,7 @@ export const Pago = definirEsquema(
         {
             id,
             cliente_id: id,
+            cliente_nombre: { ...texto, description: 'Nombre del pagador' },
             metodo: enumerado([...METODOS_PAGO]),
             monto: Dinero,
             comision: Dinero,
@@ -217,7 +227,8 @@ export const Pago = definirEsquema(
             motivo_anulacion: nulable(texto),
             servicios: {
                 ...lista(ServicioEvaluado),
-                description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
+                description:
+                    'Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte)',
             },
             banco_origen_id: { ...nulable(id), description: 'Banco de origen (transferencia, ach)' },
             banco_origen_nombre: nulable(texto),
@@ -232,6 +243,7 @@ export const Pago = definirEsquema(
             ...auditable,
         },
         [
+            'cliente_nombre',
             'anulado_en',
             'motivo_anulacion',
             'servicios',
@@ -250,6 +262,7 @@ export const Promesa = definirEsquema(
             id,
             servicio_id: id,
             cliente_id: id,
+            cliente_nombre: texto,
             vence_en: instante,
             monto: Dinero,
             estado: enumerado([
@@ -274,7 +287,7 @@ export const Promesa = definirEsquema(
             },
             ...auditable,
         },
-        ['servicio'],
+        ['servicio', 'cliente_nombre'],
     ),
 )
 

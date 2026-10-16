@@ -40,6 +40,7 @@ export interface FiltrosDiario extends OpcionesPaginacion {
     desde?: string
     hasta?: string
     origen_tipo?: string
+    origen_id?: number
 }
 
 interface FilaAsiento {
@@ -69,6 +70,7 @@ export async function libroDiario(filtros: FiltrosDiario) {
         .if(filtros.desde, (q) => q.where('fecha', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('fecha', '<=', filtros.hasta!))
         .if(filtros.origen_tipo, (q) => q.where('origen_tipo', filtros.origen_tipo!))
+        .if(filtros.origen_id, (q) => q.where('origen_id', filtros.origen_id!))
 
     const pagina = await paginar<FilaAsiento>(consulta, filtros)
     const movimientos = await movimientosDeAsientos(
@@ -87,6 +89,7 @@ export async function movimientosDeAsientos(cliente: QueryClientContract, asient
     const filas = (await cliente
         .from('ledger.movimientos as m')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .leftJoin('core.clientes as cl', 'cl.id', 'm.cliente_id')
         .whereIn('m.asiento_id', asientos)
         .orderBy('m.id', 'asc')
         .select(
@@ -98,6 +101,7 @@ export async function movimientosDeAsientos(cliente: QueryClientContract, asient
             'm.debe',
             'm.haber',
             'm.cliente_id',
+            'cl.nombre as cliente_nombre',
         )) as Array<{ asiento_id: number } & Record<string, unknown>>
     for (const { asiento_id: asientoId, ...movimiento } of filas) {
         const lista = mapa.get(asientoId) ?? []
