@@ -5,13 +5,16 @@ import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
+import { exigirPeriodoAbierto, idExterno } from '#billing/importacion'
 
 /**
  * `facturas.registrar_saldo_inicial` = `registrarSaldoInicial` (importador de A6, sin endpoint):
  * asiento de apertura del saldo de un cliente traído de otro sistema.
  *
- * - Idempotente por `clave_externa`: repetirla con los mismos datos devuelve lo ya registrado
- *   (`creado: false`); con otro cliente o monto → 409 `clave_externa_conflicto`.
+ * - Idempotente por `id_externo` (alias `clave_externa`): repetirlo con los mismos datos devuelve
+ *   lo ya registrado (`creado: false`); con otro cliente o monto → 409 `clave_externa_conflicto`.
+ * - Fecha en un periodo cerrado → 422 `periodo_cerrado` (antes de escribir nada). Se revierte
+ *   con `AnularSaldoInicial` (asientos de reverso).
  * - `monto > 0` (el cliente debe): factura de apertura sin servicio (`clave_unica =
  *   apertura-<clave_externa>`, `vencida`, no cuenta para el corte) y asiento
  *   `CxC / 2.9.01 Saldos de apertura` (origen `factura`). Se cobra como cualquier factura.
@@ -21,7 +24,10 @@ import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
  */
 
 export interface EntradaSaldoInicial {
-    clave_externa: string
+    /** id en el sistema de origen (contrato de importación) */
+    id_externo?: string
+    /** nombre anterior de `id_externo` (se acepta igual) */
+    clave_externa?: string
     cliente_id: number
     /** string decimal con signo: "150.00" debe, "-20.00" a favor */
     monto: string
@@ -43,10 +49,9 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
     readonly nombre = 'facturas.registrar_saldo_inicial'
 
     protected async handle(input: EntradaSaldoInicial, t: Transaccion): Promise<ResultadoSaldoInicial> {
-        const clave = input.clave_externa?.trim()
+        const clave = idExterno(input)
         const monto = dec(input.monto)
         const errores = []
-        if (!clave) errores.push({ field: 'clave_externa', message: 'Obligatoria', rule: 'required' })
         if (monto.isZero() || !tieneCentavosExactos(monto)) {
             errores.push({
                 field: 'monto',
@@ -69,9 +74,22 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
         const existente = (await t.trx
             .from('billing.saldos_iniciales')
             .where('clave_externa', clave)
-            .select('id', 'cliente_id', 'monto', 'factura_id')
-            .first()) as { id: number; cliente_id: number; monto: string; factura_id: number | null } | null
+            .select('id', 'cliente_id', 'monto', 'factura_id', 'anulado_en')
+            .first()) as {
+            id: number
+            cliente_id: number
+            monto: string
+            factura_id: number | null
+            anulado_en: Date | null
+        } | null
         if (existente) {
+            if (existente.anulado_en) {
+                throw new Conflicto(
+                    `El saldo inicial ${clave} se anuló; para volver a importarlo use otro id_externo`,
+                    'saldo_inicial_anulado',
+                    'Saldo inicial anulado',
+                )
+            }
             if (existente.cliente_id !== input.cliente_id || !dec(existente.monto).equals(monto)) {
                 throw new Conflicto(
                     `La clave externa ${clave} ya se usó para el cliente ${existente.cliente_id} con Q${existente.monto}`,
@@ -87,6 +105,8 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                 factura_id: existente.factura_id,
             }
         }
+
+        await exigirPeriodoAbierto(t.trx, fecha, `Saldo inicial ${clave}`)
 
         const descripcion = input.descripcion?.trim() || `Saldo inicial importado (${clave})`
         let facturaId: number | null = null

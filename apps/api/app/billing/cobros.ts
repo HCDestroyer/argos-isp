@@ -243,6 +243,7 @@ export async function aplicarAnticipos(t: Transaccion, clienteId: number): Promi
         .leftJoin('billing.saldos_iniciales_aplicaciones as a', 'a.saldo_inicial_id', 's.id')
         .where('s.cliente_id', clienteId)
         .where('s.monto', '<', 0)
+        .whereNull('s.anulado_en')
         .groupBy('s.id', 's.monto')
         .havingRaw('-s.monto > coalesce(sum(a.monto), 0)')
         .orderBy('s.id', 'asc')

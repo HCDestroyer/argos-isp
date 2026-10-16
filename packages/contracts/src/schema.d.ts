@@ -3333,6 +3333,8 @@ export interface components {
             cuenta_bancaria_id?: number | null;
             /** @description Banco y alias de la cuenta de destino */
             cuenta_bancaria_nombre?: string | null;
+            /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
+            historico?: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */

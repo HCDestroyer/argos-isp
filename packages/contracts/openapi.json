@@ -21147,6 +21147,10 @@
             ],
             "description": "Banco y alias de la cuenta de destino"
           },
+          "historico": {
+            "type": "boolean",
+            "description": "Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,

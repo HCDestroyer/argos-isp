@@ -32,6 +32,8 @@ export interface PagoVista {
     banco_origen_nombre: string | null
     cuenta_bancaria_id: number | null
     cuenta_bancaria_nombre: string | null
+    /** pago importado de otro sistema (`RegistrarPagoHistorico`): no pasó por caja ni bancos */
+    historico: boolean
     /** cliente_id/cliente_nombre: dueño de la factura (en un pago de terceros, no es el pagador) */
     aplicaciones: Array<{ factura_id: number; monto: string; cliente_id: number; cliente_nombre: string }>
     version: number
@@ -60,6 +62,7 @@ const COLUMNAS = [
     db.raw(
         "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
     ),
+    'p.historico',
     'p.version',
     'p.created_at',
     'p.updated_at',

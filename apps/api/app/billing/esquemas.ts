@@ -240,9 +240,15 @@ export const Pago = definirEsquema(
                 ...nulable(texto),
                 description: 'Banco y alias de la cuenta de destino',
             },
+            historico: {
+                ...booleano,
+                description:
+                    'Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos',
+            },
             ...auditable,
         },
         [
+            'historico',
             'cliente_nombre',
             'anulado_en',
             'motivo_anulacion',

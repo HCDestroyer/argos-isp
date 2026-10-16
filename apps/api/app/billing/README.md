@@ -65,7 +65,12 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 | `facturas.importar_pendiente`      | `actions/importar_factura_pendiente.ts` | `{ clave_externa, servicio_id, periodo, total, vence_en?, concepto?, aplicar_mora? }` → factura pendiente del periodo (ocupa `clave_unica`), IVA desglosado, mora `ninguna` salvo `aplicar_mora`, `vencida` si `vence_en` ya pasó. Asiento `CxC / 2.9.01 Saldos de apertura`                |
 | `facturas.registrar_saldo_inicial` | `actions/registrar_saldo_inicial.ts`    | `{ clave_externa, cliente_id, monto (con signo), fecha?, descripcion? }`: > 0 → factura de apertura sin servicio (`apertura-<clave>`, vencida, no cuenta para el corte) con `CxC / 2.9.01`; < 0 → `2.9.01 / Anticipos` y se aplica a sus facturas (`billing.saldos_iniciales_aplicaciones`) |
 
-Ambas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
+| `facturas.anular_saldo_inicial` | `actions/anular_saldo_inicial.ts` | `{ id_externo \| saldo_inicial_id, motivo }`: reversos de la apertura (y de sus aplicaciones si era a favor), anula la factura de apertura; 409 `saldo_con_pagos` si ya tiene pagos |
+| `pagos.registrar_historico` | `actions/registrar_pago_historico.ts` | `{ historico: true, id_externo, cliente_id, metodo, monto, fecha, referencia?, nota?, facturas? }`: pago con su fecha original, asiento `2.9.01 / CxC (+ Anticipos)` con esa fecha; sin caja, sin evento y sin reevaluar |
+
+Contrato completo (modos de importación, cuadre y errores) en `.claude/integration/contratos/importacion.md`. Saldo inicial y pago histórico aceptan `id_externo` (o `clave_externa`) y responden 422 `periodo_cerrado` con un detalle claro si la fecha cae en un mes cerrado.
+
+Todas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
 
 ## Vencimiento y mora (tarea 5)
 
