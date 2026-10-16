@@ -147,3 +147,58 @@ jobs:
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
+
+  # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
+  # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
+  e2e-panel:
+    name: Playwright del panel (fixtures)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Versión de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter @argosisp/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      # Navegadores en caché por versión de Playwright: solo se descargan cuando cambia la versión.
+      - name: Caché de navegadores
+        id: cache-navegadores
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      - name: Instalar Chromium
+        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        run: pnpm --filter @argosisp/web exec playwright install --with-deps chromium
+
+      - name: Dependencias del sistema de Chromium
+        if: steps.cache-navegadores.outputs.cache-hit == 'true'
+        run: pnpm --filter @argosisp/web exec playwright install-deps chromium
+
+      - name: Playwright
+        run: pnpm --filter @argosisp/web test:e2e
+
+      - name: Reporte de Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
