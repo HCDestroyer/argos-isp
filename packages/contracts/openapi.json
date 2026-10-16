@@ -8798,6 +8798,75 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/telegram": {
+      "get": {
+        "operationId": "portalTelegram",
+        "summary": "Estado de la vinculación de Telegram del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada pocos segundos mientras hay un enlace pendiente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de Telegram",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/telegram/desvincular": {
+      "post": {
+        "operationId": "portalDesvincularTelegram",
+        "summary": "Quita el chat de Telegram del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de Telegram",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/telegram/vincular": {
+      "post": {
+        "operationId": "portalVincularTelegram",
+        "summary": "Genera el enlace de un solo uso para vincular Telegram con el bot",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.generar_vinculo_telegram`: código de un solo uso con vencimiento (`PORTAL_TELEGRAM_VIGENCIA_S`), reemplaza los anteriores sin usar. 503 `telegram_no_configurado` sin `PORTAL_TELEGRAM_BOT`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "201": {
+            "description": "Enlace al bot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalVinculoTelegram"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/verificar": {
       "post": {
         "operationId": "portalVerificarCodigo",
@@ -17778,6 +17847,61 @@
               "null"
             ],
             "description": "Destino enmascarado (\"m***a@e***.com\", \"tu Telegram vinculado\"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente"
+          }
+        }
+      },
+      "PortalTelegram": {
+        "type": "object",
+        "required": [
+          "vinculado",
+          "disponible",
+          "bot",
+          "pendiente_hasta"
+        ],
+        "properties": {
+          "vinculado": {
+            "type": "boolean",
+            "description": "El cliente tiene un chat de Telegram vinculado"
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "Hay bot configurado: se puede pedir un enlace"
+          },
+          "bot": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Usuario del bot sin @"
+          },
+          "pendiente_hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Vence el último enlace sin usar (null si no hay uno vigente)"
+          }
+        }
+      },
+      "PortalVinculoTelegram": {
+        "type": "object",
+        "required": [
+          "enlace",
+          "bot",
+          "expira_en"
+        ],
+        "properties": {
+          "enlace": {
+            "type": "string",
+            "description": "https://t.me/<bot>?start=<código de un solo uso>"
+          },
+          "bot": {
+            "type": "string"
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

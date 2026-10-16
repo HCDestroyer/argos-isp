@@ -167,6 +167,19 @@ Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nomb
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
 `{ ip }`) porque son públicas y revelan información de un cliente.
 
+### Vincular Telegram desde el portal (semana 2)
+
+Contrato con el bot de A6 en `.claude/integration/contratos/telegram.md`.
+
+| Ruta | Acción | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/telegram` (sesión) | `acceso/telegram.ts` (`estadoTelegram`, lectura) | `PortalTelegram`: vinculado, bot disponible y vencimiento del enlace pendiente |
+| `POST /api/v1/portal/telegram/vincular` (sesión) | `actions/generar_vinculo_telegram.ts` (`portal.generar_vinculo_telegram`) | Código `vt_…` de un solo uso (solo su SHA-256 en `core.portal_vinculos_telegram`), reemplaza los anteriores sin usar; 201 con `https://t.me/<PORTAL_TELEGRAM_BOT>?start=<código>`; 503 `telegram_no_configurado` sin bot |
+| `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1; si el canal preferido era Telegram pasa a correo (`clientes.editar`); anula enlaces pendientes |
+| (el bot de A6, sin HTTP) | `actions/canjear_vinculo_telegram.ts` (`portal.canjear_vinculo_telegram`) | Valida el código (vigente, sin usar, sin reemplazar) y vincula con `clientes.vincular_telegram` de A1 en la misma transacción. El código decide el cliente. Reintento del mismo chat → `ya_vinculado: true`; otro chat → 422 `vinculo_invalido`; grupo → 422 `chat_id` `privado` |
+
+Variables: `PORTAL_TELEGRAM_BOT` (usuario sin `@`) y `PORTAL_TELEGRAM_VIGENCIA_S` (900).
+
 ### Auditoría una vez por ventana
 
 Cada visita a `/corte` y cada consulta del estado en vivo (cada 5 s) escribían una fila y llenaban la
@@ -252,6 +265,12 @@ o ausente (422 en `archivo` con texto claro), fecha futura, transferencia sin ba
 público, referencia duplicada (409 sin ids) e idempotencia, IP sin servicio (422), servicio de otro
 cliente con sesión (404) y sin sesión (401), lista de la sesión con el motivo del rechazo y el `id` de
 las cuentas públicas.
+
+`tests/portal/telegram.spec.ts`: enlace con el bot y solo el hash guardado (la auditoría no trae el
+código), canje por el bot con auditoría `webhook`, "vinculado" y canal preferido Telegram, uso único
+(otro chat 422, reintento del mismo chat `ya_vinculado`), vencido, reemplazado, inventado y de grupo,
+código de otro cliente (vincula a su dueño, nunca al que lo usa) y sesión ajena que no lo toca,
+desvincular con canal a correo e idempotente, y 503 sin bot.
 
 `tests/portal/empresa.spec.ts`: valores por defecto con versión 0 y sin cuentas, guardado con auditoría
 y diff, lectura pública con las cuentas de la fuente (falsa), documentos con `{{empresa.*}}`, borrar

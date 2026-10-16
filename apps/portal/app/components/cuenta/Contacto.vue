@@ -45,7 +45,7 @@ const canales = computed<RadioGroupItem[]>(() => CANALES_PREFERIDOS.map(canal =>
     ...canal,
     disabled: canal.value === 'telegram' && !props.contacto.telegram_vinculado,
     description: canal.value === 'telegram' && !props.contacto.telegram_vinculado
-        ? 'Vincula Telegram con nuestro bot (muy pronto)'
+        ? 'Primero vincula Telegram con el botón de arriba'
         : undefined,
 })))
 

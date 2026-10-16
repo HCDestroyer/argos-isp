@@ -112,6 +112,9 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_CODIGO_MAX_HORA: Env.schema.number.optional(),
     PORTAL_SESION_INACTIVIDAD_S: Env.schema.number.optional(),
     PORTAL_SESION_MAX_S: Env.schema.number.optional(),
+    /** Vinculación de Telegram desde el portal (`app/portal/acceso/telegram.ts`). */
+    PORTAL_TELEGRAM_BOT: Env.schema.string.optional(),
+    PORTAL_TELEGRAM_VIGENCIA_S: Env.schema.number.optional(),
 
     /*
     |----------------------------------------------------------

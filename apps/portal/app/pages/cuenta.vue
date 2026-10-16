@@ -14,7 +14,8 @@ const acceso = useAccesoPortal()
 
 useHead({ title: computed(() => `Mi cuenta · ${nombreEmpresa.value}`) })
 
-const cargando = computed(() => status.value === 'idle' || status.value === 'pending')
+// Solo la primera carga muestra el esqueleto; una recarga (p. ej. tras vincular Telegram) no lo hace.
+const cargando = computed(() => !resultado.value && (status.value === 'idle' || status.value === 'pending'))
 const cuenta = computed(() => resultado.value?.ok ? resultado.value.data : null)
 const problema = computed(() => resultado.value && !resultado.value.ok ? resultado.value.problema : null)
 
@@ -224,10 +225,16 @@ async function salir() {
                     <CuentaPromesas />
                 </template>
                 <template #datos>
-                    <CuentaContacto
-                        :contacto="cuenta.cliente"
-                        @actualizado="contactoActualizado"
-                    />
+                    <div class="flex flex-col gap-4">
+                        <CuentaTelegram
+                            :vinculado="cuenta.cliente.telegram_vinculado"
+                            @cambio="refresh()"
+                        />
+                        <CuentaContacto
+                            :contacto="cuenta.cliente"
+                            @actualizado="contactoActualizado"
+                        />
+                    </div>
                 </template>
             </UTabs>
         </template>

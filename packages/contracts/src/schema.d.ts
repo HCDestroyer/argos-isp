@@ -1324,6 +1324,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de la vinculación de Telegram del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada pocos segundos mientras hay un enlace pendiente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         */
+        get: operations["portalTelegram"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/telegram/desvincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quita el chat de Telegram del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
+         */
+        post: operations["portalDesvincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/telegram/vincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Genera el enlace de un solo uso para vincular Telegram con el bot
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.generar_vinculo_telegram`: código de un solo uso con vencimiento (`PORTAL_TELEGRAM_VIGENCIA_S`), reemplaza los anteriores sin usar. 503 `telegram_no_configurado` sin `PORTAL_TELEGRAM_BOT`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         */
+        post: operations["portalVincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/verificar": {
         parameters: {
             query?: never;
@@ -2815,6 +2875,26 @@ export interface components {
             expira_en: string;
             /** @description Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente */
             destino: string | null;
+        };
+        PortalTelegram: {
+            /** @description El cliente tiene un chat de Telegram vinculado */
+            vinculado: boolean;
+            /** @description Hay bot configurado: se puede pedir un enlace */
+            disponible: boolean;
+            /** @description Usuario del bot sin @ */
+            bot: string | null;
+            /**
+             * Format: date-time
+             * @description Vence el último enlace sin usar (null si no hay uno vigente)
+             */
+            pendiente_hasta: string | null;
+        };
+        PortalVinculoTelegram: {
+            /** @description https://t.me/<bot>?start=<código de un solo uso> */
+            enlace: string;
+            bot: string;
+            /** Format: date-time */
+            expira_en: string;
         };
         Problem: {
             type: string;
@@ -8053,6 +8133,66 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    portalTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de Telegram */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+        };
+    };
+    portalDesvincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de Telegram */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+        };
+    };
+    portalVincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enlace al bot */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalVinculoTelegram"];
+                };
             };
         };
     };
