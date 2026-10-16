@@ -265,3 +265,36 @@ export const VistaPreviaControl = definirEsquema(
         borrar: lista(objetoVistaPrevia),
     }),
 )
+
+const parKbps = objeto({ subida: entero, bajada: entero })
+
+/** Resultado de `POST /planes/vista-previa` (`vistaPreviaVelocidad` de `app/network/velocidad.ts`). */
+export const VistaPreviaVelocidad = definirEsquema(
+    'VistaPreviaVelocidad',
+    objeto({
+        rate_limit: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override)',
+        },
+        rate_limit_limitado: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+        },
+        garantizado_pct_efectivo: {
+            type: 'number',
+            description: 'garantizado_pct o 100 / reuso, con 2 decimales hacia abajo',
+        },
+        limit_at_servicio_kbps: { ...parKbps, description: 'CIR (limit-at) de cada servicio' },
+        padre: objeto({
+            max_limit: {
+                type: 'string',
+                description: 'max-limit subida/bajada: MIR × activos / reuso, hacia arriba',
+            },
+            limit_at: { type: 'string', description: 'limit-at subida/bajada: CIR × activos' },
+            prioridad: entero,
+            max_limit_kbps: parKbps,
+            limit_at_kbps: parKbps,
+            activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
+        }),
+    }),
+)

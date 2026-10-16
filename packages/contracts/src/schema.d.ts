@@ -1287,6 +1287,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/planes/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa del rate-limit de un plan (no guarda)
+         * @description Calcula con `app/network/velocidad.ts` (la misma función que usan aaa y el dispatcher) el `Mikrotik-Rate-Limit` activo y limitado y los límites de la cola padre con `activos` servicios. 422 por campo con las mismas reglas que crear el plan (`validarVelocidad`).
+         */
+        post: operations["planesVistaPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plantillas-facturacion": {
         parameters: {
             query?: never;
@@ -4559,6 +4579,36 @@ export interface components {
                 clave: string;
                 nombre: string | null;
             }[];
+        };
+        VistaPreviaVelocidad: {
+            /** @description Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override) */
+            rate_limit: string;
+            /** @description Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga) */
+            rate_limit_limitado: string;
+            /** @description garantizado_pct o 100 / reuso, con 2 decimales hacia abajo */
+            garantizado_pct_efectivo: number;
+            /** @description CIR (limit-at) de cada servicio */
+            limit_at_servicio_kbps: {
+                subida: number;
+                bajada: number;
+            };
+            padre: {
+                /** @description max-limit subida/bajada: MIR × activos / reuso, hacia arriba */
+                max_limit: string;
+                /** @description limit-at subida/bajada: CIR × activos */
+                limit_at: string;
+                prioridad: number;
+                max_limit_kbps: {
+                    subida: number;
+                    bajada: number;
+                };
+                limit_at_kbps: {
+                    subida: number;
+                    bajada: number;
+                };
+                /** @description Con 0 se calcula como 1 */
+                activos: number;
+            };
         };
         Zona: {
             id: number;
@@ -9504,6 +9554,80 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    planesVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    bajada_kbps: number;
+                    subida_kbps: number;
+                    bajada_limitada_kbps: number;
+                    subida_limitada_kbps: number;
+                    /** @description N de 1:N (1 = dedicado) */
+                    reuso?: number;
+                    /** @description CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso */
+                    garantizado_pct?: number | null;
+                    /** @description burst-limit de bajada (> bajada_kbps); null = sin ráfaga */
+                    rafaga_bajada_kbps?: number | null;
+                    /** @description burst-limit de subida (> subida_kbps); null = sin ráfaga */
+                    rafaga_subida_kbps?: number | null;
+                    /** @description burst-threshold como % del MIR (75) */
+                    rafaga_umbral_pct?: number;
+                    /** @description burst-time en segundos (16) */
+                    rafaga_segundos?: number;
+                    /** @description 1 (alta) a 8 (baja, por defecto) */
+                    prioridad?: number;
+                    /** @description Como en planes_routers: reemplaza la cadena de estado activo */
+                    rate_limit_override?: string | null;
+                    /** @description Servicios activos del plan en el router para la cola padre (por defecto 1) */
+                    activos?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaVelocidad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

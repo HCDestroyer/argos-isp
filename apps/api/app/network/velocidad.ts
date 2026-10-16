@@ -220,6 +220,37 @@ export function limitesPadrePlan(plan: VelocidadPlan, activos: number): LimitesP
     }
 }
 
+export interface VistaPreviaVelocidad {
+    /** `Mikrotik-Rate-Limit` en estado activo (o `rate_limit_override` si viene) */
+    rate_limit: string
+    /** `Mikrotik-Rate-Limit` en estado limitado (sin ráfaga) */
+    rate_limit_limitado: string
+    /** % garantizado que se aplica: `garantizado_pct` o `100 / reuso`, con 2 decimales hacia abajo */
+    garantizado_pct_efectivo: number
+    /** CIR (`limit-at`) de cada servicio en kbps */
+    limit_at_servicio_kbps: { subida: number; bajada: number }
+    /** cola padre del plan con `activos` servicios (`limitesPadrePlan`) */
+    padre: LimitesPadre & { activos: number }
+}
+
+/**
+ * Vista previa del formulario de planes (`POST /planes/vista-previa`, semana 3): lo mismo que
+ * verán `aaa` y el dispatcher, sin guardar nada. El panel no copia estas fórmulas.
+ */
+export function vistaPreviaVelocidad(plan: VelocidadPlan, activos: number): VistaPreviaVelocidad {
+    const pct = plan.garantizado_pct ?? 100 / Math.max(plan.reuso, 1)
+    return {
+        rate_limit: rateLimitServicio(plan, 'activo'),
+        rate_limit_limitado: rateLimitServicio(plan, 'limitado'),
+        garantizado_pct_efectivo: Math.floor(pct * 100 + 1e-9) / 100,
+        limit_at_servicio_kbps: {
+            subida: garantizadoKbps(plan.subida_kbps, plan),
+            bajada: garantizadoKbps(plan.bajada_kbps, plan),
+        },
+        padre: { ...limitesPadrePlan(plan, activos), activos },
+    }
+}
+
 export interface ErrorVelocidad {
     field: string
     message: string
