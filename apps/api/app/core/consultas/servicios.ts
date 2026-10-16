@@ -14,6 +14,13 @@ import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosD
 
 export type ModoIpv6 = 'radius_servicio' | 'radius_pool' | 'duid' | 'estatico' | 'ninguno'
 
+/**
+ * Cómo se conecta el servicio (`.claude/integration/contratos/routeros.md`): `pppoe` por RADIUS;
+ * `ip_estatica` y `dhcp_fija` sin credenciales, controlados por la API REST de RouterOS (A2).
+ */
+export const TIPOS_CONEXION = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const
+export type TipoConexion = (typeof TIPOS_CONEXION)[number]
+
 export interface ServicioVista {
     id: number
     cliente_id: number
@@ -24,7 +31,11 @@ export interface ServicioVista {
     promesa_activa: boolean
     suspension_manual: boolean
     suspension_manual_motivo: string | null
-    user_ppp: string
+    tipo_conexion: TipoConexion
+    /** null fuera de `pppoe` */
+    user_ppp: string | null
+    /** ARP estático IP-MAC en el router (solo sin PPPoE) */
+    amarre_ip_mac: boolean
     mac: string | null
     direccion: string | null
     coordenadas: string | null
@@ -60,7 +71,9 @@ function columnas(cliente: QueryClientContract) {
         cliente.raw(
             `EXISTS (SELECT 1 FROM billing.promesas p WHERE p.servicio_id = s.id AND p.estado = 'activa') AS promesa_activa`,
         ),
+        's.tipo_conexion',
         's.user_ppp',
+        's.amarre_ip_mac',
         cliente.raw('s.mac::text AS mac'),
         's.direccion',
         's.coordenadas',
@@ -126,6 +139,7 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     router_id?: number
     plan_id?: number
     estado?: EstadoServicio
+    tipo_conexion?: TipoConexion
     /** zona del cliente del servicio */
     zona_id?: number
     /** alguna factura del servicio en estado `vencida` (true) o ninguna (false) */
@@ -142,6 +156,7 @@ export async function listarServicios(
     if (filtros.router_id) consulta.where('s.router_id', filtros.router_id)
     if (filtros.plan_id) consulta.where('s.plan_id', filtros.plan_id)
     if (filtros.estado) consulta.where('s.estado', filtros.estado)
+    if (filtros.tipo_conexion) consulta.where('s.tipo_conexion', filtros.tipo_conexion)
     if (filtros.zona_id) {
         consulta.whereExists((c) =>
             c

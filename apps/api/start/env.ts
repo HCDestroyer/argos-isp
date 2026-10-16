@@ -119,4 +119,16 @@ export default await Env.create(new URL('../', import.meta.url), {
     |----------------------------------------------------------
     */
     COMPROBANTES_DIR: Env.schema.string.optional(),
+
+    /*
+    |----------------------------------------------------------
+    | Billing: pasarela de pago en línea (`app/billing/pasarelas`)
+    |----------------------------------------------------------
+    */
+    /** Proveedor activo (`falsa` por defecto fuera de producción; en producción sin él no hay pasarela). */
+    PASARELA_PROVEEDOR: Env.schema.string.optional(),
+    /** Secreto HMAC de los webhooks de la pasarela falsa (laboratorio). */
+    PASARELA_FALSA_SECRETO: Env.schema.string.optional(),
+    /** URL pública de la API para armar `url_pago` de la pasarela falsa (p. ej. https://api.lab.local). */
+    PASARELA_URL_PUBLICA: Env.schema.string.optional(),
 })

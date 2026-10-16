@@ -88,7 +88,7 @@ function otra() {
     <UModal
         v-model:open="abierto"
         :title="creada ? 'Resultado de la promesa' : 'Promesa de pago'"
-        :description="servicio.user_ppp"
+        :description="etiquetaServicio(servicio)"
         :dismissible="!enviando"
     >
         <template #body>

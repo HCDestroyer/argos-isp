@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { normalizarNitCui } from '#core/nit_cui'
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
+import { vincularExterno, type IdExterno } from '#core/ids_externos'
 
 export interface DatosCliente {
     nombre?: string
@@ -21,6 +22,8 @@ export interface DatosCliente {
 
 export interface EntradaCrearCliente extends DatosCliente {
     nombre: string
+    /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
+    externo?: IdExterno
 }
 
 /** Columnas de `core.clientes` que se escriben a partir de la entrada (NIT/CUI normalizado). */
@@ -49,7 +52,8 @@ export default class CrearCliente extends DomainAction<EntradaCrearCliente, Clie
     readonly nombre = 'clientes.crear'
 
     protected async handle(input: EntradaCrearCliente, t: Transaccion): Promise<ClienteVista> {
-        const columnas = await columnasCliente(t, input)
+        const { externo, ...datos } = input
+        const columnas = await columnasCliente(t, datos)
         const [fila] = (await t.trx
             .insertQuery()
             .table('core.clientes')
@@ -59,6 +63,7 @@ export default class CrearCliente extends DomainAction<EntradaCrearCliente, Clie
         }>
         const id = fila!.id
         t.fijarEntidad('cliente', id)
+        await vincularExterno(t.trx, 'cliente', id, externo)
         const cliente = await verCliente(id, t.trx)
         await t.registrarCambios({ tipo: 'cliente', id }, null, cliente)
         return cliente

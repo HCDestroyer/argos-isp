@@ -31,6 +31,9 @@ test.group('Routers', () => {
             tiene_api_password: true,
             tiene_radius_secret: true,
             modo_seguridad: 'radius',
+            control_velocidad: 'simple',
+            capacidad_bajada_kbps: null,
+            capacidad_subida_kbps: null,
             modo_velocidad: 'simple',
             activo: true,
             version: 1,
@@ -56,10 +59,12 @@ test.group('Routers', () => {
             client
                 .put(`/api/v1/routers/${router.id}`)
                 .bearerToken(token)
+                // modo_velocidad ya no se edita (se ignora): el control cambia con su propia acción
                 .json({ version: 1, radius_secret: 'otro-secreto', modo_velocidad: 'pcq' }),
             200,
         )
-        assert.equal(editado.body().modo_velocidad, 'pcq')
+        assert.equal(editado.body().control_velocidad, 'simple')
+        assert.equal(editado.body().modo_velocidad, 'simple')
         const despues = await db.from('network.routers').where('id', router.id).firstOrFail()
         assert.equal(descifrar(despues.radius_secret), 'otro-secreto')
         const cambioSecreto = await db

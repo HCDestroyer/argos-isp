@@ -52,6 +52,10 @@ export interface EntradaRegistrarPago {
     banco_origen_id?: number | null
     nota?: string | null
     facturas?: number[]
+    /** solo `pasarela`: comisión que retuvo el proveedor (va a Comisiones de pasarelas) */
+    comision?: string | null
+    /** solo `pasarela`: nombre del proveedor */
+    pasarela?: string | null
 }
 
 export interface ResultadoRegistrarPago extends PagoVista {
@@ -85,6 +89,30 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             ...(await duenosDeFacturas(t.trx, input.facturas ?? [])),
         ])
 
+        const comision = dec(input.comision ?? '0')
+        if (
+            comision.isNegative() ||
+            !tieneCentavosExactos(comision) ||
+            (comision.gt(0) && comision.gte(monto))
+        ) {
+            throw new ValidacionFallida([
+                {
+                    field: 'comision',
+                    message: 'Comisión inválida (≥ 0, 2 decimales, menor que el monto)',
+                    rule: 'comision',
+                },
+            ])
+        }
+        if (input.metodo !== 'pasarela' && (comision.gt(0) || input.pasarela)) {
+            throw new ValidacionFallida([
+                {
+                    field: 'comision',
+                    message: 'La comisión solo aplica a pagos por pasarela',
+                    rule: 'no_aplica',
+                },
+            ])
+        }
+
         const referencia = input.referencia?.trim() || null
         const bancario = await validarDatosBancarios(t.trx, {
             metodo: input.metodo,
@@ -105,6 +133,8 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 cliente_id: input.cliente_id,
                 metodo: input.metodo,
                 monto: aTexto(monto),
+                comision: aTexto(comision),
+                pasarela: input.pasarela?.trim() || null,
                 referencia,
                 caja_id: cajaId,
                 turno_id: turnoId,
@@ -122,7 +152,11 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, monto, facturas)
 
         // un solo asiento: el débito por el total y el crédito en el auxiliar CxC de cada dueño
-        const movimientos: LineaAsiento[] = [{ cuenta: cuentaDebe, debe: aTexto(monto) }]
+        // pasarela: el banco recibe el neto y la comisión es gasto (Bancos + Comisiones / CxC)
+        const movimientos: LineaAsiento[] = [{ cuenta: cuentaDebe, debe: aTexto(monto.minus(comision)) }]
+        if (comision.gt(0)) {
+            movimientos.push({ cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(comision) })
+        }
         const porCliente = new Map<number, Dec>()
         for (const a of aplicaciones) {
             porCliente.set(a.cliente_id, (porCliente.get(a.cliente_id) ?? CERO).plus(a.monto))

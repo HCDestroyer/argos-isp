@@ -6,6 +6,12 @@ import type { EstadoServicio } from '#shared/eventos'
 import { prefijoColas, redis } from '#shared/redis'
 import type { Transaccion } from '#shared/domain_action'
 import type { ModoIpv6 } from '#core/consultas/servicios'
+import {
+    leerVelocidad,
+    rateLimitServicio,
+    velocidadEfectiva,
+    type ControlVelocidad,
+} from '#network/velocidad'
 
 /**
  * Registro de autorización RADIUS de un `user_ppp` (tarea 9). Contrato con A2 en
@@ -26,6 +32,15 @@ export interface PlanAaa {
     bajada_limitada_kbps: number
     rate_limit_override: string | null
     profile_ppp: string | null
+    /**
+     * `Mikrotik-Rate-Limit` completo en estado activo (semana 2, `contratos/velocidad.md`):
+     * `rateLimitServicio(planEfectivo, 'activo')`; si hay `rate_limit_override`, es esa cadena
+     */
+    rate_limit: string
+    /** `Mikrotik-Rate-Limit` completo en estado limitado: `rateLimitServicio(planEfectivo, 'limitado')` */
+    rate_limit_limitado: string
+    /** reuso efectivo 1:N en el router (con reuso > 1 en modo `simple`, `Mikrotik-Group = plan-<id>`) */
+    reuso: number
 }
 
 export type Ipv4Aaa = { modo: 'estatico'; ip: string } | { modo: 'pool'; pool: string } | null
@@ -43,6 +58,8 @@ export interface RegistroAaa {
     pass_ppp: string
     estado: EstadoServicio
     router_id: number
+    /** `network.routers.control_velocidad` del router del servicio */
+    control_velocidad: ControlVelocidad
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
@@ -85,6 +102,21 @@ interface FilaAaa {
     bajada_limitada_kbps: number
     rate_limit_override: string | null
     profile_ppp: string | null
+    control_velocidad: ControlVelocidad
+    reuso: number
+    garantizado_pct: number | null
+    rafaga_bajada_kbps: number | null
+    rafaga_subida_kbps: number | null
+    rafaga_umbral_pct: number
+    rafaga_segundos: number
+    prioridad: number
+    pr_reuso: number | null
+    pr_garantizado_pct: number | null
+    pr_rafaga_bajada_kbps: number | null
+    pr_rafaga_subida_kbps: number | null
+    pr_rafaga_umbral_pct: number | null
+    pr_rafaga_segundos: number | null
+    pr_prioridad: number | null
     pool_ipv4: string | null
     pool_ipv6_enlace: string | null
     pool_ipv6_delegacion: string | null
@@ -93,10 +125,17 @@ interface FilaAaa {
     prefijo_delegado: string | null
 }
 
+/**
+ * Solo servicios `pppoe`: un servicio sin PPPoE (`ip_estatica`, `dhcp_fija`) no pasa por RADIUS,
+ * así que para `aaa` es inexistente (404 en el endpoint, nada en Redis). Al dejar de ser PPPoE,
+ * `EditarServicio` escribe la lápida (sin credenciales) en la clave del `user_ppp` viejo.
+ */
 function consultaBase(cliente: QueryClientContract) {
     return cliente
         .from('core.servicios as s')
+        .where('s.tipo_conexion', 'pppoe')
         .join('network.planes as p', 'p.id', 's.plan_id')
+        .join('network.routers as r', 'r.id', 's.router_id')
         .leftJoin('network.planes_routers as pr', (j) =>
             j.on('pr.plan_id', '=', 's.plan_id').andOn('pr.router_id', '=', 's.router_id'),
         )
@@ -115,6 +154,21 @@ function consultaBase(cliente: QueryClientContract) {
             'p.bajada_limitada_kbps',
             'pr.rate_limit_override',
             'pr.profile_ppp',
+            'r.control_velocidad',
+            'p.reuso',
+            cliente.raw('p.garantizado_pct::float8 AS garantizado_pct'),
+            'p.rafaga_bajada_kbps',
+            'p.rafaga_subida_kbps',
+            'p.rafaga_umbral_pct',
+            'p.rafaga_segundos',
+            'p.prioridad',
+            'pr.reuso as pr_reuso',
+            cliente.raw('pr.garantizado_pct::float8 AS pr_garantizado_pct'),
+            'pr.rafaga_bajada_kbps as pr_rafaga_bajada_kbps',
+            'pr.rafaga_subida_kbps as pr_rafaga_subida_kbps',
+            'pr.rafaga_umbral_pct as pr_rafaga_umbral_pct',
+            'pr.rafaga_segundos as pr_rafaga_segundos',
+            'pr.prioridad as pr_prioridad',
             'pr.pool_ipv4',
             'pr.pool_ipv6_enlace',
             'pr.pool_ipv6_delegacion',
@@ -155,6 +209,16 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         ipv6 = { modo }
     }
 
+    const velocidad = velocidadEfectiva(leerVelocidad(f as unknown as Record<string, unknown>), {
+        reuso: f.pr_reuso,
+        garantizado_pct: f.pr_garantizado_pct,
+        rafaga_bajada_kbps: f.pr_rafaga_bajada_kbps,
+        rafaga_subida_kbps: f.pr_rafaga_subida_kbps,
+        rafaga_umbral_pct: f.pr_rafaga_umbral_pct,
+        rafaga_segundos: f.pr_rafaga_segundos,
+        prioridad: f.pr_prioridad,
+    })
+
     return {
         servicio_id: Number(f.servicio_id),
         version: Number(f.version),
@@ -162,6 +226,7 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         pass_ppp: f.pass_ppp,
         estado: f.estado,
         router_id: Number(f.router_id),
+        control_velocidad: f.control_velocidad,
         plan: {
             id: Number(f.plan_id),
             subida_kbps: f.subida_kbps,
@@ -170,6 +235,9 @@ function aRegistro(f: FilaAaa): RegistroAaa {
             bajada_limitada_kbps: f.bajada_limitada_kbps,
             rate_limit_override: nulo(f.rate_limit_override),
             profile_ppp: nulo(f.profile_ppp),
+            rate_limit: rateLimitServicio(velocidad, 'activo'),
+            rate_limit_limitado: rateLimitServicio(velocidad, 'limitado'),
+            reuso: velocidad.reuso,
         },
         ipv4,
         ipv6,

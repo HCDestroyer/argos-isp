@@ -1,6 +1,6 @@
 import { esPermiso } from '#core/permisos'
 import { esquemasRegistrados, ref, type EsquemaJson } from '#shared/openapi/esquemas'
-import { PREFIJO_API, esParametroEntero, parametrosDeRuta, type Ruta } from '#shared/rutas'
+import { COOKIE_PORTAL, PREFIJO_API, esParametroEntero, parametrosDeRuta, type Ruta } from '#shared/rutas'
 
 /**
  * Genera el OpenAPI 3.1 a partir del registro de rutas.
@@ -58,6 +58,13 @@ export function generarOpenApi(rutas: Ruta[], info: InfoOpenApi): EsquemaJson {
                     scheme: 'bearer',
                     description: 'INTERNAL_TOKEN compartido con los servicios aaa y coa',
                 },
+                portal: {
+                    type: 'apiKey',
+                    in: 'cookie',
+                    name: COOKIE_PORTAL,
+                    description:
+                        'Sesión del portal del cliente (cookie httpOnly que deja el acceso por código)',
+                },
             },
             schemas: esquemasRegistrados(),
         },
@@ -86,9 +93,53 @@ function validarRegistro(rutas: Ruta[]) {
         if (seguridad !== 'sesion' && ruta.permiso !== null) {
             throw new Error(`${ruta.operacion}: solo las rutas con sesión llevan permiso`)
         }
-        if (ruta.respuesta.status !== 204 && !ruta.respuesta.esquema) {
+        const binaria = ruta.respuesta.contenido !== undefined && !esJson(ruta.respuesta.contenido)
+        if (ruta.respuesta.status !== 204 && !ruta.respuesta.esquema && !binaria) {
             throw new Error(`${ruta.operacion}: falta el schema de respuesta`)
         }
+        if (binaria && ruta.respuesta.esquema) {
+            throw new Error(`${ruta.operacion}: una respuesta binaria no lleva schema`)
+        }
+        if (ruta.multipart && !ruta.cuerpo) {
+            throw new Error(`${ruta.operacion}: multipart necesita el validador de los campos (cuerpo)`)
+        }
+    }
+}
+
+function esJson(contenido: string): boolean {
+    return contenido === 'application/json' || contenido.endsWith('+json')
+}
+
+/** Contenido de la respuesta exitosa: JSON con su schema o binario (`format: binary`). */
+function contenidoRespuesta(ruta: Ruta): EsquemaJson | undefined {
+    const { contenido = 'application/json', esquema } = ruta.respuesta
+    if (!esJson(contenido)) return { [contenido]: { schema: { type: 'string', format: 'binary' } } }
+    return esquema ? { [contenido]: { schema: esquema } } : undefined
+}
+
+/** Cuerpo multipart: campos del validador + archivos binarios. */
+function cuerpoMultipart(ruta: Ruta): EsquemaJson {
+    const campos = normalizar(ruta.cuerpo!.toJSONSchema() as EsquemaJson)
+    const archivos = ruta.multipart!.archivos
+    const opcionales = new Set(ruta.multipart!.archivosOpcionales ?? [])
+    const propiedades = {
+        ...((campos.properties ?? {}) as Record<string, EsquemaJson>),
+        ...Object.fromEntries(
+            Object.entries(archivos).map(([nombre, descripcion]) => [
+                nombre,
+                { type: 'string', format: 'binary', description: descripcion },
+            ]),
+        ),
+    }
+    const requeridos = [
+        ...((campos.required ?? []) as string[]),
+        ...Object.keys(archivos).filter((nombre) => !opcionales.has(nombre)),
+    ]
+    return {
+        ...campos,
+        type: 'object',
+        properties: propiedades,
+        ...(requeridos.length > 0 ? { required: requeridos } : {}),
     }
 }
 
@@ -134,14 +185,14 @@ function operacion(ruta: Ruta): EsquemaJson {
     }
 
     const respuestas: Record<string, EsquemaJson> = {}
-    respuestas[String(ruta.respuesta.status)] = ruta.respuesta.esquema
-        ? {
-              description: ruta.respuesta.descripcion,
-              content: { 'application/json': { schema: ruta.respuesta.esquema } },
-          }
+    const contenido = contenidoRespuesta(ruta)
+    respuestas[String(ruta.respuesta.status)] = contenido
+        ? { description: ruta.respuesta.descripcion, content: contenido }
         : { description: ruta.respuesta.descripcion }
 
-    if (seguridad !== 'publico') respuestas['401'] = problema('No autenticado')
+    if (seguridad === 'portal') {
+        respuestas['401'] = problema('Sin sesión del portal (cookie vencida o ausente)')
+    } else if (seguridad !== 'publico') respuestas['401'] = problema('No autenticado')
     if (seguridad === 'sesion' && ruta.permiso) respuestas['403'] = problema(`Sin el permiso ${ruta.permiso}`)
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')
     if (ruta.versionada || ruta.idempotente) {
@@ -162,14 +213,15 @@ function operacion(ruta: Ruta): EsquemaJson {
         tags: [ruta.etiqueta],
         ...(seguridad === 'sesion' ? { security: [{ bearer: [] }] } : {}),
         ...(seguridad === 'interno' ? { security: [{ interno: [] }] } : {}),
+        ...(seguridad === 'portal' ? { security: [{ portal: [] }] } : {}),
         ...(parametros.length > 0 ? { parameters: parametros } : {}),
     }
     if (ruta.cuerpo) {
         op.requestBody = {
             required: true,
-            content: {
-                'application/json': { schema: normalizar(ruta.cuerpo.toJSONSchema() as EsquemaJson) },
-            },
+            content: ruta.multipart
+                ? { 'multipart/form-data': { schema: cuerpoMultipart(ruta) } }
+                : { 'application/json': { schema: normalizar(ruta.cuerpo.toJSONSchema() as EsquemaJson) } },
         }
     }
     op.responses = respuestas
