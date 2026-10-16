@@ -16,6 +16,7 @@ import login401 from './auth/login.401.json'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
+import { rutasLibro } from './libro/rutas'
 import { sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
@@ -104,4 +105,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasBitacora,
     ...rutasSesiones,
     ...rutasFacturacion,
+    ...rutasLibro,
 })

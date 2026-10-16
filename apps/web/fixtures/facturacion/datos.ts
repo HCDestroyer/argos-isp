@@ -59,6 +59,7 @@ export const facturas: Factura[] = servicios
             const vence = sumarDias(periodo, servicio.estado === 'activo' && indice === 1 ? 19 : 9)
             const pagado = pagadoDe(servicio, periodo, total)
             const emitida = `${periodo}T14:00:00.000Z`
+            const estado = estadoFactura(pagado, total, vence)
             return {
                 id: servicio.id * 100 + indice + 9,
                 cliente_id: servicio.cliente_id,
@@ -67,7 +68,7 @@ export const facturas: Factura[] = servicios
                 clave_unica: `${servicio.id}-${periodo}`,
                 emitida_en: emitida,
                 vence_en: vence,
-                estado: estadoFactura(pagado, total, vence),
+                estado,
                 subtotal: dinero(subtotal),
                 iva: dinero(total.minus(subtotal)),
                 total: dinero(total),
@@ -76,6 +77,10 @@ export const facturas: Factura[] = servicios
                 fel_serie: null,
                 fel_numero: null,
                 fel_estado: null,
+                // Como la API: `tipo` siempre viene; `vencida_en` cuando el cron la marcó vencida.
+                tipo: 'servicio',
+                factura_origen_id: null,
+                vencida_en: estado === 'vencida' ? `${sumarDias(vence, 1)}T06:05:00.000Z` : null,
                 version: 1,
                 created_at: emitida,
                 updated_at: emitida,
@@ -101,6 +106,8 @@ export const pagos: Pago[] = facturas
             nota: null,
             registrado_por: 2,
             aplicaciones: [{ factura_id: factura.id, monto: factura.pagado }],
+            anulado_en: null,
+            motivo_anulacion: null,
             version: 1,
             created_at: fecha,
             updated_at: fecha,

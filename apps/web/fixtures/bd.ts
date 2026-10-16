@@ -7,6 +7,7 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { cajas, facturas, pagos } from './facturacion/datos'
+import { asientos, cuentas } from './libro/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, redesIpv4, routers } from './routers/datos'
@@ -29,6 +30,8 @@ interface BaseFixtures {
     facturas: Schema<'Factura'>[]
     pagos: Schema<'Pago'>[]
     cajas: Schema<'Caja'>[]
+    cuentas: Schema<'Cuenta'>[]
+    asientos: Schema<'Asiento'>[]
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -56,6 +59,8 @@ function inicial(): BaseFixtures {
         facturas,
         pagos,
         cajas,
+        cuentas,
+        asientos,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},
