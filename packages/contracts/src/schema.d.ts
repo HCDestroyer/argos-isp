@@ -2086,9 +2086,9 @@ export interface components {
             canal_preferido: "correo" | "telegram" | "whatsapp";
             telegram_chat_id: string | null;
             /** @description Cliente que paga por este (responsable de pago); null si paga él mismo */
-            responsable_pago_id?: number | null;
+            responsable_pago_id: number | null;
             /** @description Nombre del responsable de pago (solo lectura) */
-            responsable_pago_nombre?: string | null;
+            responsable_pago_nombre: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3134,7 +3134,7 @@ export interface components {
             plan_nombre?: string;
             router_nombre?: string;
             zona_nombre?: string | null;
-            excepciones?: components["schemas"]["ExcepcionesServicio"];
+            excepciones: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */

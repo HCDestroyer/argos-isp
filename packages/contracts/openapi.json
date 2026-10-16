@@ -14380,6 +14380,12 @@
         "type": "http",
         "scheme": "bearer",
         "description": "INTERNAL_TOKEN compartido con los servicios aaa y coa"
+      },
+      "portal": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "argos_portal",
+        "description": "Sesión del portal del cliente (cookie httpOnly que deja el acceso por código)"
       }
     },
     "schemas": {
@@ -15100,6 +15106,8 @@
           "campos_personalizados",
           "canal_preferido",
           "telegram_chat_id",
+          "responsable_pago_id",
+          "responsable_pago_nombre",
           "version",
           "created_at",
           "updated_at"
@@ -19117,6 +19125,7 @@
           "prefijo_delegado_v6",
           "ipv6_modo",
           "ipv6_duid",
+          "excepciones",
           "version",
           "created_at",
           "updated_at"

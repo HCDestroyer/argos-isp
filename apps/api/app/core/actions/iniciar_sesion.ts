@@ -15,7 +15,8 @@ export interface SalidaIniciarSesion {
 
 /**
  * Login del panel: verifica credenciales y emite un token opaco de sesión.
- * La contraseña nunca llega a la auditoría (se enmascara como `***`).
+ * La contraseña nunca llega a la auditoría (se enmascara como `***`). Un login correcto queda
+ * en `audit.acciones` con el actor = usuario que entró; uno fallido, con actor `sistema`.
  */
 export default class IniciarSesion extends DomainAction<EntradaIniciarSesion, SalidaIniciarSesion> {
     readonly nombre = 'auth.login'
@@ -30,6 +31,8 @@ export default class IniciarSesion extends DomainAction<EntradaIniciarSesion, Sa
         if (!usuario.activo) throw new CredencialesInvalidas()
 
         t.fijarEntidad('usuario', usuario.id)
+        // la petición llega anónima: el login queda auditado con el usuario que entró
+        t.identificarActor({ tipo: 'usuario', id: usuario.id })
         const token = await Usuario.accessTokens.create(usuario, ['*'], { name: `login ${t.ctx.canal}` })
         return { token: token.value!.release(), usuario: await construirMe(usuario) }
     }
