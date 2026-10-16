@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-import { esCanal, type Canal, type ContextoAccion } from '#shared/contexto'
+import { contextoCliente, esCanal, type Canal, type ContextoAccion } from '#shared/contexto'
 
 const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
 
@@ -37,6 +37,8 @@ export default class RequestIdMiddleware {
                 requestId,
             }
         }
+        ctx.contextoCliente = (clienteId: number, canalForzado: Canal = 'portal'): ContextoAccion =>
+            contextoCliente(clienteId, requestId, canalForzado)
 
         return next()
     }
@@ -72,5 +74,7 @@ declare module '@adonisjs/core/http' {
         requestId: string
         /** Contexto para `DomainAction.execute`. `canalForzado` lo usan rutas de un canal fijo (portal, interno). */
         contextoAccion(canalForzado?: Canal): ContextoAccion
+        /** actor `cliente` (portal autenticado; la sesión ya se verificó), canal `portal` por defecto */
+        contextoCliente(clienteId: number, canalForzado?: Canal): ContextoAccion
     }
 }

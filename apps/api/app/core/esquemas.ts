@@ -18,6 +18,7 @@ import type { EsquemaJson } from '#shared/openapi/esquemas'
 import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
 import { ReglasPromesa } from '#billing/esquemas'
 import { PlanEfectivo } from '#network/esquemas'
+import { TIPOS_ACTOR } from '#shared/contexto'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -263,11 +264,11 @@ export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
     objeto({
         id,
-        actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
+        actor_tipo: enumerado(TIPOS_ACTOR),
         actor_id: nulable(id),
         actor_nombre: {
             type: ['string', 'null'],
-            description: 'Nombre del usuario (null para el sistema)',
+            description: 'Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)',
         },
         canal: texto,
         accion: texto,
@@ -295,11 +296,11 @@ export const CambioAuditoria = definirEsquema(
         },
         antes: {},
         despues: {},
-        actor_tipo: nulable(enumerado(['usuario', 'token', 'agente', 'sistema'])),
+        actor_tipo: nulable(enumerado(TIPOS_ACTOR)),
         actor_id: nulable(id),
         actor_nombre: {
             type: ['string', 'null'],
-            description: 'Nombre del usuario (null para el sistema)',
+            description: 'Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)',
         },
         request_id: nulable(texto),
         created_at: instante,

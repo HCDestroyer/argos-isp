@@ -18436,7 +18436,8 @@
               "usuario",
               "token",
               "agente",
-              "sistema"
+              "sistema",
+              "cliente"
             ]
           },
           "actor_id": {
@@ -18451,7 +18452,7 @@
               "string",
               "null"
             ],
-            "description": "Nombre del usuario (null para el sistema)"
+            "description": "Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)"
           },
           "canal": {
             "type": "string"
@@ -18887,7 +18888,8 @@
               "usuario",
               "token",
               "agente",
-              "sistema"
+              "sistema",
+              "cliente"
             ]
           },
           "actor_id": {
@@ -18902,7 +18904,7 @@
               "string",
               "null"
             ],
-            "description": "Nombre del usuario (null para el sistema)"
+            "description": "Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)"
           },
           "request_id": {
             "type": [

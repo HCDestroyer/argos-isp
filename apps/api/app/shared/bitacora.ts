@@ -38,13 +38,18 @@ type Fila = Record<string, unknown> & { id: number }
 export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<Fila>> {
     const consulta = db
         .from('audit.acciones as a')
-        .leftJoin('core.usuarios as u_a', 'u_a.id', 'a.actor_id')
+        .leftJoin('core.usuarios as u_a', (j) =>
+            j.on('u_a.id', '=', 'a.actor_id').andOnVal('a.actor_tipo', '<>', 'cliente'),
+        )
+        .leftJoin('core.clientes as cl_a', (j) =>
+            j.on('cl_a.id', '=', 'a.actor_id').andOnVal('a.actor_tipo', '=', 'cliente'),
+        )
         .select(
             'a.id',
             'a.actor_tipo',
             'a.actor_id',
-            // tokens y agentes también son usuarios; el sistema no tiene nombre
-            'u_a.nombre as actor_nombre',
+            // tokens y agentes también son usuarios; un actor cliente, el nombre del cliente; el sistema, null
+            db.raw('COALESCE(u_a.nombre, cl_a.nombre) AS actor_nombre'),
             'a.canal',
             'a.accion',
             'a.entidad_tipo',
@@ -85,7 +90,12 @@ export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<F
 export async function listarCambios(filtros: FiltrosCambios): Promise<Pagina<Fila>> {
     const consulta = db
         .from('audit.cambios as c')
-        .leftJoin('core.usuarios as u_c', 'u_c.id', 'c.actor_id')
+        .leftJoin('core.usuarios as u_c', (j) =>
+            j.on('u_c.id', '=', 'c.actor_id').andOnVal('c.actor_tipo', '<>', 'cliente'),
+        )
+        .leftJoin('core.clientes as cl_c', (j) =>
+            j.on('cl_c.id', '=', 'c.actor_id').andOnVal('c.actor_tipo', '=', 'cliente'),
+        )
         .select(
             'c.id',
             'c.entidad_tipo',
@@ -95,7 +105,7 @@ export async function listarCambios(filtros: FiltrosCambios): Promise<Pagina<Fil
             'c.despues',
             'c.actor_tipo',
             'c.actor_id',
-            'u_c.nombre as actor_nombre',
+            db.raw('COALESCE(u_c.nombre, cl_c.nombre) AS actor_nombre'),
             'c.request_id',
             'c.created_at',
         )

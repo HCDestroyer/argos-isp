@@ -102,3 +102,8 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - Grupo `aaa-cache` (`consumidor_aaa.ts`): `servicio.*` y `asignacion.cambiada` reescriben `aaa:user:<user_ppp>`. Corre dentro de `eventos:relay`. El grupo `notify` corre dentro de `node ace notify:worker`.
 - Eventos que emite el núcleo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`. Consume: los anteriores (grupo `aaa-cache`).
 - Dependencias con otros módulos: llama `EvaluarEstadoServicio` de A3 (solo al cambiar excepciones que afectan el corte) y lee `configuracionDeServicio` de `app/billing/configuracion.ts`. Pedidos y avisos en `.claude/integration/a1.md`.
+
+## Seguridad de la API (semana 3)
+
+- **Límite de login** (`auth/limite_login.ts`): `POST /auth/login` cuenta todos los intentos por IP (`ctx.request.ip()`) y los fallidos por usuario (hash del correo en minúsculas; un login correcto lo reinicia). Al pasarse, 429 problem+json `demasiados_intentos` con `Retry-After`, sin verificar la contraseña. Variables `LOGIN_LIMITE_IP` (30), `LOGIN_LIMITE_USUARIO` (5), `LOGIN_LIMITE_VENTANA_S` (900), `LOGIN_LIMITE_PREFIJO`; `0` apaga un contador (`.env.test` los apaga; las pruebas los encienden con su prefijo). Si Redis falla, el login sigue.
+- **Actor `cliente`** (`#shared/contexto`): `contextoCliente(clienteId, requestId?, canal = 'portal')` y `ctx.contextoCliente(clienteId)` en el `HttpContext`. `audit.acciones`/`audit.cambios` aceptan `actor_tipo = 'cliente'` con `actor_id = core.clientes.id`; la bitácora pone en `actor_nombre` el nombre del cliente. `usuarioDelActor(actor)` devuelve el id de usuario solo para `usuario`/`token`/`agente`: úsalo en columnas `*_por` que apuntan a `core.usuarios`.

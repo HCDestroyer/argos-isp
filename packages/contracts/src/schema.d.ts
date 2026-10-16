@@ -2631,9 +2631,9 @@ export interface components {
         AccionAuditoria: {
             id: number;
             /** @enum {string} */
-            actor_tipo: "usuario" | "token" | "agente" | "sistema";
+            actor_tipo: "usuario" | "token" | "agente" | "sistema" | "cliente";
             actor_id: number | null;
-            /** @description Nombre del usuario (null para el sistema) */
+            /** @description Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema) */
             actor_nombre: string | null;
             canal: string;
             accion: string;
@@ -2734,9 +2734,9 @@ export interface components {
             antes: unknown;
             despues: unknown;
             /** @enum {string|null} */
-            actor_tipo: "usuario" | "token" | "agente" | "sistema" | null;
+            actor_tipo: "usuario" | "token" | "agente" | "sistema" | "cliente" | null;
             actor_id: number | null;
-            /** @description Nombre del usuario (null para el sistema) */
+            /** @description Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema) */
             actor_nombre: string | null;
             request_id: string | null;
             /** Format: date-time */
