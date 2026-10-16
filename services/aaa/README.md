@@ -48,6 +48,8 @@ Además, en todo Accept:
 
 Reuso en modo `simple` (`contratos/velocidad.md`): con `plan.reuso > 1` y `control_velocidad = simple`, activo y limitado reciben `Mikrotik-Group = plan-<plan.id>`: el perfil PPP que el dispatcher de RouterOS (`apps/api/app/network/routeros/velocidad_router.ts`) mantiene en el router con `parent-queue = argosisp-plan-<id>` (la cola padre del plan) y los pools, DNS e IPv6 del perfil `default`. Tiene prioridad sobre `profile_ppp`. El suspendido conserva `Mikrotik-Group = suspendido`.
 
+En `arbol_pcq` (`control_velocidad` del registro) el activo y el limitado no reciben `Mikrotik-Rate-Limit` ni el grupo del plan: no hay cola simple por sesión; el PCQ y el árbol del plan limitan las direcciones de la sesión, que el dispatcher de RouterOS pone en `argosisp-plan-<id>[-limitado]`. El suspendido conserva su perfil completo.
+
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
 
 ## `/aaa/accounting`

@@ -107,6 +107,34 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         assert.equal(cuerpo?.['reply:Mikrotik-Address-List'], undefined)
     })
 
+    it('arbol_pcq: sin Mikrotik-Rate-Limit ni grupo del plan (activo y limitado); el suspendido conserva su perfil', async () => {
+        const plan = {
+            id: 11,
+            subida_kbps: 5000,
+            bajada_kbps: 20000,
+            subida_limitada_kbps: 1000,
+            bajada_limitada_kbps: 2000,
+            rate_limit_override: null,
+            profile_ppp: null,
+            rate_limit: '5M/20M 0/0 0/0 0/0 8 1250k/5M',
+            rate_limit_limitado: '1M/2M 0/0 0/0 0/0 8 250k/500k',
+            reuso: 4,
+        }
+        const arbol = { plan, control_velocidad: 'arbol_pcq' as const }
+        await guardar(servicio({ user_ppp: 'u-arbol-activo', ...arbol }))
+        await guardar(servicio({ user_ppp: 'u-arbol-limitado', estado: 'limitado', ...arbol }))
+        await guardar(servicio({ user_ppp: 'u-arbol-suspendido', estado: 'suspendido', ...arbol }))
+        for (const u of ['u-arbol-activo', 'u-arbol-limitado']) {
+            const { cuerpo } = await autorizar(u)
+            assert.equal(cuerpo?.['reply:Mikrotik-Rate-Limit'], undefined)
+            assert.equal(cuerpo?.['reply:Mikrotik-Group'], undefined)
+            assert.equal(cuerpo?.['reply:Framed-IP-Address'], '10.10.1.10')
+        }
+        const suspendido = (await autorizar('u-arbol-suspendido')).cuerpo
+        assert.equal(suspendido?.['reply:Mikrotik-Rate-Limit'], '256k/256k')
+        assert.equal(suspendido?.['reply:Mikrotik-Group'], 'suspendido')
+    })
+
     it('reuso en modo simple: Mikrotik-Group = plan-<id> (activo y limitado); el suspendido conserva el suyo', async () => {
         const plan = {
             id: 9,

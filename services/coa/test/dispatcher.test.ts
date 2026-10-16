@@ -105,6 +105,27 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
             atributos: { 'Mikrotik-Rate-Limit': RATE_LIMITADO },
         })
         assert.equal(decidir(config(['plan']), servicio({ estado: 'suspendido' }), SUSPENDIDO).accion, 'nada')
+        // arbol_pcq: ni CoA de velocidad ni de plan (lo hacen las listas del árbol)
+        assert.equal(
+            decidir(config(['plan']), servicio({ control_velocidad: 'arbol_pcq' }), SUSPENDIDO).accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(
+                estado('activo', 'limitado'),
+                servicio({ estado: 'limitado', control_velocidad: 'arbol_pcq' }),
+                SUSPENDIDO,
+            ).accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(
+                estado('activo', 'suspendido'),
+                servicio({ estado: 'suspendido', control_velocidad: 'arbol_pcq' }),
+                SUSPENDIDO,
+            ).accion,
+            'coa',
+        )
         // Reuso en modo simple: el perfil PPP con la cola padre solo se asigna al conectar.
         assert.equal(
             decidir(config(['plan']), servicio({ reuso: 4, control_velocidad: 'simple' }), SUSPENDIDO).accion,

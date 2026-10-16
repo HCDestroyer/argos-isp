@@ -96,7 +96,12 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
             const router = await routerDispatcher(routerId, t.trx, this.#red)
             const deseado = papel === 'deseado' && servicio !== null
             // Objetos propios del servicio: WISP en su router, o limpieza donde escribió antes.
-            const porServicio = !deseado || servicio.tipo_conexion !== 'pppoe' || historial.includes(routerId)
+            // (PPPoE en `arbol_pcq`: sus direcciones en la lista del plan).
+            const porServicio =
+                !deseado ||
+                servicio.tipo_conexion !== 'pppoe' ||
+                historial.includes(routerId) ||
+                router?.red.control_velocidad === 'arbol_pcq'
             let estado: EstadoDeseado = estadoVacio(input.servicio_id)
             if (deseado && router) estado = estadoDeseado(servicio, router.red, perfilSuspendido())
 

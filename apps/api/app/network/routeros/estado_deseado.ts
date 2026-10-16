@@ -1,6 +1,6 @@
 import type { EstadoServicio } from '#shared/eventos'
 import { rateLimitServicio, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
-import { conPadreSimple, nombrePadre } from '#network/routeros/velocidad_router'
+import { conPadreSimple, listaPlan, nombrePadre } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
 
 /**
@@ -11,21 +11,44 @@ import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
  *
  * | Objeto | Cuándo |
  * | --- | --- |
- * | Cola simple (`/queue/simple`) | Siempre: rate-limit de `rateLimitServicio` según el estado; suspendido = el de PPPoE |
+ * | Cola simple (`/queue/simple`) | Modo `simple`: siempre (rate-limit de `rateLimitServicio`, `parent` al padre del plan con reuso). `arbol_pcq`: solo suspendido |
  * | Address-list `suspendidos` | Solo en `suspendido` (mismo NAT a `/corte` que PPPoE) |
+ * | Address-list `argosisp-plan-<id>[-limitado]` (IPv4 e IPv6) | `arbol_pcq`, activo o limitado: IPv4 y prefijo delegado (WISP) o las direcciones de la sesión abierta (PPPoE: IPv4, /64, /56) |
  * | Lease DHCP | Solo en `dhcp_fija` (también suspendido: necesita su IP para llegar a `/corte`) |
  * | ARP estático | Solo con `amarre_ip_mac` y `mac` |
  *
- * Un servicio `pppoe`, `retirado`, inexistente o sin IPv4 no tiene nada en el router.
+ * Un servicio `retirado`, inexistente o sin IPv4 no tiene nada en el router; uno `pppoe`, solo sus
+ * entradas del árbol.
  */
 
 /** Menús donde un servicio puede tener objetos (en este orden se aplican). */
 export const RUTAS_SERVICIO = [
     '/queue/simple',
     '/ip/firewall/address-list',
+    '/ipv6/firewall/address-list',
     '/ip/dhcp-server/lease',
     '/ip/arp',
 ] as const satisfies readonly RutaRouterOS[]
+
+/**
+ * Entradas IPv6 de un servicio en las listas del árbol (`arbol_pcq`): una por prefijo, con
+ * `comment = argosisp:servicio:<id>:<sufijo>` (el cliente deja un solo objeto por comment).
+ */
+export const SUFIJOS_V6 = ['enlace', 'delegado', 'delegado-2'] as const
+export type SufijoV6 = (typeof SUFIJOS_V6)[number]
+
+export function commentServicioV6(servicioId: number, sufijo: SufijoV6): string {
+    return `${commentServicio(servicioId)}:${sufijo}`
+}
+
+/** Todos los (menú, comment) que puede tener un servicio: lo que se borra si no debe estar. */
+function clavesServicio(servicioId: number): Array<{ ruta: RutaServicio; comment: string }> {
+    return RUTAS_SERVICIO.flatMap((ruta): Array<{ ruta: RutaServicio; comment: string }> =>
+        ruta === '/ipv6/firewall/address-list'
+            ? SUFIJOS_V6.map((sufijo) => ({ ruta, comment: commentServicioV6(servicioId, sufijo) }))
+            : [{ ruta, comment: commentServicio(servicioId) }],
+    )
+}
 export type RutaServicio = (typeof RUTAS_SERVICIO)[number]
 
 export const PREFIJO_COMMENT_SERVICIO = 'argosisp:servicio:'
@@ -58,6 +81,8 @@ export interface ServicioRed {
     prefijos_v6: string[]
     mac: string | null
     amarre_ip_mac: boolean
+    /** Sesión PPPoE abierta (la más reciente): sus direcciones van a las listas del árbol */
+    sesion?: { ipv4: string | null; enlace: string | null; delegado: string | null } | null
     /** Velocidad efectiva del plan en el router (plantilla + excepciones) */
     velocidad: VelocidadPlan
 }
@@ -88,8 +113,8 @@ export interface EstadoDeseado {
     servicio_id: number
     /** Objetos que deben existir */
     presentes: ObjetoDeseado[]
-    /** Menús donde no debe haber nada con el comment del servicio */
-    ausentes: RutaServicio[]
+    /** (menú, comment) del servicio que no deben existir */
+    ausentes: Array<{ ruta: RutaServicio; comment: string }>
     avisos: string[]
 }
 
@@ -117,7 +142,47 @@ export function propiedadesCola(rateLimit: string): Propiedades {
 }
 
 export function estadoVacio(servicioId: number): EstadoDeseado {
-    return { servicio_id: servicioId, presentes: [], ausentes: [...RUTAS_SERVICIO], avisos: [] }
+    return { servicio_id: servicioId, presentes: [], ausentes: clavesServicio(servicioId), avisos: [] }
+}
+
+function completar(id: number, presentes: ObjetoDeseado[], avisos: string[]): EstadoDeseado {
+    const conObjeto = new Set(presentes.map((o) => `${o.ruta}|${o.comment}`))
+    return {
+        servicio_id: id,
+        presentes,
+        ausentes: clavesServicio(id).filter((c) => !conObjeto.has(`${c.ruta}|${c.comment}`)),
+        avisos,
+    }
+}
+
+/**
+ * Entradas de las listas del plan en `arbol_pcq` (IPv4 y cada prefijo IPv6) de un servicio activo
+ * o limitado: el mangle del plan las marca y el árbol las limita.
+ */
+function entradasArbol(
+    id: number,
+    planId: number,
+    limitado: boolean,
+    ipv4: string | null,
+    v6: Array<[SufijoV6, string]>,
+): ObjetoDeseado[] {
+    const list = listaPlan(planId, limitado)
+    const salida: ObjetoDeseado[] = []
+    if (ipv4) {
+        salida.push({
+            ruta: '/ip/firewall/address-list',
+            comment: commentServicio(id),
+            propiedades: { list, address: ipv4, disabled: 'no' },
+        })
+    }
+    for (const [sufijo, prefijo] of v6) {
+        salida.push({
+            ruta: '/ipv6/firewall/address-list',
+            comment: commentServicioV6(id, sufijo),
+            propiedades: { list, address: prefijo, disabled: 'no' },
+        })
+    }
+    return salida
 }
 
 export function estadoDeseado(
@@ -127,7 +192,22 @@ export function estadoDeseado(
 ): EstadoDeseado {
     const id = servicio.servicio_id
     const vacio = estadoVacio(id)
-    if (servicio.tipo_conexion === 'pppoe' || servicio.estado === 'retirado') return vacio
+    const arbol = router.control_velocidad === 'arbol_pcq'
+    const cuenta = servicio.estado === 'activo' || servicio.estado === 'limitado'
+    if (servicio.estado === 'retirado') return vacio
+    if (servicio.tipo_conexion === 'pppoe') {
+        // PPPoE: la cola y el corte vienen de RADIUS. En el árbol, sus direcciones (de la sesión
+        // abierta) van a la lista del plan; sin sesión, nada.
+        if (!arbol || !cuenta || !servicio.sesion) return vacio
+        const v6: Array<[SufijoV6, string]> = []
+        if (servicio.sesion.enlace) v6.push(['enlace', servicio.sesion.enlace])
+        if (servicio.sesion.delegado) v6.push(['delegado', servicio.sesion.delegado])
+        return completar(
+            id,
+            entradasArbol(id, servicio.plan_id, servicio.estado === 'limitado', servicio.sesion.ipv4, v6),
+            [],
+        )
+    }
     if (!servicio.ipv4) return { ...vacio, avisos: ['el servicio no tiene IPv4 vigente'] }
 
     const comment = commentServicio(id)
@@ -138,29 +218,41 @@ export function estadoDeseado(
             ? suspendido.rateLimit
             : rateLimitServicio(servicio.velocidad, servicio.estado)
 
-    presentes.push({
-        ruta: '/queue/simple',
-        comment,
-        propiedades: {
-            name: `argosisp-servicio-${id}`,
-            target: [`${servicio.ipv4}/32`, ...servicio.prefijos_v6].join(','),
-            ...propiedadesCola(rateLimit),
-            // Reuso en modo simple: hija de la cola padre del plan (`velocidad_router.ts`). Un
-            // suspendido no cuenta para el padre ni cuelga de él (igual que PPPoE con `suspendido`).
-            parent:
-                servicio.estado !== 'suspendido' &&
-                conPadreSimple(router.control_velocidad, servicio.velocidad)
-                    ? nombrePadre(servicio.plan_id)
-                    : 'none',
-            disabled: 'no',
-        },
-    })
+    // En el árbol no hay cola simple por servicio, salvo el suspendido (como la dinámica del PPPoE
+    // suspendido, que `aaa` crea con el rate-limit mínimo).
+    if (!arbol || servicio.estado === 'suspendido') {
+        presentes.push({
+            ruta: '/queue/simple',
+            comment,
+            propiedades: {
+                name: `argosisp-servicio-${id}`,
+                target: [`${servicio.ipv4}/32`, ...servicio.prefijos_v6].join(','),
+                ...propiedadesCola(rateLimit),
+                // Reuso en modo simple: hija de la cola padre del plan (`velocidad_router.ts`). Un
+                // suspendido no cuenta para el padre ni cuelga de él (igual que PPPoE con `suspendido`).
+                parent:
+                    cuenta && conPadreSimple(router.control_velocidad, servicio.velocidad)
+                        ? nombrePadre(servicio.plan_id)
+                        : 'none',
+                disabled: 'no',
+            },
+        })
+    }
     if (servicio.estado === 'suspendido') {
         presentes.push({
             ruta: '/ip/firewall/address-list',
             comment,
             propiedades: { list: suspendido.addressList, address: servicio.ipv4, disabled: 'no' },
         })
+    } else if (arbol) {
+        // WISP: solo el prefijo delegado propio (el /64 del segmento es compartido).
+        const sufijos: SufijoV6[] = ['delegado', 'delegado-2']
+        const v6 = servicio.prefijos_v6
+            .slice(0, sufijos.length)
+            .map((p, i): [SufijoV6, string] => [sufijos[i]!, p])
+        presentes.push(
+            ...entradasArbol(id, servicio.plan_id, servicio.estado === 'limitado', servicio.ipv4, v6),
+        )
     }
     if (servicio.tipo_conexion === 'dhcp_fija') {
         if (servicio.mac) {
@@ -194,11 +286,5 @@ export function estadoDeseado(
             avisos.push('amarre IP-MAC sin interfaz de clientes en el router: no se crea el ARP')
         }
     }
-    const conObjeto = new Set(presentes.map((o) => o.ruta))
-    return {
-        servicio_id: id,
-        presentes,
-        ausentes: RUTAS_SERVICIO.filter((r) => !conObjeto.has(r)),
-        avisos,
-    }
+    return completar(id, presentes, avisos)
 }

@@ -153,8 +153,9 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     }
                     actuales.set(ruta, porComment)
                 }
-                const vigentes = new Set(servicios.map((s) => s.servicio_id))
-                for (const servicio of servicios) {
+                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
+                const vigentes = new Set(todos.map((s) => s.servicio_id))
+                for (const servicio of todos) {
                     const estado = estadoDeseado(servicio, router.red, perfilSuspendido())
                     salida.avisos.push(...estado.avisos.map((a) => `servicio ${servicio.servicio_id}: ${a}`))
                     salida.correcciones.push(

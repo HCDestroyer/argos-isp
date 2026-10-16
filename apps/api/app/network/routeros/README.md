@@ -55,6 +55,21 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 - Un cambio de plan de una sesión PPPoE con reuso: `coa` manda Disconnect (el perfil solo se asigna al conectar). Si solo el plan viejo tenía reuso, la sesión sigue bajo el padre viejo hasta reconectar (el padre no se borra mientras tenga hijas).
 - El reconciliador repone padres y perfiles borrados a mano, corrige los editados y borra los de planes sin reuso o sin servicios.
 
+### Modo `arbol_pcq`
+
+| Objeto                                                                                      | Clave                                                                                            | Propiedades                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/queue/type` `argosisp-plan-<id>[-limitado]-<sentido>`                                     | `name` (el menú no tiene `comment`)                                                              | `kind = pcq`, `pcq-rate` = MIR del plan (o el limitado), `pcq-classifier = dst-address` (bajada) / `src-address` (subida), `pcq-dst-address6-mask` / `pcq-src-address6-mask = 64`          |
+| `/queue/tree` `argosisp-global-bajada` / `-subida`                                          | `comment = argosisp:global:<sentido>`                                                            | `parent = global`, `max-limit` = `capacidad_*_kbps` del router (null → `0`, sin techo)                                                                                                     |
+| `/queue/tree` `argosisp-plan-<id>[-limitado]-<sentido>`                                     | `comment = argosisp:plan:<id>[:limitado]:<sentido>`                                              | `parent` = el global, `packet-mark` y `queue` = el tipo PCQ, `max-limit` / `limit-at` de `limitesPadrePlan` (activos del plan, o limitados con la velocidad limitada), `priority` del plan |
+| `/ip/firewall/mangle` y `/ipv6/firewall/mangle`                                             | el mismo `comment` que el nodo                                                                   | `chain = forward`, `action = mark-packet`, `dst-address-list` (bajada) o `src-address-list` (subida) = `argosisp-plan-<id>[-limitado]`, `new-packet-mark` = el nodo, `passthrough = no`    |
+| `/ip/firewall/address-list` y `/ipv6/firewall/address-list` `argosisp-plan-<id>[-limitado]` | `comment = argosisp:servicio:<id>` (IPv4) y `argosisp:servicio:<id>:enlace` / `:delegado` (IPv6) | IPv4, /64 y /56 de cada servicio activo o limitado                                                                                                                                         |
+
+- Sin colas simples por servicio: `aaa` no manda `Mikrotik-Rate-Limit` a un activo o limitado de un router en `arbol_pcq`, y `coa` no manda CoA de velocidad (el cambio de estado o de plan es mover la entrada de lista). El suspendido conserva el rate-limit mínimo: en PPPoE la cola dinámica que crea `aaa`/`coa`, en WISP una cola simple igual (`argosisp-servicio-<id>`, 256k) más la lista `suspendidos`.
+- Listas: en WISP, la IPv4 y el prefijo delegado del servicio (nunca el /64 compartido del segmento); en PPPoE, las direcciones de la sesión abierta (`network.sesiones`: IPv4, /64 y /56), por `sesion.iniciada`, `sesion.terminada` y `asignacion.cambiada`.
+- Orden: tipos → globales → nodos → mangle → listas por servicio; los sobrantes se borran al revés (mangle, nodos de plan, globales, tipos). El falso rechaza un nodo con `parent` o `queue` inexistente y el borrado de un tipo en uso o de un nodo con hijos.
+- Los tipos se reconocen por nombre (`argosisp-plan-<id>-…`, `id > 0`): el ejemplo de `lab.rsc` (plan `0`) no se toca.
+
 ## Eventos
 
 | Consume (grupo `routeros`)                                                                       | Hace                                                                                                                                                                              |
@@ -77,7 +92,7 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 
 ## Pendiente (tanda 2)
 
-- `arbol_pcq` (queue tree, PCQ y mangle) y `router.control_cambiado`.
+- `router.control_cambiado` (cambio de modo por lotes con vista previa).
 - IPv6 en la address-list de corte (`/ipv6/firewall/address-list`): fuera de los menús administrados de la tarea 1.
 
 ## Pruebas

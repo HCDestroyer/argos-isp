@@ -82,6 +82,12 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
         case 'retirado':
             throw new Error('un servicio retirado no tiene perfil: se rechaza antes')
     }
+    // `arbol_pcq`: sin cola simple por servicio. La velocidad la ponen el PCQ y el árbol del plan,
+    // con las direcciones de la sesión en `argosisp-plan-<id>[-limitado]` (dispatcher de RouterOS).
+    // El suspendido conserva su rate-limit mínimo (no está en las listas del plan).
+    if (servicio.control_velocidad === 'arbol_pcq' && servicio.estado !== 'suspendido') {
+        delete reply['Mikrotik-Rate-Limit']
+    }
 
     // IPv4: se conserva también al suspender (A5 identifica al cliente por IP en la página de corte).
     if (servicio.ipv4?.modo === 'estatico') reply['Framed-IP-Address'] = servicio.ipv4.ip

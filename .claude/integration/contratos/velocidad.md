@@ -43,6 +43,7 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
   - **WISP:** el dispatcher mantiene la lista con la API.
   - **PPPoE:** el dispatcher agrega o quita la entrada al recibir `sesion.iniciada` / `sesion.terminada` o `asignacion.cambiada`.
 - **Estado limitado:** el servicio pasa a la lista del plan limitado `argosisp-plan-<id>-limitado`, con su propio PCQ a la velocidad limitada. Nunca se edita el PCQ del plan para un solo cliente.
+- **Implementación (A2, tanda 2):** padres `argosisp-global-bajada` / `argosisp-global-subida` (`comment = argosisp:global:<sentido>`, `parent = global`, capacidad del enlace o `0`); por plan, tipos y nodos `argosisp-plan-<id>[-limitado]-<sentido>` (nodo con `comment = argosisp:plan:<id>[:limitado]:<sentido>`, el mangle IPv4 e IPv6 con el mismo `comment`). El nodo del plan cuenta los servicios en `activo` y el del limitado los `limitado`. Sin `Mikrotik-Rate-Limit` para activo y limitado en PPPoE (`aaa`) ni CoA de velocidad (`coa`); el suspendido conserva el rate-limit mínimo (PPPoE por RADIUS, WISP con una cola simple igual). Detalle en `apps/api/app/network/routeros/README.md`.
 
 ## Buenas prácticas que aplica ArgosIsp (y documenta en `infra/mikrotik/README.md`)
 

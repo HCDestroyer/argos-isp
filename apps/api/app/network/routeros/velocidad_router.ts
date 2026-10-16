@@ -1,4 +1,4 @@
-import { limitesPadrePlan, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
+import { formatoKbps, limitesPadrePlan, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
 import type { ObjetoRouterOS, Propiedades, RutaRouterOS } from '#network/routeros/cliente'
 
 /**
@@ -99,8 +99,12 @@ export interface PlanRouter {
     velocidad: VelocidadPlan
     /** Servicios no retirados del plan en el router (de cualquier tipo) */
     servicios: number
-    /** Los que cuentan para el padre: ni suspendidos ni retirados */
+    /** Los que cuentan para el padre: ni suspendidos ni retirados (activos + limitados) */
     activos: number
+    /** Solo en estado `activo` (hijo del plan en `arbol_pcq`) */
+    en_activo: number
+    /** Solo en estado `limitado` (hijo del plan limitado en `arbol_pcq`) */
+    en_limitado: number
     /** `target` de las colas WISP del plan que cuelgan del padre (activas y limitadas) */
     targets_wisp: string[]
 }
@@ -121,17 +125,56 @@ export interface EstadoVelocidad {
 }
 
 /** Menús con objetos de velocidad, en el orden en que se borran los sobrantes (hijas primero). */
-export const MENUS_VELOCIDAD = ['/ppp/profile', '/queue/simple'] as const satisfies readonly RutaRouterOS[]
+export const MENUS_VELOCIDAD = [
+    '/ip/firewall/mangle',
+    '/ipv6/firewall/mangle',
+    '/ppp/profile',
+    '/queue/simple',
+    '/queue/tree',
+    '/queue/type',
+] as const satisfies readonly RutaRouterOS[]
 export type MenuVelocidad = (typeof MENUS_VELOCIDAD)[number]
 
 /** Lo que se leyó del router (un `listar` por menú). */
 export type LecturaVelocidad = Map<MenuVelocidad, ObjetoRouterOS[]>
 
+/**
+ * Tipos de cola PCQ de ArgosIsp. `/queue/type` no tiene `comment`: se identifican por nombre. El
+ * plan `0` es el ejemplo de `lab.rsc` (ningún plan real tiene id 0) y no se toca.
+ */
+const NOMBRE_TIPO = /^argosisp-plan-[1-9]\d*-(?:limitado-)?(?:bajada|subida)$/
+
 /** ¿Es un objeto del control de velocidad que ArgosIsp administra en ese menú? */
-export function esObjetoVelocidad(_ruta: MenuVelocidad, objeto: ObjetoRouterOS): boolean {
-    const comment = objeto.comment ?? ''
+export function esObjetoVelocidad(ruta: MenuVelocidad, objeto: ObjetoRouterOS): boolean {
     if (objeto.dynamic === 'true') return false
+    if (ruta === '/queue/type') return NOMBRE_TIPO.test(objeto.name ?? '')
+    const comment = objeto.comment ?? ''
     return comment.startsWith(PREFIJO_COMMENT_PLAN) || comment.startsWith(PREFIJO_COMMENT_GLOBAL)
+}
+
+export type Sentido = 'bajada' | 'subida'
+export const SENTIDOS: readonly Sentido[] = ['bajada', 'subida']
+
+/** Padre global del árbol (`arbol_pcq`): `argosisp-global-<sentido>`, `comment = argosisp:global:<sentido>`. */
+export function nombreGlobal(sentido: Sentido): string {
+    return `argosisp-global-${sentido}`
+}
+
+/**
+ * Address-list del plan en `arbol_pcq` (IPv4 e IPv6, mismo nombre): `argosisp-plan-<id>` o
+ * `argosisp-plan-<id>-limitado`.
+ */
+export function listaPlan(planId: number, limitado: boolean): string {
+    return `argosisp-plan-${planId}${limitado ? '-limitado' : ''}`
+}
+
+/** Nombre del tipo PCQ, del nodo del árbol y de la marca de paquete: `argosisp-plan-<id>[-limitado]-<sentido>`. */
+export function nombreNodo(planId: number, limitado: boolean, sentido: Sentido): string {
+    return `${listaPlan(planId, limitado)}-${sentido}`
+}
+
+function commentNodo(planId: number, limitado: boolean, sentido: Sentido): string {
+    return `${commentPlan(planId)}${limitado ? ':limitado' : ''}:${sentido}`
 }
 
 /** Clave estable de un objeto para comparar deseado y actual. */
@@ -174,7 +217,7 @@ export function estadoVelocidadRouter(
     const presentes: ObjetoVelocidad[] = []
     const avisos: string[] = []
     const conservar: string[] = []
-    if (router.control !== 'simple') return { presentes, avisos, conservar }
+    if (router.control === 'arbol_pcq') return estadoArbol(router, planes)
 
     const dinamicas = hijasDinamicas(lectura)
     const base = perfilBase(lectura)
@@ -231,6 +274,100 @@ export function estadoVelocidadRouter(
 }
 
 /**
+ * Modo `arbol_pcq` (`contratos/velocidad.md`, "Modo arbol_pcq"), en orden de creación:
+ *
+ * 1. `/queue/type` por plan y sentido: `argosisp-plan-<id>[-limitado]-<sentido>`, `kind = pcq`,
+ *    `pcq-rate` = MIR (o el limitado), clasificador `dst-address` (bajada) / `src-address` (subida)
+ *    y máscara /64 en IPv6 (un cliente = un /64, no una dirección).
+ * 2. `/queue/tree` globales `argosisp-global-bajada|subida` (`parent = global`, `max-limit` =
+ *    capacidad del enlace; 0 = sin techo).
+ * 3. `/queue/tree` por plan y sentido, hijos del global: `packet-mark` y `queue` = el tipo PCQ,
+ *    `max-limit` / `limit-at` de `limitesPadrePlan(plan, activos)` y la prioridad del plan. El plan
+ *    limitado tiene su propio nodo, con la velocidad limitada y sus servicios limitados.
+ * 4. Mangle IPv4 e IPv6 (`chain = forward`, `mark-packet`, `passthrough = no`): destino en la lista
+ *    del plan → marca de bajada; origen → marca de subida.
+ *
+ * Las listas (`argosisp-plan-<id>[-limitado]`) las llena el dispatcher por servicio
+ * (`estado_deseado.ts`): IPv4, /64 y /56 de cada servicio activo o limitado. Sin colas simples
+ * por servicio (salvo el WISP suspendido, como la dinámica del PPPoE suspendido).
+ */
+function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVelocidad {
+    const tipos: ObjetoVelocidad[] = []
+    const globales: ObjetoVelocidad[] = []
+    const nodos: ObjetoVelocidad[] = []
+    const mangles: ObjetoVelocidad[] = []
+    const capacidad = { bajada: router.capacidad_bajada_kbps, subida: router.capacidad_subida_kbps }
+    for (const sentido of SENTIDOS) {
+        globales.push({
+            ruta: '/queue/tree',
+            clave: { comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` },
+            propiedades: {
+                name: nombreGlobal(sentido),
+                parent: 'global',
+                'max-limit': formatoKbps(capacidad[sentido] ?? 0),
+                disabled: 'no',
+            },
+        })
+    }
+    for (const plan of [...planes].sort((a, b) => a.plan_id - b.plan_id)) {
+        for (const limitado of [false, true]) {
+            const vel = limitado
+                ? {
+                      ...plan.velocidad,
+                      bajada_kbps: plan.velocidad.bajada_limitada_kbps,
+                      subida_kbps: plan.velocidad.subida_limitada_kbps,
+                  }
+                : plan.velocidad
+            const limites = limitesPadrePlan(vel, limitado ? plan.en_limitado : plan.en_activo)
+            const lista = listaPlan(plan.plan_id, limitado)
+            for (const sentido of SENTIDOS) {
+                const nombre = nombreNodo(plan.plan_id, limitado, sentido)
+                const bajada = sentido === 'bajada'
+                tipos.push({
+                    ruta: '/queue/type',
+                    clave: { name: nombre },
+                    propiedades: {
+                        kind: 'pcq',
+                        'pcq-rate': formatoKbps(bajada ? vel.bajada_kbps : vel.subida_kbps),
+                        'pcq-classifier': bajada ? 'dst-address' : 'src-address',
+                        ...(bajada ? { 'pcq-dst-address6-mask': '64' } : { 'pcq-src-address6-mask': '64' }),
+                    },
+                })
+                nodos.push({
+                    ruta: '/queue/tree',
+                    clave: { comment: commentNodo(plan.plan_id, limitado, sentido) },
+                    propiedades: {
+                        name: nombre,
+                        parent: nombreGlobal(sentido),
+                        'packet-mark': nombre,
+                        queue: nombre,
+                        'max-limit': formatoKbps(limites.max_limit_kbps[sentido]),
+                        'limit-at': formatoKbps(limites.limit_at_kbps[sentido]),
+                        priority: String(limites.prioridad),
+                        disabled: 'no',
+                    },
+                })
+                for (const ruta of ['/ip/firewall/mangle', '/ipv6/firewall/mangle'] as const) {
+                    mangles.push({
+                        ruta,
+                        clave: { comment: commentNodo(plan.plan_id, limitado, sentido) },
+                        propiedades: {
+                            chain: 'forward',
+                            action: 'mark-packet',
+                            [bajada ? 'dst-address-list' : 'src-address-list']: lista,
+                            'new-packet-mark': nombre,
+                            passthrough: 'no',
+                            disabled: 'no',
+                        },
+                    })
+                }
+            }
+        }
+    }
+    return { presentes: [...tipos, ...globales, ...nodos, ...mangles], avisos: [], conservar: [] }
+}
+
+/**
  * Objetos de velocidad que hay en el router y no deben estar, en orden de borrado (perfiles antes
  * que la cola a la que apuntan). Un padre que todavía tiene colas dinámicas colgando no se borra
  * (`estadoVelocidadRouter` lo conserva).
@@ -245,11 +382,15 @@ export function sobrantesVelocidad(
     ])
     const salida: Array<{ ruta: MenuVelocidad; objeto: ObjetoRouterOS }> = []
     for (const ruta of MENUS_VELOCIDAD) {
-        for (const objeto of lectura.get(ruta) ?? []) {
-            if (!esObjetoVelocidad(ruta, objeto)) continue
-            if (deseadas.has(`${ruta}|${claveTexto({ comment: objeto.comment! })}`)) continue
-            salida.push({ ruta, objeto })
-        }
+        const sobran = (lectura.get(ruta) ?? []).filter((objeto) => {
+            if (!esObjetoVelocidad(ruta, objeto)) return false
+            const clave: Propiedades =
+                ruta === '/queue/type' ? { name: objeto.name! } : { comment: objeto.comment! }
+            return !deseadas.has(`${ruta}|${claveTexto(clave)}`)
+        })
+        // En el árbol, los nodos de plan antes que los globales de los que cuelgan.
+        const global = (o: ObjetoRouterOS) => (o.comment?.startsWith(PREFIJO_COMMENT_GLOBAL) ? 1 : 0)
+        for (const objeto of sobran.sort((a, b) => global(a) - global(b))) salida.push({ ruta, objeto })
     }
     return salida
 }

@@ -71,23 +71,36 @@ export class AlmacenPg implements Almacen {
     }
 
     async servicio(servicioId: number): Promise<ServicioActual | null> {
-        const { rows } = await this.pool.query<{ user_ppp: string | null; estado: EstadoServicio }>(
-            `SELECT s.user_ppp, s.estado FROM core.servicios s WHERE s.id = $1`,
+        const { rows } = await this.pool.query<{
+            user_ppp: string | null
+            estado: EstadoServicio
+            control_velocidad: 'simple' | 'arbol_pcq' | null
+        }>(
+            `SELECT s.user_ppp, s.estado, r.control_velocidad
+             FROM core.servicios s LEFT JOIN network.routers r ON r.id = s.router_id
+             WHERE s.id = $1`,
             [servicioId],
         )
         const fila = rows[0]
         if (!fila) return null
+        const control = fila.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple'
         const servicio: ServicioActual = {
             servicio_id: servicioId,
             estado: fila.estado,
             rate_limit: null,
             rate_limit_limitado: null,
+            control_velocidad: control,
         }
-        // Solo activo y limitado llevan rate-limit por CoA; sin user_ppp no hay sesión PPPoE.
+        // Solo activo y limitado llevan rate-limit por CoA; sin user_ppp no hay sesión PPPoE; en
+        // `arbol_pcq` la velocidad no viaja por RADIUS (la ponen las listas del árbol).
         if ((fila.estado !== 'activo' && fila.estado !== 'limitado') || !fila.user_ppp) return servicio
+        if (control === 'arbol_pcq') return servicio
         if (!this.#rateLimits) return { ...servicio, error_rate_limit: 'coa sin fuente de rate-limit' }
         const r = await this.#rateLimits.obtener(servicioId, fila.user_ppp)
-        return r.ok ? { ...servicio, ...r.valor } : { ...servicio, error_rate_limit: r.error }
+        // El control del router sale de Postgres (vigente), no del registro.
+        return r.ok
+            ? { ...servicio, ...r.valor, control_velocidad: control }
+            : { ...servicio, error_rate_limit: r.error }
     }
 
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {

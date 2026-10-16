@@ -22,6 +22,7 @@ interface FilaServicio {
     prefijos_v6: string[] | null
     mac: string | null
     amarre_ip_mac: boolean
+    sesion: { ipv4: string | null; enlace: string | null; delegado: string | null } | null
     [campo: string]: unknown
 }
 
@@ -69,6 +70,14 @@ function consultaServicios(cliente: QueryClientContract) {
                 `ARRAY(SELECT a.prefijo::text FROM network.ipv6_asignaciones a
                         WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'delegacion') AS prefijos_v6`,
             ),
+            cliente.raw(
+                // Sesión PPPoE abierta más reciente: sus direcciones van a las listas del árbol.
+                `(SELECT jsonb_build_object('ipv4', host(ses.ipv4), 'enlace', ses.prefijo_enlace_v6::text,
+                                            'delegado', ses.prefijo_delegado_v6::text)
+                    FROM network.sesiones ses
+                   WHERE ses.servicio_id = s.id AND ses.fin IS NULL
+                   ORDER BY ses.inicio DESC, ses.id DESC LIMIT 1) AS sesion`,
+            ),
         )
 }
 
@@ -93,6 +102,7 @@ function aServicio(fila: FilaServicio): ServicioRed {
         prefijos_v6: fila.prefijos_v6 ?? [],
         mac: fila.mac,
         amarre_ip_mac: Boolean(fila.amarre_ip_mac),
+        sesion: fila.sesion ?? null,
         velocidad: velocidadEfectiva(plan, excepcion),
     }
 }
@@ -142,12 +152,22 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
         if (s.estado === 'retirado') continue
         let plan = planes.get(s.plan_id)
         if (!plan) {
-            plan = { plan_id: s.plan_id, velocidad: s.velocidad, servicios: 0, activos: 0, targets_wisp: [] }
+            plan = {
+                plan_id: s.plan_id,
+                velocidad: s.velocidad,
+                servicios: 0,
+                activos: 0,
+                en_activo: 0,
+                en_limitado: 0,
+                targets_wisp: [],
+            }
             planes.set(s.plan_id, plan)
         }
         plan.servicios++
         if (s.estado === 'suspendido') continue
         plan.activos++
+        if (s.estado === 'limitado') plan.en_limitado++
+        else plan.en_activo++
         if (s.tipo_conexion !== 'pppoe' && s.ipv4 && conPadreSimple(router.control, s.velocidad)) {
             plan.targets_wisp.push(`${s.ipv4}/32`, ...s.prefijos_v6)
         }

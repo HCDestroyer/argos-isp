@@ -164,8 +164,7 @@ export async function aplicarEstado(
             })
         }
     }
-    const comment = `argosisp:servicio:${estado.servicio_id}`
-    for (const ruta of estado.ausentes) {
+    for (const { ruta, comment } of estado.ausentes) {
         if (actuales && !actuales.get(ruta)?.has(comment)) continue
         const borrados = await cliente.borrar(ruta, comment, ctx)
         if (borrados > 0) cambios.push({ ruta, comment, accion: 'borrado' })

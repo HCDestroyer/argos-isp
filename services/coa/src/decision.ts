@@ -16,6 +16,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
+ * | velocidad o plan en `arbol_pcq`          | nada       | (sin cola por sesión: el dispatcher mueve la lista del plan)    |
  *
  * El rate-limit es siempre la cadena completa de A1 (`registro.ts`); si no se puede leer, el CoA
  * de velocidad se registra como fallido (`coa.fallido`) en vez de mandar uno distinto.
@@ -91,6 +92,13 @@ export function rateLimitDe(servicio: ServicioActual): string | null {
 
 /** CoA de velocidad del estado actual, o el error si no hay cadena de A1. */
 function coaVelocidad(servicio: ServicioActual, razon: string): Decision {
+    if (servicio.control_velocidad === 'arbol_pcq') {
+        // Sin cola por sesión: el dispatcher de RouterOS mueve sus direcciones entre las listas del plan.
+        return {
+            accion: 'nada',
+            razon: `${razon}: router en arbol_pcq (lo aplica el dispatcher de RouterOS)`,
+        }
+    }
     const rate = rateLimitDe(servicio)
     if (!rate) {
         return {
