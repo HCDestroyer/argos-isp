@@ -1148,7 +1148,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                             No hay cuentas bancarias activas en quetzales.
                             <ULink
                                 v-if="puede('cuentas_bancarias.editar')"
-                                to="/cuentas-bancarias"
+                                to="/configuracion/cuentas-bancarias"
                                 class="text-primary"
                             >
                                 Crear una

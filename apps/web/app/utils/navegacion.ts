@@ -47,6 +47,12 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
         ],
     },
+    {
+        etiqueta: 'Configuración',
+        secciones: [
+            { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },
+        ],
+    },
 ]
 
 export const SECCIONES_PANEL: SeccionPanel[] = GRUPOS_PANEL.flatMap(grupo => grupo.secciones)
