@@ -19,6 +19,10 @@ import type { Redis } from 'ioredis'
 export interface RateLimits {
     rate_limit: string
     rate_limit_limitado: string
+    /** Reuso efectivo del plan en el router (1 si el registro no lo trae) */
+    reuso: number
+    /** `control_velocidad` del router (`simple` si el registro no lo trae) */
+    control_velocidad: 'simple' | 'arbol_pcq'
 }
 
 export type ResultadoRateLimits = { ok: true; valor: RateLimits } | { ok: false; error: string }
@@ -39,13 +43,24 @@ export interface OpcionesApi {
 /** Extrae las cadenas del JSON de `contratos/aaa.md` si es del servicio esperado. */
 export function rateLimitsDeRegistro(datos: unknown, servicioId: number): RateLimits | null {
     if (typeof datos !== 'object' || datos === null) return null
-    const r = datos as { servicio_id?: unknown; eliminado?: unknown; plan?: Record<string, unknown> }
+    const r = datos as {
+        servicio_id?: unknown
+        eliminado?: unknown
+        control_velocidad?: unknown
+        plan?: Record<string, unknown>
+    }
     if (r.eliminado === true || Number(r.servicio_id) !== servicioId) return null
     const rate = r.plan?.rate_limit
     const limitado = r.plan?.rate_limit_limitado
     if (typeof rate !== 'string' || rate === '' || typeof limitado !== 'string' || limitado === '')
         return null
-    return { rate_limit: rate, rate_limit_limitado: limitado }
+    const reuso = Number(r.plan?.reuso)
+    return {
+        rate_limit: rate,
+        rate_limit_limitado: limitado,
+        reuso: Number.isInteger(reuso) && reuso >= 1 ? reuso : 1,
+        control_velocidad: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+    }
 }
 
 const dormir = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms))

@@ -155,7 +155,7 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
         )
     })
 
-    test('opera los ocho menús administrados', async ({ assert }) => {
+    test('opera los diez menús administrados', async ({ assert }) => {
         const c = cliente(falso)
         const props: Record<RutaRouterOS, Record<string, string>> = {
             '/queue/simple': { target: '10.0.0.1/32', 'max-limit': '1M/2M' },
@@ -179,7 +179,15 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
                 server: 'dhcp1',
             },
             '/ip/arp': { address: '10.0.0.1', 'mac-address': 'aa:bb:cc:dd:ee:01', interface: 'ether2' },
-            '/ppp/profile': { name: 'plan-1', 'parent-queue': 'argosisp:plan:1' },
+            '/ipv6/firewall/address-list': { list: 'argosisp-plan-1', address: '2001:db8:1::/56' },
+            '/ipv6/firewall/mangle': {
+                chain: 'forward',
+                action: 'mark-packet',
+                'new-packet-mark': 'p1',
+                passthrough: 'no',
+            },
+            // `parent-queue` debe nombrar una cola simple que exista (el falso lo valida como RouterOS)
+            '/ppp/profile': { name: 'plan-1', 'local-address': '10.0.0.1' },
         }
         for (const ruta of RUTAS) {
             const comment = `argosisp:prueba:${ruta}`

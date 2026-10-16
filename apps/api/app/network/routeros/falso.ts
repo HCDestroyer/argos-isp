@@ -49,6 +49,8 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/queue/type': { requeridas: ['name', 'kind'], unicas: [['name']] },
     '/ip/firewall/address-list': { requeridas: ['list', 'address'], unicas: [['list', 'address']] },
     '/ip/firewall/mangle': { requeridas: ['chain', 'action'], unicas: [] },
+    '/ipv6/firewall/address-list': { requeridas: ['list', 'address'], unicas: [['list', 'address']] },
+    '/ipv6/firewall/mangle': { requeridas: ['chain', 'action'], unicas: [] },
     '/ip/dhcp-server/lease': { requeridas: ['address', 'mac-address'], unicas: [['mac-address', 'server']] },
     '/ip/arp': { requeridas: ['address', 'interface'], unicas: [['address', 'interface']] },
     '/ppp/profile': { requeridas: ['name'], unicas: [['name']] },
@@ -86,7 +88,30 @@ function normalizar(ruta: RutaRouterOS, props: Record<string, string>): Record<s
 const VALORES_POR_DEFECTO: Partial<Record<RutaRouterOS, Record<string, string>>> = {
     '/queue/simple': { 'max-limit': '0/0', 'limit-at': '0/0', parent: 'none', priority: '8/8' },
     '/ip/dhcp-server/lease': { server: 'all', status: 'waiting' },
+    '/queue/tree': {
+        'max-limit': '0',
+        'limit-at': '0',
+        priority: '8',
+        queue: 'default-small',
+        'packet-mark': '',
+    },
+    '/ip/firewall/mangle': { passthrough: 'true' },
+    '/ipv6/firewall/mangle': { passthrough: 'true' },
 }
+
+/** Tipos de cola que trae RouterOS (`/queue/type print`); los demás deben existir en la tabla. */
+const TIPOS_DE_FABRICA = new Set([
+    'default',
+    'default-small',
+    'ethernet-default',
+    'wireless-default',
+    'synchronous-default',
+    'hotspot-default',
+    'pcq-upload-default',
+    'pcq-download-default',
+    'only-hardware-queue',
+    'multi-queue-ethernet-default',
+])
 
 export class RouterOSFalso {
     readonly usuario: string
@@ -116,6 +141,15 @@ export class RouterOSFalso {
             ? crearHttps({ cert: op.tls.cert, key: op.tls.key }, manejar)
             : crearHttp(manejar)
         for (const ruta of RUTAS) this.#tablas.set(ruta, [])
+        // Como un router recién instalado: el perfil PPP `default` existe siempre.
+        this.#tablas.get('/ppp/profile')!.push({
+            '.id': '*0',
+            name: 'default',
+            default: 'true',
+            'use-ipv6': 'true',
+            'change-tcp-mss': 'true',
+            'only-one': 'default',
+        })
         for (const ruta of RUTAS_LECTURA) this.#lectura.set(ruta, [])
     }
 
@@ -254,6 +288,8 @@ export class RouterOSFalso {
             )
         }
         if (metodo === 'DELETE' && id !== null) {
+            const enUso = this.#enUso(ruta, tabla[indice]!)
+            if (enUso) return this.#error(res, 400, 'Bad Request', enUso)
             tabla.splice(indice, 1)
             res.writeHead(204).end()
             return
@@ -262,7 +298,7 @@ export class RouterOSFalso {
             const props = normalizar(ruta, cuerpo ?? {})
             const falta = ESQUEMA[ruta].requeridas.find((k) => !props[k])
             if (falta) return this.#error(res, 400, 'Bad Request', `failure: ${falta} not specified`)
-            const conflicto = this.#conflicto(ruta, props, null)
+            const conflicto = this.#conflicto(ruta, props, null) ?? this.#referencias(ruta, props)
             if (conflicto) return this.#error(res, 400, 'Bad Request', conflicto)
             const objeto: ObjetoRouterOS = {
                 '.id': `*${(this.#siguienteId++).toString(16).toUpperCase()}`,
@@ -278,12 +314,62 @@ export class RouterOSFalso {
         if (metodo === 'PATCH' && id !== null) {
             const props = normalizar(ruta, cuerpo ?? {})
             const actual = tabla[indice]!
-            const conflicto = this.#conflicto(ruta, { ...actual, ...props } as Record<string, string>, id)
+            const conflicto =
+                this.#conflicto(ruta, { ...actual, ...props } as Record<string, string>, id) ??
+                this.#referencias(ruta, props)
             if (conflicto) return this.#error(res, 400, 'Bad Request', conflicto)
             Object.assign(actual, props)
             return this.#json(res, 200, actual)
         }
         return this.#error(res, 400, 'Bad Request', 'no such command')
+    }
+
+    /**
+     * Referencias que RouterOS valida al escribir: `parent` de una cola simple, `parent-queue` de un
+     * perfil PPP, `parent` y `queue` de un queue tree (`input value is wrong` / `no such item`).
+     */
+    #referencias(ruta: RutaRouterOS, props: Record<string, string>): string | null {
+        const existe = (menu: RutaRouterOS, nombre: string) => this.tabla(menu).some((o) => o.name === nombre)
+        if (ruta === '/queue/simple' && props.parent && props.parent !== 'none') {
+            if (!existe('/queue/simple', props.parent)) return `input does not match any value of parent`
+        }
+        if (ruta === '/ppp/profile' && props['parent-queue'] && props['parent-queue'] !== 'none') {
+            if (!existe('/queue/simple', props['parent-queue'])) {
+                return `input does not match any value of parent-queue`
+            }
+        }
+        if (ruta === '/queue/tree') {
+            if (props.parent && props.parent !== 'global' && !existe('/queue/tree', props.parent)) {
+                return `input does not match any value of parent`
+            }
+            if (props.queue && !TIPOS_DE_FABRICA.has(props.queue) && !existe('/queue/type', props.queue)) {
+                return `input does not match any value of queue`
+            }
+        }
+        return null
+    }
+
+    /**
+     * El falso es más estricto que RouterOS al borrar: una cola padre con hijas (simples, perfiles PPP o
+     * nodos del árbol) o un tipo de cola en uso no se puede borrar. Así una prueba detecta un orden de
+     * borrado que dejaría hijas colgando.
+     */
+    #enUso(ruta: RutaRouterOS, objeto: ObjetoRouterOS): string | null {
+        const nombre = objeto.name
+        if (!nombre) return null
+        if (ruta === '/queue/simple') {
+            if (this.tabla('/queue/simple').some((o) => o.parent === nombre)) return 'queue has children'
+            if (this.tabla('/ppp/profile').some((o) => o['parent-queue'] === nombre)) {
+                return 'queue is used by ppp profile'
+            }
+        }
+        if (ruta === '/queue/tree' && this.tabla('/queue/tree').some((o) => o.parent === nombre)) {
+            return 'queue has children'
+        }
+        if (ruta === '/queue/type' && this.tabla('/queue/tree').some((o) => o.queue === nombre)) {
+            return 'can not remove type that is in use'
+        }
+        return null
     }
 
     #conflicto(ruta: RutaRouterOS, props: Record<string, string>, id: string | null): string | null {

@@ -112,6 +112,8 @@ describe('FuenteRedisApi', () => {
             valor: {
                 rate_limit: '5M/20M 10M/40M 3840k/15M 16/16 4 1280k/5M',
                 rate_limit_limitado: '1M/2M 0/0 0/0 0/0 4 256k/512k',
+                reuso: 4,
+                control_velocidad: 'simple',
             },
         })
         assert.equal(api.pedidos.length, 0)
@@ -170,9 +172,11 @@ describe('FuenteRedisApi', () => {
     it('rateLimitsDeRegistro exige las dos cadenas y el mismo servicio', () => {
         assert.equal(rateLimitsDeRegistro(registro(), 102), null)
         assert.equal(rateLimitsDeRegistro(null, 101), null)
-        assert.deepEqual(rateLimitsDeRegistro(registro(), 101), {
+        assert.deepEqual(rateLimitsDeRegistro(registro({ control_velocidad: 'arbol_pcq' }), 101), {
             rate_limit: '5M/20M 10M/40M 3840k/15M 16/16 4 1280k/5M',
             rate_limit_limitado: '1M/2M 0/0 0/0 0/0 4 256k/512k',
+            reuso: 4,
+            control_velocidad: 'arbol_pcq',
         })
     })
 })

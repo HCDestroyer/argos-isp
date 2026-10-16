@@ -15,6 +15,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | → `retirado`                             | Disconnect | (al reconectar `aaa` lo rechaza)                                |
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
+ * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
  *
  * El rate-limit es siempre la cadena completa de A1 (`registro.ts`); si no se puede leer, el CoA
  * de velocidad se registra como fallido (`coa.fallido`) en vez de mandar uno distinto.
@@ -53,6 +54,9 @@ export interface ServicioActual {
     rate_limit_limitado: string | null
     /** Por qué faltan las cadenas (Redis y API sin respuesta); el CoA de velocidad falla con esto. */
     error_rate_limit?: string | null
+    /** Del mismo registro: reuso efectivo del plan y `control_velocidad` del router */
+    reuso?: number
+    control_velocidad?: 'simple' | 'arbol_pcq'
 }
 
 export type AtributosCoa = Record<string, string>
@@ -141,6 +145,13 @@ export function decidir(
         return {
             accion: 'nada',
             razon: `plan cambiado con el servicio ${servicio.estado}: se aplica al reconectar`,
+        }
+    }
+    if (servicio.control_velocidad === 'simple' && (servicio.reuso ?? 1) > 1) {
+        // El perfil PPP (`Mikrotik-Group = plan-<id>`, con la cola padre) solo se asigna al conectar.
+        return {
+            accion: 'disconnect',
+            razon: 'cambió el plan: reconecta con el perfil plan-<id> y su cola padre',
         }
     }
     return coaVelocidad(servicio, 'cambió el plan')

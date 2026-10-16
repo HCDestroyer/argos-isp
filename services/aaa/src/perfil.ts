@@ -37,17 +37,28 @@ function rateLimit(subidaKbps: number, bajadaKbps: number): string {
     return `${subidaKbps}k/${bajadaKbps}k`
 }
 
+/**
+ * Perfil PPP del servicio activo o limitado (`Mikrotik-Group`): con reuso en modo `simple`, el
+ * perfil `plan-<id>` que ArgosIsp mantiene en el router con `parent-queue` a la cola padre del plan
+ * (`apps/api/app/network/routeros/velocidad_router.ts`); si no, el `profile_ppp` del router.
+ */
+export function grupoDe(servicio: ServicioAaa): string | null {
+    if (servicio.control_velocidad === 'simple' && servicio.plan.reuso > 1) return `plan-${servicio.plan.id}`
+    return servicio.plan.profile_ppp
+}
+
 export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): ResultadoPerfil {
     const reply: AtributosReply = {}
     const avisos: string[] = []
     const { plan } = servicio
+    const grupo = grupoDe(servicio)
 
     switch (servicio.estado) {
         case 'activo':
             // `plan.rate_limit` ya trae el `rate_limit_override` del router si existe.
             reply['Mikrotik-Rate-Limit'] =
                 plan.rate_limit ?? plan.rate_limit_override ?? rateLimit(plan.subida_kbps, plan.bajada_kbps)
-            if (plan.profile_ppp) reply['Mikrotik-Group'] = plan.profile_ppp
+            if (grupo) reply['Mikrotik-Group'] = grupo
             break
         case 'limitado':
             if (plan.rate_limit_limitado && plan.subida_limitada_kbps > 0 && plan.bajada_limitada_kbps > 0) {
@@ -60,7 +71,7 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
                 reply['Mikrotik-Rate-Limit'] = rateLimit(plan.subida_kbps, plan.bajada_kbps)
                 avisos.push(`plan ${plan.id} sin velocidad limitada; se usa la del plan`)
             }
-            if (plan.profile_ppp) reply['Mikrotik-Group'] = plan.profile_ppp
+            if (grupo) reply['Mikrotik-Group'] = grupo
             break
         case 'suspendido':
             reply['Mikrotik-Rate-Limit'] = op.suspendido.rateLimit

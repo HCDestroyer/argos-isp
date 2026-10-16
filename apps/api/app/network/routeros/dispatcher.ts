@@ -13,6 +13,14 @@ import { clienteDeRouter, type RouterApi } from '#network/routeros/router'
 import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
+import type { RutaRouterOS } from '#network/routeros/cliente'
+import {
+    claveTexto,
+    MENUS_VELOCIDAD,
+    sobrantesVelocidad,
+    type EstadoVelocidad,
+    type LecturaVelocidad,
+} from '#network/routeros/velocidad_router'
 
 /**
  * Piezas comunes del dispatcher de RouterOS (servicios sin PPPoE): auditoría en `audit.red`,
@@ -119,7 +127,7 @@ export async function routersPendientes(): Promise<number[]> {
 }
 
 export interface Cambio {
-    ruta: RutaServicio
+    ruta: RutaRouterOS
     comment: string
     accion: 'creado' | 'actualizado' | 'borrado'
     /** Objetos duplicados borrados además del cambio */
@@ -161,6 +169,69 @@ export async function aplicarEstado(
         if (actuales && !actuales.get(ruta)?.has(comment)) continue
         const borrados = await cliente.borrar(ruta, comment, ctx)
         if (borrados > 0) cambios.push({ ruta, comment, accion: 'borrado' })
+    }
+    return cambios
+}
+
+/** Lee los menús del control de velocidad (un `listar` por menú). */
+export async function leerVelocidadRouter(cliente: ClienteRouterOS): Promise<LecturaVelocidad> {
+    const lectura: LecturaVelocidad = new Map()
+    for (const ruta of MENUS_VELOCIDAD) lectura.set(ruta, await cliente.listar(ruta))
+    return lectura
+}
+
+function comentarioDe(clave: Record<string, string>): string {
+    return clave.comment ?? clave.name ?? claveTexto(clave)
+}
+
+/**
+ * Crea o corrige los objetos de velocidad del router (padres, perfiles, árbol), en orden: padres
+ * antes que lo que cuelga de ellos. Lo que ya está igual en `lectura` no se toca.
+ */
+export async function asegurarVelocidad(
+    cliente: ClienteRouterOS,
+    estado: EstadoVelocidad,
+    lectura: LecturaVelocidad,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const cambios: Cambio[] = []
+    for (const objeto of estado.presentes) {
+        const existentes = (lectura.get(objeto.ruta as never) ?? []).filter((o: ObjetoRouterOS) =>
+            Object.entries(objeto.clave).every(([k, v]) => o[k] === v),
+        )
+        if (
+            existentes.length === 1 &&
+            Object.keys(diferencias(objeto.propiedades, existentes[0]!)).length === 0
+        ) {
+            continue
+        }
+        const r = await cliente.asegurarPor(objeto.ruta, objeto.clave, objeto.propiedades, ctx)
+        if (r.accion !== 'sin_cambios' || r.duplicados > 0) {
+            cambios.push({
+                ruta: objeto.ruta,
+                comment: comentarioDe(objeto.clave),
+                accion: r.accion === 'sin_cambios' ? 'actualizado' : r.accion,
+                ...(r.duplicados > 0 ? { duplicados: r.duplicados } : {}),
+            })
+        }
+    }
+    return cambios
+}
+
+/** Borra los objetos de velocidad que sobran (hijas antes que padres; `sobrantesVelocidad`). */
+export async function limpiarVelocidad(
+    cliente: ClienteRouterOS,
+    estado: EstadoVelocidad,
+    lectura: LecturaVelocidad,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const cambios: Cambio[] = []
+    for (const { ruta, objeto } of sobrantesVelocidad(estado, lectura)) {
+        const clave: Record<string, string> = objeto.comment
+            ? { comment: objeto.comment }
+            : { name: objeto.name ?? '' }
+        await cliente.borrarPor(ruta, clave, ctx)
+        cambios.push({ ruta, comment: objeto.comment ?? objeto.name ?? objeto['.id'], accion: 'borrado' })
     }
     return cambios
 }

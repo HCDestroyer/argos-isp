@@ -1,5 +1,6 @@
 import type { EstadoServicio } from '#shared/eventos'
-import { rateLimitServicio, type VelocidadPlan } from '#network/velocidad'
+import { rateLimitServicio, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
+import { conPadreSimple, nombrePadre } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
 
 /**
@@ -33,10 +34,10 @@ export function commentServicio(servicioId: number): string {
     return `${PREFIJO_COMMENT_SERVICIO}${servicioId}`
 }
 
-/** `argosisp:servicio:<id>` → id; null si el comment no es de un servicio. */
+/** `argosisp:servicio:<id>` (o `argosisp:servicio:<id>:<sufijo>`) → id; null si no es de un servicio. */
 export function servicioDeComment(comment: string | undefined): number | null {
     if (!comment?.startsWith(PREFIJO_COMMENT_SERVICIO)) return null
-    const id = Number(comment.slice(PREFIJO_COMMENT_SERVICIO.length))
+    const id = Number(comment.slice(PREFIJO_COMMENT_SERVICIO.length).split(':')[0])
     return Number.isInteger(id) && id > 0 ? id : null
 }
 
@@ -68,6 +69,8 @@ export interface RouterRed {
     dhcp_servidor: string
     /** Interfaz del ARP estático; null = no se puede amarrar (se avisa) */
     interfaz_clientes: string | null
+    /** `network.routers.control_velocidad` (`contratos/velocidad.md`) */
+    control_velocidad: ControlVelocidad
 }
 
 export interface PerfilSuspendidoRed {
@@ -142,6 +145,13 @@ export function estadoDeseado(
             name: `argosisp-servicio-${id}`,
             target: [`${servicio.ipv4}/32`, ...servicio.prefijos_v6].join(','),
             ...propiedadesCola(rateLimit),
+            // Reuso en modo simple: hija de la cola padre del plan (`velocidad_router.ts`). Un
+            // suspendido no cuenta para el padre ni cuelga de él (igual que PPPoE con `suspendido`).
+            parent:
+                servicio.estado !== 'suspendido' &&
+                conPadreSimple(router.control_velocidad, servicio.velocidad)
+                    ? nombrePadre(servicio.plan_id)
+                    : 'none',
             disabled: 'no',
         },
     })

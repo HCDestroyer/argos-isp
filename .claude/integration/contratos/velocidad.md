@@ -29,6 +29,7 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
   - **WISP:** el dispatcher fija `parent` en cada cola.
   - **PPPoE:** `aaa` manda `Mikrotik-Group = plan-<plan_id>`, y ese perfil PPP tiene `parent-queue` apuntando a la cola padre. ArgosIsp mantiene los perfiles y las colas padre por la API REST.
 - **Recálculo del padre:** el `max-limit` del padre se recalcula **por evento** (`servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada` con plan o router, retiro), nunca por intervalo. Los suspendidos no cuentan.
+- **Implementación (A2, tanda 2):** padre y perfil solo para planes con `reuso > 1` efectivo en el router (con reuso 1 no hay padre ni `Mikrotik-Group = plan-<id>`). El perfil `plan-<id>` copia pools, DNS e IPv6 del perfil `default` del router. El `target` del padre son los de sus hijas (colas WISP y colas dinámicas de PPPoE leídas del router; se recalcula también con `sesion.iniciada` / `sesion.terminada`); sin hijas, `192.0.2.255/32`. Un cambio de plan de una sesión PPPoE con reuso se aplica con Disconnect. Detalle en `apps/api/app/network/routeros/README.md`, "Control de velocidad".
 
 ## Modo `arbol_pcq` (recomendado para muchos clientes por router)
 

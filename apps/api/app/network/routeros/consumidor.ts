@@ -21,6 +21,9 @@ const EVENTOS_SERVICIO = new Set([
  *   el estado deseado sale de Postgres, así que un evento repetido o atrasado aplica lo vigente).
  * - `sesion.iniciada` sin prefijo delegado → job `routeros-prefijos` (`CompletarPrefijoDelegado`, modo
  *   `radius_pool`: lee del router el /56 que delegó).
+ * - `sesion.iniciada` / `sesion.terminada` → `AplicarRedServicio` del servicio: en un router que
+ *   necesita control de velocidad (padre por plan o árbol) recalcula los objetos del plan; si no, no
+ *   toca el router.
  * - `plan.velocidad_cambiada` → reconciliar los routers con servicios sin PPPoE de ese plan (o el
  *   router de la excepción).
  * - Un router caído no hace lanzar: la acción emite `routeros.fallido` y el job `recuperar` lo
@@ -38,7 +41,8 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
         return (
             EVENTOS_SERVICIO.has(evento) ||
             evento === 'plan.velocidad_cambiada' ||
-            evento === 'sesion.iniciada'
+            evento === 'sesion.iniciada' ||
+            evento === 'sesion.terminada'
         )
     }
 
@@ -65,6 +69,15 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             ) {
                 await encolarPrefijo({ nas_ip: nasIp, acct_session_id: acct })
             }
+        }
+        if (evento.evento === 'sesion.iniciada' || evento.evento === 'sesion.terminada') {
+            // Colas dinámicas de PPPoE bajo el padre del plan (target del padre en modo simple).
+            const servicioId = Number(evento.payload.servicio_id)
+            if (!Number.isInteger(servicioId) || servicioId <= 0) return
+            await new AplicarRedServicio(opciones).execute(
+                { servicio_id: servicioId, evento_id: String(evento.id), evento: evento.evento },
+                ctx,
+            )
             return
         }
         const planId = Number(evento.payload.plan_id)

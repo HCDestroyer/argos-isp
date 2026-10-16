@@ -105,6 +105,11 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
             atributos: { 'Mikrotik-Rate-Limit': RATE_LIMITADO },
         })
         assert.equal(decidir(config(['plan']), servicio({ estado: 'suspendido' }), SUSPENDIDO).accion, 'nada')
+        // Reuso en modo simple: el perfil PPP con la cola padre solo se asigna al conectar.
+        assert.equal(
+            decidir(config(['plan']), servicio({ reuso: 4, control_velocidad: 'simple' }), SUSPENDIDO).accion,
+            'disconnect',
+        )
         assert.equal(decidir(config([]), servicio(), SUSPENDIDO).accion, 'nada')
     })
 

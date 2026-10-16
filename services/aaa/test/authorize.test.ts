@@ -107,6 +107,31 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         assert.equal(cuerpo?.['reply:Mikrotik-Address-List'], undefined)
     })
 
+    it('reuso en modo simple: Mikrotik-Group = plan-<id> (activo y limitado); el suspendido conserva el suyo', async () => {
+        const plan = {
+            id: 9,
+            subida_kbps: 5000,
+            bajada_kbps: 20000,
+            subida_limitada_kbps: 1000,
+            bajada_limitada_kbps: 2000,
+            rate_limit_override: null,
+            profile_ppp: 'perfil-del-router',
+            rate_limit: '5M/20M 0/0 0/0 0/0 8 1250k/5M',
+            rate_limit_limitado: '1M/2M 0/0 0/0 0/0 8 250k/500k',
+            reuso: 4,
+        }
+        await guardar(servicio({ user_ppp: 'u-reuso-activo', plan }))
+        await guardar(servicio({ user_ppp: 'u-reuso-limitado', estado: 'limitado', plan }))
+        await guardar(servicio({ user_ppp: 'u-reuso-suspendido', estado: 'suspendido', plan }))
+        await guardar(servicio({ user_ppp: 'u-dedicado', plan: { ...plan, reuso: 1 } }))
+        const grupo = async (u: string) => (await autorizar(u)).cuerpo?.['reply:Mikrotik-Group']
+        assert.equal(await grupo('u-reuso-activo'), 'plan-9')
+        assert.equal(await grupo('u-reuso-limitado'), 'plan-9')
+        assert.equal(await grupo('u-reuso-suspendido'), 'suspendido')
+        // reuso 1: sin padre, el perfil del router si lo define
+        assert.equal(await grupo('u-dedicado'), 'perfil-del-router')
+    })
+
     it('rate-limit completo de A1 (plan.rate_limit / rate_limit_limitado) tal cual', async () => {
         const plan = {
             id: 7,
@@ -118,6 +143,7 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
             profile_ppp: null,
             rate_limit: '5M/20M 10M/40M 3750k/15M 16/16 2 1250k/5M',
             rate_limit_limitado: '1M/2M 0/0 0/0 0/0 2 250k/500k',
+            reuso: 1,
         }
         await guardar(servicio({ user_ppp: 'u-rl-activo', plan }))
         await guardar(servicio({ user_ppp: 'u-rl-limitado', estado: 'limitado', plan }))

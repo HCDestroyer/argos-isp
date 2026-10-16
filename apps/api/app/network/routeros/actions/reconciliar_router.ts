@@ -10,11 +10,20 @@ import {
     servicioDeComment,
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
-import { routerDispatcher, serviciosRedDeRouter } from '#network/routeros/consultas'
+import {
+    necesitaVelocidad,
+    planesDeRouter,
+    routerDispatcher,
+    serviciosVigentesDeRouter,
+} from '#network/routeros/consultas'
+import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
     aplicarEstado,
+    asegurarVelocidad,
     fabricaPorDefecto,
+    leerVelocidadRouter,
+    limpiarVelocidad,
     LOCK_ROUTEROS,
     marcarPendiente,
     perfilSuspendido,
@@ -94,7 +103,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             t.alConfirmar(() => quitarPendiente(input.router_id))
             return salida
         }
-        const servicios = await serviciosRedDeRouter(input.router_id, t.trx)
+        const todos = await serviciosVigentesDeRouter(input.router_id, t.trx)
+        const servicios = todos.filter((s) => s.tipo_conexion !== 'pppoe')
+        const planes = planesDeRouter(router.velocidad, todos)
+        const conVelocidad = router.con_credenciales || necesitaVelocidad(router.velocidad, planes)
         salida.servicios = servicios.length
         const ctx = (servicioId: number) => ({
             servicio_id: servicioId,
@@ -106,6 +118,23 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
         try {
             const cliente = this.#fabrica(router.api)
             try {
+                // Control de velocidad primero: los padres deben existir antes que sus hijas.
+                const ctxPlan = {
+                    servicio_id: null,
+                    evento_id: input.evento_id ?? null,
+                    request_id: t.ctx.requestId,
+                    motivo: `reconciliar: ${input.motivo}`,
+                }
+                const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
+                const velocidad = lecturaVelocidad
+                    ? estadoVelocidadRouter(router.velocidad, planes, lecturaVelocidad)
+                    : null
+                if (velocidad && lecturaVelocidad) {
+                    salida.avisos.push(...velocidad.avisos)
+                    salida.correcciones.push(
+                        ...(await asegurarVelocidad(cliente, velocidad, lecturaVelocidad, ctxPlan)),
+                    )
+                }
                 // Una lectura por menú: objetos con comment de servicio, agrupados por comment.
                 const actuales = new Map<RutaServicio, Map<string, ObjetoRouterOS[]>>()
                 const enRouter = new Set<number>()
@@ -136,6 +165,12 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                 for (const id of [...enRouter].filter((s) => !vigentes.has(s)).sort((a, b) => a - b)) {
                     salida.correcciones.push(
                         ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
+                    )
+                }
+                if (velocidad) {
+                    const despues = await leerVelocidadRouter(cliente)
+                    salida.correcciones.push(
+                        ...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)),
                     )
                 }
             } finally {

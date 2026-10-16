@@ -4,6 +4,7 @@ import env from '#start/env'
 import { leerVelocidad, velocidadEfectiva } from '#network/velocidad'
 import type { RouterApi } from '#network/routeros/router'
 import type { RouterRed, ServicioRed, TipoConexion } from '#network/routeros/estado_deseado'
+import { conPadreSimple, type PlanRouter, type RouterVelocidad } from '#network/routeros/velocidad_router'
 import type { EstadoServicio } from '#shared/eventos'
 
 /**
@@ -118,6 +119,47 @@ export async function serviciosRedDeRouter(
     return filas.map(aServicio)
 }
 
+/** Servicios no retirados de un router, de cualquier tipo (también PPPoE): base del control de velocidad. */
+export async function serviciosVigentesDeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<ServicioRed[]> {
+    const filas = (await consultaServicios(cliente)
+        .where('s.router_id', routerId)
+        .whereNot('s.estado', 'retirado')
+        .orderBy('s.id')) as FilaServicio[]
+    return filas.map(aServicio)
+}
+
+/**
+ * Planes con servicios vigentes en el router, para `estadoVelocidadRouter`: velocidad efectiva,
+ * cuántos cuentan para el padre (ni suspendidos ni retirados) y los `target` de las colas WISP que
+ * cuelgan de él. Las sesiones PPPoE no hacen falta: sus colas dinámicas se leen del router.
+ */
+export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
+    const planes = new Map<number, PlanRouter>()
+    for (const s of servicios) {
+        if (s.estado === 'retirado') continue
+        let plan = planes.get(s.plan_id)
+        if (!plan) {
+            plan = { plan_id: s.plan_id, velocidad: s.velocidad, servicios: 0, activos: 0, targets_wisp: [] }
+            planes.set(s.plan_id, plan)
+        }
+        plan.servicios++
+        if (s.estado === 'suspendido') continue
+        plan.activos++
+        if (s.tipo_conexion !== 'pppoe' && s.ipv4 && conPadreSimple(router.control, s.velocidad)) {
+            plan.targets_wisp.push(`${s.ipv4}/32`, ...s.prefijos_v6)
+        }
+    }
+    return [...planes.values()].sort((a, b) => a.plan_id - b.plan_id)
+}
+
+/** ¿El router necesita objetos de velocidad (árbol, o algún plan con padre)? */
+export function necesitaVelocidad(router: RouterVelocidad, planes: PlanRouter[]): boolean {
+    return router.control === 'arbol_pcq' || planes.some((p) => conPadreSimple(router.control, p.velocidad))
+}
+
 /**
  * Routers donde el dispatcher escribió alguna vez para el servicio (`audit.red`, tipo `routeros`):
  * al cambiar de router o de tipo, ahí puede quedar algo que limpiar.
@@ -135,7 +177,11 @@ export async function routersConHistorial(
     return filas.map((f) => Number(f.router_id))
 }
 
-/** Routers activos con servicios sin PPPoE (de un plan, si se indica): los que se reconcilian. */
+/**
+ * Routers activos que se reconcilian: los que tienen servicios sin PPPoE y los que ArgosIsp
+ * administra por la API (con credenciales y servicios: control de velocidad, perfiles PPP, árbol).
+ * Con `planId`, solo los que tienen servicios de ese plan.
+ */
 export async function routersConServiciosSinPppoe(
     opciones: { planId?: number } = {},
     cliente: QueryClientContract = db.connection(),
@@ -144,7 +190,11 @@ export async function routersConServiciosSinPppoe(
         .from('core.servicios as s')
         .join('network.routers as r', 'r.id', 's.router_id')
         .where('r.activo', true)
-        .whereNot('s.tipo_conexion', 'pppoe')
+        .where((q) =>
+            q
+                .whereNot('s.tipo_conexion', 'pppoe')
+                .orWhere((c) => c.whereNotNull('r.api_usuario').whereNotNull('r.api_password')),
+        )
         .distinct('s.router_id')
     if (opciones.planId) consulta.where('s.plan_id', opciones.planId)
     const filas = (await consulta) as Array<{ router_id: number }>
@@ -161,6 +211,9 @@ export interface RouterDispatcher {
     nombre: string
     api: RouterApi
     red: RouterRed
+    velocidad: RouterVelocidad
+    /** Tiene `api_usuario` y `api_password`: ArgosIsp puede administrarlo por la API REST */
+    con_credenciales: boolean
     activo: boolean
 }
 
@@ -182,6 +235,7 @@ export async function routerDispatcher(
     if (!fila) return null
     const r = fila.r
     const texto = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null)
+    const kbps = (v: unknown) => (v === null || v === undefined ? null : Number(v))
     return {
         activo: r.activo !== false,
         nombre: String(r.nombre ?? r.id),
@@ -206,6 +260,14 @@ export async function routerDispatcher(
                 predeterminados.interfaz_clientes ??
                 env.get('ROUTEROS_INTERFAZ_CLIENTES') ??
                 null,
+            control_velocidad: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
         },
+        velocidad: {
+            router_id: Number(r.id),
+            control: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+            capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
+            capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
+        },
+        con_credenciales: texto(r.api_usuario) !== null && texto(r.api_password) !== null,
     }
 }

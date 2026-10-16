@@ -20,6 +20,7 @@ Vive en `apps/api` y no en `services/coa` porque usa la función de velocidad ú
 | `actions/reconciliar_router.ts`   | `ReconciliarRouterOS` (`routeros.reconciliar`): un router completo contra todos sus servicios sin PPPoE                                                                                                                  |
 | `consumidor.ts`                   | Grupo `routeros` del bus                                                                                                                                                                                                 |
 | `jobs.ts`                         | Crons `recuperar` y `reconciliar` (cola `routeros-cron`)                                                                                                                                                                 |
+| `velocidad_router.ts`             | Función pura: objetos de velocidad del router (padres por plan, perfiles PPP `plan-<id>`) según `control_velocidad`, reuso y lo leído del router                                                                         |
 | `prefijos.ts`                     | Cola `routeros-prefijos`: tras `sesion.iniciada` sin /56 (IPv6 `radius_pool`), `CompletarPrefijoDelegado` lee el binding DHCPv6-PD del router (`app/network/sesiones`)                                                   |
 
 Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|recuperar`, `--sin-eventos`).
@@ -34,6 +35,25 @@ Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|
 | `/ip/arp`                   | `address`, `mac-address`, `interface` (del router o `ROUTEROS_INTERFAZ_CLIENTES`)                                                                             | Solo con `amarre_ip_mac` y `mac`; sin interfaz se avisa y no se crea                 |
 
 Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:<id>` no se toca (en particular las reglas fijas de `lab.rsc`, `argosisp: …` y `argosisp:top …`). El `target` lleva la IPv4 y el prefijo delegado propio del servicio, nunca el /64 del segmento WISP (compartido con RA).
+
+## Control de velocidad (`contratos/velocidad.md`)
+
+### Modo `simple` con reuso
+
+Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_routers`) y servicios no retirados en él:
+
+| Objeto          | Clave                          | Propiedades                                                                                                                                                                                                                                           |
+| --------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/queue/simple` | `comment = argosisp:plan:<id>` | `name = argosisp-plan-<id>`, `max-limit` / `limit-at` de `limitesPadrePlan(plan, activos)` (`#network/velocidad`), `priority` del plan, sin ráfaga, `target` = los de sus hijas                                                                       |
+| `/ppp/profile`  | `comment = argosisp:plan:<id>` | `name = plan-<id>`, `parent-queue = argosisp-plan-<id>` y lo que tenga el perfil `default` en `local-address`, `remote-address`, `remote-ipv6-prefix-pool`, `dhcpv6-pd-pool`, `use-ipv6`, `dns-server`, `change-tcp-mss`… (`PROPIEDADES_PERFIL_BASE`) |
+
+- `activos` = servicios del plan en el router (PPPoE y WISP) que no están suspendidos ni retirados. Con 0 activos se calcula como 1.
+- Hijas: las colas WISP activas o limitadas del plan llevan `parent = argosisp-plan-<id>` (suspendidas, `none`); las de PPPoE cuelgan por el perfil (`aaa` manda `Mikrotik-Group = plan-<id>`; el suspendido, `suspendido`).
+- `target` del padre = los `target` de las colas WISP hijas más los de las colas dinámicas de PPPoE que el router ya puso bajo el padre (se leen del router; por eso se recalcula también con `sesion.iniciada` / `sesion.terminada`). Un `target` amplio (la red de clientes) haría que el padre capture el tráfico de clientes de otros planes. Sin hijas: `192.0.2.255/32` (RFC 5737, ningún cliente la tiene). **Verificar en el laboratorio** que la cola dinámica de PPPoE cuelga del padre y que RouterOS acepta el `target` con la lista de hijas.
+- El padre existe mientras el plan tenga servicios no retirados en el router o colas dinámicas colgando de él. Orden: padres y perfiles primero, después las colas del servicio, al final se borran los sobrantes (perfiles antes que su cola). El `RouterOSFalso` rechaza un `parent`/`parent-queue` inexistente y el borrado de un padre con hijas, así que una prueba detecta un orden que dejaría hijas colgando.
+- Recálculo **por evento**, nunca por intervalo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada` (plan, router, tipo), retiro, `sesion.iniciada` / `sesion.terminada` y `plan.velocidad_cambiada` (reconcilia los routers del plan). Un router que no necesita control de velocidad (sin planes con reuso en `simple`) no se toca con eventos de PPPoE, salvo un cambio de plan, router o tipo o un retiro, que pueden dejar un padre sobrante.
+- Un cambio de plan de una sesión PPPoE con reuso: `coa` manda Disconnect (el perfil solo se asigna al conectar). Si solo el plan viejo tenía reuso, la sesión sigue bajo el padre viejo hasta reconectar (el padre no se borra mientras tenga hijas).
+- El reconciliador repone padres y perfiles borrados a mano, corrige los editados y borra los de planes sin reuso o sin servicios.
 
 ## Eventos
 
@@ -57,7 +77,7 @@ Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un
 
 ## Pendiente (tanda 2)
 
-- Modo de velocidad: colas padre por plan (`argosisp:plan:<id>`, reuso), `arbol_pcq` (queue tree, PCQ y mangle), perfiles PPP con `parent-queue` y `router.control_cambiado`.
+- `arbol_pcq` (queue tree, PCQ y mangle) y `router.control_cambiado`.
 - IPv6 en la address-list de corte (`/ipv6/firewall/address-list`): fuera de los menús administrados de la tarea 1.
 
 ## Pruebas
