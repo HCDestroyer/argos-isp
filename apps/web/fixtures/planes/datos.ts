@@ -2,6 +2,8 @@ import type { Schema } from '@argosisp/contracts'
 
 const creado = '2026-09-01T15:00:00.000Z'
 const meta = { version: 1, created_at: creado, updated_at: creado }
+/** Lo que la API manda en cada plan sin velocidad avanzada (`VELOCIDAD_POR_DEFECTO` de A1). */
+const velocidad = { garantizado_pct: null, rafaga_bajada_kbps: null, rafaga_subida_kbps: null, rafaga_umbral_pct: 75, rafaga_segundos: 16, prioridad: 8 }
 
 export const planes: Schema<'Plan'>[] = [
     {
@@ -13,6 +15,7 @@ export const planes: Schema<'Plan'>[] = [
         bajada_limitada_kbps: 1_000,
         subida_limitada_kbps: 512,
         reuso: 1,
+        ...velocidad,
         dual_stack: 'ambos',
         tamano_prefijo_delegado: 56,
         global: true,
@@ -28,6 +31,7 @@ export const planes: Schema<'Plan'>[] = [
         bajada_limitada_kbps: 1_000,
         subida_limitada_kbps: 512,
         reuso: 1,
+        ...velocidad,
         dual_stack: 'ambos',
         tamano_prefijo_delegado: 56,
         global: true,
@@ -43,6 +47,7 @@ export const planes: Schema<'Plan'>[] = [
         bajada_limitada_kbps: 2_000,
         subida_limitada_kbps: 1_000,
         reuso: 1,
+        ...velocidad,
         dual_stack: 'ambos',
         tamano_prefijo_delegado: 48,
         global: false,
@@ -58,6 +63,7 @@ export const planes: Schema<'Plan'>[] = [
         bajada_limitada_kbps: 2_000,
         subida_limitada_kbps: 1_000,
         reuso: 1,
+        ...velocidad,
         dual_stack: 'v4',
         tamano_prefijo_delegado: 64,
         global: false,

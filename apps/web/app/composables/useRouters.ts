@@ -5,6 +5,9 @@ export type RouterNas = Schema<'Router'>
 export type RedIpv4 = Schema<'RedIpv4'>
 export type Ipv6Bloque = Schema<'Ipv6Bloque'>
 export type FiltrosRouters = Omit<NonNullable<paths['/api/v1/routers']['get']['parameters']['query']>, 'cursor'>
+export type PlanEfectivo = Schema<'PlanEfectivo'>
+export type CambiosRouter = paths['/api/v1/routers/{id}']['put']['requestBody']['content']['application/json']
+export type CambioControlVelocidad = paths['/api/v1/routers/{id}/cambiar-control-velocidad']['post']['requestBody']['content']['application/json']
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -18,8 +21,25 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers', { params: { query } }))
     }
 
-    /** Planes disponibles en el router (globales + implementados en él). */
-    function planes(id: number): Promise<Resultado<Plan[]>> {
+    function ver(id: number): Promise<Resultado<RouterNas>> {
+        return resolver(api.GET('/api/v1/routers/{id}', { params: { path: { id } } }))
+    }
+
+    /** `PUT /routers/:id` (`routers.editar`) con `version`: datos y capacidad del enlace (no el modo de colas). */
+    function editar(id: number, cambios: CambiosRouter): Promise<Resultado<RouterNas>> {
+        return resolver(api.PUT('/api/v1/routers/{id}', { params: { path: { id } }, body: cambios }))
+    }
+
+    /**
+     * `POST /routers/:id/cambiar-control-velocidad` (`routers.cambiar_control_velocidad`, solo
+     * admin) con `version`; 409 si el router cambió. Emite `router.control_cambiado`.
+     */
+    function cambiarControlVelocidad(id: number, datos: CambioControlVelocidad): Promise<Resultado<RouterNas>> {
+        return resolver(api.POST('/api/v1/routers/{id}/cambiar-control-velocidad', { params: { path: { id } }, body: datos }))
+    }
+
+    /** Planes disponibles en el router (globales + implementados en él), con su rate-limit efectivo. */
+    function planes(id: number): Promise<Resultado<PlanEfectivo[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/planes', { params: { path: { id } } }))
     }
 
@@ -31,5 +51,5 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } } }))
     }
 
-    return { listar, planes, redesIpv4, ipv6Bloques }
+    return { listar, ver, editar, cambiarControlVelocidad, planes, redesIpv4, ipv6Bloques }
 }

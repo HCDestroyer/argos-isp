@@ -1,0 +1,379 @@
+<script setup lang="ts">
+import type { Problem } from '@argosisp/contracts'
+import type { FormSubmitEvent } from '@nuxt/ui'
+import * as z from 'zod'
+
+/**
+ * Control de velocidad de un router (`contratos/velocidad.md`): capacidad del enlace
+ * (`PUT /routers/:id`, `routers.editar`, con `version`) y modo de colas `simple` / `arbol_pcq`
+ * con su acción explícita (`POST /routers/:id/cambiar-control-velocidad`, solo admin), con una
+ * confirmación que explica qué implica el cambio. Muestra el rate-limit efectivo de cada plan.
+ */
+const props = defineProps<{
+    router: RouterNas
+}>()
+
+const abierto = defineModel<boolean>('open', { default: false })
+
+const emit = defineEmits<{
+    actualizado: [router: RouterNas]
+}>()
+
+const toast = useToast()
+const { puede } = usePermisos()
+
+const actual = shallowRef<RouterNas>(props.router)
+const control = computed<ControlVelocidad>(() => actual.value.control_velocidad ?? (actual.value.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple'))
+const otro = computed<ControlVelocidad>(() => (control.value === 'simple' ? 'arbol_pcq' : 'simple'))
+
+/* Capacidad del enlace. */
+const esquemaCapacidad = z.object({
+    capacidad_bajada_kbps: z.number().int('Solo kbps enteros').min(1, 'Al menos 1 kbps').max(100_000_000, 'Máximo 100 000 000 kbps').nullable(),
+    capacidad_subida_kbps: z.number().int('Solo kbps enteros').min(1, 'Al menos 1 kbps').max(100_000_000, 'Máximo 100 000 000 kbps').nullable(),
+})
+type DatosCapacidad = z.output<typeof esquemaCapacidad>
+const capacidad = reactive<DatosCapacidad>({ capacidad_bajada_kbps: null, capacidad_subida_kbps: null })
+const formulario = useTemplateRef('formulario')
+const guardando = ref(false)
+const problemaCapacidad = ref<Problem | null>(null)
+
+/* Planes efectivos en el router (rate-limit que calcula la API). */
+const planes = shallowRef<PlanEfectivo[]>([])
+const problemaPlanes = ref<Problem | null>(null)
+const cargandoPlanes = ref(false)
+
+async function cargarPlanes() {
+    if (!puede('planes.ver')) {
+        return
+    }
+    cargandoPlanes.value = true
+    const resultado = await useRouters().planes(actual.value.id)
+    cargandoPlanes.value = false
+    planes.value = resultado.ok ? resultado.data : []
+    problemaPlanes.value = resultado.ok ? null : resultado.problema
+}
+
+async function recargarRouter() {
+    const resultado = await useRouters().ver(actual.value.id)
+    if (resultado.ok) {
+        actual.value = resultado.data
+        capacidad.capacidad_bajada_kbps = resultado.data.capacidad_bajada_kbps ?? null
+        capacidad.capacidad_subida_kbps = resultado.data.capacidad_subida_kbps ?? null
+        problemaCapacidad.value = null
+        problemaCambio.value = null
+    }
+}
+
+watch(abierto, (valor) => {
+    if (!valor) {
+        return
+    }
+    actual.value = props.router
+    capacidad.capacidad_bajada_kbps = props.router.capacidad_bajada_kbps ?? null
+    capacidad.capacidad_subida_kbps = props.router.capacidad_subida_kbps ?? null
+    problemaCapacidad.value = null
+    void cargarPlanes()
+}, { immediate: true })
+
+async function guardarCapacidad(evento: FormSubmitEvent<DatosCapacidad>) {
+    guardando.value = true
+    problemaCapacidad.value = null
+    const resultado = await useRouters().editar(actual.value.id, { version: actual.value.version, ...evento.data })
+    guardando.value = false
+    if (!resultado.ok) {
+        const errores = erroresDeFormulario(resultado.problema)
+        if (errores.length) {
+            formulario.value?.setErrors(errores)
+        }
+        problemaCapacidad.value = errores.length ? null : resultado.problema
+        return
+    }
+    actual.value = resultado.data
+    emit('actualizado', resultado.data)
+    toast.add({ title: 'Capacidad guardada', description: `${actual.value.nombre}: el techo de la cola padre global se actualiza en el router.`, icon: 'i-lucide-circle-check', color: 'success' })
+}
+
+/* Cambio de modo. */
+const confirmando = ref(false)
+const motivo = ref('')
+const cambiando = ref(false)
+const problemaCambio = ref<Problem | null>(null)
+
+function abrirCambio() {
+    motivo.value = ''
+    problemaCambio.value = null
+    confirmando.value = true
+}
+
+async function cambiar() {
+    cambiando.value = true
+    problemaCambio.value = null
+    const datos: CambioControlVelocidad = { version: actual.value.version, control_velocidad: otro.value }
+    if (motivo.value.trim()) {
+        datos.motivo = motivo.value.trim()
+    }
+    const resultado = await useRouters().cambiarControlVelocidad(actual.value.id, datos)
+    cambiando.value = false
+    if (!resultado.ok) {
+        problemaCambio.value = resultado.problema
+        return
+    }
+    actual.value = resultado.data
+    confirmando.value = false
+    emit('actualizado', resultado.data)
+    toast.add({ title: `${actual.value.nombre}: ${CONTROLES_VELOCIDAD[control.value].etiqueta}`, description: 'El dispatcher aplica el cambio por lotes en el router.', icon: 'i-lucide-circle-check', color: 'success' })
+}
+
+/** Qué se crea y qué se borra al pasar de un modo al otro (`contratos/velocidad.md`). */
+const implicaciones = computed(() => (otro.value === 'arbol_pcq'
+    ? [
+            'Se crean el árbol de colas en global (padre de bajada y de subida con la capacidad del enlace) y un hijo por plan con su reuso y su garantía.',
+            'Se crean tipos de cola PCQ por plan (bajada y subida, con máscara /64 para IPv6), listas de direcciones y reglas mangle que marcan el tráfico de cada servicio.',
+            'Se borran las colas simples de los servicios y las padres por plan. PPPoE deja de usar el rate-limit de RADIUS para su cola.',
+            'FastTrack debe quedar desactivado para el tráfico de clientes; sin eso las colas no se aplican.',
+        ]
+    : [
+            'Se crea una cola simple por servicio (la dinámica de PPPoE con el rate-limit de RADIUS, una estática en WISP) y una cola padre por plan con el reuso.',
+            'Se borran el árbol de colas, los tipos PCQ, las listas de direcciones y las reglas mangle de ArgosIsp.',
+            'Con más de unos cientos de clientes por router, las colas simples cargan el CPU: el monitoreo avisa desde ~1000.',
+        ]))
+</script>
+
+<template>
+    <USlideover
+        v-model:open="abierto"
+        :title="`Velocidad · ${actual.nombre}`"
+        :description="`${actual.host} · NAS ${actual.nas_ip}`"
+        :ui="{ content: 'sm:max-w-xl' }"
+    >
+        <template #body>
+            <div class="flex flex-col gap-6">
+                <section
+                    class="flex flex-col gap-3"
+                    aria-labelledby="titulo-control"
+                >
+                    <h3
+                        id="titulo-control"
+                        class="text-sm font-medium text-highlighted"
+                    >
+                        Modo de colas
+                    </h3>
+                    <div class="flex flex-col gap-2 rounded-lg border border-default p-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <UBadge
+                                :label="CONTROLES_VELOCIDAD[control].etiqueta"
+                                :icon="CONTROLES_VELOCIDAD[control].icono"
+                                color="primary"
+                                variant="subtle"
+                                data-prueba="control-actual"
+                            />
+                            <span class="font-mono text-xs text-muted">{{ control }}</span>
+                        </div>
+                        <p class="text-sm text-muted">
+                            {{ CONTROLES_VELOCIDAD[control].descripcion }}
+                        </p>
+                        <UButton
+                            v-if="puede('routers.cambiar_control_velocidad')"
+                            :label="CONTROLES_VELOCIDAD[otro].cambiarA"
+                            :icon="CONTROLES_VELOCIDAD[otro].icono"
+                            color="warning"
+                            variant="outline"
+                            class="self-start"
+                            data-prueba="abrir-cambio-control"
+                            @click="abrirCambio"
+                        />
+                        <p
+                            v-else
+                            class="text-xs text-muted"
+                        >
+                            Solo un administrador cambia el modo de colas.
+                        </p>
+                    </div>
+                </section>
+
+                <section
+                    class="flex flex-col gap-3"
+                    aria-labelledby="titulo-capacidad"
+                >
+                    <h3
+                        id="titulo-capacidad"
+                        class="text-sm font-medium text-highlighted"
+                    >
+                        Capacidad del enlace
+                    </h3>
+                    <UForm
+                        id="form-capacidad"
+                        ref="formulario"
+                        :schema="esquemaCapacidad"
+                        :state="capacidad"
+                        :disabled="!puede('routers.editar')"
+                        class="flex flex-col gap-3"
+                        @submit="guardarCapacidad"
+                    >
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <UFormField
+                                label="Bajada (kbps)"
+                                name="capacidad_bajada_kbps"
+                                :help="capacidad.capacidad_bajada_kbps ? formatearVelocidad(capacidad.capacidad_bajada_kbps) : 'Vacía: sin techo.'"
+                            >
+                                <UInputNumber
+                                    v-model="capacidad.capacidad_bajada_kbps"
+                                    :min="1"
+                                    :step="1000"
+                                    :format-options="{ useGrouping: false }"
+                                    :step-snapping="false"
+                                    class="w-full"
+                                    data-prueba="capacidad-bajada"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Subida (kbps)"
+                                name="capacidad_subida_kbps"
+                                :help="capacidad.capacidad_subida_kbps ? formatearVelocidad(capacidad.capacidad_subida_kbps) : 'Vacía: sin techo.'"
+                            >
+                                <UInputNumber
+                                    v-model="capacidad.capacidad_subida_kbps"
+                                    :min="1"
+                                    :step="1000"
+                                    :format-options="{ useGrouping: false }"
+                                    :step-snapping="false"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                        </div>
+                        <p class="text-xs text-muted">
+                            Techo de la cola padre global: en árbol PCQ limita la suma de todos los planes.
+                        </p>
+                        <ProblemaAlerta
+                            v-if="problemaCapacidad"
+                            :problema="problemaCapacidad"
+                            :reintentar="problemaCapacidad.status === 409 ? recargarRouter : undefined"
+                        />
+                        <UButton
+                            v-if="puede('routers.editar')"
+                            type="submit"
+                            label="Guardar capacidad"
+                            icon="i-lucide-save"
+                            :loading="guardando"
+                            class="self-start"
+                            data-prueba="guardar-capacidad"
+                        />
+                    </UForm>
+                </section>
+
+                <section
+                    v-if="puede('planes.ver')"
+                    class="flex flex-col gap-3"
+                    aria-labelledby="titulo-planes-router"
+                >
+                    <h3
+                        id="titulo-planes-router"
+                        class="text-sm font-medium text-highlighted"
+                    >
+                        Rate-limit de cada plan en este router
+                    </h3>
+                    <ProblemaAlerta
+                        v-if="problemaPlanes"
+                        :problema="problemaPlanes"
+                        :reintentar="cargarPlanes"
+                        :reintentando="cargandoPlanes"
+                    />
+                    <USkeleton
+                        v-else-if="cargandoPlanes && !planes.length"
+                        class="h-24 w-full"
+                    />
+                    <p
+                        v-else-if="!planes.length"
+                        class="text-sm text-muted"
+                    >
+                        Ningún plan disponible en este router.
+                    </p>
+                    <ul
+                        v-else
+                        class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        data-prueba="planes-router"
+                    >
+                        <li
+                            v-for="plan in planes"
+                            :key="plan.id"
+                            class="flex flex-col gap-0.5 px-3 py-2"
+                        >
+                            <span class="text-sm font-medium text-highlighted">{{ plan.nombre }}</span>
+                            <span class="font-mono text-xs break-all">{{ plan.rate_limit }}</span>
+                            <span class="font-mono text-xs break-all text-muted">Limitado: {{ plan.rate_limit_limitado }}</span>
+                        </li>
+                    </ul>
+                    <p class="text-xs text-muted">
+                        Calculado por la API con las excepciones del router.
+                    </p>
+                </section>
+            </div>
+
+            <UModal
+                v-model:open="confirmando"
+                :title="`${CONTROLES_VELOCIDAD[otro].cambiarA} · ${actual.nombre}`"
+                :dismissible="!cambiando"
+            >
+                <template #body>
+                    <div class="flex flex-col gap-4">
+                        <UAlert
+                            color="warning"
+                            variant="subtle"
+                            icon="i-lucide-triangle-alert"
+                            title="Qué implica"
+                        >
+                            <template #description>
+                                <ul class="mt-1 flex list-disc flex-col gap-1 pl-4">
+                                    <li
+                                        v-for="linea in implicaciones"
+                                        :key="linea"
+                                    >
+                                        {{ linea }}
+                                    </li>
+                                </ul>
+                            </template>
+                        </UAlert>
+                        <p class="text-sm text-muted">
+                            El cambio se aplica por lotes y es reversible: se puede volver al modo anterior con esta misma acción. Mientras se aplica, los clientes pueden notar un corte breve de velocidad.
+                        </p>
+                        <UFormField
+                            label="Motivo"
+                            help="Opcional; queda en la bitácora."
+                        >
+                            <UTextarea
+                                v-model="motivo"
+                                :rows="2"
+                                placeholder="Ej.: el router ya pasa de 800 clientes"
+                                class="w-full"
+                            />
+                        </UFormField>
+                        <ProblemaAlerta
+                            v-if="problemaCambio"
+                            :problema="problemaCambio"
+                            :reintentar="problemaCambio.status === 409 ? recargarRouter : undefined"
+                            data-prueba="cambio-error"
+                        />
+                    </div>
+                </template>
+                <template #footer>
+                    <div class="flex w-full justify-end gap-2">
+                        <UButton
+                            label="Cancelar"
+                            color="neutral"
+                            variant="ghost"
+                            :disabled="cambiando"
+                            @click="confirmando = false"
+                        />
+                        <UButton
+                            :label="CONTROLES_VELOCIDAD[otro].cambiarA"
+                            color="warning"
+                            :loading="cambiando"
+                            data-prueba="confirmar-cambio-control"
+                            @click="cambiar"
+                        />
+                    </div>
+                </template>
+            </UModal>
+        </template>
+    </USlideover>
+</template>

@@ -2,8 +2,10 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type Plan = Schema<'Plan'>
 export type FiltrosPlanes = Omit<NonNullable<paths['/api/v1/planes']['get']['parameters']['query']>, 'cursor'>
+export type DatosPlan = paths['/api/v1/planes']['post']['requestBody']['content']['application/json']
+export type CambiosPlan = paths['/api/v1/planes/{id}']['put']['requestBody']['content']['application/json']
 
-/** Planes de velocidad. */
+/** Planes de velocidad: lista, alta y edición (con `version`; 409 si alguien lo cambió). */
 export function usePlanes() {
     const api = useApi()
 
@@ -15,5 +17,19 @@ export function usePlanes() {
         return resolver(api.GET('/api/v1/planes', { params: { query } }))
     }
 
-    return { listar }
+    function ver(id: number): Promise<Resultado<Plan>> {
+        return resolver(api.GET('/api/v1/planes/{id}', { params: { path: { id } } }))
+    }
+
+    /** `POST /planes` (`planes.crear`); 422 por campo, también las reglas cruzadas de velocidad. */
+    function crear(datos: DatosPlan): Promise<Resultado<Plan>> {
+        return resolver(api.POST('/api/v1/planes', { body: datos }))
+    }
+
+    /** `PUT /planes/:id` (`planes.editar`) con la `version` leída. */
+    function editar(id: number, cambios: CambiosPlan): Promise<Resultado<Plan>> {
+        return resolver(api.PUT('/api/v1/planes/{id}', { params: { path: { id } }, body: cambios }))
+    }
+
+    return { listar, ver, crear, editar }
 }
