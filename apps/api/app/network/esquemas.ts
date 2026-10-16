@@ -7,6 +7,7 @@ import {
     enumerado,
     id,
     instante,
+    lista,
     nulable,
     objeto,
     texto,
@@ -237,5 +238,35 @@ export const TramoAsignacion = definirEsquema(
             ...nulable(texto),
             description: 'alta, edicion: <campos>, retiro: <motivo> o inicial (migración)',
         },
+    }),
+)
+
+const objetoVistaPrevia = objeto({
+    ruta: texto,
+    clave: { ...texto, description: '`comment` del objeto (o `name` en `/queue/type`)' },
+    nombre: nulable(texto),
+})
+
+/** Vista previa del cambio de modo de control de un router (A2, `GET /routers/:id/vista-previa-control`). */
+export const VistaPreviaControl = definirEsquema(
+    'VistaPreviaControl',
+    objeto({
+        router_id: id,
+        de: enumerado(['simple', 'arbol_pcq']),
+        a: enumerado(['simple', 'arbol_pcq']),
+        servicios: entero,
+        lotes: {
+            ...entero,
+            description: 'Lotes en que el worker migra los servicios (con pausa entre lotes)',
+        },
+        sesiones_a_desconectar: {
+            ...entero,
+            description:
+                'Sesiones PPPoE abiertas que reciben Disconnect para entrar con el perfil del modo nuevo',
+        },
+        menus: lista(objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero })),
+        crear: lista(objetoVistaPrevia),
+        actualizar: lista(objetoVistaPrevia),
+        borrar: lista(objetoVistaPrevia),
     }),
 )

@@ -19,15 +19,15 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 3. Cachea lo obtenido con `SET NX` y **sin TTL**: si A1 escribió mientras se consultaba, gana A1. Los inexistentes no se cachean.
 4. Descifra `pass_ppp` (`v1.<iv>.<tag>.<datos>`, AES-256-GCM, `AAA_PPP_KEY`) y responde a FreeRADIUS, que autentica PAP o CHAP contra `control:Cleartext-Password`.
 
-| Estado del servicio        | HTTP | rlm_rest → FreeRADIUS | Atributos `reply:`                                                                                                                            |
-| -------------------------- | ---- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `activo`                   | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `<subida>k/<bajada>k` o `rate_limit_override` (burst); `Mikrotik-Group` = `profile_ppp` si lo hay                     |
-| `limitado`                 | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `<subida_limitada>k/<bajada_limitada>k` (si el plan no la define: la del plan y un aviso en el log)                   |
-| `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `256k/256k`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in` |
-| `retirado`                 | 401  | reject → Reject       | —                                                                                                                                             |
-| inexistente o lápida       | 404  | notfound → Reject     | —                                                                                                                                             |
-| Redis y respaldo sin datos | 503  | fail → Reject         | —                                                                                                                                             |
-| `pass_ppp` no descifrable  | 500  | fail → Reject         | —                                                                                                                                             |
+| Estado del servicio        | HTTP | rlm_rest → FreeRADIUS | Atributos `reply:`                                                                                                                               |
+| -------------------------- | ---- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `activo`                   | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `plan.rate_limit` (cadena completa de A1); `Mikrotik-Group` = `plan-<id>` con reuso > 1 en `simple`, si no `profile_ppp` |
+| `limitado`                 | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `plan.rate_limit_limitado`; `Mikrotik-Group` como en activo                                                              |
+| `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `256k/256k`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in`    |
+| `retirado`                 | 401  | reject → Reject       | —                                                                                                                                                |
+| inexistente o lápida       | 404  | notfound → Reject     | —                                                                                                                                                |
+| Redis y respaldo sin datos | 503  | fail → Reject         | —                                                                                                                                                |
+| `pass_ppp` no descifrable  | 500  | fail → Reject         | —                                                                                                                                                |
 
 Además, en todo Accept:
 
@@ -45,6 +45,10 @@ Además, en todo Accept:
 ¹ El "Delegated-IPv6-Pool" del brief es `Delegated-IPv6-Prefix-Pool` (RFC 6911, atributo 171) en FreeRADIUS 3.2; RouterOS lee el VSA `Mikrotik-Delegated-IPv6-Pool` (vendor 14988, atributo 22). Se mandan los dos. El /56 que eligió el router no llega en el accounting de RouterOS 7.24.5: lo lee `apps/api` del binding DHCPv6-PD (`app/network/sesiones/README.md`).
 
 `Mikrotik-Rate-Limit` (semana 2): si el registro trae `plan.rate_limit` / `plan.rate_limit_limitado` (cadena completa de `apps/api/app/network/velocidad.ts`, `contratos/aaa.md`), se manda tal cual; si no (registros viejos), `subida/bajada` como antes.
+
+Reuso en modo `simple` (`contratos/velocidad.md`): con `plan.reuso > 1` y `control_velocidad = simple`, activo y limitado reciben `Mikrotik-Group = plan-<plan.id>`: el perfil PPP que el dispatcher de RouterOS (`apps/api/app/network/routeros/velocidad_router.ts`) mantiene en el router con `parent-queue = argosisp-plan-<id>` (la cola padre del plan) y los pools, DNS e IPv6 del perfil `default`. Tiene prioridad sobre `profile_ppp`. El suspendido conserva `Mikrotik-Group = suspendido`.
+
+En `arbol_pcq` (`control_velocidad` del registro) el activo y el limitado no reciben `Mikrotik-Rate-Limit` ni el grupo del plan: no hay cola simple por sesión; el PCQ y el árbol del plan limitan las direcciones de la sesión, que el dispatcher de RouterOS pone en `argosisp-plan-<id>[-limitado]`. El suspendido conserva su perfil completo.
 
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
 

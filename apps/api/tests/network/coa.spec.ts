@@ -8,7 +8,8 @@ import { Redis } from 'ioredis'
 import env from '#start/env'
 import { cifrar } from '#shared/cifrado'
 import { insertarEvento } from '#shared/outbox'
-import { prefijoAaa } from '#core/aaa'
+import { claveAaa, prefijoAaa } from '#core/aaa'
+import { leerVelocidad, rateLimitServicio } from '#network/velocidad'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
@@ -91,7 +92,7 @@ async function esperarHasta<T>(
 }
 
 /** NAS con su router (secret cifrado v1), plan con velocidad limitada y servicio con sesión abierta. */
-async function escenario(nasIp: string) {
+async function escenario(nasIp: string, plan: Record<string, unknown> = {}) {
     const routerId =
         (
             (await db.from('network.routers').whereRaw('nas_ip = ?::inet', [nasIp]).select('id').first()) as {
@@ -103,6 +104,7 @@ async function escenario(nasIp: string) {
         bajada_kbps: 20480,
         subida_limitada_kbps: 1024,
         bajada_limitada_kbps: 2048,
+        ...plan,
     })
     const userPpp = unico('ppp')
     const servicioId = await crearServicioFila({
@@ -241,7 +243,14 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             // Donde la API publica aaa:user:* en pruebas: coa lee de ahí el rate-limit completo.
             // Sin esto coa usa su prefijo por defecto y cae al rate-limit de respaldo.
             AAA_REDIS_PREFIJO: prefijoAaa(),
-            COA_TIMEOUT_MS: '300',
+            // Respaldo cuando falta aaa:user:*: la API de esta corrida (el servidor HTTP de Japa)
+            API_INTERNAL_URL: `http://${env.get('HOST')}:${env.get('PORT')}/api/v1/`,
+            AAA_INTERNAL_TOKEN: env.get('INTERNAL_TOKEN'),
+            COA_API_TIMEOUT_MS: '2000',
+            COA_API_REINTENTOS: '1',
+            COA_API_ESPERA_MS: '50',
+            // Holgado: con la máquina cargada un ACK puede tardar; solo la prueba del NAS mudo espera el timeout.
+            COA_TIMEOUT_MS: '1500',
             COA_REINTENTOS: '1',
             COA_ESPERA_MS: '50',
         })
@@ -347,6 +356,54 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
                 ['CoA-Request', '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k'],
                 ['CoA-Request', '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k'],
             ],
+        )
+    })
+
+    test('sin aaa:user:* en Redis → coa pide el registro a la API y el CoA lleva la cadena completa', async ({
+        assert,
+    }) => {
+        const plan = {
+            reuso: 4,
+            prioridad: 4,
+            rafaga_bajada_kbps: 40000,
+            rafaga_subida_kbps: 10000,
+        }
+        const e = await escenario('127.0.0.2', plan)
+        const ultimo = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+        await new CambiarEstadoServicio().execute(
+            { servicioId: e.servicioId, nuevo: 'limitado', motivo: 'prueba e2e' },
+            contextoPrueba(),
+        )
+        await redis.del(claveAaa(e.userPpp))
+        const [limitar] = await relayar(e.servicioId, Number(ultimo.id ?? 0))
+        await respuestaFinal(limitar!)
+        // Vuelve a activo, también sin la clave: ráfaga, prioridad y limit-at del reuso.
+        const ultimo2 = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+        await new CambiarEstadoServicio().execute(
+            { servicioId: e.servicioId, nuevo: 'activo', motivo: 'prueba e2e' },
+            contextoPrueba(),
+        )
+        await redis.del(claveAaa(e.userPpp))
+        const [activar] = await relayar(e.servicioId, Number(ultimo2.id ?? 0))
+        const { final } = await respuestaFinal(activar!)
+        assert.isTrue(final.ok)
+
+        const fila = await db
+            .from('network.planes')
+            .whereIn('id', db.from('core.servicios').where('id', e.servicioId).select('plan_id'))
+            .firstOrFail()
+        const velocidad = leerVelocidad(fila)
+        const esperado = [rateLimitServicio(velocidad, 'limitado'), rateLimitServicio(velocidad, 'activo')]
+        assert.deepEqual(esperado, [
+            '1024k/2048k 0/0 0/0 0/0 4 256k/512k',
+            '5120k/20480k 10M/40M 3840k/15360k 16/16 4 1280k/5120k',
+        ])
+        const paquetes = nasAck
+            .json<PaqueteNas>()
+            .filter((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId)
+        assert.deepEqual(
+            paquetes.map((p) => [p.codigo, p.atributos['Mikrotik-Rate-Limit']]),
+            esperado.map((r) => ['CoA-Request', r]),
         )
     })
 

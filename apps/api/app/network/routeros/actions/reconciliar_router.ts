@@ -10,15 +10,26 @@ import {
     servicioDeComment,
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
-import { routerDispatcher, serviciosRedDeRouter } from '#network/routeros/consultas'
+import {
+    necesitaVelocidad,
+    planesDeRouter,
+    routerDispatcher,
+    serviciosVigentesDeRouter,
+} from '#network/routeros/consultas'
+import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
     aplicarEstado,
+    asegurarVelocidad,
+    enTransicion,
     fabricaPorDefecto,
+    leerVelocidadRouter,
+    limpiarVelocidad,
     LOCK_ROUTEROS,
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
+    reportarReglasOro,
     quitarPendiente,
     type Cambio,
     type FabricaClientes,
@@ -28,7 +39,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control'
     evento_id?: string | null
 }
 
@@ -45,6 +56,8 @@ export interface ResultadoReconciliar {
     omitido: boolean
     /** Colas simples del router en esta lectura (todas); null si no se pudo leer */
     colas_simples: number | null
+    /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
+    errores_velocidad: string[]
 }
 
 /**
@@ -72,7 +85,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
     }
 
     protected auditarExito(salida: ResultadoReconciliar): boolean {
-        return salida.correcciones.length > 0 || salida.error !== null
+        return salida.correcciones.length > 0 || salida.error !== null || salida.errores_velocidad.length > 0
     }
 
     protected async handle(input: EntradaReconciliar, t: Transaccion): Promise<ResultadoReconciliar> {
@@ -86,6 +99,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             error: null,
             omitido: false,
             colas_simples: null,
+            errores_velocidad: [],
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
         const router = await routerDispatcher(input.router_id, t.trx, this.#red)
@@ -94,7 +108,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             t.alConfirmar(() => quitarPendiente(input.router_id))
             return salida
         }
-        const servicios = await serviciosRedDeRouter(input.router_id, t.trx)
+        const todos = await serviciosVigentesDeRouter(input.router_id, t.trx)
+        const servicios = todos.filter((s) => s.tipo_conexion !== 'pppoe')
+        const planes = planesDeRouter(router.velocidad, todos)
+        const conVelocidad = router.con_credenciales || necesitaVelocidad(router.velocidad, planes)
         salida.servicios = servicios.length
         const ctx = (servicioId: number) => ({
             servicio_id: servicioId,
@@ -103,9 +120,33 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             motivo: `reconciliar: ${input.motivo}`,
         })
 
+        let nodosArbol: number | null = null
         try {
             const cliente = this.#fabrica(router.api)
             try {
+                // Control de velocidad primero: los padres deben existir antes que sus hijas.
+                const ctxPlan = {
+                    servicio_id: null,
+                    evento_id: input.evento_id ?? null,
+                    request_id: t.ctx.requestId,
+                    motivo: `reconciliar: ${input.motivo}`,
+                }
+                const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
+                nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null
+                const velocidad = lecturaVelocidad
+                    ? estadoVelocidadRouter(router.velocidad, planes, lecturaVelocidad)
+                    : null
+                if (velocidad && lecturaVelocidad) {
+                    salida.avisos.push(...velocidad.avisos)
+                    salida.errores_velocidad = await reportarReglasOro(
+                        t,
+                        { router_id: input.router_id, servicio_id: null, evento_id: input.evento_id ?? null },
+                        velocidad,
+                    )
+                    salida.correcciones.push(
+                        ...(await asegurarVelocidad(cliente, velocidad, lecturaVelocidad, ctxPlan)),
+                    )
+                }
                 // Una lectura por menú: objetos con comment de servicio, agrupados por comment.
                 const actuales = new Map<RutaServicio, Map<string, ObjetoRouterOS[]>>()
                 const enRouter = new Set<number>()
@@ -124,8 +165,9 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     }
                     actuales.set(ruta, porComment)
                 }
-                const vigentes = new Set(servicios.map((s) => s.servicio_id))
-                for (const servicio of servicios) {
+                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
+                const vigentes = new Set(todos.map((s) => s.servicio_id))
+                for (const servicio of todos) {
                     const estado = estadoDeseado(servicio, router.red, perfilSuspendido())
                     salida.avisos.push(...estado.avisos.map((a) => `servicio ${servicio.servicio_id}: ${a}`))
                     salida.correcciones.push(
@@ -138,13 +180,25 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                         ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
                     )
                 }
+                if (velocidad && !(await enTransicion(input.router_id))) {
+                    const despues = await leerVelocidadRouter(cliente)
+                    salida.correcciones.push(
+                        ...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)),
+                    )
+                }
             } finally {
                 cliente.cerrar()
             }
             t.alConfirmar(() => quitarPendiente(input.router_id))
             const colas = salida.colas_simples
             if (colas !== null) {
-                t.alConfirmar(() => guardarLecturaColas(input.router_id, router.nombre, colas))
+                const arbol = nodosArbol
+                t.alConfirmar(() =>
+                    guardarLecturaColas(input.router_id, router.nombre, colas, {
+                        arbol,
+                        control: router.velocidad.control,
+                    }),
+                )
             }
         } catch (error) {
             if (!(error instanceof ErrorRouterOS) && !(error instanceof RouterSinCredenciales)) throw error

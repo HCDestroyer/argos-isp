@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import type { Transaccion } from '#shared/domain_action'
 import env from '#start/env'
 import { prefijoColas, redis } from '#shared/redis'
 import { claveDesdeTexto } from '#shared/cifrado'
@@ -13,6 +14,14 @@ import { clienteDeRouter, type RouterApi } from '#network/routeros/router'
 import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
+import type { RutaRouterOS } from '#network/routeros/cliente'
+import {
+    claveTexto,
+    MENUS_VELOCIDAD,
+    sobrantesVelocidad,
+    type EstadoVelocidad,
+    type LecturaVelocidad,
+} from '#network/routeros/velocidad_router'
 
 /**
  * Piezas comunes del dispatcher de RouterOS (servicios sin PPPoE): auditoría en `audit.red`,
@@ -45,7 +54,7 @@ export const bitacoraRed: Bitacora = {
 export async function registrarFallo(datos: {
     router_id: number
     servicio_id: number | null
-    operacion: 'aplicar' | 'reconciliar'
+    operacion: 'aplicar' | 'reconciliar' | 'cambiar_control'
     evento_id: string | null
     request_id: string
     error: Error
@@ -118,8 +127,30 @@ export async function routersPendientes(): Promise<number[]> {
     return ids.map(Number).filter((n) => Number.isInteger(n) && n > 0)
 }
 
+/**
+ * Router en cambio de modo de control (`router.control_cambiado`, `cambio_control.ts`): mientras
+ * dura, los eventos y el reconciliador no borran los objetos del modo anterior (los servicios que
+ * faltan migrar todavía cuelgan de ellos); la limpieza la hace el último paso del cambio. Es un
+ * candado de trabajo, no una caché: vence en una hora por si el worker muere a mitad.
+ */
+export function claveTransicion(routerId: number): string {
+    return `${prefijoColas()}:routeros:transicion:${routerId}`
+}
+
+export async function marcarTransicion(routerId: number): Promise<void> {
+    await redis().set(claveTransicion(routerId), String(Date.now()), 'EX', 3600)
+}
+
+export async function quitarTransicion(routerId: number): Promise<void> {
+    await redis().del(claveTransicion(routerId))
+}
+
+export async function enTransicion(routerId: number): Promise<boolean> {
+    return (await redis().exists(claveTransicion(routerId))) === 1
+}
+
 export interface Cambio {
-    ruta: RutaServicio
+    ruta: RutaRouterOS
     comment: string
     accion: 'creado' | 'actualizado' | 'borrado'
     /** Objetos duplicados borrados además del cambio */
@@ -156,11 +187,107 @@ export async function aplicarEstado(
             })
         }
     }
-    const comment = `argosisp:servicio:${estado.servicio_id}`
-    for (const ruta of estado.ausentes) {
+    for (const { ruta, comment } of estado.ausentes) {
         if (actuales && !actuales.get(ruta)?.has(comment)) continue
         const borrados = await cliente.borrar(ruta, comment, ctx)
         if (borrados > 0) cambios.push({ ruta, comment, accion: 'borrado' })
+    }
+    return cambios
+}
+
+/**
+ * Reglas de oro que el router no cumpliría (`EstadoVelocidad.errores`): una fila en `audit.red` y
+ * `routeros.fallido` por cada una, con el detalle. El objeto afectado no se escribió.
+ */
+export async function reportarReglasOro(
+    t: Transaccion,
+    datos: { router_id: number; servicio_id: number | null; evento_id: string | null },
+    estado: EstadoVelocidad,
+): Promise<string[]> {
+    for (const e of estado.errores) {
+        await bitacoraRed.registrar({
+            tipo: 'routeros',
+            router_id: datos.router_id,
+            servicio_id: datos.servicio_id,
+            comando: {
+                operacion: 'validar_velocidad',
+                regla: e.regla,
+                plan_id: e.plan_id,
+                evento_id: datos.evento_id,
+                request_id: t.ctx.requestId,
+            },
+            respuesta: { error: e.detalle, final: true },
+            ok: false,
+        })
+        await t.emit('routeros.fallido', {
+            servicio_id: datos.servicio_id,
+            router_id: datos.router_id,
+            operacion: `validar velocidad (${e.regla})`,
+            error: e.detalle,
+        })
+    }
+    return estado.errores.map((e) => e.detalle)
+}
+
+/** Lee los menús del control de velocidad (un `listar` por menú). */
+export async function leerVelocidadRouter(cliente: ClienteRouterOS): Promise<LecturaVelocidad> {
+    const lectura: LecturaVelocidad = new Map()
+    for (const ruta of MENUS_VELOCIDAD) lectura.set(ruta, await cliente.listar(ruta))
+    return lectura
+}
+
+function comentarioDe(clave: Record<string, string>): string {
+    return clave.comment ?? clave.name ?? claveTexto(clave)
+}
+
+/**
+ * Crea o corrige los objetos de velocidad del router (padres, perfiles, árbol), en orden: padres
+ * antes que lo que cuelga de ellos. Lo que ya está igual en `lectura` no se toca.
+ */
+export async function asegurarVelocidad(
+    cliente: ClienteRouterOS,
+    estado: EstadoVelocidad,
+    lectura: LecturaVelocidad,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const cambios: Cambio[] = []
+    for (const objeto of estado.presentes) {
+        const existentes = (lectura.get(objeto.ruta as never) ?? []).filter((o: ObjetoRouterOS) =>
+            Object.entries(objeto.clave).every(([k, v]) => o[k] === v),
+        )
+        if (
+            existentes.length === 1 &&
+            Object.keys(diferencias(objeto.propiedades, existentes[0]!)).length === 0
+        ) {
+            continue
+        }
+        const r = await cliente.asegurarPor(objeto.ruta, objeto.clave, objeto.propiedades, ctx)
+        if (r.accion !== 'sin_cambios' || r.duplicados > 0) {
+            cambios.push({
+                ruta: objeto.ruta,
+                comment: comentarioDe(objeto.clave),
+                accion: r.accion === 'sin_cambios' ? 'actualizado' : r.accion,
+                ...(r.duplicados > 0 ? { duplicados: r.duplicados } : {}),
+            })
+        }
+    }
+    return cambios
+}
+
+/** Borra los objetos de velocidad que sobran (hijas antes que padres; `sobrantesVelocidad`). */
+export async function limpiarVelocidad(
+    cliente: ClienteRouterOS,
+    estado: EstadoVelocidad,
+    lectura: LecturaVelocidad,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const cambios: Cambio[] = []
+    for (const { ruta, objeto } of sobrantesVelocidad(estado, lectura)) {
+        const clave: Record<string, string> = objeto.comment
+            ? { comment: objeto.comment }
+            : { name: objeto.name ?? '' }
+        await cliente.borrarPor(ruta, clave, ctx)
+        cambios.push({ ruta, comment: objeto.comment ?? objeto.name ?? objeto['.id'], accion: 'borrado' })
     }
     return cambios
 }

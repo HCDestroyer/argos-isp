@@ -8,6 +8,7 @@ import radius from 'radius'
 import { firmarPeticion, verificarPeticion, verificarRespuesta } from '../src/firma.ts'
 import { atributosRadius, ClienteNasUdp } from '../src/nas.ts'
 import { NasSimulado } from './nas_simulado.ts'
+import { TIMEOUT_ACK_MS } from './ayudas.ts'
 
 const SECRET = 'secreto-de-prueba'
 
@@ -61,7 +62,7 @@ describe('firma RFC 5176', () => {
 describe('ClienteNasUdp ↔ NAS simulado', () => {
     const nas = new NasSimulado({ ip: '127.0.0.1', secret: SECRET })
     const cliente = new ClienteNasUdp()
-    const envio = (tipo: 'coa' | 'disconnect', secret = SECRET, timeoutMs = 500) => ({
+    const envio = (tipo: 'coa' | 'disconnect', secret = SECRET, timeoutMs = TIMEOUT_ACK_MS) => ({
         tipo,
         nasIp: '127.0.0.1',
         puerto: nas.puerto,

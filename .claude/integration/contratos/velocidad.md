@@ -29,6 +29,7 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
   - **WISP:** el dispatcher fija `parent` en cada cola.
   - **PPPoE:** `aaa` manda `Mikrotik-Group = plan-<plan_id>`, y ese perfil PPP tiene `parent-queue` apuntando a la cola padre. ArgosIsp mantiene los perfiles y las colas padre por la API REST.
 - **Recálculo del padre:** el `max-limit` del padre se recalcula **por evento** (`servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada` con plan o router, retiro), nunca por intervalo. Los suspendidos no cuentan.
+- **Implementación (A2, tanda 2):** padre y perfil solo para planes con `reuso > 1` efectivo en el router (con reuso 1 no hay padre ni `Mikrotik-Group = plan-<id>`). El perfil `plan-<id>` copia pools, DNS e IPv6 del perfil `default` del router. El `target` del padre son los de sus hijas (colas WISP y colas dinámicas de PPPoE leídas del router; se recalcula también con `sesion.iniciada` / `sesion.terminada`); sin hijas, `192.0.2.255/32`. Un cambio de plan de una sesión PPPoE con reuso se aplica con Disconnect. Detalle en `apps/api/app/network/routeros/README.md`, "Control de velocidad".
 
 ## Modo `arbol_pcq` (recomendado para muchos clientes por router)
 
@@ -42,13 +43,14 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
   - **WISP:** el dispatcher mantiene la lista con la API.
   - **PPPoE:** el dispatcher agrega o quita la entrada al recibir `sesion.iniciada` / `sesion.terminada` o `asignacion.cambiada`.
 - **Estado limitado:** el servicio pasa a la lista del plan limitado `argosisp-plan-<id>-limitado`, con su propio PCQ a la velocidad limitada. Nunca se edita el PCQ del plan para un solo cliente.
+- **Implementación (A2, tanda 2):** padres `argosisp-global-bajada` / `argosisp-global-subida` (`comment = argosisp:global:<sentido>`, `parent = global`, capacidad del enlace o `0`); por plan, tipos y nodos `argosisp-plan-<id>[-limitado]-<sentido>` (nodo con `comment = argosisp:plan:<id>[:limitado]:<sentido>`, el mangle IPv4 e IPv6 con el mismo `comment`). El nodo del plan cuenta los servicios en `activo` y el del limitado los `limitado`. Sin `Mikrotik-Rate-Limit` para activo y limitado en PPPoE (`aaa`) ni CoA de velocidad (`coa`); el suspendido conserva el rate-limit mínimo (PPPoE por RADIUS, WISP con una cola simple igual). Detalle en `apps/api/app/network/routeros/README.md`.
 
 ## Buenas prácticas que aplica ArgosIsp (y documenta en `infra/mikrotik/README.md`)
 
 - **FastTrack:** desactivado o excluido para el tráfico de clientes con colas. Con FastTrack las colas no se aplican; `lab.rsc` lo deja sin FastTrack para esas redes y lo verifica.
 - **Colas simples:** pocas y en orden. Primero las padres por plan; ArgosIsp no deja colas sueltas sin `comment = argosisp:…`. Más de ~1000 colas simples en un router es una alerta del monitoreo y se recomienda `arbol_pcq`.
 - **IPv6 incluido:** el `target` de las colas simples lleva la IPv4, el /64 y el /56; el árbol marca IPv6 con las mismas listas. Un cliente dual-stack nunca queda sin límite en IPv6.
-- **Garantía coherente:** `limit-at` ≤ `max-limit`, y la suma de los `limit-at` de un padre ≤ el `max-limit` del padre. Si no se cumple, la acción responde 422 con el detalle.
+- **Garantía coherente:** `limit-at` ≤ `max-limit`, y la suma de los `limit-at` de un padre ≤ el `max-limit` del padre. Si no se cumple, la acción responde 422 con el detalle. Del lado del router (A2) se vuelve a verificar con lo que hay de verdad (excepciones, sesiones PPPoE bajo el padre, capacidad del enlace en el árbol): si no se cumple, el padre o el árbol no se escribe y sale `routeros.fallido` con el detalle.
 - **Ráfaga sana:** `burst-threshold` < MIR < `burst-limit`.
 - **Prioridades:** 1 a 8 según el plan. Corporativos con prioridad alta, residenciales con 8.
 - **Cambios auditados e idempotentes:** cada escritura de cola, perfil, lista o mangle queda en `audit.red`; el reconciliador de `contratos/routeros.md` también corrige colas, listas y padres.

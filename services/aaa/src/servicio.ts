@@ -24,7 +24,12 @@ export interface PlanAaa {
      */
     rate_limit: string | null
     rate_limit_limitado: string | null
+    /** Reuso efectivo en el router (`1:N`); 1 si el registro no lo trae. */
+    reuso: number
 }
+
+/** `network.routers.control_velocidad` (`contratos/velocidad.md`); `simple` si el registro no lo trae. */
+export type ControlVelocidad = 'simple' | 'arbol_pcq'
 
 export type Ipv4Aaa = { modo: 'estatico'; ip: string } | { modo: 'pool'; pool: string } | null
 
@@ -42,6 +47,7 @@ export interface ServicioAaa {
     pass_ppp: string
     estado: EstadoServicio
     router_id: number
+    control_velocidad: ControlVelocidad
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
@@ -138,6 +144,7 @@ export function parsearRegistro(v: unknown): RegistroAaa {
         pass_ppp: texto(v, 'pass_ppp', ''),
         estado: estado as EstadoServicio,
         router_id: entero(v, 'router_id', ''),
+        control_velocidad: v.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
         plan: {
             id: entero(plan, 'id', 'plan.'),
             subida_kbps: entero(plan, 'subida_kbps', 'plan.'),
@@ -148,6 +155,10 @@ export function parsearRegistro(v: unknown): RegistroAaa {
             rate_limit: textoONulo(plan, 'rate_limit', 'plan.'),
             rate_limit_limitado: textoONulo(plan, 'rate_limit_limitado', 'plan.'),
             profile_ppp: textoONulo(plan, 'profile_ppp', 'plan.'),
+            reuso:
+                typeof plan.reuso === 'number' && Number.isInteger(plan.reuso) && plan.reuso >= 1
+                    ? plan.reuso
+                    : 1,
         },
         ipv4: ipv4(v.ipv4),
         ipv6: ipv6(v.ipv6),

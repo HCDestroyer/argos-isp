@@ -35,6 +35,11 @@ export interface Config {
     claveSecretos: string | undefined
     /** Prefijo de `aaa:user:<user_ppp>` (rate-limit completo de A1) */
     aaaPrefijo: string
+    /**
+     * Respaldo del rate-limit cuando `aaa:user:*` no está en Redis: la API interna, igual que `aaa`
+     * (`registro.ts`). null si no hay `API_INTERNAL_URL`.
+     */
+    api: { url: string; token: string; timeoutMs: number; reintentos: number; esperaMs: number } | null
     nas: {
         puerto: number
         timeoutMs: number
@@ -84,6 +89,15 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
         },
         claveSecretos: env.AAA_PPP_KEY,
         aaaPrefijo: env.AAA_REDIS_PREFIJO || 'aaa:user:',
+        api: env.API_INTERNAL_URL
+            ? {
+                  url: env.API_INTERNAL_URL,
+                  token: env.AAA_INTERNAL_TOKEN || env.INTERNAL_TOKEN || '',
+                  timeoutMs: numero(env.COA_API_TIMEOUT_MS, 2000),
+                  reintentos: numero(env.COA_API_REINTENTOS, 3),
+                  esperaMs: numero(env.COA_API_ESPERA_MS, 500),
+              }
+            : null,
         nas: {
             puerto: numero(env.COA_NAS_PORT, 3799),
             timeoutMs: numero(env.COA_TIMEOUT_MS, 2000),

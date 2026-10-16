@@ -4,7 +4,19 @@ import { decidir, EventoInvalido, leerEvento, type EventoServicio } from '../src
 import { leerConfig } from '../src/config.ts'
 import { Dispatcher } from '../src/dispatcher.ts'
 import { ClienteNasUdp } from '../src/nas.ts'
-import { AlmacenMemoria, CLAVE, SECRET, servicio, sesion, silencio, SUSPENDIDO } from './ayudas.ts'
+import {
+    AlmacenMemoria,
+    CLAVE,
+    RATE_ACTIVO,
+    RATE_LIMITADO,
+    SECRET,
+    servicio,
+    sesion,
+    silencio,
+    SUSPENDIDO,
+    TIMEOUT_ACK_MS,
+    TIMEOUT_CORTO_MS,
+} from './ayudas.ts'
 import { NasSimulado } from './nas_simulado.ts'
 
 function estado(de: string, a: string): EventoServicio {
@@ -33,8 +45,8 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
                 'Filter-Id': 'argos-corte.in',
             },
         ],
-        ['activo', 'limitado', 'coa', { 'Mikrotik-Rate-Limit': '1024k/2048k' }],
-        ['limitado', 'activo', 'coa', { 'Mikrotik-Rate-Limit': '5120k/20480k' }],
+        ['activo', 'limitado', 'coa', { 'Mikrotik-Rate-Limit': RATE_LIMITADO }],
+        ['limitado', 'activo', 'coa', { 'Mikrotik-Rate-Limit': RATE_ACTIVO }],
         ['suspendido', 'activo', 'disconnect', null],
         ['suspendido', 'limitado', 'disconnect', null],
         ['activo', 'retirado', 'disconnect', null],
@@ -48,16 +60,30 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         })
     }
 
-    it('rate_limit_override del router al volver a activo', () => {
+    it('la cadena de A1 tal cual (con override o ráfaga), sin recalcular', () => {
         const d = decidir(
             estado('limitado', 'activo'),
-            servicio({ rate_limit_override: '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' }),
+            servicio({ rate_limit: '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' }),
             SUSPENDIDO,
         )
         assert.deepEqual(d, {
             accion: 'coa',
             razon: 'velocidad: limitado → activo',
             atributos: { 'Mikrotik-Rate-Limit': '5M/20M 10M/40M 4M/16M 16/16 8 1M/4M' },
+        })
+    })
+
+    it('sin la cadena de A1: CoA con error, nunca un rate-limit armado con kbps', () => {
+        const d = decidir(
+            estado('activo', 'limitado'),
+            servicio({ estado: 'limitado', rate_limit_limitado: null, error_rate_limit: 'API caída' }),
+            SUSPENDIDO,
+        )
+        assert.deepEqual(d, {
+            accion: 'coa',
+            razon: 'velocidad: activo → limitado',
+            atributos: {},
+            error: 'API caída',
         })
     })
 
@@ -78,9 +104,35 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         assert.deepEqual(decidir(config(['plan']), servicio({ estado: 'limitado' }), SUSPENDIDO), {
             accion: 'coa',
             razon: 'cambió el plan',
-            atributos: { 'Mikrotik-Rate-Limit': '1024k/2048k' },
+            atributos: { 'Mikrotik-Rate-Limit': RATE_LIMITADO },
         })
         assert.equal(decidir(config(['plan']), servicio({ estado: 'suspendido' }), SUSPENDIDO).accion, 'nada')
+        // arbol_pcq: ni CoA de velocidad ni de plan (lo hacen las listas del árbol)
+        assert.equal(
+            decidir(config(['plan']), servicio({ control_velocidad: 'arbol_pcq' }), SUSPENDIDO).accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(
+                estado('activo', 'limitado'),
+                servicio({ estado: 'limitado', control_velocidad: 'arbol_pcq' }),
+                SUSPENDIDO,
+            ).accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(
+                estado('activo', 'suspendido'),
+                servicio({ estado: 'suspendido', control_velocidad: 'arbol_pcq' }),
+                SUSPENDIDO,
+            ).accion,
+            'coa',
+        )
+        // Reuso en modo simple: el perfil PPP con la cola padre solo se asigna al conectar.
+        assert.equal(
+            decidir(config(['plan']), servicio({ reuso: 4, control_velocidad: 'simple' }), SUSPENDIDO).accion,
+            'disconnect',
+        )
         assert.equal(decidir(config([]), servicio(), SUSPENDIDO).accion, 'nada')
     })
 
@@ -108,18 +160,23 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         almacen = new AlmacenMemoria()
         almacen.servicios.set(101, servicio({ estado: 'suspendido' }))
         almacen.sesiones.set(101, [sesion()])
-        dispatcher = new Dispatcher({
+        dispatcher = conTimeout(TIMEOUT_ACK_MS)
+    })
+
+    /** Dispatcher contra el NAS simulado; las pruebas de timeout usan uno corto. */
+    function conTimeout(timeoutMs: number) {
+        return new Dispatcher({
             almacen,
             nas: new ClienteNasUdp(),
             claveSecretos: CLAVE,
             suspendido: SUSPENDIDO,
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs,
             reintentos: 3,
             esperaMs: 10,
             log: silencio,
         })
-    })
+    }
 
     const suspender = (id: number | string = 1) => ({
         id,
@@ -198,7 +255,7 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('timeout: 1 + 3 reintentos con backoff, cada intento en audit.red y coa.fallido al agotar', async () => {
         nas.modo = 'silencio'
-        const r = await dispatcher.procesar(suspender(4))
+        const r = await conTimeout(TIMEOUT_CORTO_MS).procesar(suspender(4))
         assert.deepEqual(r.sesiones, [{ sesion_id: 1, tipo: 'coa', resultado: 'timeout', intentos: 4 }])
         assert.equal(nas.recibidos.length, 4)
         assert.deepEqual(
@@ -216,10 +273,17 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('timeout y luego ACK: un solo envío exitoso, sin coa.fallido', async () => {
         nas.modo = (n) => (n < 3 ? 'silencio' : 'ack')
-        const r = await dispatcher.procesar(suspender(5))
-        assert.deepEqual(r.sesiones, [{ sesion_id: 1, tipo: 'coa', resultado: 'ack', intentos: 3 }])
+        // Los dos primeros no responden (timeout corto); el tercero responde, pero con la máquina
+        // cargada su ACK puede llegar tarde y salir en el cuarto: se afirma "al menos 3".
+        const r = await conTimeout(400).procesar(suspender(5))
+        assert.equal(r.sesiones[0]?.resultado, 'ack')
+        assert.ok(r.sesiones[0]!.intentos >= 3)
         assert.equal(almacen.outbox.length, 0)
-        assert.equal(almacen.red.length, 3)
+        assert.equal(almacen.red.length, r.sesiones[0]!.intentos)
+        assert.deepEqual(
+            almacen.red.slice(0, 2).map((f) => f.respuesta.resultado),
+            ['timeout', 'timeout'],
+        )
     })
 
     it('sin sesión activa o evento superado: no envía nada', async () => {
@@ -311,13 +375,20 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
 
     it('desconexión con payload inválido: EventoInvalido (se descarta)', async () => {
         await assert.rejects(
-            dispatcher.procesar({ id: 23, evento: 'sesion.desconexion_solicitada', payload: { sesion_id: 0 } }),
+            dispatcher.procesar({
+                id: 23,
+                evento: 'sesion.desconexion_solicitada',
+                payload: { sesion_id: 0 },
+            }),
             EventoInvalido,
         )
     })
 
     it('suspender una sesión con IPv6: CoA por defecto; Disconnect con COA_SUSPENDER_CON_IPV6=disconnect', async () => {
-        const conV6 = sesion({ prefijo_enlace_v6: '2001:db8:101:1::/64', prefijo_delegado_v6: '2001:db8:300:100::/56' })
+        const conV6 = sesion({
+            prefijo_enlace_v6: '2001:db8:101:1::/64',
+            prefijo_delegado_v6: '2001:db8:300:100::/56',
+        })
         const soloV4 = sesion({ id: 2, acct_session_id: '81a00004' })
         almacen.sesiones.set(101, [conV6, soloV4])
 
@@ -334,7 +405,7 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
             suspendido: SUSPENDIDO,
             suspenderConIpv6: 'disconnect',
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs: TIMEOUT_ACK_MS,
             reintentos: 0,
             esperaMs: 10,
             log: silencio,

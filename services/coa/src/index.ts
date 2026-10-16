@@ -8,6 +8,7 @@ import { Dispatcher } from './dispatcher.ts'
 import { crearLog } from './log.ts'
 import { ClienteNasUdp } from './nas.ts'
 import { MetricasCoa } from './metricas.ts'
+import { FuenteRedisApi } from './registro.ts'
 
 const config = leerConfig()
 const log = crearLog(config.logLevel)
@@ -26,7 +27,13 @@ redis.on('error', () => {
 })
 
 const metricas = new MetricasCoa()
-const almacen = new AlmacenPg(config.db, { redis, prefijo: config.aaaPrefijo })
+if (!config.api) {
+    log.warn({}, 'coa sin API_INTERNAL_URL: si falta aaa:user:* en Redis, los CoA de velocidad fallan')
+}
+const almacen = new AlmacenPg(
+    config.db,
+    new FuenteRedisApi({ redis, prefijo: config.aaaPrefijo, api: config.api }),
+)
 const dispatcher = new Dispatcher({
     almacen,
     nas: new ClienteNasUdp(config.nas.origen),

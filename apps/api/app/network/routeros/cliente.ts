@@ -30,6 +30,8 @@ export const RUTAS = [
     '/queue/type',
     '/ip/firewall/address-list',
     '/ip/firewall/mangle',
+    '/ipv6/firewall/address-list',
+    '/ipv6/firewall/mangle',
     '/ip/dhcp-server/lease',
     '/ip/arp',
     '/ppp/profile',
@@ -182,8 +184,21 @@ export class ClienteRouterOS {
         propiedades: Propiedades,
         ctx: ContextoRed = {},
     ): Promise<ResultadoAsegurar> {
+        return this.asegurarPor(ruta, { comment }, propiedades, ctx)
+    }
+
+    /**
+     * Como `asegurar`, con otra clave de identidad: `{ name }` en menús sin `comment` (`/queue/type`).
+     * La clave va siempre en el objeto creado.
+     */
+    async asegurarPor(
+        ruta: RutaRouterOS,
+        clave: Propiedades,
+        propiedades: Propiedades,
+        ctx: ContextoRed = {},
+    ): Promise<ResultadoAsegurar> {
         return this.#conReintentos(async (intento) => {
-            const existentes = await this.#listar(ruta, { comment })
+            const existentes = await this.#listar(ruta, clave)
             const [primero, ...sobrantes] = existentes
             for (const sobrante of sobrantes) await this.#borrarId(ruta, sobrante, ctx, intento)
             if (!primero) {
@@ -191,7 +206,7 @@ export class ClienteRouterOS {
                     'PUT',
                     ruta,
                     null,
-                    { ...propiedades, comment },
+                    { ...propiedades, ...clave },
                     ctx,
                     intento,
                 )
@@ -210,8 +225,13 @@ export class ClienteRouterOS {
 
     /** Borra todo lo que lleve ese `comment`. Devuelve cuántos objetos borró (0 si no había). */
     async borrar(ruta: RutaRouterOS, comment: string, ctx: ContextoRed = {}): Promise<number> {
+        return this.borrarPor(ruta, { comment }, ctx)
+    }
+
+    /** Borra todo lo que coincida con la clave (`{ comment }` o `{ name }`). */
+    async borrarPor(ruta: RutaRouterOS, clave: Propiedades, ctx: ContextoRed = {}): Promise<number> {
         return this.#conReintentos(async (intento) => {
-            const existentes = await this.#listar(ruta, { comment })
+            const existentes = await this.#listar(ruta, clave)
             for (const objeto of existentes) await this.#borrarId(ruta, objeto, ctx, intento)
             return existentes.length
         })

@@ -50,7 +50,7 @@ export interface OpcionesDispatcher {
 export interface ResultadoSesion {
     sesion_id: number
     tipo: TipoPaquete
-    resultado: Respuesta['resultado'] | 'sin_secret' | 'ya_procesado'
+    resultado: Respuesta['resultado'] | 'sin_secret' | 'sin_rate_limit' | 'ya_procesado'
     intentos: number
 }
 
@@ -205,24 +205,14 @@ export class Dispatcher {
             requestId: entrada.requestId ?? null,
         })
 
-        let secret: string | null
-        try {
-            secret = sesion.radius_secret ? descifrar(sesion.radius_secret, this.#op.claveSecretos) : null
-        } catch {
-            secret = null
-        }
-        if (!secret) {
-            const error =
-                sesion.router_id === null
-                    ? 'NAS no registrado en network.routers'
-                    : 'router sin radius_secret válido'
+        const sinEnviar = async (resultado: 'sin_secret' | 'sin_rate_limit', error: string) => {
             await almacen.registrar(
                 {
                     tipo,
                     router_id: sesion.router_id,
                     servicio_id: servicioId,
                     comando: { ...comando, intento: 0 },
-                    respuesta: { resultado: 'sin_secret', error, final: true },
+                    respuesta: { resultado, error, final: true },
                     ok: false,
                 },
                 fallar(error),
@@ -237,8 +227,26 @@ export class Dispatcher {
                 },
                 'coa.fallido',
             )
-            this.#op.metricas?.envio(tipo, 'sin_secret')
-            return { sesion_id: sesion.id, tipo, resultado: 'sin_secret', intentos: 0 }
+            this.#op.metricas?.envio(tipo, resultado)
+            return { sesion_id: sesion.id, tipo, resultado, intentos: 0 }
+        }
+
+        // Sin la cadena de A1 no se manda un rate-limit inventado (`registro.ts`).
+        if (decision.accion === 'coa' && decision.error) return sinEnviar('sin_rate_limit', decision.error)
+
+        let secret: string | null
+        try {
+            secret = sesion.radius_secret ? descifrar(sesion.radius_secret, this.#op.claveSecretos) : null
+        } catch {
+            secret = null
+        }
+        if (!secret) {
+            return sinEnviar(
+                'sin_secret',
+                sesion.router_id === null
+                    ? 'NAS no registrado en network.routers'
+                    : 'router sin radius_secret válido',
+            )
         }
 
         const maximo = 1 + Math.max(0, this.#op.reintentos)

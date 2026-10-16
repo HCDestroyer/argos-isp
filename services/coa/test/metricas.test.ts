@@ -5,7 +5,16 @@ import { crearServidor } from '../src/app.ts'
 import { Dispatcher } from '../src/dispatcher.ts'
 import { MetricasCoa } from '../src/metricas.ts'
 import { ClienteNasUdp } from '../src/nas.ts'
-import { AlmacenMemoria, CLAVE, SECRET, servicio, sesion, silencio, SUSPENDIDO } from './ayudas.ts'
+import {
+    AlmacenMemoria,
+    CLAVE,
+    SECRET,
+    servicio,
+    sesion,
+    silencio,
+    SUSPENDIDO,
+    TIMEOUT_ACK_MS,
+} from './ayudas.ts'
 import { NasSimulado } from './nas_simulado.ts'
 
 /** Tarea 5 (semana 2): `/metrics` del coa-dispatcher. */
@@ -41,7 +50,7 @@ describe('GET /metrics de coa', () => {
             claveSecretos: CLAVE,
             suspendido: SUSPENDIDO,
             puertoNas: nas.puerto,
-            timeoutMs: 150,
+            timeoutMs: TIMEOUT_ACK_MS,
             reintentos: 0,
             esperaMs: 1,
             log: silencio,

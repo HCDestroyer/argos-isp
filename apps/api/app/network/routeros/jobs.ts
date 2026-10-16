@@ -6,6 +6,7 @@ import { contextoSistema } from '#shared/contexto'
 import ReconciliarRouterOS, { type ResultadoReconciliar } from '#network/routeros/actions/reconciliar_router'
 import { routerDispatcher, routersConServiciosSinPppoe } from '#network/routeros/consultas'
 import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
+import { ejecutarCambioControl, type EntradaCambioControl } from '#network/routeros/cambio_control'
 
 /**
  * Crons del reconciliador (`node ace routeros:worker`), cola `routeros-cron`:
@@ -14,6 +15,7 @@ import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#
  * | --- | --- | --- |
  * | `recuperar` | 30 s (`ROUTEROS_RECUPERAR_CADA_MS`) | Sondea (`/system/resource`) los routers que fallaron; al responder, los reconcilia |
  * | `reconciliar` | 15 min (`ROUTEROS_RECONCILIAR_CADA_MS`) | Reconcilia todos los routers con servicios sin PPPoE (red de seguridad) |
+ * | `cambiar_control` | por evento (`router.control_cambiado`) | Cambio de modo de control por lotes (`cambio_control.ts`); `jobId` = el evento |
  *
  * Lock: concurrencia 1 y un advisory lock de Postgres por job (si otra instancia lo tiene, el
  * disparo se omite); cada router además se serializa con el lock de las acciones. Los jobs solo
@@ -133,8 +135,32 @@ export async function ejecutarCronRouterOS(
     }
 }
 
+let colaCambios: Queue | null = null
+
+/**
+ * Encola el cambio de modo de un router (lo consume este mismo worker, concurrencia 1: no se cruza
+ * con la reconciliación). `jobId` = el evento: una entrega repetida no lo encola dos veces.
+ */
+export async function encolarCambioControl(entrada: EntradaCambioControl): Promise<void> {
+    colaCambios ??= new Queue(NOMBRE_COLA_ROUTEROS, { connection: conexion(), prefix: prefijo() })
+    await colaCambios.add('cambiar_control', entrada, {
+        jobId: `control-${entrada.router_id}-${entrada.evento_id ?? Date.now()}`,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
+    })
+}
+
+export async function cerrarColaCambios(): Promise<void> {
+    await colaCambios?.close()
+    colaCambios = null
+}
+
 export function crearWorkerRouterOS(opciones: { prefijo?: string } = {}) {
-    const worker = new Worker(NOMBRE_COLA_ROUTEROS, (job: Job) => ejecutarCronRouterOS(job.name), {
+    const procesar = (job: Job) =>
+        job.name === 'cambiar_control'
+            ? ejecutarCambioControl(job.data as EntradaCambioControl)
+            : ejecutarCronRouterOS(job.name)
+    const worker = new Worker(NOMBRE_COLA_ROUTEROS, procesar, {
         connection: conexion(),
         prefix: prefijo(opciones.prefijo),
         concurrency: 1,

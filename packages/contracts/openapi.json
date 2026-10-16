@@ -14354,6 +14354,98 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/vista-previa-control": {
+      "get": {
+        "operationId": "routersVistaPreviaControl",
+        "summary": "Vista previa del cambio de control de velocidad (qué se crea y qué se borra)",
+        "description": "Calcula, con los datos vigentes y sin tocar el router, los objetos que el cambio a `a` crea, corrige y borra (colas, árbol, PCQ, mangle, address-lists, perfiles PPP), los lotes y las sesiones PPPoE que reciben Disconnect. Con `a` igual al modo actual, todo vacío. 404 si el router no existe.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "a",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "simple",
+                "arbol_pcq"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaControl"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios": {
       "get": {
         "operationId": "serviciosListar",
@@ -25841,6 +25933,156 @@
           },
           "descripcion": {
             "type": "string"
+          }
+        }
+      },
+      "VistaPreviaControl": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "de",
+          "a",
+          "servicios",
+          "lotes",
+          "sesiones_a_desconectar",
+          "menus",
+          "crear",
+          "actualizar",
+          "borrar"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "de": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ]
+          },
+          "a": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ]
+          },
+          "servicios": {
+            "type": "integer"
+          },
+          "lotes": {
+            "type": "integer",
+            "description": "Lotes en que el worker migra los servicios (con pausa entre lotes)"
+          },
+          "sesiones_a_desconectar": {
+            "type": "integer",
+            "description": "Sesiones PPPoE abiertas que reciben Disconnect para entrar con el perfil del modo nuevo"
+          },
+          "menus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "crear",
+                "actualizar",
+                "borrar"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "crear": {
+                  "type": "integer"
+                },
+                "actualizar": {
+                  "type": "integer"
+                },
+                "borrar": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "crear": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "actualizar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "borrar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },

@@ -37,6 +37,7 @@ export function servicio(
         pass_ppp: cifrar(pass, CLAVE),
         estado: 'activo',
         router_id: 1,
+        control_velocidad: 'simple',
         plan: {
             id: 1,
             subida_kbps: 5120,
@@ -47,6 +48,7 @@ export function servicio(
             profile_ppp: null,
             rate_limit: null,
             rate_limit_limitado: null,
+            reuso: 1,
         },
         ipv4: { modo: 'estatico', ip: '10.10.1.10' },
         ipv6: {
