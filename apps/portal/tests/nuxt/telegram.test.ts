@@ -21,8 +21,8 @@ async function esperarHasta(condicion: () => boolean, ms = 2_000) {
     }
 }
 
-async function montar(vinculado = false) {
-    const wrapper = await mountSuspended(CuentaTelegram, { props: { vinculado, intervaloMs: 20 } })
+async function montar(vinculado = false, intervaloMs = 20) {
+    const wrapper = await mountSuspended(CuentaTelegram, { props: { vinculado, intervaloMs } })
     await flushPromises()
     await flushPromises()
     return wrapper
@@ -58,7 +58,10 @@ describe('vincular Telegram', () => {
         fijarSesionFixture(true)
         await useApi().POST('/api/v1/portal/telegram/vincular')
         sessionStorage.setItem('argos:telegram:vence', String(Date.now() + 60_000))
-        const wrapper = await montar()
+        // El fixture da el chat por vinculado en la segunda consulta: con 20 ms entre consultas,
+        // en una máquina rápida ya pasó antes de revisar el estado "esperando". 300 ms deja ver ese
+        // estado y `esperarHasta` (2 s) sigue alcanzando para ver el vínculo.
+        const wrapper = await montar(false, 300)
         expect(wrapper.text()).toContain('Esperando la confirmación del bot de Telegram')
         expect(wrapper.find('[data-testid="telegram-codigo"]').exists()).toBe(false)
         await esperarHasta(() => wrapper.find('[data-testid="telegram-vinculado"]').exists())
