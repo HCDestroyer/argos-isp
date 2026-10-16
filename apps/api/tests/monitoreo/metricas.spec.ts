@@ -4,7 +4,14 @@ import { contextoSistema } from '#shared/contexto'
 import { redis } from '#shared/redis'
 import { nombreStream } from '#shared/eventos_bus'
 import { conexionRedis, prefijoColas } from '#notify/cola'
-import { fijarTokenMetricas, quitarSeccionMetricas, registrarSeccionMetricas } from '#monitoreo/metricas'
+import {
+    fijarTokenMetricas,
+    quitarSeccionMetricas,
+    registrarSeccionMetricas,
+    seccionMetricas,
+    type MetricaExtra,
+} from '#monitoreo/metricas'
+import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { Exposicion } from '#monitoreo/prometheus'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { unico } from '#tests/ayudas'
@@ -24,10 +31,30 @@ function valor(texto: string, nombre: string, etiquetas: Record<string, string> 
     return null
 }
 
+/**
+ * La sección `routeros` real (A2, `start/routes/network.ts`) la reemplaza una prueba de aquí. Se
+ * guarda al empezar el grupo y se devuelve tal cual en cada prueba y en el teardown del grupo,
+ * para que las pruebas de A2 que leen `/metrics` pasen en cualquier orden.
+ */
+let routerosReal: (() => Promise<MetricaExtra[]>) | undefined
+
+function restaurarRouterOS() {
+    if (routerosReal) registrarSeccionMetricas('routeros', routerosReal)
+    else quitarSeccionMetricas('routeros')
+}
+
 test.group('monitoreo · /metrics', (group) => {
+    group.setup(() => {
+        routerosReal = seccionMetricas('routeros')
+    })
+    group.teardown(() => restaurarRouterOS())
+
     group.each.setup(() => {
         fijarTokenMetricas(TOKEN)
-        return () => fijarTokenMetricas(undefined)
+        return () => {
+            fijarTokenMetricas(undefined)
+            restaurarRouterOS()
+        }
     })
 
     test('sin METRICS_TOKEN responde 404; con token equivocado 401', async ({ client }) => {
@@ -156,8 +183,14 @@ test.group('monitoreo · /metrics', (group) => {
             assert.equal(valor(fallo.text(), 'argosisp_metricas_error', { seccion: 'routeros' }), 1)
             assert.isNotNull(valor(fallo.text(), 'argosisp_outbox_sin_publicar'))
         } finally {
-            quitarSeccionMetricas('routeros')
+            restaurarRouterOS()
         }
+    })
+
+    test('la sección routeros real queda registrada después de reemplazarla', ({ assert }) => {
+        // La API la registra al cargar sus rutas; la prueba anterior la reemplazó y la devolvió
+        assert.strictEqual(routerosReal, leerMetricasRouterOS)
+        assert.strictEqual(seccionMetricas('routeros'), leerMetricasRouterOS)
     })
 
     test('formato: etiquetas escapadas y nombres válidos', ({ assert }) => {

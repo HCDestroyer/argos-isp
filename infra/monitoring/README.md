@@ -4,7 +4,8 @@
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Métricas de la API (`GET /metrics`, Bearer `METRICS_TOKEN`) | `apps/api/app/monitoreo/README.md`                                                                                                |
 | Prometheus                                                  | servicio `prometheus` del compose, perfil `monitoreo`; configuración en `prometheus.yml`                                          |
-| Reglas de alerta                                            | `reglas.yml` (API sin métricas, colas atascadas o con fallos, grupos de eventos atrasados, outbox sin publicar, crons sin correr, routers con más de ~1000 colas simples); pruebas en `reglas.test.yml` (CI) |
+| Métricas de aaa y coa (A2, `GET /metrics`, mismo Bearer)   | jobs `aaa` (`aaa:3100`) y `coa` (`coa:3200`) de `prometheus.yml`; detalle abajo, "aaa y coa"                                       |
+| Reglas de alerta                                            | `reglas.yml` (API, aaa o coa sin métricas, aaa sin Redis o con p95 > 100 ms, coa sin consumir, colas atascadas o con fallos, grupos de eventos atrasados, outbox sin publicar, crons sin correr, routers con más de ~1000 colas simples); pruebas en `reglas.test.yml` (CI) |
 | Alertas de negocio al equipo por Telegram                   | `apps/api/app/notify` (aaa caído y recuperado, CoA fallido, RouterOS fallido, caja con diferencia, crons de billing atrasados)    |
 | Health checks                                               | `healthcheck` de cada servicio en `infra/docker-compose.yml`                                                                      |
 | Logs                                                        | JSON a stdout en api (pino), aaa (pino de Fastify) y coa (`docker compose logs -f <servicio>`)                                    |
@@ -53,3 +54,17 @@ docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prom
 ## Verificado (día 4)
 
 Compose con la imagen actual de la API: `/metrics` con el usuario de la aplicación (`argosisp_api`) devuelve colas (`billing-cron`, `notify-cron` con sus schedulers), grupos `notify` y `aaa-cache` con lag 0, outbox 0, la última corrida de cada cron e incidentes abiertos; Prometheus tiene el target `api` en `up 1` y carga las 8 reglas (`promtool check rules` y `check config` en verde).
+
+## aaa y coa
+
+Prometheus raspa `aaa:3100/metrics` y `coa:3200/metrics` con el mismo `METRICS_TOKEN` que la API (el compose se lo pasa a los tres). Con el token vacío aaa y coa responden sin autenticación; la API responde 404. Ambos son del perfil `lab`: sin él, sus targets quedan en `down` y salta `ServicioSinMetricas`.
+
+| Métrica | Servicio | Uso |
+| --- | --- | --- |
+| `argosisp_aaa_autorizaciones_total{resultado}` | aaa | autorizaciones por segundo: `sum(rate(argosisp_aaa_autorizaciones_total[1m]))` |
+| `argosisp_aaa_autorizacion_duracion_segundos{resultado}` | aaa | latencia (histograma): `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))` |
+| `argosisp_aaa_accounting_total{tipo,resultado}`, `argosisp_aaa_redis_arriba` | aaa | accounting encolado y Redis |
+| `argosisp_coa_envios_total{tipo,resultado}`, `argosisp_coa_rtt_segundos{tipo}` | coa | CoA/Disconnect por resultado (ack, nak, timeout, error, sin_secret) y RTT del NAS |
+| `argosisp_coa_eventos_pendientes`, `argosisp_coa_consumidor_activo` | coa | grupo `coa` de `argos:eventos` |
+
+Reglas: `ServicioSinMetricas` (2 min), `AaaSinRedis` (1 min), `AaaLatenciaAlta` (p95 > 100 ms durante 10 min) y `CoaConsumidorInactivo` (2 min), con pruebas en `reglas.test.yml`. Las colas `routeros-cron` y `routeros-prefijos` del `routeros-worker` aparecen en `argosisp_cola_trabajos` de la API.
