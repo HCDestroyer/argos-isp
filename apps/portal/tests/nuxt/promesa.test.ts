@@ -74,7 +74,9 @@ describe('esquema y textos de la promesa', () => {
         expect(esquemaPromesa({ ...conPrevio, pago_previo: '0.00' }).safeParse({ vence_el: diaFixture(1), monto: '350.00' }).success).toBe(true)
 
         const explicacion = textoPagoPrevio(conPrevio)
-        expect(explicacion).toContain('abonar el 50% de tu deuda (Q\u00A0262.50)')
+        expect(explicacion).not.toContain('abonar')
+        expect(explicacion).toContain('Paga en línea, en la oficina o por depósito')
+        expect(textoPagoPrevio({ deuda_maxima: null })).toBe('Paga en línea, en la oficina o por depósito y luego solicita la promesa.')
         expect(explicacion).toContain('Tu saldo vencido (Q\u00A0350.00) pasa del máximo para una promesa (Q\u00A0300.00)')
     })
 

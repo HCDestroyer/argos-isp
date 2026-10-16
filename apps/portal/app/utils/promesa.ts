@@ -39,13 +39,12 @@ export function esquemaPromesa(
     })
 }
 
-/** Por qué hay que pagar antes de prometer (abono inicial o deuda vencida sobre el máximo). */
-export function textoPagoPrevio(condiciones: Pick<Condiciones, 'abono_inicial' | 'deuda_maxima'>): string {
+/**
+ * Por qué hay que pagar antes de prometer. El abono ya está en la lista de límites; aquí se agrega
+ * solo lo que la lista no dice: que el saldo vencido pasa del máximo.
+ */
+export function textoPagoPrevio(condiciones: Pick<Condiciones, 'deuda_maxima'>): string {
     const partes: string[] = []
-    const abono = condiciones.abono_inicial
-    if (abono && new Decimal(abono.faltante).greaterThan(0)) {
-        partes.push(`La promesa pide abonar el ${abono.porcentaje}% de tu deuda (${montoEnTexto(abono.requerido)}); llevas ${montoEnTexto(abono.abonado)}.`)
-    }
     const deuda = condiciones.deuda_maxima
     if (deuda && new Decimal(deuda.faltante).greaterThan(0)) {
         partes.push(`Tu saldo vencido (${montoEnTexto(deuda.vencida)}) pasa del máximo para una promesa (${montoEnTexto(deuda.maximo)}).`)

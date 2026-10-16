@@ -44,7 +44,7 @@ withDefaults(defineProps<{
             variant="subtle"
             icon="i-lucide-receipt"
             :title="`Recibimos tu pago de ${montoEnTexto(pago.monto)}`"
-            description="Gracias. Puedes verlo en «Ver mis facturas y pagos»."
+            description="Gracias. El pago ya quedó aplicado a tu cuenta."
             class="text-start"
             data-testid="reactivado-pago"
         />
