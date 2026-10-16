@@ -43,6 +43,10 @@ fallar() {
     echo "FALLA: $1" >&2
     echo "--- alertmanager" >&2
     dc logs --no-color --tail 40 alertmanager >&2 || true
+    echo "--- prometheus: alertas y estado de Alertmanager" >&2
+    dc exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alerts >&2 || true
+    dc exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alertmanagers >&2 || true
+    dc logs --no-color --tail 20 prometheus >&2 || true
     echo "--- telegram-falso" >&2
     dc logs --no-color --tail 20 telegram-falso >&2 || true
     exit 1
