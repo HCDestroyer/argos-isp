@@ -106,4 +106,10 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_REDIS_PREFIJO: Env.schema.string.optional(),
     /** Ventana de auditoría de quien-soy y estado (`app/portal/auditoria_unica.ts`). */
     PORTAL_AUDITORIA_VENTANA_S: Env.schema.number.optional(),
+    /** Acceso por código y sesión del portal (`app/portal/acceso/codigos.ts`). */
+    PORTAL_CODIGO_VIGENCIA_S: Env.schema.number.optional(),
+    PORTAL_CODIGO_INTENTOS: Env.schema.number.optional(),
+    PORTAL_CODIGO_MAX_HORA: Env.schema.number.optional(),
+    PORTAL_SESION_INACTIVIDAD_S: Env.schema.number.optional(),
+    PORTAL_SESION_MAX_S: Env.schema.number.optional(),
 })

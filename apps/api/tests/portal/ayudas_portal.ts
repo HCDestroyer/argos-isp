@@ -1,5 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
+import type { ApiResponse } from '@japa/api-client'
 import { unico } from '#tests/ayudas'
+import type { CanalCodigo, EnviadorCodigo, MensajeCodigo } from '#portal/acceso/envio_codigo'
 
 /**
  * Datos de prueba del portal: cliente, servicio con facturas y sesiones de red.
@@ -8,8 +10,33 @@ import { unico } from '#tests/ayudas'
 
 let contador = 0
 
+export interface OpcionesServicio {
+    estado?: string
+    nombre?: string
+    promesa?: boolean
+    /** NIT ya normalizado (sin guion); por defecto `1234567-8` compartido (no identifica a nadie) */
+    nit?: string
+    /** `null` para un cliente sin correo */
+    email?: string | null
+    telegram?: string | null
+    canal?: 'correo' | 'telegram' | 'whatsapp'
+}
+
+/** NIT guatemalteco válido y aleatorio (cuerpo de 8 dígitos + verificador módulo 11). */
+export function nitAleatorio(): string {
+    const cuerpo = String(10_000_000 + Math.floor(Math.random() * 89_999_999))
+    let factor = cuerpo.length + 1
+    let total = 0
+    for (const caracter of cuerpo) {
+        total += Number(caracter) * factor
+        factor -= 1
+    }
+    const modulo = (11 - (total % 11)) % 11
+    return `${cuerpo}${modulo === 10 ? 'K' : modulo}`
+}
+
 /** Cliente + servicio con facturas: adeudado 399.75, vencidas 2 por 299.75. */
-export async function crearServicio(opciones: { estado?: string; nombre?: string; promesa?: boolean } = {}) {
+export async function crearServicio(opciones: OpcionesServicio = {}) {
     contador += 1
     const sufijo = unico('portal')
     const [router] = await db
@@ -24,9 +51,11 @@ export async function crearServicio(opciones: { estado?: string; nombre?: string
         .table('core.clientes')
         .insert({
             nombre: opciones.nombre ?? 'María José García López',
-            email: 'maria@example.com',
+            email: opciones.email === undefined ? 'maria@example.com' : opciones.email,
             telefono: '5555-1234',
-            nit_cui: '1234567-8',
+            nit_cui: opciones.nit ?? '1234567-8',
+            telegram_chat_id: opciones.telegram ?? null,
+            canal_preferido: opciones.canal ?? 'correo',
             direccion: '5a avenida 10-20 zona 1',
         })
         .returning('id')
@@ -71,7 +100,13 @@ export async function crearServicio(opciones: { estado?: string; nombre?: string
             canal: 'portal',
         })
     }
-    return { servicioId: Number(servicio.id), routerId: Number(router.id), sufijo }
+    return {
+        servicioId: Number(servicio.id),
+        clienteId: Number(cliente.id),
+        routerId: Number(router.id),
+        sufijo,
+        userPpp: `ppp-${sufijo}`,
+    }
 }
 
 export async function crearSesion(
@@ -89,4 +124,39 @@ export async function crearSesion(
         prefijo_delegado_v6: datos.delegado ?? null,
         fin: datos.fin ?? null,
     })
+}
+
+/** Enviador de códigos falso: guarda los mensajes en lugar de mandarlos. */
+export class EnviadorFalso implements EnviadorCodigo {
+    mensajes: MensajeCodigo[] = []
+    fallar = false
+
+    constructor(public canales: CanalCodigo[] = ['correo', 'telegram']) {}
+
+    disponibles(): CanalCodigo[] {
+        return this.canales
+    }
+
+    async enviar(mensaje: MensajeCodigo): Promise<void> {
+        if (this.fallar) throw new Error('SMTP caído (prueba)')
+        this.mensajes.push(mensaje)
+    }
+
+    /** Código de 6 dígitos del último mensaje. */
+    ultimoCodigo(): string {
+        const ultimo = this.mensajes.at(-1)
+        const codigo = ultimo ? /\b(\d{6})\b/.exec(ultimo.cuerpo)?.[1] : undefined
+        if (!codigo) throw new Error('No se envió ningún código')
+        return codigo
+    }
+}
+
+/** `argos_portal=<token>` de las cabeceras `Set-Cookie` de una respuesta. */
+export function cookieDeSesion(respuesta: ApiResponse): string | null {
+    const cabecera = respuesta.headers()['set-cookie'] as string | string[] | undefined
+    const lista = Array.isArray(cabecera) ? cabecera : cabecera ? [cabecera] : []
+    const cookie = lista.find((c) => c.startsWith('argos_portal='))
+    if (!cookie) return null
+    const valor = cookie.split(';')[0]!
+    return valor === 'argos_portal=' ? null : valor
 }

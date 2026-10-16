@@ -1,7 +1,7 @@
 <script setup lang="ts">
-const { empresa } = useRuntimeConfig().public
+const { nombre: nombreEmpresa } = useEmpresa()
 
-useHead({ title: `Portal del cliente · ${empresa.nombre}` })
+useHead({ title: computed(() => `Portal del cliente · ${nombreEmpresa.value}`) })
 </script>
 
 <template>
@@ -25,10 +25,18 @@ useHead({ title: `Portal del cliente · ${empresa.nombre}` })
 
         <UPageCard
             title="Mi cuenta"
-            description="Facturas, pagos y datos de contacto con un código enviado a tu teléfono o correo. Disponible pronto."
+            description="Facturas, pagos y datos de contacto. Entras con un código que te enviamos a tu correo o Telegram registrado."
             icon="i-lucide-user-round"
+            to="/cuenta"
             variant="outline"
-            class="opacity-75"
+        />
+
+        <UPageCard
+            title="Contacto"
+            description="Teléfonos, WhatsApp, correo y horario de atención."
+            icon="i-lucide-headset"
+            to="/contacto"
+            variant="outline"
         />
     </div>
 </template>
