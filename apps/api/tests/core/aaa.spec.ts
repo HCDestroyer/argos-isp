@@ -34,7 +34,13 @@ async function crearServicioApi(client: any, token: string, extra: Record<string
         client
             .post('/api/v1/servicios')
             .bearerToken(token)
-            .json({ cliente_id: clienteId, router_id: escenario.routerId, plan_id: planId, ...extra }),
+            .json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: escenario.routerId,
+                plan_id: planId,
+                ...extra,
+            }),
         201,
     )
     return { ...escenario, planId, clienteId, servicio: r.body() as Record<string, any> }

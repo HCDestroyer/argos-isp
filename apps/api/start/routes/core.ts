@@ -26,6 +26,7 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
@@ -34,18 +35,23 @@ import DesconectarServicio from '#network/sesiones/actions/desconectar_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
+import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
+import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
 import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
 import { NoEncontrado, Problema } from '#shared/errores'
 import { construirRegistroAaa } from '#core/aaa'
 import { resolverIp } from '#network/consultas/ip'
+import { listarTramos } from '#network/historial'
+import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import {
     AaaServicio,
     AccionAuditoria,
     CambioAuditoria,
     Cliente,
+    ConfiguracionEfectivaServicio,
     CredencialesPpp,
     Me,
     Permiso,
@@ -300,6 +306,42 @@ const clientes: Ruta[] = [
         },
     }),
     definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/vincular-telegram',
+        operacion: 'clientesVincularTelegram',
+        resumen: 'Vincular el chat de Telegram del cliente',
+        descripcion:
+            'Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.vincular_telegram',
+        cuerpo: v.vincularTelegramValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente con el chat vinculado', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new VincularTelegramCliente().execute(
+                { id, chat_id: cuerpo.chat_id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/desvincular-telegram',
+        operacion: 'clientesDesvincularTelegram',
+        resumen: 'Quitar el chat de Telegram del cliente',
+        etiqueta: 'clientes',
+        permiso: 'clientes.desvincular_telegram',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente sin chat de Telegram', esquema: Cliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
         metodo: 'get',
         ruta: '/zonas',
         operacion: 'zonasListar',
@@ -394,7 +436,8 @@ const servicios: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             const cliente = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => ({ zona: [] }))
             exigirAlcance(ctx.alcance, { router: [cuerpo.router_id], zona: cliente.zona ?? [] })
-            return new CrearServicio().execute(cuerpo, ctx.contextoAccion())
+            // sin plantilla_facturacion_id → plantilla por defecto (app/core/plantilla_por_defecto.ts)
+            return new CrearServicio().execute({ ...cuerpo, plantillaPorDefecto: true }, ctx.contextoAccion())
         },
     }),
     definirRuta({
@@ -409,6 +452,42 @@ const servicios: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
             return verServicio(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/configuracion-efectiva',
+        operacion: 'serviciosConfiguracionEfectiva',
+        resumen: 'Configuración efectiva: plan en su router y plantilla con excepciones aplicadas',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: {
+            status: 200,
+            descripcion: 'Plan efectivo y facturación efectiva del servicio',
+            esquema: ConfiguracionEfectivaServicio,
+        },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return configuracionEfectivaPublica(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/asignaciones',
+        operacion: 'serviciosAsignaciones',
+        resumen: 'Historial de router, plan, IPv4 y prefijos IPv6 del servicio',
+        descripcion:
+            'Tramos del más reciente al más viejo; el vigente tiene `fin: null`. Cada cambio de router, ' +
+            'plan, IPv4 o prefijos cierra un tramo y abre otro.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: v.listarPaginadoValidator,
+        respuesta: { status: 200, descripcion: 'Página de tramos', esquema: pagina(TramoAsignacion) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return listarTramos(id, query)
         },
     }),
     definirRuta({

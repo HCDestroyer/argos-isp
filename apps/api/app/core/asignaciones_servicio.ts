@@ -91,6 +91,8 @@ export async function reconciliarAsignaciones(
         plan: PlanEfectivo
         modo: ModoIpv6
         ipv4?: string | null
+        /** red de la que tomar la IPv4 (debe ser del router) */
+        redIpv4Id?: number | null
         prefijoEstatico?: string | null
     },
 ): Promise<Asignaciones> {
@@ -98,8 +100,8 @@ export async function reconciliarAsignaciones(
 
     if (plan.dual_stack === 'v6') {
         await liberarIpv4(trx, servicioId)
-    } else if (entrada.ipv4) {
-        await asignarIpv4(trx, { servicioId, routerId, ip: entrada.ipv4 })
+    } else if (entrada.ipv4 || entrada.redIpv4Id) {
+        await asignarIpv4(trx, { servicioId, routerId, ip: entrada.ipv4, redId: entrada.redIpv4Id })
     } else {
         const tieneRedes = await trx.from('network.redes_ipv4').where('router_id', routerId).first()
         if (tieneRedes) {

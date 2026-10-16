@@ -1616,6 +1616,106 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/desvincular-telegram": {
+      "post": {
+        "operationId": "clientesDesvincularTelegram",
+        "summary": "Quitar el chat de Telegram del cliente",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cliente sin chat de Telegram",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.desvincular_telegram",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.desvincular_telegram",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/estado-cuenta": {
       "get": {
         "operationId": "clientesEstadoCuenta",
@@ -1682,6 +1782,128 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/vincular-telegram": {
+      "post": {
+        "operationId": "clientesVincularTelegram",
+        "summary": "Vincular el chat de Telegram del cliente",
+        "description": "Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chat_id": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,20}$",
+                    "description": "chat id de Telegram (entero con signo, como texto)"
+                  }
+                },
+                "required": [
+                  "chat_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente con el chat vinculado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.vincular_telegram",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.vincular_telegram",
         "x-implementado": true
       }
     },
@@ -6266,9 +6488,11 @@
                         "cajas.cerrar",
                         "cajas.ver",
                         "clientes.crear",
+                        "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.ver",
+                        "clientes.vincular_telegram",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -6432,9 +6656,11 @@
                         "cajas.cerrar",
                         "cajas.ver",
                         "clientes.crear",
+                        "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.ver",
+                        "clientes.vincular_telegram",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -7673,7 +7899,8 @@
                       "integer",
                       "null"
                     ],
-                    "minimum": 1
+                    "minimum": 1,
+                    "description": "Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla"
                   },
                   "user_ppp": {
                     "type": "string",
@@ -7735,6 +7962,11 @@
                     "format": "ipv4",
                     "description": "IP fija; si no viene se asigna de las redes del router"
                   },
+                  "red_ipv4_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena)"
+                  },
                   "ipv6_modo": {
                     "type": "string",
                     "enum": [
@@ -7756,6 +7988,143 @@
                     "type": "string",
                     "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
                     "description": "Solo modo estatico"
+                  },
+                  "excepciones": {
+                    "type": "object",
+                    "properties": {
+                      "dia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 28
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prorrateo": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dias_gracia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_limitar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_cortar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_tipo": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "ninguna",
+                              "fija",
+                              "porcentaje"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_valor": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/Dinero"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_recurrente": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hora_corte": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                            "description": "HH:MM hora de Guatemala"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "certificar_al": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "emitir",
+                              "pagar",
+                              "nunca"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reglas_promesa": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "Parcial: se combina clave a clave sobre la plantilla"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa"
                   }
                 },
                 "required": [
@@ -8015,6 +8384,143 @@
                     "type": "string",
                     "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
                     "description": "Prefijo IPv6 en notación CIDR"
+                  },
+                  "excepciones": {
+                    "type": "object",
+                    "properties": {
+                      "dia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 28
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prorrateo": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dias_gracia": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_limitar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facturas_para_cortar": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_tipo": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "ninguna",
+                              "fija",
+                              "porcentaje"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_valor": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/Dinero"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "mora_recurrente": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hora_corte": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                            "description": "HH:MM hora de Guatemala"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "certificar_al": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "emitir",
+                              "pagar",
+                              "nunca"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reglas_promesa": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "Parcial: se combina clave a clave sobre la plantilla"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa"
                   }
                 },
                 "required": [
@@ -8088,6 +8594,194 @@
           }
         },
         "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/asignaciones": {
+      "get": {
+        "operationId": "serviciosAsignaciones",
+        "summary": "Historial de router, plan, IPv4 y prefijos IPv6 del servicio",
+        "description": "Tramos del más reciente al más viejo; el vigente tiene `fin: null`. Cada cambio de router, plan, IPv4 o prefijos cierra un tramo y abre otro.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de tramos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TramoAsignacion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/configuracion-efectiva": {
+      "get": {
+        "operationId": "serviciosConfiguracionEfectiva",
+        "summary": "Configuración efectiva: plan en su router y plantilla con excepciones aplicadas",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plan efectivo y facturación efectiva del servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionEfectivaServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -9271,9 +9965,11 @@
                             "cajas.cerrar",
                             "cajas.ver",
                             "clientes.crear",
+                            "clientes.desvincular_telegram",
                             "clientes.editar",
                             "clientes.estado_cuenta",
                             "clientes.ver",
+                            "clientes.vincular_telegram",
                             "facturas.anular",
                             "facturas.generar",
                             "facturas.ver",
@@ -10946,6 +11642,136 @@
           }
         }
       },
+      "ConfiguracionEfectivaServicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "plantilla_facturacion_id",
+          "plan",
+          "facturacion",
+          "excepciones"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plantilla_facturacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanEfectivo"
+          },
+          "facturacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfiguracionFacturacion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excepciones": {
+            "$ref": "#/components/schemas/ExcepcionesServicio"
+          }
+        }
+      },
+      "ConfiguracionFacturacion": {
+        "type": "object",
+        "required": [
+          "plantilla_id",
+          "nombre",
+          "ciclo",
+          "dia",
+          "prorrateo",
+          "dias_gracia",
+          "facturas_para_limitar",
+          "facturas_para_cortar",
+          "mora_tipo",
+          "mora_valor",
+          "mora_recurrente",
+          "hora_corte",
+          "certificar_al",
+          "reglas_promesa",
+          "excepciones"
+        ],
+        "properties": {
+          "plantilla_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "ciclo": {
+            "type": "string",
+            "enum": [
+              "dia_fijo",
+              "aniversario"
+            ]
+          },
+          "dia": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "prorrateo": {
+            "type": "boolean"
+          },
+          "dias_gracia": {
+            "type": "integer"
+          },
+          "facturas_para_limitar": {
+            "type": "integer"
+          },
+          "facturas_para_cortar": {
+            "type": "integer"
+          },
+          "mora_tipo": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "fija",
+              "porcentaje"
+            ]
+          },
+          "mora_valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "mora_recurrente": {
+            "type": "boolean"
+          },
+          "hora_corte": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM hora de Guatemala"
+          },
+          "certificar_al": {
+            "type": "string",
+            "enum": [
+              "emitir",
+              "pagar",
+              "nunca"
+            ]
+          },
+          "reglas_promesa": {
+            "$ref": "#/components/schemas/ReglasPromesa"
+          },
+          "excepciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Campos que vienen de una excepción del servicio"
+          }
+        }
+      },
       "CredencialesPpp": {
         "type": "object",
         "required": [
@@ -11241,6 +12067,65 @@
           "suspendido",
           "retirado"
         ]
+      },
+      "ExcepcionesServicio": {
+        "type": "object",
+        "description": "Excepciones a la plantilla de facturación del servicio",
+        "properties": {
+          "dia": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "prorrateo": {
+            "type": "boolean"
+          },
+          "dias_gracia": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facturas_para_limitar": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facturas_para_cortar": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "mora_tipo": {
+            "type": "string",
+            "enum": [
+              "ninguna",
+              "fija",
+              "porcentaje"
+            ]
+          },
+          "mora_valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "mora_recurrente": {
+            "type": "boolean"
+          },
+          "hora_corte": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM hora de Guatemala"
+          },
+          "certificar_al": {
+            "type": "string",
+            "enum": [
+              "emitir",
+              "pagar",
+              "nunca"
+            ]
+          },
+          "reglas_promesa": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Parcial: se combina clave a clave sobre la plantilla"
+          }
+        },
+        "additionalProperties": false
       },
       "Factura": {
         "type": "object",
@@ -13312,6 +14197,9 @@
               "null"
             ]
           },
+          "excepciones": {
+            "$ref": "#/components/schemas/ExcepcionesServicio"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -13532,6 +14420,96 @@
           },
           "datos": {
             "$ref": "#/components/schemas/TokenApi"
+          }
+        }
+      },
+      "TramoAsignacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "router_id",
+          "router_nombre",
+          "plan_id",
+          "plan_nombre",
+          "ipv4",
+          "prefijo_enlace_v6",
+          "prefijo_delegado_v6",
+          "inicio",
+          "fin",
+          "motivo"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "router_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ipv4": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefijo_enlace_v6": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefijo_delegado_v6": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "null = tramo vigente"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "alta, edicion: <campos>, retiro: <motivo> o inicial (migración)"
           }
         }
       },
