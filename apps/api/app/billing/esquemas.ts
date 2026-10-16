@@ -14,6 +14,7 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import { METODOS_PAGO } from '#shared/eventos'
 
 /**
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
@@ -186,7 +187,7 @@ export const Pago = definirEsquema(
         {
             id,
             cliente_id: id,
-            metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+            metodo: enumerado([...METODOS_PAGO]),
             monto: Dinero,
             comision: Dinero,
             referencia: nulable(texto),
@@ -202,9 +203,27 @@ export const Pago = definirEsquema(
                 ...lista(ServicioEvaluado),
                 description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
             },
+            banco_origen_id: { ...nulable(id), description: 'Banco de origen (transferencia, ach)' },
+            banco_origen_nombre: nulable(texto),
+            cuenta_bancaria_id: {
+                ...nulable(id),
+                description: 'Cuenta bancaria propia de destino (deposito, transferencia, ach, remesa)',
+            },
+            cuenta_bancaria_nombre: {
+                ...nulable(texto),
+                description: 'Banco y alias de la cuenta de destino',
+            },
             ...auditable,
         },
-        ['anulado_en', 'motivo_anulacion', 'servicios'],
+        [
+            'anulado_en',
+            'motivo_anulacion',
+            'servicios',
+            'banco_origen_id',
+            'banco_origen_nombre',
+            'cuenta_bancaria_id',
+            'cuenta_bancaria_nombre',
+        ],
     ),
 )
 
@@ -274,4 +293,22 @@ export const EstadoCuenta = definirEsquema(
         },
         ['saldo_a_favor'],
     ),
+)
+
+export const Banco = definirEsquema('Banco', objeto({ id, nombre: texto, activo: booleano }))
+
+export const CuentaBancaria = definirEsquema(
+    'CuentaBancaria',
+    objeto({
+        id,
+        banco_id: id,
+        banco_nombre: texto,
+        numero: texto,
+        alias: texto,
+        moneda: enumerado(['GTQ', 'USD']),
+        activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
+        cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
+        cuenta_codigo: texto,
+        ...auditable,
+    }),
 )

@@ -2,7 +2,14 @@ import { test } from '@japa/runner'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
-import { escenario, estadoServicio, eventosDe, facturasDe, generar } from '#tests/billing/ayudas_billing'
+import {
+    cuentaBancariaPrueba,
+    escenario,
+    estadoServicio,
+    eventosDe,
+    facturasDe,
+    generar,
+} from '#tests/billing/ayudas_billing'
 
 /**
  * Tarea 12 (parcial): ciclo completo emitir → vencer → limitar → cortar → pagar → reactivar, con
@@ -82,6 +89,7 @@ test.group('billing · ciclo completo', () => {
         })
         await paso('limitado', '150.00')
 
+        const cuenta = await cuentaBancariaPrueba()
         // 6. pagar la otra → activo
         const segunda = await estado(
             client
@@ -92,6 +100,7 @@ test.group('billing · ciclo completo', () => {
                     metodo: 'deposito',
                     monto: '150.00',
                     referencia: unico('boleta'),
+                    cuenta_bancaria_id: cuenta.id,
                 }),
             201,
         )

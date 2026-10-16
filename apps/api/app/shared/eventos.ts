@@ -10,7 +10,18 @@
  */
 
 export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
-export type MetodoPago = 'caja' | 'pasarela' | 'deposito' | 'agente' | 'debito'
+/** Métodos de pago (`billing.pagos.metodo`). transferencia, ach y remesa: decisión del PM 2026-10-16. */
+export const METODOS_PAGO = [
+    'caja',
+    'pasarela',
+    'deposito',
+    'transferencia',
+    'ach',
+    'remesa',
+    'agente',
+    'debito',
+] as const
+export type MetodoPago = (typeof METODOS_PAGO)[number]
 export type CanalNotificacion = 'correo' | 'telegram' | 'whatsapp'
 
 /** Monto decimal serializado, p. ej. "150.00". Nunca `number`. */

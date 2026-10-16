@@ -26,6 +26,10 @@ export interface PagoVista {
     registrado_por: number | null
     anulado_en: Date | null
     motivo_anulacion: string | null
+    banco_origen_id: number | null
+    banco_origen_nombre: string | null
+    cuenta_bancaria_id: number | null
+    cuenta_bancaria_nombre: string | null
     aplicaciones: Array<{ factura_id: number; monto: string }>
     version: number
     created_at: Date
@@ -46,6 +50,12 @@ const COLUMNAS = [
     'p.registrado_por',
     'p.anulado_en',
     'p.motivo_anulacion',
+    'p.banco_origen_id',
+    'bo.nombre as banco_origen_nombre',
+    'p.cuenta_bancaria_id',
+    db.raw(
+        "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
+    ),
     'p.version',
     'p.created_at',
     'p.updated_at',
@@ -82,6 +92,9 @@ export async function verPago(
 ): Promise<PagoVista> {
     const fila = await cliente
         .from('billing.pagos as p')
+        .leftJoin('billing.bancos as bo', 'bo.id', 'p.banco_origen_id')
+        .leftJoin('billing.cuentas_bancarias as cb', 'cb.id', 'p.cuenta_bancaria_id')
+        .leftJoin('billing.bancos as bd', 'bd.id', 'cb.banco_id')
         .where('p.id', id)
         .select(...COLUMNAS)
         .first()
@@ -93,6 +106,7 @@ export async function verPago(
 export interface FiltrosPagos extends OpcionesPaginacion {
     cliente_id?: number
     caja_id?: number
+    cuenta_bancaria_id?: number
     metodo?: MetodoPago
     estado?: EstadoPago
     desde?: Date
@@ -107,9 +121,13 @@ const dimensionesPago: FiltrosDimension = {
 export async function listarPagos(filtros: FiltrosPagos, alcance?: Alcance) {
     const consulta = db
         .from('billing.pagos as p')
+        .leftJoin('billing.bancos as bo', 'bo.id', 'p.banco_origen_id')
+        .leftJoin('billing.cuentas_bancarias as cb', 'cb.id', 'p.cuenta_bancaria_id')
+        .leftJoin('billing.bancos as bd', 'bd.id', 'cb.banco_id')
         .select(...COLUMNAS)
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
         .if(filtros.caja_id, (q) => q.where('p.caja_id', filtros.caja_id!))
+        .if(filtros.cuenta_bancaria_id, (q) => q.where('p.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
         .if(filtros.metodo, (q) => q.where('p.metodo', filtros.metodo!))
         .if(filtros.estado, (q) => q.where('p.estado', filtros.estado!))
         .if(filtros.desde, (q) => q.where('p.created_at', '>=', filtros.desde!))

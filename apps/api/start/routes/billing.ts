@@ -27,9 +27,14 @@ import { Prohibido } from '#shared/errores'
 import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
+import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
+import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
 import AprobarPromesa from '#billing/actions/aprobar_promesa'
 import {
     EstadoCuenta,
+    Banco,
+    CuentaBancaria,
     Factura,
     FacturaDetalle,
     Pago,
@@ -306,6 +311,64 @@ async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<Ca
     return canal
 }
 
+const bancos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos',
+        operacion: 'bancosListar',
+        resumen: 'Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH)',
+        etiqueta: 'pagos',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
+        handler: () => listarBancos(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cuentas-bancarias',
+        operacion: 'cuentasBancariasListar',
+        resumen: 'Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas)',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.ver',
+        query: v.listarCuentasBancariasValidator,
+        respuesta: { status: 200, descripcion: 'Cuentas bancarias', esquema: lista(CuentaBancaria) },
+        handler: (_ctx, { query }) => listarCuentasBancarias(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cuentas-bancarias/:id',
+        operacion: 'cuentasBancariasVer',
+        resumen: 'Ver cuenta bancaria propia',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.ver',
+        respuesta: { status: 200, descripcion: 'Cuenta bancaria', esquema: CuentaBancaria },
+        handler: (_ctx, { params }) => verCuentaBancaria(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/cuentas-bancarias',
+        operacion: 'cuentasBancariasCrear',
+        resumen: 'Crear cuenta bancaria propia (crea su subcuenta de Bancos en el libro)',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.editar',
+        cuerpo: v.crearCuentaBancariaValidator,
+        respuesta: { status: 201, descripcion: 'Cuenta bancaria creada', esquema: CuentaBancaria },
+        handler: (ctx, { cuerpo }) => new CrearCuentaBancaria().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/cuentas-bancarias/:id',
+        operacion: 'cuentasBancariasEditar',
+        resumen: 'Editar cuenta bancaria propia',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.editar',
+        cuerpo: v.editarCuentaBancariaValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Cuenta bancaria actualizada', esquema: CuentaBancaria },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarCuentaBancaria().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
 const estadoCuenta: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -323,4 +386,4 @@ const estadoCuenta: Ruta[] = [
     }),
 ]
 
-export default [...plantillas, ...facturas, ...pagos, ...promesas, ...estadoCuenta]
+export default [...plantillas, ...facturas, ...pagos, ...promesas, ...bancos, ...estadoCuenta]

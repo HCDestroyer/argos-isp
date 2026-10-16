@@ -5,6 +5,7 @@ import { normalizarReglasPromesa } from '#billing/reglas_promesa'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 
 /**
  * Escenarios de facturación: plantilla + plan + cliente + servicio insertados directo (las
@@ -131,6 +132,20 @@ export async function servicioCortado(opciones: OpcionesEscenario = {}): Promise
     )
     await new EvaluarEstadoServicio().execute({ servicio_id: datos.servicioId }, contextoPrueba())
     return datos
+}
+
+/** Id de un banco del catálogo por nombre. */
+export async function bancoId(nombre = 'Banrural'): Promise<number> {
+    const fila = await db.from('billing.bancos').where('nombre', nombre).select('id').firstOrFail()
+    return fila.id as number
+}
+
+/** Cuenta bancaria propia nueva (con su subcuenta de Bancos) creada por la acción. */
+export async function cuentaBancariaPrueba(banco = 'Banrural') {
+    return new CrearCuentaBancaria().execute(
+        { banco_id: await bancoId(banco), numero: unico('300'), alias: unico('Recaudación') },
+        contextoPrueba(),
+    )
 }
 
 /** Movimientos del asiento como tuplas `[codigo, debe, haber, cliente_id]`. */

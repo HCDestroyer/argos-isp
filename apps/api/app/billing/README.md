@@ -88,12 +88,26 @@ Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera
 | `pagos.registrar` | `actions/registrar_pago.ts` | `POST /pagos` con `Idempotency-Key`   |
 | `pagos.anular`    | `actions/anular_pago.ts`    | `POST /pagos/:id/anular` con `motivo` |
 
-- `referencia` única por método (409 `referencia_duplicada`). Misma `Idempotency-Key` → misma respuesta (middleware).
+- Métodos: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito` (`METODOS_PAGO` en `app/shared/eventos.ts`). Datos obligatorios (`DATOS_POR_METODO`, 422 con un error por campo; `no_aplica` si se mandan donde no corresponden):
+
+    | Método                 | Obligatorios                                                                  |
+    | ---------------------- | ----------------------------------------------------------------------------- |
+    | `transferencia`, `ach` | `banco_origen_id`, `cuenta_bancaria_id`, `referencia`                         |
+    | `remesa`               | `cuenta_bancaria_id` (banco al que llegó), `referencia` (código de la remesa) |
+    | `deposito`             | `cuenta_bancaria_id`, `referencia` (boleta)                                   |
+
+- `referencia` única por (`metodo`, `cuenta_bancaria_id`, `referencia`) (409 `referencia_duplicada`; índice `pagos_metodo_referencia` con NULLS NOT DISTINCT). Misma `Idempotency-Key` → misma respuesta (middleware).
 - Aplicación: primero las `facturas` pedidas, luego la más antigua (vencimiento, periodo, id). Lo que sobra va a **Anticipos** (auxiliar por cliente) y se aplica a las facturas que se emitan después (`aplicarAnticipos` en `cobros.ts`, asiento `Anticipos / CxC` con origen en el pago).
-- Asiento: `Caja (o Banco principal) / CxC + Anticipos`. `caja` sin `caja_id` usa la caja principal (turnos: tarea 9); `deposito`, `pasarela`, `agente`, `debito` van al banco principal (comisión de pasarela: semana 2).
+- Asiento: `Caja | subcuenta bancaria | Banco principal / CxC + Anticipos`. `caja` sin `caja_id` usa la caja del turno abierto del cajero o la principal; `deposito`, `transferencia`, `ach` y `remesa` van a la subcuenta de `1.1.02` de la cuenta bancaria de destino; `pasarela`, `agente`, `debito` al banco principal (comisión de pasarela: semana 2).
 - `pago.registrado` y, en la misma transacción, `evaluarEstadoServicio` de cada servicio afectado: la reactivación (`servicio.estado_cambiado`) sale con el pago. La respuesta trae `servicios[]` con cómo quedó cada uno.
 - Anular: estado `anulado` con quién/cuándo/motivo, `RevertirAsiento` de cada asiento del pago (cobro y aplicaciones de su anticipo), descuenta lo aplicado (las facturas que ya habían vencido vuelven a `vencida`), `pago.anulado` y re-evaluación.
 - Concurrencia: advisory lock por cliente (`bloquearCliente`) en toda acción que aplica dinero.
+
+## Cuentas bancarias y bancos (`cuentas_bancarias.ts`)
+
+- `billing.bancos`: catálogo de bancos de Guatemala (sembrado en su migración). `GET /bancos` (cualquier usuario con sesión).
+- `billing.cuentas_bancarias`: cuentas propias (banco, número, alias, moneda `GTQ`/`USD`, activa). **Fuente única** de las cuentas para depósito del panel y del portal. `cuentas_bancarias.crear` (`POST /cuentas-bancarias`) crea además su subcuenta `1.1.02.NN` en el libro; `cuentas_bancarias.editar` (`PUT /cuentas-bancarias/:id`, con `version`) renombra la subcuenta y nunca la desactiva. Ambas con permiso `cuentas_bancarias.editar`; `GET /cuentas-bancarias[?activa]` y `/:id` con `cuentas_bancarias.ver`. Cambios en `audit.cambios` (`cuenta_bancaria`).
+- Una cuenta inactiva o en USD no recibe pagos (422).
 
 ## Promesas de pago (tarea 10)
 
