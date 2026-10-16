@@ -63,3 +63,5 @@ export const RecordatorioPago = definirEsquema(
         ...auditable,
     }),
 )
+
+export const TelegramWebhookRespuesta = definirEsquema('TelegramWebhookRespuesta', objeto({ ok: booleano }))

@@ -27,6 +27,7 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 | Acciones                                                                        | `actions/programar_notificacion.ts`, `actions/enviar_notificacion.ts`, `actions/editar_plantilla_notificacion.ts` |
 | Plantillas iniciales (seeder idempotente, no pisa ediciones)                    | `plantillas_base.ts`, `database/seeders/notify_plantillas_seeder.ts`                                              |
 | Rutas                                                                           | `start/routes/notify.ts`                                                                                          |
+| Bot de Telegram (webhook, vinculación, `/estado`)                               | `telegram/`, `actions/generar_codigo_telegram.ts`, `actions/canjear_codigo_telegram.ts`, `commands/telegram_webhook.ts` |
 
 ## Eventos
 
@@ -40,6 +41,15 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 - **Canales.** Un envío por cada canal que sirva, con el `canal_preferido` primero (decisión del PM, 2026-10-15: que llegue por cualquier medio). Un canal sirve si el adaptador está configurado (`SMTP_HOST`, `TELEGRAM_BOT_TOKEN`), el cliente tiene destino (`email` o `telegram_chat_id`) y hay plantilla activa para ese evento y canal. WhatsApp aún no tiene adaptador. Si ningún canal sirve, queda un envío `fallido` con destino `-`.
 - **Reintentos.** BullMQ reintenta `NOTIFY_INTENTOS` veces (5 por defecto), con backoff exponencial desde 5 s. Un error transitorio (red, SMTP 4xx, Telegram 429 o 5xx) deja el envío `encolado`, guarda el error y suma un intento. Un error permanente (SMTP 5xx, Telegram 400 o 403, canal no configurado) o el último intento lo marcan `fallido`. Si el canal que falló no era correo y el cliente no tenía ya un envío por correo para ese aviso (por ejemplo, la plantilla de correo se activó después), se crea uno con `fallback_de`; si ya lo tenía, no se duplica.
 - **Texto.** El asunto y el cuerpo se renderizan al programar y se guardan en el envío, junto con un snapshot de `variables` que se usa para el fallback. Las plantillas son texto plano y no se escapa HTML. En Telegram el asunto va como primera línea.
+
+## Bot de Telegram (semana 2)
+
+Contrato completo en `.claude/integration/contratos/telegram.md`.
+
+- **Vincular.** El portal (A5) llama `GenerarCodigoTelegram` (`notificaciones.telegram_codigo`) con la sesión del cliente y muestra `t.me/<bot>?start=<código>`. Solo se guarda el SHA-256 en `notify.telegram_codigos` (`pendiente` → `usado` o `reemplazado`; uno pendiente por cliente; vence a los `TELEGRAM_CODIGO_VIGENCIA_S`). El webhook canjea con `CanjearCodigoTelegram` (`notificaciones.telegram_vincular`), que llama `VincularTelegramCliente` de A1 en la misma transacción.
+- **Webhook.** `POST /api/v1/telegram/webhook`, público, con `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si no; sin secreto rechaza todo). `telegram/bot.ts` decide el comando: `/start <código>`, `/start`, `/estado` (solo chats vinculados: servicios, saldo pendiente y a favor), `/desvincular`, `/ayuda`. Solo chats privados. Responde por el canal `telegram`; si la Bot API falla, igual responde 200.
+- **Registro.** `node ace telegram:webhook` (`setWebhook` con el secreto y `allowed_updates: ['message']`, más `setMyCommands`); `--info`, `--borrar`, `--url`.
+- **No emite eventos.** La vinculación queda en `audit.acciones` y `audit.cambios` (`telegram_chat_id`) por la acción de A1.
 
 ## Avisos de pago: comprobantes y pagos de terceros
 
