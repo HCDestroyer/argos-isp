@@ -56,6 +56,14 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 - `procesar` es **idempotente por `id`**: el mismo evento puede llegar dos veces. Si lanza, el worker no hace `XACK` y el evento se reintenta (reclamado con `XAUTOCLAIM` tras 60 s).
 - Los consumidores no deciden estados ni mueven dinero por su cuenta: llaman acciones de dominio (regla 1).
 
+## Payloads de pagos (A3)
+
+`pago.registrado` y `pago.anulado`: `{ pago_id, cliente_id, monto, metodo, facturas[], clientes[] }`.
+
+- `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
+- `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.
+- Consumidores: `billing` revisa las promesas de cada cliente de `clientes`; `notify` debería avisar también a cada dueño de factura distinto del pagador.
+
 ## Pruebas
 
 - Los consumidores se prueban alimentando `procesar()` directamente con un `EventoEntrante`, sin Redis.

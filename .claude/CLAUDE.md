@@ -91,7 +91,9 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
 ### 9. Auditoría
 
 - `audit.acciones`: actor, canal, acción, entidad, entrada, resultado, request_id. Automática por `DomainAction`.
-- Única excepción: telemetría de alta frecuencia que no es una acción de nadie. Hoy solo el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores; se declara con `auditarExito()` en la acción. Los errores se auditan siempre.
+- Excepciones, declaradas con `auditarExito()` en la acción (los errores se auditan siempre):
+    - Telemetría de alta frecuencia que no es una acción de nadie: el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores.
+    - Evaluaciones sin efecto: `servicios.evaluar_estado` solo deja fila cuando cambió el estado (decisión del PM, día 4). La acción que la llamó (pago, promesa, corte) queda auditada igual, y el corte deja su corrida en `registrar_corrida`.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
 - `audit.red`: cada CoA, Disconnect o comando a RouterOS con la respuesta del equipo.
@@ -143,10 +145,15 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6 |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, servicio_id, cliente_id, total, vence |
-| `pago.registrado` / `pago.anulado` | billing | pago_id, cliente_id, monto, metodo, facturas[] |
+| `pago.registrado` / `pago.anulado` | billing | pago_id, cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, servicio_id, vence, monto |
 | `caja.cerrada` | ledger | caja_id, cajero_id, esperado, contado, diferencia |
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
+| `sesion.desconexion_solicitada` | network | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, motivo |
+| `coa.fallido` | coa | servicio_id (o null), nas_ip, tipo (coa/disconnect), error |
+| `aaa.caido` / `aaa.recuperado` | network (vigía) | nodo, desde, hasta (recuperado), ultimo_error |
+
+El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 
 ## Estados del servicio
 

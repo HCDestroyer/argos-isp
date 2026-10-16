@@ -8,6 +8,10 @@ import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
 import { Asiento, Caja, CajaTurno, Cuenta, Mayor } from '#ledger/esquemas'
 import { libroDiario, libroMayor, listarCuentas } from '#ledger/consultas'
+import { existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
+import { exigirAlcance } from '#core/acl'
+import AbrirCaja from '#ledger/actions/abrir_caja'
+import CerrarCaja from '#ledger/actions/cerrar_caja'
 
 const cajas: Ruta[] = [
     definirRuta({
@@ -18,6 +22,7 @@ const cajas: Ruta[] = [
         etiqueta: 'cajas',
         permiso: 'cajas.ver',
         respuesta: { status: 200, descripcion: 'Cajas', esquema: lista(Caja) },
+        handler: (ctx) => listarCajas(ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -29,6 +34,15 @@ const cajas: Ruta[] = [
         cuerpo: v.abrirCajaValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Turno abierto', esquema: CajaTurno },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await existeCaja(id)
+            exigirAlcance(ctx.alcance, { caja: [id] })
+            return new AbrirCaja().execute(
+                { caja_id: id, fondo_inicial: cuerpo.fondo_inicial },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -39,7 +53,18 @@ const cajas: Ruta[] = [
         permiso: 'cajas.cerrar',
         cuerpo: v.cerrarCajaValidator,
         idempotente: true,
+        descripcion:
+            'esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.',
         respuesta: { status: 200, descripcion: 'Turno cerrado', esquema: CajaTurno },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await existeCaja(id)
+            exigirAlcance(ctx.alcance, { caja: [id] })
+            return new CerrarCaja().execute(
+                { caja_id: id, contado: cuerpo.contado, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -50,6 +75,12 @@ const cajas: Ruta[] = [
         permiso: 'cajas.ver',
         query: v.listarTurnosValidator,
         respuesta: { status: 200, descripcion: 'Página de turnos', esquema: pagina(CajaTurno) },
+        handler: async (ctx, { query, params }) => {
+            const id = Number(params.id)
+            await existeCaja(id)
+            exigirAlcance(ctx.alcance, { caja: [id] })
+            return listarTurnos(id, query)
+        },
     }),
 ]
 

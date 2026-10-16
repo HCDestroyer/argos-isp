@@ -1,9 +1,9 @@
 import { test } from '@japa/runner'
-import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import VencerFacturas from '#billing/actions/vencer_facturas'
-import { escenario, generar } from '#tests/billing/ayudas_billing'
+import { cuentaBancariaPrueba, escenario, generar } from '#tests/billing/ayudas_billing'
 
 const ruta = (clienteId: number) => `/api/v1/clientes/${clienteId}/estado-cuenta`
 
@@ -62,8 +62,15 @@ test.group('billing · estado de cuenta', () => {
     test('pago adelantado: saldo 0 y saldo a favor; cliente inexistente 404', async ({ client, assert }) => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-10-01' })
         await generar(servicioId, '2026-10-01')
+        const bancaria = await cuentaBancariaPrueba()
         await new RegistrarPago().execute(
-            { cliente_id: clienteId, metodo: 'deposito', monto: '200.00' },
+            {
+                cliente_id: clienteId,
+                metodo: 'deposito',
+                monto: '200.00',
+                cuenta_bancaria_id: bancaria.id,
+                referencia: unico('boleta'),
+            },
             contextoPrueba(),
         )
         const { token } = await usuarioConRoles(['cajero'])

@@ -161,6 +161,46 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bancos": {
+      "get": {
+        "operationId": "bancosListar",
+        "summary": "Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos activos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Banco"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/bitacora/acciones": {
       "get": {
         "operationId": "bitacoraAcciones",
@@ -543,20 +583,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/abrir": {
@@ -677,26 +707,17 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.abrir",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/cerrar": {
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
+        "description": "esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -820,20 +841,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.cerrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/turnos": {
@@ -948,20 +959,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes": {
@@ -2288,6 +2289,379 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cuentas-bancarias": {
+      "get": {
+        "operationId": "cuentasBancariasListar",
+        "summary": "Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activa",
+            "in": "query",
+            "required": false,
+            "description": "Solo activas (true) o inactivas",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuentas bancarias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CuentaBancaria"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cuentasBancariasCrear",
+        "summary": "Crear cuenta bancaria propia (crea su subcuenta de Bancos en el libro)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "banco_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Banco (GET /bancos)"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "enum": [
+                      "GTQ",
+                      "USD"
+                    ]
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "banco_id",
+                  "numero",
+                  "alias"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta bancaria creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cuentas-bancarias/{id}": {
+      "get": {
+        "operationId": "cuentasBancariasVer",
+        "summary": "Ver cuenta bancaria propia",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta bancaria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "cuentasBancariasEditar",
+        "summary": "Editar cuenta bancaria propia",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "banco_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Banco (GET /bancos)"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "enum": [
+                      "GTQ",
+                      "USD"
+                    ]
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuenta bancaria actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/aviso-cobro/{facturaId}": {
       "get": {
         "operationId": "documentosAvisoCobroPdf",
@@ -3069,6 +3443,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.",
         "tags": [
           "facturacion"
         ],
@@ -3180,20 +3555,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/corte": {
@@ -4730,6 +5095,15 @@
             }
           },
           {
+            "name": "cuenta_bancaria_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
             "name": "metodo",
             "in": "query",
             "required": false,
@@ -4739,6 +5113,9 @@
                 "caja",
                 "pasarela",
                 "deposito",
+                "transferencia",
+                "ach",
+                "remesa",
                 "agente",
                 "debito"
               ]
@@ -4880,6 +5257,9 @@
                       "caja",
                       "pasarela",
                       "deposito",
+                      "transferencia",
+                      "ach",
+                      "remesa",
                       "agente",
                       "debito"
                     ]
@@ -4897,7 +5277,8 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 100
+                    "maxLength": 100,
+                    "description": "Boleta, número de transferencia/ACH o código de remesa (obligatoria con deposito, transferencia, ach y remesa). Única por método y cuenta bancaria"
                   },
                   "caja_id": {
                     "type": [
@@ -4905,7 +5286,23 @@
                       "null"
                     ],
                     "minimum": 1,
-                    "description": "Obligatoria con metodo caja"
+                    "description": "Caja del efectivo; sin ella, la del turno abierto del cajero o la principal"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta bancaria propia de destino (GET /cuentas-bancarias). Obligatoria con deposito, transferencia, ach y remesa"
+                  },
+                  "banco_origen_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco de origen (GET /bancos). Obligatorio con transferencia y ach"
                   },
                   "nota": {
                     "type": [
@@ -7684,24 +8081,15 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "promesasCrear",
         "summary": "Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)",
+        "description": "Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
         "tags": [
           "promesas"
         ],
@@ -7816,20 +8204,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/promesas/{id}/aprobar": {
@@ -7947,20 +8325,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.aprobar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/roles": {
@@ -8059,6 +8427,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cuentas_bancarias.editar",
+                        "cuentas_bancarias.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "empresa.editar",
@@ -8233,6 +8603,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cuentas_bancarias.editar",
+                        "cuentas_bancarias.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "empresa.editar",
@@ -11548,6 +11920,8 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "cuentas_bancarias.editar",
+                            "cuentas_bancarias.ver",
                             "documentos.editar",
                             "documentos.ver",
                             "empresa.editar",
@@ -12780,6 +13154,14 @@
           },
           "monto": {
             "$ref": "#/components/schemas/Dinero"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Dueño de la factura (pago de terceros: puede no ser el pagador)"
+          },
+          "cliente_nombre": {
+            "type": "string"
           }
         }
       },
@@ -12887,6 +13269,26 @@
               "null"
             ],
             "minimum": 1
+          }
+        }
+      },
+      "Banco": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "activo"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
           }
         }
       },
@@ -13021,6 +13423,22 @@
               "string",
               "null"
             ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que abrió el turno"
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que cerró el turno"
           },
           "version": {
             "type": "integer",
@@ -13442,6 +13860,74 @@
           },
           "activa": {
             "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CuentaBancaria": {
+        "type": "object",
+        "required": [
+          "id",
+          "banco_id",
+          "banco_nombre",
+          "numero",
+          "alias",
+          "moneda",
+          "activa",
+          "cuenta_id",
+          "cuenta_codigo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "banco_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "banco_nombre": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ",
+              "USD"
+            ]
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Una cuenta inactiva no recibe pagos nuevos"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta de 1.1.02 Bancos en el libro"
+          },
+          "cuenta_codigo": {
+            "type": "string"
           },
           "version": {
             "type": "integer",
@@ -14066,6 +14552,20 @@
             "format": "date-time",
             "description": "Cuándo se marcó vencida"
           },
+          "anulada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -14502,6 +15002,9 @@
               "caja",
               "pasarela",
               "deposito",
+              "transferencia",
+              "ach",
+              "remesa",
               "agente",
               "debito"
             ]
@@ -14578,6 +15081,35 @@
               "$ref": "#/components/schemas/ServicioEvaluado"
             },
             "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
+          },
+          "banco_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Banco de origen (transferencia, ach)"
+          },
+          "banco_origen_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cuenta bancaria propia de destino (deposito, transferencia, ach, remesa)"
+          },
+          "cuenta_bancaria_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Banco y alias de la cuenta de destino"
           },
           "version": {
             "type": "integer",
@@ -15684,7 +16216,12 @@
               "object",
               "null"
             ],
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar"
+          },
+          "servicio": {
+            "$ref": "#/components/schemas/ServicioEvaluado",
+            "description": "Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación)"
           },
           "version": {
             "type": "integer",

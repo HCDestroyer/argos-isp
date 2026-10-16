@@ -11,6 +11,9 @@ const METODOS: Record<Schema<'Pago'>['metodo'], string> = {
     deposito: 'Depósito',
     agente: 'Pago en agente',
     debito: 'Débito automático',
+    transferencia: 'Transferencia',
+    ach: 'ACH',
+    remesa: 'Remesa',
 }
 
 /**

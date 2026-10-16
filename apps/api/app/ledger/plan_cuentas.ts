@@ -31,9 +31,12 @@ export const CUENTAS = {
     CXC_CLIENTES: '1.1.03',
     ANTICIPOS_CLIENTES: '2.1.01',
     IVA_DEBITO: '2.1.02',
+    TRANSITORIAS: '2.9',
+    SALDOS_APERTURA: '2.9.01',
     INGRESOS_INTERNET: '4.1.01',
     RECARGOS_MORA: '4.1.02',
     OTROS_INGRESOS: '4.1.03',
+    SOBRANTES_CAJA: '4.1.04',
     DESCUENTOS: '5.1.01',
     COMISIONES_PASARELAS: '5.1.02',
     GASTO_ENERGIA: '5.2.01',
@@ -41,6 +44,7 @@ export const CUENTAS = {
     GASTO_NOMINA: '5.2.03',
     GASTO_VEHICULOS: '5.2.04',
     GASTO_ALQUILERES: '5.2.05',
+    FALTANTES_CAJA: '5.2.06',
     GASTO_OTROS: '5.2.99',
 } as const
 
@@ -92,6 +96,20 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
         padre: '2.1',
         imputable: true,
     },
+    {
+        codigo: CUENTAS.TRANSITORIAS,
+        nombre: 'Cuentas transitorias',
+        tipo: 'pasivo',
+        padre: '2',
+        imputable: false,
+    },
+    {
+        codigo: CUENTAS.SALDOS_APERTURA,
+        nombre: 'Saldos de apertura por importación',
+        tipo: 'pasivo',
+        padre: CUENTAS.TRANSITORIAS,
+        imputable: true,
+    },
 
     { codigo: '4', nombre: 'Ingresos', tipo: 'ingreso', padre: null, imputable: false },
     { codigo: '4.1', nombre: 'Ingresos de operación', tipo: 'ingreso', padre: '4', imputable: false },
@@ -112,6 +130,13 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
     {
         codigo: CUENTAS.OTROS_INGRESOS,
         nombre: 'Otros ingresos',
+        tipo: 'ingreso',
+        padre: '4.1',
+        imputable: true,
+    },
+    {
+        codigo: CUENTAS.SOBRANTES_CAJA,
+        nombre: 'Sobrantes de caja',
         tipo: 'ingreso',
         padre: '4.1',
         imputable: true,
@@ -145,6 +170,13 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
     { codigo: CUENTAS.GASTO_NOMINA, nombre: 'Nómina', tipo: 'gasto', padre: '5.2', imputable: true },
     { codigo: CUENTAS.GASTO_VEHICULOS, nombre: 'Vehículos', tipo: 'gasto', padre: '5.2', imputable: true },
     { codigo: CUENTAS.GASTO_ALQUILERES, nombre: 'Alquileres', tipo: 'gasto', padre: '5.2', imputable: true },
+    {
+        codigo: CUENTAS.FALTANTES_CAJA,
+        nombre: 'Faltantes de caja',
+        tipo: 'gasto',
+        padre: '5.2',
+        imputable: true,
+    },
     { codigo: CUENTAS.GASTO_OTROS, nombre: 'Otros gastos', tipo: 'gasto', padre: '5.2', imputable: true },
 ]
 

@@ -24,15 +24,35 @@ export async function bloquearCliente(trx: TransactionClientContract, clienteId:
 
 export interface FacturaPendiente {
     id: number
+    /** dueño de la factura (puede no ser el pagador: pago de terceros) */
+    cliente_id: number
     servicio_id: number | null
     total: string
     pagado: string
     vencida_en: Date | null
 }
 
+const COLUMNAS_PENDIENTE = ['id', 'cliente_id', 'servicio_id', 'total', 'pagado', 'vencida_en']
+
+/** Dueños de unas facturas (para bloquearlos antes de aplicar un pago de terceros). */
+export async function duenosDeFacturas(trx: TransactionClientContract, ids: number[]): Promise<number[]> {
+    if (ids.length === 0) return []
+    const filas = (await trx.from('billing.facturas').whereIn('id', ids).distinct('cliente_id')) as Array<{
+        cliente_id: number
+    }>
+    return filas.map((f) => f.cliente_id)
+}
+
+/** Bloquea varios clientes en orden ascendente (sin interbloqueos entre cobros cruzados). */
+export async function bloquearClientes(trx: TransactionClientContract, ids: number[]): Promise<void> {
+    for (const id of [...new Set(ids)].sort((a, b) => a - b)) await bloquearCliente(trx, id)
+}
+
 /**
- * Facturas con saldo del cliente, bloqueadas, en el orden de aplicación: primero las
- * `preferidas` en el orden pedido, luego la más antigua (vencimiento, periodo, id).
+ * Facturas con saldo, bloqueadas, en el orden de aplicación: primero las `preferidas` en el
+ * orden pedido (de cualquier cliente: pago de terceros), luego las del pagador de la más antigua a
+ * la más nueva (vencimiento, periodo, id). Una preferida inexistente o sin saldo → 422 con el
+ * índice (`facturas.<i>`). Los dueños ya deben estar bloqueados (`bloquearClientes`).
  */
 export async function facturasPendientes(
     trx: TransactionClientContract,
@@ -49,26 +69,34 @@ export async function facturasPendientes(
             { column: 'id', order: 'asc' },
         ])
         .forUpdate()
-        .select('id', 'servicio_id', 'total', 'pagado', 'vencida_en')) as FacturaPendiente[]
+        .select(...COLUMNAS_PENDIENTE)) as FacturaPendiente[]
 
     if (preferidas.length === 0) return filas
-    const porId = new Map(filas.map((f) => [f.id, f]))
-    const faltantes = preferidas.filter((id) => !porId.has(id))
-    if (faltantes.length > 0) {
-        throw new ValidacionFallida(
-            faltantes.map((id) => ({
-                field: 'facturas',
-                message: `La factura ${id} no es del cliente o no tiene saldo pendiente`,
-                rule: 'factura_pendiente',
-            })),
-        )
-    }
+    const ajenas = (await trx
+        .from('billing.facturas')
+        .whereIn('id', preferidas)
+        .whereNot('cliente_id', clienteId)
+        .whereIn('estado', ['emitida', 'parcial', 'vencida'])
+        .orderBy('id', 'asc')
+        .forUpdate()
+        .select(...COLUMNAS_PENDIENTE)) as FacturaPendiente[]
+    const porId = new Map([...filas, ...ajenas].map((f) => [f.id, f]))
+    const errores = preferidas
+        .map((id, i) => ({ id, i }))
+        .filter(({ id }) => !porId.has(id))
+        .map(({ id, i }) => ({
+            field: `facturas.${i}`,
+            message: `La factura ${id} no existe o no tiene saldo pendiente`,
+            rule: 'factura_pendiente',
+        }))
+    if (errores.length > 0) throw new ValidacionFallida(errores)
     const primero = [...new Set(preferidas)].map((id) => porId.get(id)!)
     return [...primero, ...filas.filter((f) => !preferidas.includes(f.id))]
 }
 
 export interface Aplicacion {
     factura_id: number
+    cliente_id: number
     servicio_id: number | null
     monto: string
     estado: EstadoFactura
@@ -100,9 +128,12 @@ export async function sumarAPagado(
  * `pagos_aplicaciones` y actualiza `pagado`/`estado`. Devuelve lo aplicado y lo que sobra.
  * No escribe el asiento: lo hace quien llama, con la contrapartida que corresponda.
  */
+/** De dónde sale el dinero aplicado: un pago o un saldo inicial a favor (importación). */
+export type FuenteAplicacion = number | { saldo_inicial_id: number }
+
 export async function aplicarAFacturas(
     trx: TransactionClientContract,
-    pagoId: number,
+    fuente: FuenteAplicacion,
     monto: Dec,
     facturas: FacturaPendiente[],
 ): Promise<{ aplicaciones: Aplicacion[]; aplicado: Dec; restante: Dec }> {
@@ -115,11 +146,20 @@ export async function aplicarAFacturas(
         const aplicar = pendiente.lt(restante) ? pendiente : restante
         await trx
             .insertQuery()
-            .table('billing.pagos_aplicaciones')
-            .insert({ pago_id: pagoId, factura_id: factura.id, monto: aTexto(aplicar) })
+            .table(
+                typeof fuente === 'number'
+                    ? 'billing.pagos_aplicaciones'
+                    : 'billing.saldos_iniciales_aplicaciones',
+            )
+            .insert({
+                ...(typeof fuente === 'number' ? { pago_id: fuente } : fuente),
+                factura_id: factura.id,
+                monto: aTexto(aplicar),
+            })
         const estado = await sumarAPagado(trx, factura, aplicar)
         aplicaciones.push({
             factura_id: factura.id,
+            cliente_id: factura.cliente_id,
             servicio_id: factura.servicio_id,
             monto: aTexto(aplicar),
             estado,
@@ -145,9 +185,11 @@ export async function saldoAnticipos(trx: QueryClientContract, clienteId: number
 }
 
 /**
- * Aplica el anticipo del cliente (excedentes de pagos anteriores) a sus facturas pendientes, la
- * más antigua primero. Cada pago con remanente genera su aplicación y un asiento
- * `Anticipos / CxC` con origen en ese pago (así anularlo revierte también esta aplicación).
+ * Aplica el anticipo del cliente (excedentes de pagos anteriores y saldos iniciales a favor de la
+ * importación) a sus facturas pendientes, la más antigua primero. Cada pago con remanente genera
+ * su aplicación y un asiento `Anticipos / CxC` con origen en ese pago (así anularlo revierte
+ * también esta aplicación); cada saldo inicial a favor, su aplicación y un asiento `ajuste` con
+ * origen en el saldo inicial.
  * El cliente ya debe estar bloqueado (`bloquearCliente`).
  */
 export async function aplicarAnticipos(t: Transaccion, clienteId: number): Promise<Aplicacion[]> {
@@ -194,10 +236,58 @@ export async function aplicarAnticipos(t: Transaccion, clienteId: number): Promi
         todas.push(...aplicaciones)
         disponible = disponible.minus(aplicado)
     }
+
+    // saldos iniciales a favor (importación), después de los pagos
+    const saldos = (await t.trx
+        .from('billing.saldos_iniciales as s')
+        .leftJoin('billing.saldos_iniciales_aplicaciones as a', 'a.saldo_inicial_id', 's.id')
+        .where('s.cliente_id', clienteId)
+        .where('s.monto', '<', 0)
+        .groupBy('s.id', 's.monto')
+        .havingRaw('-s.monto > coalesce(sum(a.monto), 0)')
+        .orderBy('s.id', 'asc')
+        .select('s.id', t.trx.raw('(-s.monto - coalesce(sum(a.monto), 0))::text as restante'))) as Array<{
+        id: number
+        restante: string
+    }>
+    for (const saldo of saldos) {
+        if (disponible.lte(0)) break
+        const restante = dec(saldo.restante)
+        const usar = restante.lt(disponible) ? restante : disponible
+        const { aplicaciones, aplicado } = await aplicarAFacturas(
+            t.trx,
+            { saldo_inicial_id: saldo.id },
+            usar,
+            facturas,
+        )
+        if (aplicado.lte(0)) break
+        await new RegistrarAsiento().execute(
+            {
+                descripcion: `Aplicación del saldo inicial a favor ${saldo.id} a facturas ${aplicaciones
+                    .map((a) => a.factura_id)
+                    .join(', ')}`,
+                origen_tipo: 'ajuste',
+                origen_id: saldo.id,
+                movimientos: [
+                    { cuenta: CUENTAS.ANTICIPOS_CLIENTES, debe: aTexto(aplicado), cliente_id: clienteId },
+                    { cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(aplicado), cliente_id: clienteId },
+                ],
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        todas.push(...aplicaciones)
+        disponible = disponible.minus(aplicado)
+    }
     return todas
 }
 
 /** Ids únicos de los servicios tocados por unas aplicaciones. */
 export function serviciosDe(aplicaciones: Array<{ servicio_id: number | null }>): number[] {
     return [...new Set(aplicaciones.map((a) => a.servicio_id).filter((id): id is number => id !== null))]
+}
+
+/** Pagador primero y luego los dueños de las facturas aplicadas (payload `clientes` de pago.*). */
+export function clientesDelPago(pagadorId: number, aplicaciones: Array<{ cliente_id: number }>): number[] {
+    return [...new Set([pagadorId, ...aplicaciones.map((a) => a.cliente_id)])]
 }

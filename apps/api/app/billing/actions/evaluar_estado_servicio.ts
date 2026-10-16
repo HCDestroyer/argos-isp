@@ -56,6 +56,15 @@ export default class EvaluarEstadoServicio extends DomainAction<
 > {
     readonly nombre = 'servicios.evaluar_estado'
 
+    /**
+     * Decisión del PM (2026-10-16): solo se audita la evaluación que cambió el estado (cada pago,
+     * promesa y corte evalúa muchos servicios sin cambio). Los errores se auditan siempre y quien
+     * la llama (pago, promesa, corte con `registrar_corrida`) deja su propia fila.
+     */
+    protected override auditarExito(salida: ResultadoEvaluarEstado): boolean {
+        return salida.cambiado
+    }
+
     protected async handle(input: EntradaEvaluarEstado, t: Transaccion): Promise<ResultadoEvaluarEstado> {
         t.fijarEntidad('servicio', input.servicio_id)
         const servicio = await leerServicio(t.trx, input.servicio_id)

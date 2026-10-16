@@ -75,6 +75,9 @@ export const ETIQUETAS_METODO: Record<Metodo, string> = {
     agente: 'Agente bancario',
     debito: 'Débito / tarjeta',
     pasarela: 'Pago en línea',
+    transferencia: 'Transferencia',
+    ach: 'ACH',
+    remesa: 'Remesa',
 }
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/

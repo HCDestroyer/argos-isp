@@ -2,6 +2,7 @@ import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, fechaIso, idEntidad, instanteIso, motivo, versionEsperada } from '#shared/validadores'
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
+import { METODOS_PAGO } from '#shared/eventos'
 
 /*
 |--------------------------------------------------------------------------
@@ -124,7 +125,8 @@ export const listarPagosValidator = vine.compile(
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         caja_id: idEntidad().optional(),
-        metodo: vine.enum(['caja', 'pasarela', 'deposito', 'agente', 'debito'] as const).optional(),
+        cuenta_bancaria_id: idEntidad().optional(),
+        metodo: vine.enum(METODOS_PAGO).optional(),
         estado: vine.enum(['registrado', 'pendiente_verificacion', 'anulado'] as const).optional(),
         desde: instanteIso().optional(),
         hasta: instanteIso().optional(),
@@ -134,10 +136,22 @@ export const listarPagosValidator = vine.compile(
 export const registrarPagoValidator = vine.compile(
     vine.object({
         cliente_id: idEntidad(),
-        metodo: vine.enum(['caja', 'pasarela', 'deposito', 'agente', 'debito'] as const),
+        metodo: vine.enum(METODOS_PAGO),
         monto: dinero(),
-        referencia: vine.string().trim().maxLength(100).nullable().optional(),
-        caja_id: idEntidad().nullable().optional().meta({ description: 'Obligatoria con metodo caja' }),
+        referencia: vine.string().trim().maxLength(100).nullable().optional().meta({
+            description:
+                'Boleta, número de transferencia/ACH o código de remesa (obligatoria con deposito, transferencia, ach y remesa). Única por método y cuenta bancaria',
+        }),
+        caja_id: idEntidad().nullable().optional().meta({
+            description: 'Caja del efectivo; sin ella, la del turno abierto del cajero o la principal',
+        }),
+        cuenta_bancaria_id: idEntidad().nullable().optional().meta({
+            description:
+                'Cuenta bancaria propia de destino (GET /cuentas-bancarias). Obligatoria con deposito, transferencia, ach y remesa',
+        }),
+        banco_origen_id: idEntidad().nullable().optional().meta({
+            description: 'Banco de origen (GET /bancos). Obligatorio con transferencia y ach',
+        }),
         nota: vine.string().trim().maxLength(500).nullable().optional(),
         facturas: vine
             .array(idEntidad())
@@ -183,4 +197,37 @@ export const crearPromesaValidator = vine.compile(
 
 export const aprobarPromesaValidator = vine.compile(
     vine.object({ nota: vine.string().trim().maxLength(500).nullable().optional() }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Cuentas bancarias propias
+|--------------------------------------------------------------------------
+*/
+
+const camposCuentaBancaria = {
+    banco_id: idEntidad().meta({ description: 'Banco (GET /bancos)' }),
+    numero: vine.string().trim().minLength(3).maxLength(40),
+    alias: vine.string().trim().minLength(2).maxLength(80),
+    moneda: vine.enum(['GTQ', 'USD'] as const).optional(),
+    activa: vine.boolean().optional(),
+}
+
+export const crearCuentaBancariaValidator = vine.compile(vine.object(camposCuentaBancaria))
+
+export const editarCuentaBancariaValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        banco_id: camposCuentaBancaria.banco_id.optional(),
+        numero: vine.string().trim().minLength(3).maxLength(40).optional(),
+        alias: vine.string().trim().minLength(2).maxLength(80).optional(),
+        moneda: vine.enum(['GTQ', 'USD'] as const).optional(),
+        activa: vine.boolean().optional(),
+    }),
+)
+
+export const listarCuentasBancariasValidator = vine.compile(
+    vine.object({
+        activa: vine.boolean().optional().meta({ description: 'Solo activas (true) o inactivas' }),
+    }),
 )

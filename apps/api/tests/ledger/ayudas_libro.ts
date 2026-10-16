@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import Usuario from '#core/models/usuario'
 import { unico } from '#tests/ayudas'
 import { saldoCliente } from '#ledger/consultas'
 
@@ -60,4 +61,42 @@ export async function cerrarMes(periodo: string): Promise<void> {
 export async function saldoTexto(clienteId: number): Promise<string> {
     const saldo = await saldoCliente(clienteId)
     return saldo.toFixed(2)
+}
+
+/** Caja nueva con su cuenta hija de 1.1.01. */
+export async function nuevaCaja(): Promise<number> {
+    const padre = await db.from('ledger.cuentas').where('codigo', '1.1.01').select('id').firstOrFail()
+    const [cuenta] = (await db
+        .table('ledger.cuentas')
+        .insert({
+            codigo: `1.1.01.${unico('c')}`,
+            nombre: unico('Caja'),
+            tipo: 'activo',
+            padre_id: padre.id,
+        })
+        .returning('id')) as Array<{ id: number }>
+    const [caja] = (await db
+        .table('ledger.cajas')
+        .insert({ nombre: unico('Caja'), cuenta_id: cuenta!.id })
+        .returning('id')) as Array<{ id: number }>
+    return caja!.id
+}
+
+/** Cajero cuyo rol `cajero` solo vale en `cajaId`. */
+export async function cajeroDe(cajaId: number) {
+    const usuario = await Usuario.create({
+        nombre: unico('Cajero'),
+        email: `${unico('cajero')}@prueba.local`,
+        password: 'clave-de-prueba',
+        activo: true,
+    })
+    const rol = await db.from('core.roles').where('nombre', 'cajero').select('id').firstOrFail()
+    await db.table('core.usuarios_roles').insert({
+        usuario_id: usuario.id,
+        role_id: rol.id,
+        alcance_tipo: 'caja',
+        alcance_id: cajaId,
+    })
+    const token = await Usuario.accessTokens.create(usuario)
+    return { usuario, token: token.value!.release() }
 }

@@ -3,6 +3,9 @@ import { contextoPrueba, unico } from '#tests/ayudas'
 import { crearClienteFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import { normalizarReglasPromesa } from '#billing/reglas_promesa'
 import GenerarFacturas from '#billing/actions/generar_facturas'
+import VencerFacturas from '#billing/actions/vencer_facturas'
+import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 
 /**
  * Escenarios de facturación: plantilla + plan + cliente + servicio insertados directo (las
@@ -110,6 +113,39 @@ export async function asientoDe(origenTipo: string, origenId: number) {
         .where('a.origen_id', origenId)
         .orderBy('m.id', 'asc')
         .select('a.id as asiento_id', 'c.codigo', 'm.debe', 'm.haber', 'm.cliente_id')
+}
+
+/**
+ * Servicio instalado el 2026-09-01 con septiembre y octubre vencidas (vencimiento al 2026-10-07)
+ * y ya cortado. Hora de corte 00:00: baja sin esperar.
+ */
+export async function servicioCortado(opciones: OpcionesEscenario = {}): Promise<Escenario> {
+    const datos = await escenario({
+        fecha_instalacion: '2026-09-01',
+        ...opciones,
+        plantilla: { hora_corte: '00:00', ...opciones.plantilla },
+    })
+    await generar(datos.servicioId, '2026-10-01')
+    await new VencerFacturas().execute(
+        { servicio_id: datos.servicioId, hasta: '2026-10-07' },
+        contextoPrueba(),
+    )
+    await new EvaluarEstadoServicio().execute({ servicio_id: datos.servicioId }, contextoPrueba())
+    return datos
+}
+
+/** Id de un banco del catálogo por nombre. */
+export async function bancoId(nombre = 'Banrural'): Promise<number> {
+    const fila = await db.from('billing.bancos').where('nombre', nombre).select('id').firstOrFail()
+    return fila.id as number
+}
+
+/** Cuenta bancaria propia nueva (con su subcuenta de Bancos) creada por la acción. */
+export async function cuentaBancariaPrueba(banco = 'Banrural') {
+    return new CrearCuentaBancaria().execute(
+        { banco_id: await bancoId(banco), numero: unico('300'), alias: unico('Recaudación') },
+        contextoPrueba(),
+    )
 }
 
 /** Movimientos del asiento como tuplas `[codigo, debe, haber, cliente_id]`. */
