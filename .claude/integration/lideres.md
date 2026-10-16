@@ -14,3 +14,4 @@
 | 2026-10-15 | Líder FE | A5 | **Fallo (captura 13):** "Pagar en línea" está deshabilitado pero se ve activo (azul). Debe verse apagado hasta la semana 2 | Abierto (día 3) |
 | 2026-10-15 | PM | A1, A4 | Filtros avanzados de clientes y servicios: router, estado del servicio (activo, limitado, **cortado** = suspendido, retirado), plan, zona, con deuda vencida, con promesa activa | Abierto (día 3) |
 | 2026-10-15 | PM | A3, A4 | **Cobro rápido** (tipo caja, más simple): buscar cliente → ver pendiente → monto, método y referencia → registrar → recibo. Debe reactivar el servicio por evento | Abierto (día 3) |
+| 2026-10-16 | PM | A1, A2, A4, A6 | **WISP sin PPPoE** (semana 2): tipos de conexión `ip_estatica` y `dhcp_fija` además de `pppoe`; control por API REST de RouterOS (cola simple, address-list `suspendidos`, lease DHCP); amarre IP-MAC opcional por servicio. Contrato en `contratos/routeros.md` | Abierto (semana 2) |

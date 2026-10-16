@@ -16,7 +16,7 @@ Convenciones: `id bigint identity`, `created_at`, `updated_at`, `version int` en
 | `tokens_api` | usuario_id, nombre, hash, alcances jsonb, ultimo_uso, revocado_en |
 | `clientes` | nombre, tipo (`persona`/`empresa`), nit_cui, nombre_fiscal, direccion_fiscal, email, telefono, movil, direccion, coordenadas, zona_id, campos_personalizados jsonb, canal_preferido (`correo`/`telegram`/`whatsapp`), telegram_chat_id |
 | `zonas` | nombre |
-| `servicios` | cliente_id, router_id, plan_id, plantilla_facturacion_id, estado (`activo`/`limitado`/`suspendido`/`retirado`), user_ppp, pass_ppp (cifrado), mac, direccion, coordenadas, fecha_instalacion, costo_override, excluir_firewall, ipv6_duid, ipv6_modo (`radius_servicio`/`radius_pool`/`duid`/`estatico`/`ninguno`), version |
+| `servicios` | cliente_id, router_id, plan_id, plantilla_facturacion_id, estado (`activo`/`limitado`/`suspendido`/`retirado`), tipo_conexion (`pppoe`/`ip_estatica`/`dhcp_fija`; decisión del PM, día 4), user_ppp y pass_ppp (cifrado; solo `pppoe`), mac (obligatoria en `dhcp_fija`), amarre_ip_mac (bool, opcional), direccion, coordenadas, fecha_instalacion, costo_override, excluir_firewall, ipv6_duid, ipv6_modo (`radius_servicio`/`radius_pool`/`duid`/`estatico`/`ninguno`), version |
 | `servicios_excepciones` | servicio_id, campo, valor jsonb (excepciones a la plantilla) |
 | `idempotency_keys` | clave, actor_id, ruta, respuesta jsonb, created_at |
 
