@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto } from '#shared/errores'
+import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { verPlan, type PlanVista } from '#network/consultas/planes'
+import { validarVelocidad, VELOCIDAD_POR_DEFECTO, type VelocidadPlan } from '#network/velocidad'
 
 export interface DatosPlan {
     nombre?: string
@@ -10,6 +11,12 @@ export interface DatosPlan {
     bajada_limitada_kbps?: number
     subida_limitada_kbps?: number
     reuso?: number
+    garantizado_pct?: number | null
+    rafaga_bajada_kbps?: number | null
+    rafaga_subida_kbps?: number | null
+    rafaga_umbral_pct?: number
+    rafaga_segundos?: number
+    prioridad?: number
     dual_stack?: 'ambos' | 'v4' | 'v6'
     tamano_prefijo_delegado?: 64 | 56 | 48
     global?: boolean
@@ -29,9 +36,22 @@ export function columnasPlan(datos: DatosPlan): Record<string, unknown> {
     return Object.fromEntries(Object.entries(datos).filter(([, valor]) => valor !== undefined))
 }
 
+/** 422 por campo si la velocidad no es coherente (`validarVelocidad`). */
+export function exigirVelocidadValida(velocidad: VelocidadPlan, detalle?: string) {
+    const errores = validarVelocidad(velocidad)
+    if (errores.length > 0) {
+        throw new ValidacionFallida(
+            errores,
+            detalle ? `${detalle}: ${errores[0]!.message}` : errores[0]!.message,
+        )
+    }
+}
+
 /**
  * Crea un plan (velocidades normal y limitada, precio, dual stack, tamaño del prefijo delegado).
  * `global`: disponible en todos los routers; si no, solo donde tenga implementación.
+ * Velocidad (`contratos/velocidad.md`): reuso, garantizado, ráfaga y prioridad con los valores por
+ * defecto del contrato; 422 por campo si no son coherentes.
  */
 export default class CrearPlan extends DomainAction<EntradaCrearPlan, PlanVista> {
     readonly nombre = 'planes.crear'
@@ -39,6 +59,10 @@ export default class CrearPlan extends DomainAction<EntradaCrearPlan, PlanVista>
     protected async handle(input: EntradaCrearPlan, t: Transaccion): Promise<PlanVista> {
         const repetido = await t.trx.from('network.planes').where('nombre', input.nombre).first()
         if (repetido) throw new Conflicto(`Ya existe el plan ${input.nombre}`, 'plan_duplicado')
+        exigirVelocidadValida({
+            ...VELOCIDAD_POR_DEFECTO,
+            ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)),
+        } as VelocidadPlan)
         const [fila] = (await t.trx
             .insertQuery()
             .table('network.planes')

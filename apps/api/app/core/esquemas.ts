@@ -351,6 +351,10 @@ export const AaaServicio = definirEsquema(
         pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
         estado: EstadoServicio,
         router_id: id,
+        control_velocidad: {
+            ...enumerado(['simple', 'arbol_pcq']),
+            description: 'network.routers.control_velocidad del router del servicio',
+        },
         plan: objeto({
             id,
             subida_kbps: entero,
@@ -359,6 +363,21 @@ export const AaaServicio = definirEsquema(
             bajada_limitada_kbps: entero,
             rate_limit_override: nulable(texto),
             profile_ppp: nulable(texto),
+            rate_limit: {
+                type: 'string',
+                description:
+                    'Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override)',
+            },
+            rate_limit_limitado: {
+                type: 'string',
+                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+            },
+            reuso: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 64,
+                description: 'Reuso efectivo 1:N en el router',
+            },
         }),
         ipv4: {
             anyOf: [

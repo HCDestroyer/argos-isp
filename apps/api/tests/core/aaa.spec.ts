@@ -68,6 +68,7 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
             pass_ppp: fila.pass_ppp,
             estado: 'activo',
             router_id: routerId,
+            control_velocidad: 'simple',
             plan: {
                 id: planId,
                 subida_kbps: 5000,
@@ -76,6 +77,10 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
                 bajada_limitada_kbps: 2048,
                 rate_limit_override: null,
                 profile_ppp: null,
+                // plan sin campos nuevos: misma velocidad, más el limit-at del reuso 1 (= MIR)
+                rate_limit: '5M/20M 0/0 0/0 0/0 8 5M/20M',
+                rate_limit_limitado: '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k',
+                reuso: 1,
             },
             ipv4: { modo: 'estatico', ip: `${base}.2` },
             ipv6: {
