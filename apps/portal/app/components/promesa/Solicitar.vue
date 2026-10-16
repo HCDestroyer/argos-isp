@@ -9,7 +9,9 @@ import Decimal from 'decimal.js'
  *
  * Al abrir lee los límites (`GET /portal/promesas/condiciones`) y los muestra antes de enviar.
  * La decisión es del backend: aprobada cierra el modal y la página sigue con el estado en vivo;
- * rechazada y pendiente se muestran aquí con el motivo en palabras del cliente.
+ * rechazada y pendiente se muestran aquí con el motivo en palabras del cliente. "Cambiar fecha o
+ * monto" solo aparece si la regla que rechazó se cumple con otra fecha (`corregible`); si no (cupo,
+ * historial, deuda), se ofrece el contacto.
  *
  * `Idempotency-Key`: la misma clave en los reintentos de un envío que no llegó (sin conexión); una
  * nueva cuando la API respondió.
@@ -45,9 +47,10 @@ const esquema = computed(() => esquemaPromesa(condiciones.value ?? {
     monto_maximo: null,
 }))
 const plazo = computed(() => condiciones.value ? textoPlazo(condiciones.value) : null)
-const faltaAbono = computed(() => {
-    const abono = condiciones.value?.abono_inicial
-    return abono && new Decimal(abono.faltante).greaterThan(0) ? abono : null
+/** Lo que hay que pagar antes de prometer (de `limitesPromesa()` de A3): mientras sea > 0 no se envía. */
+const pagoPrevio = computed(() => {
+    const previo = condiciones.value?.pago_previo
+    return previo && new Decimal(previo).greaterThan(0) ? previo : null
 })
 
 async function cargar() {
@@ -175,12 +178,23 @@ function corregir() {
                 </p>
                 <div class="flex flex-col gap-2 sm:flex-row-reverse">
                     <UButton
-                        v-if="resultado.resultado === 'rechazada'"
+                        v-if="resultado.resultado === 'rechazada' && resultado.corregible"
                         label="Cambiar fecha o monto"
                         icon="i-lucide-pencil"
                         size="lg"
                         block
+                        data-testid="promesa-corregir"
                         @click="corregir"
+                    />
+                    <UButton
+                        v-else-if="resultado.resultado === 'rechazada'"
+                        label="Contactar a la oficina"
+                        icon="i-lucide-phone"
+                        to="/contacto"
+                        size="lg"
+                        block
+                        data-testid="promesa-contacto"
+                        @click="open = false"
                     />
                     <UButton
                         :label="resultado.resultado === 'rechazada' ? 'Cerrar' : 'Listo'"
@@ -248,6 +262,16 @@ function corregir() {
                         </span>
                     </li>
                     <li
+                        v-if="condiciones.deuda_maxima"
+                        class="flex gap-2"
+                    >
+                        <UIcon
+                            name="i-lucide-scale"
+                            class="mt-0.5 size-4 shrink-0 text-muted"
+                        />
+                        <span>Saldo vencido máximo para prometer: {{ montoEnTexto(condiciones.deuda_maxima.maximo) }}</span>
+                    </li>
+                    <li
                         v-if="condiciones.requiere_aprobacion"
                         class="flex gap-2"
                     >
@@ -260,12 +284,12 @@ function corregir() {
                 </ul>
 
                 <UAlert
-                    v-if="faltaAbono"
+                    v-if="pagoPrevio"
                     color="warning"
                     variant="subtle"
                     icon="i-lucide-triangle-alert"
-                    :title="`Te falta abonar ${montoEnTexto(faltaAbono.faltante)}`"
-                    description="Paga ese abono en oficina o por depósito y luego solicita la promesa."
+                    :title="`Antes de prometer debes pagar ${montoEnTexto(pagoPrevio)}`"
+                    :description="textoPagoPrevio(condiciones)"
                     data-testid="promesa-falta-abono"
                 />
 
@@ -322,6 +346,7 @@ function corregir() {
                         size="xl"
                         block
                         :loading="enviando"
+                        :disabled="pagoPrevio !== null"
                         data-testid="promesa-enviar"
                     />
                 </UForm>

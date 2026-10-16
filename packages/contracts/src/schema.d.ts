@@ -1527,6 +1527,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/pagos/en-linea/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de un pago en línea (página de retorno `/corte?pago=<id>`)
+         * @description Solo lectura: `pendiente` hasta que llegue el webhook, luego `pagado`, `fallido` o `expirado`. Responde solo si el cobro es del cliente de la sesión del portal o del servicio de la IP de origen; cualquier otro, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         */
+        get: operations["portalPagoEnLinea"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/pagos/iniciar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor
+         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a `/corte?pago=<id>`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         */
+        post: operations["portalIniciarPago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/promesas": {
         parameters: {
             query?: never;
@@ -1605,6 +1645,66 @@ export interface paths {
          * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
          */
         post: operations["portalSalir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de la vinculación de Telegram del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         */
+        get: operations["portalTelegram"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/telegram/desvincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quita el chat de Telegram del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.desvincular_telegram` sobre `clientes.desvincular_telegram`. Si el canal preferido era Telegram pasa a correo. Idempotente.
+         */
+        post: operations["portalDesvincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/telegram/vincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Genera el código de un solo uso y el enlace al bot para vincular Telegram
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         */
+        post: operations["portalVincularTelegram"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2282,6 +2382,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telegram/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook del bot de Telegram (lo llama Telegram, no el panel)
+         * @description Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.
+         */
+        post: operations["telegramWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tokens": {
         parameters: {
             query?: never;
@@ -2898,6 +3018,8 @@ export interface components {
             instrucciones_pago: string | null;
             /** @description Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
+            /** @description Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita) */
+            pago_en_linea: boolean;
         };
         EnvioNotificacion: {
             id: number;
@@ -3383,6 +3505,15 @@ export interface components {
                 abonado: components["schemas"]["Dinero"];
                 faltante: components["schemas"]["Dinero"];
             } | null;
+            /** @description La plantilla no admite promesas con más deuda vencida que `maximo` */
+            deuda_maxima: {
+                maximo: components["schemas"]["Dinero"];
+                vencida: components["schemas"]["Dinero"];
+                /** @description Lo que hay que pagar para quedar dentro del máximo */
+                faltante: components["schemas"]["Dinero"];
+            } | null;
+            /** @description Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada */
+            pago_previo: components["schemas"]["Dinero"] | null;
             /** @description La promesa quedará pendiente de aprobación */
             requiere_aprobacion: boolean;
         };
@@ -3460,6 +3591,19 @@ export interface components {
                 monto: components["schemas"]["Dinero"];
             }[];
         };
+        PortalPagoEnLinea: {
+            /** @description Cobro en línea; el retorno es `/corte?pago=<id>` */
+            id: number;
+            /** @enum {string} */
+            estado: "pendiente" | "pagado" | "fallido" | "expirado";
+            monto: components["schemas"]["Dinero"];
+            /** @description Página de pago del proveedor (solo mientras el cobro está pendiente) */
+            url_pago: string | null;
+            /** Format: date-time */
+            expira_en: string | null;
+            /** Format: date-time */
+            pagado_en: string | null;
+        };
         PortalPromesa: {
             id: number;
             servicio_id: number;
@@ -3482,6 +3626,8 @@ export interface components {
             monto: components["schemas"]["Dinero"];
             /** @description Resultado en palabras del cliente (nunca el código de la regla) */
             motivo: string;
+            /** @description Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto */
+            corregible: boolean;
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
         };
@@ -3516,6 +3662,24 @@ export interface components {
             expira_en: string;
             /** @description Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente */
             destino: string | null;
+        };
+        PortalTelegram: {
+            /** @description El cliente tiene un chat de Telegram vinculado */
+            vinculado: boolean;
+            /** @description Hay bot configurado: se puede pedir un enlace */
+            disponible: boolean;
+            /** @description Usuario del bot sin @ */
+            bot: string | null;
+        };
+        PortalVinculoTelegram: {
+            /** @description Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano */
+            codigo: string;
+            /** @description https://t.me/<bot>?start=<código> */
+            enlace: string;
+            /** @description Usuario del bot sin @ */
+            bot: string;
+            /** Format: date-time */
+            vence_en: string;
         };
         Problem: {
             type: string;
@@ -4249,6 +4413,9 @@ export interface components {
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
+        };
+        TelegramWebhookRespuesta: {
+            ok: boolean;
         };
         TokenApi: {
             id: number;
@@ -10051,6 +10218,105 @@ export interface operations {
             };
         };
     };
+    portalPagoEnLinea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pago en línea */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPagoEnLinea"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalIniciarPago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
+                    servicio_id?: number;
+                    /** @description Facturas concretas del cliente (solo con la sesión del portal) */
+                    facturas?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPagoEnLinea"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalPromesas: {
         parameters: {
             query?: {
@@ -10237,6 +10503,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    portalTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de Telegram */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+        };
+    };
+    portalDesvincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de Telegram */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+        };
+    };
+    portalVincularTelegram: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enlace al bot */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalVinculoTelegram"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
         };
     };
@@ -13130,6 +13465,49 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    telegramWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    update_id: number;
+                    message?: {
+                        message_id: number;
+                        chat: {
+                            id: number;
+                            type: string;
+                        };
+                        text?: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Actualización procesada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramWebhookRespuesta"];
                 };
             };
             /** @description Datos inválidos */

@@ -140,6 +140,18 @@ export interface CatalogoEventos {
     }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
     'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
+    /**
+     * El dispatcher de RouterOS (A2, `app/network/routeros`) agotó los reintentos contra la API
+     * REST del router. `servicio_id` null en una reconciliación del router completo. El
+     * reconciliador vuelve a aplicar el estado deseado cuando el router responde.
+     */
+    'routeros.fallido': {
+        servicio_id: number | null
+        router_id: number
+        /** Comando legible que falló (`queue/simple add`, `ip/firewall/address-list remove`…) o `reconciliar` */
+        operacion: string
+        error: string
+    }
     /** `aaa` no respondió su health check durante el umbral (60 s). `desde` = primer fallo. */
     'aaa.caido': { nodo: string; desde: string; ultimo_error?: string | null }
     /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
@@ -194,6 +206,7 @@ export const EVENTOS = [
     'sesion.terminada',
     'sesion.desconexion_solicitada',
     'coa.fallido',
+    'routeros.fallido',
     'aaa.caido',
     'aaa.recuperado',
     'factura.emitida',

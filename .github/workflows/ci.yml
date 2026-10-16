@@ -153,6 +153,11 @@ jobs:
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
 
+      - name: Reglas de Prometheus (promtool check y test)
+        run: |
+          docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 check rules /m/reglas.yml
+          docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
   e2e-panel:

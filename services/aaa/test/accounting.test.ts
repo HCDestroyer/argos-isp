@@ -216,4 +216,48 @@ describe('ColaAccountingBullmq (Redis real, base 2, prefijo propio)', () => {
         assert.deepEqual(job.data, registro)
         assert.equal(job.opts.attempts, 8)
     })
+
+    it('paquetes simultáneos salen en un lote (addBulk) y cada uno queda como job', async () => {
+        await lector.obliterate({ force: true })
+        const base = normalizarAccounting(atributos(START), AHORA)
+        const registros = Array.from({ length: 50 }, (_, i) => ({ ...base, acct_session_id: `lote-${i}` }))
+        const addBulk = cola.cola.addBulk.bind(cola.cola)
+        let lotes = 0
+        cola.cola.addBulk = (jobs) => {
+            lotes++
+            return addBulk(jobs)
+        }
+        try {
+            await Promise.all(registros.map((r) => cola.encolar(r)))
+        } finally {
+            cola.cola.addBulk = addBulk
+        }
+        assert.equal(lotes, 1)
+        const jobs = await lector.getJobs(['waiting'])
+        assert.deepEqual(
+            jobs.map((j) => j.data.acct_session_id).sort(),
+            registros.map((r) => r.acct_session_id).sort(),
+        )
+        assert.ok(jobs.every((j) => j.opts.attempts === 8))
+    })
+
+    it('si el lote falla, todos los paquetes del lote fallan (el NAS los reintenta)', async () => {
+        const base = normalizarAccounting(atributos(START), AHORA)
+        const addBulk = cola.cola.addBulk.bind(cola.cola)
+        cola.cola.addBulk = async () => {
+            throw new Error('Redis caído')
+        }
+        try {
+            const r = await Promise.allSettled([
+                cola.encolar(base),
+                cola.encolar({ ...base, acct_session_id: 'x' }),
+            ])
+            assert.deepEqual(
+                r.map((x) => x.status),
+                ['rejected', 'rejected'],
+            )
+        } finally {
+            cola.cola.addBulk = addBulk
+        }
+    })
 })

@@ -32,6 +32,11 @@ import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementaci
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
 import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
+import { registrarSeccionMetricas } from '#monitoreo/metricas'
+import { leerMetricasRouterOS } from '#network/routeros/metricas'
+
+// A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
+registrarSeccionMetricas('routeros', leerMetricasRouterOS)
 
 const routers: Ruta[] = [
     definirRuta({

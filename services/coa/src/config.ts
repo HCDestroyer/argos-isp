@@ -33,6 +33,8 @@ export interface Config {
     reclamarTrasMs: number
     db: { host: string; port: number; user: string; password: string | undefined; database: string }
     claveSecretos: string | undefined
+    /** Prefijo de `aaa:user:<user_ppp>` (rate-limit completo de A1) */
+    aaaPrefijo: string
     nas: {
         puerto: number
         timeoutMs: number
@@ -81,6 +83,7 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             database: env.DB_DATABASE ?? 'argosisp',
         },
         claveSecretos: env.AAA_PPP_KEY,
+        aaaPrefijo: env.AAA_REDIS_PREFIJO || 'aaa:user:',
         nas: {
             puerto: numero(env.COA_NAS_PORT, 3799),
             timeoutMs: numero(env.COA_TIMEOUT_MS, 2000),

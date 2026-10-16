@@ -41,6 +41,23 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 - Sin ACK al final (NAK, reintentos agotados, router sin secret) → `coa.fallido` en `audit.outbox` en la misma transacción que la última fila de `audit.red`.
 - Idempotente por `id` del evento: si una sesión ya tiene una fila final para ese evento no se vuelve a enviar (un evento duplicado no desconecta dos veces).
 
+## RouterOS (servicios sin PPPoE)
+
+El cliente REST de RouterOS 7 y el dispatcher de servicios WISP (`ip_estatica`, `dhcp_fija`) viven en `apps/api/app/network/routeros` (semana 2): necesitan la función de velocidad compartida (`#network/velocidad`), las acciones de dominio y el outbox (`routeros.fallido`), que están en la API. `coa` sigue siendo solo RADIUS (CoA/Disconnect). Ver `apps/api/app/network/routeros/README.md`.
+
+## Observabilidad (semana 2, tarea 5)
+
+`GET /metrics` (texto Prometheus 0.0.4; `METRICS_TOKEN` igual que `aaa`):
+
+| Métrica                           | Tipo                   | Etiquetas                                                                                                   |
+| --------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `argosisp_coa_envios_total`       | counter                | `tipo` (`coa`, `disconnect`), `resultado` (`ack`, `nak`, `timeout`, `error`, `sin_secret`); uno por intento |
+| `argosisp_coa_rtt_segundos`       | histogram (0,01 a 2 s) | `tipo` (envíos con respuesta)                                                                               |
+| `argosisp_coa_eventos_pendientes` | gauge                  | eventos del grupo `coa` entregados y sin confirmar (`XPENDING`)                                             |
+| `argosisp_coa_consumidor_activo`  | gauge                  | —                                                                                                           |
+
+Las líneas de log del dispatcher llevan `evento_id` y `request_id` (el de la acción que emitió el evento). Las métricas del dispatcher WISP (RouterOS) están en `/metrics` de la API (`apps/api/app/network/routeros/metricas.ts`).
+
 ## Comandos
 
 ```

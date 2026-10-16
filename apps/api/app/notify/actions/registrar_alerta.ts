@@ -13,11 +13,20 @@ import {
 import { quetzales } from '#notify/formato'
 
 /** Eventos del catálogo que generan alertas internas. */
-export const EVENTOS_ALERTA = ['aaa.caido', 'aaa.recuperado', 'coa.fallido', 'caja.cerrada'] as const
+export const EVENTOS_ALERTA = [
+    'aaa.caido',
+    'aaa.recuperado',
+    'coa.fallido',
+    'routeros.fallido',
+    'caja.cerrada',
+] as const
 export type EventoAlerta = (typeof EVENTOS_ALERTA)[number]
 
 /** Fallos de CoA del mismo router dentro de esta ventana son el mismo incidente. */
 export const VENTANA_COA_MIN = 30
+
+/** Fallos de la API REST del mismo router dentro de esta ventana son el mismo incidente. */
+export const VENTANA_ROUTEROS_MIN = 30
 
 export interface EntradaAlerta {
     /** `outbox:<id>` del evento: idempotencia por evento */
@@ -51,6 +60,7 @@ function texto(valor: unknown): string {
  * | `aaa.caido` | `aaa:<nodo>`, abierto hasta `aaa.recuperado` | al abrir |
  * | `aaa.recuperado` | cierra `aaa:<nodo>` | "resuelto", si había uno abierto |
  * | `coa.fallido` | `coa:<nas_ip>`, termina tras 30 min sin fallos | al abrir |
+ * | `routeros.fallido` | `routeros:<router_id>`, termina tras 30 min sin fallos | al abrir |
  * | `caja.cerrada` con diferencia ≠ 0 | `caja:<caja_id>`, puntual | siempre |
  *
  * Idempotente por `origen`: un evento entregado dos veces no suma ni avisa otra vez (devuelve los
@@ -175,6 +185,30 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                     ventana_min: VENTANA_COA_MIN,
                 })
             }
+            case 'routeros.fallido': {
+                // contratos/routeros.md: { servicio_id, router_id, operacion, error } tras 3 reintentos
+                const routerId = texto(p.router_id) || 'desconocido'
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `routeros:${routerId}`,
+                    tipo: 'routeros',
+                    detalle: {
+                        router_id: p.router_id ?? null,
+                        primer_servicio_id: p.servicio_id ?? null,
+                        operacion: texto(p.operacion) || null,
+                    },
+                    ahora,
+                    ventanaMin: VENTANA_ROUTEROS_MIN,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisar(incidente, 'abierto', 'alerta.routeros.fallido', {
+                    router_id: routerId,
+                    router: await nombreRouter(t, p.router_id),
+                    servicio_id: texto(p.servicio_id),
+                    operacion: texto(p.operacion),
+                    error: texto(p.error),
+                    ventana_min: VENTANA_ROUTEROS_MIN,
+                })
+            }
             case 'caja.cerrada': {
                 const diferencia = new Decimal(texto(p.diferencia) || '0')
                 if (diferencia.isZero()) return sinAlerta(null)
@@ -200,4 +234,16 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             }
         }
     }
+}
+
+/** "Torre Norte (10.0.0.1)" o, si no existe, "#<id>". Solo para el texto de la alerta. */
+async function nombreRouter(t: Transaccion, routerId: unknown): Promise<string> {
+    const id = Number(routerId)
+    if (!Number.isInteger(id) || id <= 0) return `#${texto(routerId) || '?'}`
+    const fila = (await t.trx.from('network.routers').where('id', id).select('nombre', 'host').first()) as {
+        nombre: string
+        host: string | null
+    } | null
+    if (!fila) return `#${id}`
+    return fila.host ? `${fila.nombre} (${fila.host})` : fila.nombre
 }

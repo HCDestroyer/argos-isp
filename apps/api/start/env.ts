@@ -53,6 +53,27 @@ export default await Env.create(new URL('../', import.meta.url), {
 
     /*
     |----------------------------------------------------------
+    | API REST de RouterOS (A2, servicios sin PPPoE; app/network/routeros)
+    |----------------------------------------------------------
+    */
+    /** Verificar el certificado HTTPS del router cuando el router no lo define (por defecto true) */
+    ROUTEROS_TLS_VERIFICAR: Env.schema.boolean.optional(),
+    /** ms por petición (5000), reintentos ante red caída o 5xx (3) y espera base del backoff (500) */
+    ROUTEROS_TIMEOUT_MS: Env.schema.number.optional(),
+    ROUTEROS_REINTENTOS: Env.schema.number.optional(),
+    ROUTEROS_ESPERA_MS: Env.schema.number.optional(),
+    /** Velocidad y address-list del suspendido (las mismas que PPPoE: 256k/256k, suspendidos) */
+    ROUTEROS_SUSPENDIDO_RATE_LIMIT: Env.schema.string.optional(),
+    ROUTEROS_SUSPENDIDO_ADDRESS_LIST: Env.schema.string.optional(),
+    /** Interfaz del ARP estático (amarre IP-MAC) y servidor DHCP del lease si el router no los define */
+    ROUTEROS_INTERFAZ_CLIENTES: Env.schema.string.optional(),
+    ROUTEROS_DHCP_SERVIDOR: Env.schema.string.optional(),
+    /** ms entre reconciliaciones completas (900000) y entre sondeos de routers caídos (30000) */
+    ROUTEROS_RECONCILIAR_CADA_MS: Env.schema.number.optional(),
+    ROUTEROS_RECUPERAR_CADA_MS: Env.schema.number.optional(),
+
+    /*
+    |----------------------------------------------------------
     | Notificaciones (A6): correo SMTP, Telegram y datos de la empresa en plantillas
     |----------------------------------------------------------
     */
@@ -64,6 +85,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     MAIL_FROM: Env.schema.string.optional(),
     TELEGRAM_BOT_TOKEN: Env.schema.string.optional(),
     TELEGRAM_API_ROOT: Env.schema.string.optional(),
+    /** Bot (webhook y vinculación, `contratos/telegram.md`) */
+    TELEGRAM_BOT_NOMBRE: Env.schema.string.optional(),
+    TELEGRAM_WEBHOOK_SECRET: Env.schema.string.optional(),
+    TELEGRAM_WEBHOOK_URL: Env.schema.string.optional(),
+    TELEGRAM_CODIGO_VIGENCIA_S: Env.schema.number.optional(),
     NOTIFY_INTENTOS: Env.schema.number.optional(),
     NOTIFY_EMPRESA_NOMBRE: Env.schema.string.optional(),
     NOTIFY_EMPRESA_TELEFONO: Env.schema.string.optional(),

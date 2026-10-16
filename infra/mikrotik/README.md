@@ -1,6 +1,6 @@
 # MikroTik del laboratorio
 
-`lab.rsc` deja un RouterOS 7 listo para que A2 pruebe RADIUS, accounting y CoA, y para que A5 pruebe la página de corte por IPv4 e IPv6.
+`lab.rsc` deja un RouterOS 7 listo para que A2 pruebe RADIUS, accounting y CoA, y para que A5 pruebe la página de corte por IPv4 e IPv6. Desde la semana 2 también prepara los clientes **WISP sin PPPoE** (`contratos/routeros.md`), el **control de velocidad** (`contratos/velocidad.md`) y el usuario de la **API REST** con HTTPS.
 
 ## Qué configura
 
@@ -15,8 +15,14 @@
 | Filter-Id           | Salto `forward → ppp` en IPv4 e IPv6 para las reglas dinámicas que RouterOS crea con `Filter-Id`; cadena neutra `argos-activo`                                                                                                            |
 | Hacia el router     | Suspendidos solo alcanzan DNS, ICMP y, en IPv6, ND/RA y DHCPv6 (renovación del PD)                                                                                                                                                        |
 | WireGuard           | Opcional (`wgHabilitar true`): túnel `wg-argosisp` hacia el servidor                                                                                                                                                                      |
+| WISP sin PPPoE      | Gateway en `wispIf`, DHCP `argos-dhcp-wisp` **solo con leases estáticos** (`address-pool=static-only`) para `dhcp_fija`, VLAN de ejemplo `wisp-amarre` con `arp=reply-only` y su DHCP con `add-arp=yes` para el amarre IP-MAC. Ver "WISP sin PPPoE" |
+| FastTrack           | Excluido para `argos-clientes` (PPPoE y WISP, IPv4 e IPv6) con dos `accept established,related` antes de `defconf: fasttrack`; script `argosisp-verificar-fasttrack` lo comprueba al final del import                                       |
+| `arbol_pcq`         | Ejemplo con el plan ficticio `0` (20M/10M, 1:4): padres globales, PCQ por plan con máscara /64 en IPv6, address-list `argosisp-plan-0` y mangle `mark-packet` sin `passthrough`, más el limitado                                         |
+| API REST            | Grupo `argosisp-api` (`read,write,api,rest-api`), usuario `argosisp-api` restringido a `apiDesde`, certificado propio en `www-ssl` (TLS 1.2+), `www`, `api` y `api-ssl` apagados                                                                    |
 
 Las reglas de salto (`argosisp:top`) se colocan al inicio de `filter` y `nat` (IPv4 e IPv6), antes de fasttrack y de `accept established,related`, que de otro modo dejarían pasar al suspendido.
+
+**Qué es de quién.** `lab.rsc` solo borra y recrea lo que lleva comentario `argosisp: …` (con espacio) o `argosisp:top …`. Lo que ArgosIsp crea por la API lleva `argosisp:servicio:<id>` o `argosisp:plan:<id>` (sin espacio; `contratos/routeros.md`) y el script **no lo toca** al reaplicarse (antes la limpieza borraba cualquier `argosisp…` de las address-lists, incluidas las entradas de `suspendidos` de los servicios WISP).
 
 ### Nombres que A1 registra en `planes_routers`
 
@@ -27,6 +33,17 @@ Las reglas de salto (`argosisp:top`) se colocan al inicio de `filter` y `nat` (I
 | /56 delegado                  | `argos-v6-pd`     | `2001:db8:200::/40` en /56 | `Delegated-IPv6-Pool` (RFC 4818) o `Mikrotik-Delegated-IPv6-Pool` |
 | Perfil de corte               | `suspendido`      | —                          | `Mikrotik-Group`                                                  |
 | Address-list / interface-list | `suspendidos`     | —                          | `Mikrotik-Address-List`                                           |
+
+### Binding DHCPv6-PD de una sesión PPPoE
+
+Verificado el 16-10-2026 en dos CHR RouterOS **7.24.5** (r1 con `lab.rsc`, r2 como cliente PPPoE con `/ipv6 dhcp-client request=prefix`), usuario `cliente-pd`:
+
+- Cada sesión con `dhcpv6-pd-pool` en su perfil crea un **servidor DHCPv6 dinámico** con el nombre de la interfaz PPP, con los signos `<` y `>` incluidos: `/ipv6/dhcp-server` → `name = interface = <pppoe-cliente-pd>`, `dynamic = true`, `prefix-pool = argos-v6-pd`, `address-pool = static-only`.
+- El binding: `/ipv6/dhcp-server/binding` → `server = <pppoe-cliente-pd>`, `active-server = <pppoe-cliente-pd>`, `address = 2001:db8:200::/56`, `ia-type = pd`, `prefix-pool = argos-v6-pd`, `dynamic = true`, `status = bound`, `duid` del CPE. El nombre **sí es `<pppoe-<usuario>>`**, como lo busca `CompletarPrefijoDelegado`.
+- Por la API REST el filtro funciona con los signos codificados: `GET /rest/ipv6/dhcp-server/binding?server=%3Cpppoe-cliente-pd%3E` devuelve el binding; `?server=pppoe-cliente-pd` (sin `< >`) devuelve `[]`. Leerlo solo necesita la política `read`.
+- La ruta del /56 en `/ipv6/route` es `dst-address = 2001:db8:200::/56`, `gateway = fe80::…%<pppoe-cliente-pd>` (link-local del CPE con la interfaz, no `<pppoe-…>` solo), `dynamic` y `dhcp = true`; el /64 de enlace sí tiene `gateway = <pppoe-cliente-pd>`. Para el /56 conviene el binding, no la ruta.
+- Al cerrar la sesión desaparecen el servidor dinámico y el binding; al reconectar el mismo CPE (mismo DUID) recibe el mismo /56 mientras el pool no lo reasigne.
+- En la prueba el /56 salió del pool del perfil (`/ppp secret` local, `radius = false`). Con RADIUS en modo `radius_pool` (`Delegated-IPv6-Pool`) el servidor dinámico es el mismo (depende de la interfaz, no del origen del pool); falta confirmarlo con RADIUS en el equipo físico. Con `Delegated-IPv6-Prefix` fijo (`radius_servicio`) no hace falta buscarlo.
 
 Para el modo `radius_servicio` (IP y prefijos fijos por servicio), el IPAM debe usar rangos fuera de esos pools, por ejemplo `10.10.1.0/24`, `2001:db8:101::/48` (enlace) y `2001:db8:300::/40` (delegados). El router instala la ruta al recibir `Framed-IP-Address`, `Framed-IPv6-Prefix` y `Delegated-IPv6-Prefix`.
 
@@ -82,7 +99,7 @@ En el router:
     # usuario conectado: address (IPv4), caller-id, uptime
 /interface pppoe-server print
 /ipv6 dhcp-server binding print
-    # el /56 delegado al cliente (servidor dinámico creado por el perfil)
+    # el /56 delegado al cliente: server = <pppoe-usuario> (servidor dinámico creado por el perfil)
 /ipv6 route print where dynamic
     # /64 de enlace y /56 delegado hacia la interfaz <pppoe-usuario>
 /queue simple print
@@ -218,12 +235,175 @@ En IPv6 el parámetro es `to-address` (en IPv4 es `to-addresses`); confirmar la 
 
 Si el PM quiere el redirect IPv6 **sin** reconectar, la alternativa es que `coa`, tras el CoA-ACK, agregue el /64 y el /56 de la sesión a `/ipv6/firewall/address-list list=suspendidos` por la API REST de RouterOS (fila `routeros` en `audit.red`) y los quite al reactivar. Más piezas que pueden fallar (credenciales de API, entradas huérfanas si falla el borrado); queda para la semana 2 si se decide.
 
+## WISP sin PPPoE (`ip_estatica`, `dhcp_fija`)
+
+Contrato: `.claude/integration/contratos/routeros.md`. Estos servicios no pasan por RADIUS: ArgosIsp (dispatcher de A2) escribe en el router por la API REST. `lab.rsc` solo deja listo el segmento; **los objetos de cada servicio los crea ArgosIsp** con `comment = "argosisp:servicio:<id>"`.
+
+| Pieza | Lo hace `lab.rsc` | Lo hace ArgosIsp por la API |
+| --- | --- | --- |
+| Gateway | `wispGateway` en `wispIf` (y `wispV6Gateway` con RA si se define) | — |
+| `ip_estatica` | nada más: la IP va a mano en la antena (gateway `wispGateway`, DNS el router) | cola simple `target=<ipv4>/32` |
+| `dhcp_fija` | servidor `argos-dhcp-wisp` con `address-pool=static-only` (una MAC sin lease no recibe IP) y su `network` | `/ip/dhcp-server/lease` (`mac-address`, `address`, `server=argos-dhcp-wisp`) + cola |
+| Amarre IP-MAC | VLAN `wisp-amarre` (id `amarreVlanId`) con `arp=reply-only` y DHCP `argos-dhcp-amarre` con `add-arp=yes` | `/ip/arp` estático (`address`, `mac-address`, `interface=wisp-amarre`) si `amarre_ip_mac = true` |
+| Corte | la misma `suspendidos`, el mismo NAT a `/corte` y el mismo rechazo que PPPoE | `/ip/firewall/address-list` `list=suspendidos` (solo en `suspendido`) |
+| NAT y FastTrack | `wispRed` y `amarreRed` en `argos-clientes` | — |
+
+**Amarre (`arp=reply-only`).** El router solo contesta ARP a las IPs que tienen entrada estática en `/ip arp` o lease de su DHCP (`add-arp=yes`). Un equipo que clona la IP pero tiene otra MAC no recibe respuesta ARP y no navega. Por eso **todos** los servicios de una interfaz `reply-only` necesitan amarre o lease: un `ip_estatica` sin `amarre_ip_mac` en esa interfaz se queda sin servicio. La VLAN de ejemplo separa los clientes con amarre de los demás; en un despliegue real se activa en la interfaz (o VLAN) de la antena sectorial que se quiera proteger.
+
+**IPv6 en WISP.** `wispV6Gateway` publica un /64 **compartido** con RA para la WAN de los CPE. No sirve para limitar por cliente (todos comparten el /64): el límite por cliente en IPv6 va por su /56 delegado con binding DHCPv6 estático por DUID (tarea de la semana 2). El `target` de la cola WISP no debe llevar el /64 del segmento.
+
+**Verificado el 16-10-2026** en dos CHR RouterOS **7.24.5** (r1 con `lab.rsc`, r2 como CPE en `wispIf`), todo por la API REST con el usuario `argosisp-api` sobre HTTPS verificando el certificado con `argosisp-ca.crt`:
+
+| Prueba | Resultado |
+| --- | --- |
+| CPE en DHCP sin lease | `searching...`: no recibe IP (`static-only`) |
+| `PUT /rest/ip/dhcp-server/lease` con su MAC | el CPE queda `bound` con `10.20.0.50` |
+| `PUT /rest/queue/simple` `max-limit=128k/256k` | bandwidth-test hacia el CPE: ~244 kbps de bajada |
+| `PUT /rest/ip/firewall/address-list` `list=suspendidos` | TCP del CPE al router rechazado al instante (`corte-in TCP reset`); al quitar la entrada vuelve a conectar |
+| VLAN `wisp-amarre` (`arp=reply-only`) sin ARP estático | ping al gateway: 100 % perdido |
+| `PUT /rest/ip/arp` con IP y MAC del CPE | ping al gateway responde; otra IP sin amarre en el mismo equipo no responde |
+| Reaplicar `lab.rsc` con entradas `argosisp:servicio:999` en `suspendidos` y `/queue simple` | quedan intactas |
+
+Llamadas que hace el dispatcher (para probar a mano con el usuario de API, ver abajo):
+
+```
+# lease de dhcp_fija
+curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/rest/ip/dhcp-server/lease \
+  -H 'content-type: application/json' \
+  -d '{"address":"10.20.0.50","mac-address":"AA:BB:CC:00:00:50","server":"argos-dhcp-wisp","comment":"argosisp:servicio:123"}'
+# cola simple (velocidad del plan; formato completo de velocidad.ts)
+curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/rest/queue/simple \
+  -H 'content-type: application/json' \
+  -d '{"name":"argosisp-servicio-123","target":"10.20.0.50/32","max-limit":"10M/20M","comment":"argosisp:servicio:123"}'
+# corte
+curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/rest/ip/firewall/address-list \
+  -H 'content-type: application/json' -d '{"list":"suspendidos","address":"10.20.0.50","comment":"argosisp:servicio:123"}'
+# amarre
+curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/rest/ip/arp \
+  -H 'content-type: application/json' \
+  -d '{"address":"10.21.0.50","mac-address":"AA:BB:CC:00:00:51","interface":"wisp-amarre","comment":"argosisp:servicio:124"}'
+```
+
+## Control de velocidad (`simple` y `arbol_pcq`)
+
+Contrato: `.claude/integration/contratos/velocidad.md`.
+
+### FastTrack excluido para clientes con colas
+
+Con FastTrack los paquetes saltan colas simples, queue tree y mangle: el cliente navega sin límite. `lab.rsc` no apaga FastTrack para el resto del tráfico del router; agrega dos reglas `argosisp:top sin fasttrack` (subida y bajada) que aceptan lo `established,related` de `argos-clientes` **antes** de `defconf: fasttrack` y **después** de los saltos de corte (un suspendido sigue cayendo en `argos-corte`). Igual en IPv6 (RouterOS 7 también tiene FastTrack IPv6).
+
+`argos-clientes` = `clientesV4`, `wispRed`, `amarreRed` en IPv4 y `clientesV6`, `wispV6Red` en IPv6. Si se agrega una red de clientes, va a esas variables y se reaplica.
+
+**Verificación (un comando):**
+
+```
+/system script run argosisp-verificar-fasttrack
+# argosisp: FastTrack OK (excluido para argos-clientes en IPv4 e IPv6)
+```
+
+Verificado en CHR 7.24.5 con reglas tipo defconf (`defconf: fasttrack` y `accept established,related` en IPv4 e IPv6, antes del import): las reglas `sin fasttrack` quedan antes de FastTrack y el script responde OK; moviendo `defconf: fasttrack` al inicio responde `FastTrack MAL: ipv4:fasttrack-antes-de-la-exclusion`.
+
+Falla (y deja `argosisp: FastTrack MAL: …` en `/log`) si alguna regla `fasttrack-connection` activa de IPv4 o IPv6 queda antes de la exclusión, si falta la exclusión o si hay conexiones vivas de clientes (IPv4) marcadas como FastTrack. `lab.rsc` lo corre al final del import, así que un import que deja FastTrack mal termina con error. Con tráfico real, también: `/ip firewall connection print count-only where fasttrack` (de clientes debe ser 0) y los contadores de `/ip firewall filter print stats where comment~"sin fasttrack"` suben.
+
+### Modo `simple`
+
+Una cola simple por servicio: la dinámica de PPPoE (`Mikrotik-Rate-Limit` desde `aaa`) o la estática que crea ArgosIsp para WISP. El reuso va con una cola padre por plan y router (`comment = argosisp:plan:<id>`). `lab.rsc` no crea colas simples. Buenas prácticas que verifica el monitoreo:
+
+- **Más de ~1000 colas simples en un router** es la alerta `RouterDemasiadasColasSimples` (`infra/monitoring/reglas.yml`): pasar ese router a `arbol_pcq`.
+- `/queue simple print count-only where !(comment~"^argosisp:")` y `!dynamic` debe dar 0: ArgosIsp no deja colas sueltas.
+
+### Ejemplo de `arbol_pcq`
+
+`arbolEjemplo true` crea, con el plan ficticio `0` (ningún plan real tiene id 0) y los mismos nombres que usará ArgosIsp:
+
+```
+/queue type   argosisp-plan-0-bajada   pcq-rate=20M pcq-classifier=dst-address pcq-dst-address6-mask=64
+              argosisp-plan-0-subida   pcq-rate=10M pcq-classifier=src-address pcq-src-address6-mask=64
+              argosisp-plan-0-limitado-{bajada,subida}  (2M / 1M)
+/queue tree   argosisp-ejemplo-bajada  parent=global max-limit=capBajada
+              └ argosisp-plan-0-bajada packet-mark=argosisp-plan-0-bajada queue=argosisp-plan-0-bajada
+                                       max-limit=20M (MIR × 4 activos / reuso 4) limit-at=20M (CIR 5M × 4) priority=8
+              └ argosisp-plan-0-limitado-bajada
+              argosisp-ejemplo-subida  (igual, con 10M)
+/ip firewall address-list  argosisp-plan-0: 10.20.0.101 … 10.20.0.104
+/ipv6 firewall address-list argosisp-plan-0: 2001:db8:101:1::/64, 2001:db8:300:100::/56
+/ip|ipv6 firewall mangle   forward dst-address-list=argosisp-plan-0 → mark-packet argosisp-plan-0-bajada passthrough=no
+                           forward src-address-list=argosisp-plan-0 → mark-packet argosisp-plan-0-subida passthrough=no
+```
+
+- Cada cliente tiene su tope (`pcq-rate` = MIR) y el padre del plan reparte el reuso: con 4 clientes del plan 1:4 de 20 Mbps, los 4 juntos comparten 20 Mbps y uno solo alcanza 20 Mbps.
+- `pcq-dst-address6-mask=64` / `pcq-src-address6-mask=64`: en IPv6 cada /64 es un cliente (un teléfono con varias direcciones de privacidad no multiplica su cuota).
+- Un servicio limitado pasa a la lista `argosisp-plan-<id>-limitado`; nunca se edita el PCQ del plan para un cliente.
+- `/queue type` no tiene comentario, así que el script borra por nombre solo los `argosisp-plan-<arbolPlanId>-*` del ejemplo.
+- En un router que ArgosIsp maneja en `arbol_pcq`, pon `arbolEjemplo false`: ArgosIsp crea sus padres y planes con la acción `routers.cambiar_control_velocidad` (A2).
+
+## Usuario de la API REST y HTTPS
+
+ArgosIsp habla con el router por la API REST (`/rest/...` sobre `www-ssl`). `lab.rsc` crea:
+
+- **Grupo `argosisp-api`** con `policy=read,write,api,rest-api` y nada más: sin `ftp`, `ssh`, `telnet`, `winbox`, `web`, `policy`, `password`, `sensitive`, `reboot`, `sniff`, `test`, `romon` ni `local`. Verificado en CHR 7.24.5: con ese grupo la API REST lee y escribe (`/ip/firewall/address-list`, colas, leases) y **no** puede cambiar usuarios (`/user/set` responde `not enough permissions`).
+- **Usuario `argosisp-api`** con `address=apiDesde` (solo desde el servidor ArgosIsp). Solo si cambias `apiPassword` (con `CAMBIAR` el import avisa y no lo crea). Genera la clave con `openssl rand -base64 24` y regístrala en el router de ArgosIsp (`api_usuario`, `api_password`; se guarda cifrada).
+- **Certificado**: CA propia `argosisp-ca` y `argosisp-www` con CN = `apiNombre` y SAN `DNS:apiNombre,IP:apiIp`, en `www-ssl` con `tls-version=only-1.2` y `available-from=apiDesde`. Se crean una sola vez; para regenerarlos (cambió `apiIp`), bórralos y reaplica.
+- `apiSoloHttps true` apaga `www` (HTTP en claro), `api` (8728) y `api-ssl` (8729): ArgosIsp solo usa la API REST. WebFig sigue por HTTPS desde `apiDesde`; para administrar desde otra IP, usa Winbox o SSH.
+
+Verificación desde el servidor:
+
+```
+# descargar la CA que exporta el script (archivo argosisp-ca.crt del router)
+scp admin@<router>:argosisp-ca.crt infra/mikrotik/argosisp-ca.crt   # no se commitea
+curl --cacert infra/mikrotik/argosisp-ca.crt -u argosisp-api:$CLAVE https://<apiNombre o apiIp>/rest/system/identity
+# {"name":"..."}  (con verificación de certificado, sin -k)
+curl --cacert infra/mikrotik/argosisp-ca.crt -u argosisp-api:$CLAVE -X POST https://<apiIp>/rest/user/set \
+  -H 'content-type: application/json' -d '{".id":"argosisp-api","group":"full"}'
+# {"detail":"not enough permissions (9)", ...}
+curl -m 3 http://<apiIp>/rest/system/identity     # falla: www apagado
+```
+
+En el router: `/user group print detail where name=argosisp-api` (solo `read;write;api;rest-api` sin `!`), `/ip service print where name~"www|api"`.
+
+## Lista de verificación en el equipo físico (semana 2)
+
+Con ArgosIsp levantado (`docker compose ... up -d`), el dispatcher WISP de A2 y el router dado de alta con su usuario de API. Anotar resultado y fecha en `.claude/STATUS.md`.
+
+**0. Base.** `/import file-name=lab.rsc verbose=yes` termina con `argosisp: FastTrack OK` y `lab.rsc aplicado`; reaplicarlo no borra entradas `argosisp:servicio:*` (`/ip firewall address-list print where comment~"argosisp:servicio"` igual antes y después).
+
+**1. Cliente con IP estática** (antena con `10.20.0.50/24`, gateway `10.20.0.1`):
+
+1. Alta en ArgosIsp con `tipo_conexion = ip_estatica` y esa IP: aparece `/queue simple` con `target=10.20.0.50/32` y `comment=argosisp:servicio:<id>`; `audit.red` registra la llamada.
+2. Navega a la velocidad del plan (speedtest); `/queue simple print stats` cuenta bytes (si no cuenta, revisa FastTrack).
+3. Limitar → la cola cambia a la velocidad limitada en menos de 30 s.
+4. Suspender → la IP entra en `suspendidos`; `http://example.com` muestra `/corte` y el portal identifica al cliente por la IP; HTTPS falla al instante (reset).
+5. Reactivar → sale de `suspendidos` en menos de 30 s y navega.
+6. Borrar a mano la cola y la entrada de `suspendidos`: el reconciliador las vuelve a crear (y lo audita).
+
+**2. Cliente con DHCP fija** (CPE en DHCP, MAC conocida):
+
+1. Alta con `tipo_conexion = dhcp_fija` y `mac`: `/ip dhcp-server lease print where server=argos-dhcp-wisp` muestra el lease estático y el CPE recibe esa IP (`/ip dhcp-server lease print` → `bound`).
+2. Un CPE con otra MAC en el mismo segmento **no** recibe IP (`static-only`).
+3. Repetir limitar, suspender y reactivar como el punto 1.
+4. Amarre: en `wisp-amarre`, con `amarre_ip_mac = true`, aparece la entrada en `/ip arp` (no dinámica). Cambiar la MAC del CPE (clonar la IP en otro equipo): el otro equipo no navega (`/ip arp print` no lo aprende, ping al gateway sin respuesta).
+
+**3. Reuso 1:4** (plan de 20 Mbps, reuso 4, router en `simple` o el ejemplo `arbol_pcq`):
+
+1. Cuatro clientes del plan activos (PPPoE o WISP). Uno solo en speedtest (los otros en reposo): alcanza ~20 Mbps.
+2. Los cuatro en speedtest a la vez: la suma ronda 20 Mbps (cada uno ~5 Mbps, el CIR) y ninguno queda en 0.
+3. `simple`: la cola padre `argosisp:plan:<id>` tiene `max-limit = 20M × 4 / 4`; suspender uno recalcula el padre a `20M × 3 / 4` sin esperar (por evento).
+4. `arbol_pcq`: `/queue tree print stats` muestra el tráfico en `argosisp-plan-<id>-bajada`, y `/queue type print where name~"argosisp-plan"` la máscara /64.
+
+**4. Límite por IPv6** (cliente PPPoE dual-stack con /64 y /56):
+
+1. Speedtest solo por IPv6 (`speedtest --ip=...` o un servidor IPv6, o `iperf3 -6`): la velocidad queda en el MIR del plan, igual que por IPv4.
+2. `simple`: el `target` de la cola del servicio incluye la IPv4, el /64 y el /56. `arbol_pcq`: el /64 y el /56 están en `argosisp-plan-<id>` de `/ipv6 firewall address-list` y `/ipv6 firewall mangle print stats` cuenta paquetes.
+3. Dos dispositivos detrás del CPE con direcciones IPv6 distintas del mismo /56: entre los dos no pasan del MIR.
+4. `/system script run argosisp-verificar-fasttrack` sigue en OK con el tráfico corriendo.
+
 ## Seguridad
 
 - `radiusSecret` largo y aleatorio (`openssl rand -hex 16`), distinto por router. Nunca en el repo: va en `infra/.env` del servidor y en el router.
 - RouterOS 7.15+ exige `Message-Authenticator` en las respuestas (`require-message-auth=yes-for-request-resp`, mitigación de Blast-RADIUS); FreeRADIUS 3.2.10 lo envía y `clients.conf` lo exige al router.
 - `allow-remote-requests=yes` del DNS se limita con las reglas `argosisp:top DNS del router solo interno` sobre `wanIf`.
 - Las reglas de este script no sustituyen el firewall base del router (input desde WAN, gestión solo por IPs de administración); aplícalo antes.
+- La API REST va solo por HTTPS con verificación del certificado (CA del router o una pública); el usuario `argosisp-api` tiene los permisos mínimos y solo entra desde `apiDesde`. `apiPassword` no se commitea: se edita en el router al importar.
 
 ## Documentación consultada
 
@@ -231,4 +411,7 @@ Si el PM quiere el redirect IPv6 **sin** reconectar, la alternativa es que `coa`
 - Referencia CLI `/ppp` (RouterOS 7.24): https://manual.mikrotik.com/docs/7.24/cli-reference/ppp/
 - RADIUS cliente, `/radius incoming` y atributos de CoA: https://manual.mikrotik.com/docs/authentication-authorization-accounting/radius/
 - PPPoE server: https://manual.mikrotik.com/docs/cli-reference/interface/pppoe-server/server
+- Colas (simple, tree, PCQ) y FastTrack: https://help.mikrotik.com/docs/spaces/ROS/pages/328088/Queues y https://help.mikrotik.com/docs/spaces/ROS/pages/328158/Packet+Flow+in+RouterOS
+- DHCP server (`static-only`, `add-arp`) y ARP `reply-only`: https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP y https://help.mikrotik.com/docs/spaces/ROS/pages/328092/ARP
+- REST API y usuarios/grupos: https://help.mikrotik.com/docs/spaces/ROS/pages/47579162/REST+API y https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User
 - RFC 3162 (RADIUS e IPv6), RFC 4818 (Delegated-IPv6-Prefix), RFC 5176 (CoA/Disconnect), RFC 3849 y RFC 5737 (prefijos de documentación)

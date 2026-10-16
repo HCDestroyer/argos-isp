@@ -8,6 +8,7 @@ import { Redis } from 'ioredis'
 import env from '#start/env'
 import { cifrar } from '#shared/cifrado'
 import { insertarEvento } from '#shared/outbox'
+import { prefijoAaa } from '#core/aaa'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
@@ -237,6 +238,9 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             DB_DATABASE: env.get('DB_DATABASE'),
             AAA_PPP_KEY: env.get('AAA_PPP_KEY') ?? '',
             COA_NAS_PORT: String(PUERTO_NAS),
+            // Donde la API publica aaa:user:* en pruebas: coa lee de ahí el rate-limit completo.
+            // Sin esto coa usa su prefijo por defecto y cae al rate-limit de respaldo.
+            AAA_REDIS_PREFIJO: prefijoAaa(),
             COA_TIMEOUT_MS: '300',
             COA_REINTENTOS: '1',
             COA_ESPERA_MS: '50',
@@ -338,8 +342,10 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         assert.deepEqual(
             paquetes.map((p) => [p.codigo, p.atributos['Mikrotik-Rate-Limit']]),
             [
-                ['CoA-Request', '1024k/2048k'],
-                ['CoA-Request', '5120k/20480k'],
+                // rate-limit completo de `network/velocidad.ts` (A1): MIR, sin ráfaga, prioridad 8 y
+                // limit-at = MIR con reuso 1
+                ['CoA-Request', '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k'],
+                ['CoA-Request', '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k'],
             ],
         )
     })

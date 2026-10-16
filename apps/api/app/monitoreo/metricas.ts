@@ -19,12 +19,23 @@ import { Exposicion, type Muestra } from '#monitoreo/prometheus'
  * | `argosisp_outbox_sin_publicar` | `audit.outbox` con `publicado_en` nulo (relay detenido) |
  * | `argosisp_cron_ultima_ejecucion_timestamp_seconds{cron}` | última corrida correcta por cron en `audit.acciones` |
  * | `argosisp_incidentes_abiertos{tipo}` | `notify.incidentes` abiertos (alertas internas) |
+ * | `argosisp_routeros_colas_simples{router_id,router}` | sección `routeros` que registra A2 (`registrarSeccionMetricas`) |
  * | `argosisp_metricas_error{seccion}` | 1 si una sección no se pudo leer en este scrape |
  * | `process_*`, `nodejs_heap_*` | proceso de la API |
  */
 
-/** Colas BullMQ conocidas (dueño): notify (A6), billing (A3), accounting de aaa (A2). */
-export const COLAS = ['notify-envios', 'notify-cron', 'billing-cron', 'aaa-accounting'] as const
+/**
+ * Colas BullMQ conocidas (dueño): notify (A6), billing (A3), accounting de aaa y RouterOS (A2:
+ * crons del reconciliador y prefijo delegado de `radius_pool`, `node ace routeros:worker`).
+ */
+export const COLAS = [
+    'notify-envios',
+    'notify-cron',
+    'billing-cron',
+    'aaa-accounting',
+    'routeros-cron',
+    'routeros-prefijos',
+] as const
 const ESTADOS = ['waiting', 'active', 'delayed', 'failed', 'prioritized', 'waiting-children'] as const
 
 /** Acciones de los crons (las audita la acción con canal `cron`). */
@@ -118,6 +129,40 @@ async function ultimaCorrida(accion: string): Promise<number | null> {
     return fila ? fila.created_at.getTime() / 1000 : null
 }
 
+/** Una métrica gauge que otro módulo agrega a `/metrics` (`registrarSeccionMetricas`). */
+export interface MetricaExtra {
+    nombre: string
+    ayuda: string
+    muestras: Muestra[]
+}
+
+const seccionesExtra = new Map<string, () => Promise<MetricaExtra[]>>()
+
+/**
+ * Agrega una sección a `GET /metrics` sin tocar este archivo. Ej.: A2 registra `routeros` con
+ * `argosisp_routeros_colas_simples{router_id,router}` desde su módulo (lo que lea debe ser barato:
+ * corre en cada scrape; nada de llamar al router aquí). Si `leer` falla, la sección queda en
+ * `argosisp_metricas_error{seccion}` = 1 y no se escribe ninguna de sus métricas. Registrar el
+ * mismo nombre otra vez la reemplaza.
+ */
+export function registrarSeccionMetricas(seccion: string, leer: () => Promise<MetricaExtra[]>) {
+    seccionesExtra.set(seccion, leer)
+}
+
+/** Para pruebas. */
+export function quitarSeccionMetricas(seccion: string) {
+    seccionesExtra.delete(seccion)
+}
+
+/**
+ * Para pruebas: la función registrada hoy para `seccion` (o `undefined`). Una prueba que reemplaza
+ * una sección real (p. ej. `routeros`, que registra `start/routes/network.ts`) la guarda con esto y
+ * la devuelve al terminar con `registrarSeccionMetricas`, para no romper otras pruebas de la corrida.
+ */
+export function seccionMetricas(seccion: string): (() => Promise<MetricaExtra[]>) | undefined {
+    return seccionesExtra.get(seccion)
+}
+
 /** Arma el texto de exposición. Una sección que falla no tumba las demás. */
 export async function recolectarMetricas(): Promise<string> {
     const exp = new Exposicion()
@@ -192,6 +237,11 @@ export async function recolectarMetricas(): Promise<string> {
         return filas.map((f) => ({ etiquetas: { tipo: f.tipo }, valor: Number(f.n) }))
     })
     exp.gauge('argosisp_incidentes_abiertos', 'Incidentes de alertas internas abiertos', incidentes ?? [])
+
+    for (const [nombre, leer] of seccionesExtra) {
+        const metricas = await seccion(nombre, leer)
+        for (const metrica of metricas ?? []) exp.gauge(metrica.nombre, metrica.ayuda, metrica.muestras)
+    }
 
     const memoria = process.memoryUsage()
     exp.gauge('process_resident_memory_bytes', 'Memoria residente', [{ valor: memoria.rss }])

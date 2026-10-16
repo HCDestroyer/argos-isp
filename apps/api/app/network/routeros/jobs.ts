@@ -1,0 +1,147 @@
+import { Queue, Worker, type Job, type RedisOptions } from 'bullmq'
+import logger from '@adonisjs/core/services/logger'
+import db from '@adonisjs/lucid/services/db'
+import env from '#start/env'
+import { contextoSistema } from '#shared/contexto'
+import ReconciliarRouterOS, { type ResultadoReconciliar } from '#network/routeros/actions/reconciliar_router'
+import { routerDispatcher, routersConServiciosSinPppoe } from '#network/routeros/consultas'
+import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
+
+/**
+ * Crons del reconciliador (`node ace routeros:worker`), cola `routeros-cron`:
+ *
+ * | Job | Cada | Qué hace |
+ * | --- | --- | --- |
+ * | `recuperar` | 30 s (`ROUTEROS_RECUPERAR_CADA_MS`) | Sondea (`/system/resource`) los routers que fallaron; al responder, los reconcilia |
+ * | `reconciliar` | 15 min (`ROUTEROS_RECONCILIAR_CADA_MS`) | Reconcilia todos los routers con servicios sin PPPoE (red de seguridad) |
+ *
+ * Lock: concurrencia 1 y un advisory lock de Postgres por job (si otra instancia lo tiene, el
+ * disparo se omite); cada router además se serializa con el lock de las acciones. Los jobs solo
+ * llaman acciones (regla 1).
+ */
+
+export const NOMBRE_COLA_ROUTEROS = 'routeros-cron'
+
+export function cronsRouterOS() {
+    return {
+        recuperar: env.get('ROUTEROS_RECUPERAR_CADA_MS') ?? 30_000,
+        reconciliar: env.get('ROUTEROS_RECONCILIAR_CADA_MS') ?? 15 * 60_000,
+    }
+}
+
+function conexion(): RedisOptions {
+    return {
+        host: env.get('REDIS_HOST') ?? '127.0.0.1',
+        port: env.get('REDIS_PORT') ?? 6379,
+        password: env.get('REDIS_PASSWORD') || undefined,
+        // requerido por BullMQ para las conexiones bloqueantes de los workers
+        maxRetriesPerRequest: null,
+    }
+}
+
+function prefijo(p?: string) {
+    return p ?? env.get('COLAS_PREFIJO') ?? 'argosisp'
+}
+
+export async function programarCronsRouterOS(opciones: { prefijo?: string } = {}): Promise<Queue> {
+    const cola = new Queue(NOMBRE_COLA_ROUTEROS, {
+        connection: conexion(),
+        prefix: prefijo(opciones.prefijo),
+    })
+    for (const [nombre, cada] of Object.entries(cronsRouterOS())) {
+        await cola.upsertJobScheduler(
+            nombre,
+            { every: cada },
+            {
+                name: nombre,
+                data: {},
+                opts: { removeOnComplete: { count: 100 }, removeOnFail: { count: 500 } },
+            },
+        )
+    }
+    return cola
+}
+
+const LOCK_CRON_ROUTEROS = 4103
+
+async function conLock<T>(
+    nombre: string,
+    trabajo: () => Promise<T>,
+): Promise<{ omitido: boolean; resultado?: T }> {
+    return db.transaction(async (trx) => {
+        const { rows } = (await trx.rawQuery('SELECT pg_try_advisory_xact_lock(?, hashtext(?)) AS ok', [
+            LOCK_CRON_ROUTEROS,
+            nombre,
+        ])) as { rows: Array<{ ok: boolean }> }
+        if (!rows[0]?.ok) return { omitido: true }
+        return { omitido: false, resultado: await trabajo() }
+    })
+}
+
+/**
+ * Ejecuta un cron por nombre (el worker y las pruebas). `clientes` reemplaza la fábrica de
+ * clientes REST (pruebas).
+ */
+export async function ejecutarCronRouterOS(
+    nombre: string,
+    opciones: OpcionesDispatcher & { ahora?: Date } = {},
+): Promise<{ omitido: boolean; resultado?: ResultadoReconciliar[] }> {
+    const ahora = opciones.ahora ?? new Date()
+    const ctx = contextoSistema('cron', `routeros-${nombre}-${ahora.toISOString()}`)
+    const fabrica = opciones.clientes ?? fabricaPorDefecto
+    const reconciliar = (routerId: number, motivo: 'periodico' | 'recuperado') =>
+        new ReconciliarRouterOS({ clientes: fabrica, red: opciones.red }).execute(
+            { router_id: routerId, motivo },
+            ctx,
+        )
+
+    switch (nombre) {
+        case 'reconciliar':
+            return conLock(nombre, async () => {
+                const salidas: ResultadoReconciliar[] = []
+                for (const id of await routersConServiciosSinPppoe()) {
+                    salidas.push(await reconciliar(id, 'periodico'))
+                }
+                return salidas
+            })
+        case 'recuperar':
+            return conLock(nombre, async () => {
+                const salidas: ResultadoReconciliar[] = []
+                for (const id of await routersPendientes()) {
+                    const router = await routerDispatcher(id, undefined, opciones.red)
+                    if (!router) {
+                        salidas.push(await reconciliar(id, 'recuperado'))
+                        continue
+                    }
+                    // Sondeo barato antes de reconciliar: un router que sigue caído no genera
+                    // otro `routeros.fallido` cada 30 s.
+                    let cliente
+                    try {
+                        cliente = fabrica(router.api)
+                        await cliente.probar()
+                    } catch {
+                        continue
+                    } finally {
+                        cliente?.cerrar()
+                    }
+                    salidas.push(await reconciliar(id, 'recuperado'))
+                }
+                return salidas
+            })
+        default:
+            throw new Error(`Cron de routeros desconocido: ${nombre}`)
+    }
+}
+
+export function crearWorkerRouterOS(opciones: { prefijo?: string } = {}) {
+    const worker = new Worker(NOMBRE_COLA_ROUTEROS, (job: Job) => ejecutarCronRouterOS(job.name), {
+        connection: conexion(),
+        prefix: prefijo(opciones.prefijo),
+        concurrency: 1,
+    })
+    worker.on('failed', (job, error) =>
+        logger.error({ cron: job?.name, err: error }, 'Cron de routeros falló'),
+    )
+    worker.on('error', (error) => logger.error({ err: error }, 'Worker de routeros'))
+    return worker
+}

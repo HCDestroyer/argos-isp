@@ -24,7 +24,19 @@ export function condicionesFixture(): Schema<'PortalCondicionesPromesa'> {
         monto_maximo: '525.00',
         monto_sugerido: '350.00',
         abono_inicial: null,
+        deuda_maxima: null,
+        pago_previo: null,
         requiere_aprobacion: false,
+    }
+}
+
+/** La plantilla pide abonar el 50 % y admite hasta Q300.00 vencidos: hay que pagar Q262.50 antes. */
+export function condicionesConPagoPrevioFixture(): Schema<'PortalCondicionesPromesa'> {
+    return {
+        ...condicionesFixture(),
+        abono_inicial: { porcentaje: 50, requerido: '262.50', abonado: '0.00', faltante: '262.50' },
+        deuda_maxima: { maximo: '300.00', vencida: '350.00', faltante: '50.00' },
+        pago_previo: '262.50',
     }
 }
 
@@ -45,6 +57,9 @@ export function condicionesConPromesaFixture(): Schema<'PortalCondicionesPromesa
 
 export type ResultadoPromesaFixture = Schema<'PortalPromesaSolicitada'>['resultado']
 
+/** `rechazada` es por cupo del periodo (cambiar fecha o monto no sirve); `rechazada_fecha`, por el plazo. */
+export type EscenarioResultadoFixture = ResultadoPromesaFixture | 'rechazada_fecha'
+
 const MOTIVOS: Record<ResultadoPromesaFixture, string> = {
     aprobada: 'Tu promesa de pago fue aprobada.',
     rechazada: 'Ya usaste las promesas de pago disponibles para este periodo. Comunícate con nosotros para acordar una fecha de pago.',
@@ -53,16 +68,18 @@ const MOTIVOS: Record<ResultadoPromesaFixture, string> = {
 
 /** Respuesta de `POST /portal/promesas` con el resultado pedido. */
 export function promesaSolicitadaFixture(
-    resultado: ResultadoPromesaFixture,
+    escenario: EscenarioResultadoFixture,
     datos: { vence_el: string, monto: string },
 ): Schema<'PortalPromesaSolicitada'> {
+    const resultado: ResultadoPromesaFixture = escenario === 'rechazada_fecha' ? 'rechazada' : escenario
     return {
         id: 88,
         resultado,
         // 23:59:59 de Guatemala (UTC−6) = 05:59:59 UTC del día siguiente.
         vence_en: new Date(`${datos.vence_el}T23:59:59-06:00`).toISOString(),
         monto: datos.monto,
-        motivo: MOTIVOS[resultado],
+        motivo: escenario === 'rechazada_fecha' ? 'La fecha de pago debe estar dentro de los próximos 3 días.' : MOTIVOS[resultado],
+        corregible: escenario === 'rechazada_fecha',
         servicio_estado: resultado === 'aprobada' ? 'activo' : null,
     }
 }

@@ -1,0 +1,101 @@
+# Pruebas de las reglas de RouterOS (promtool test rules). Correr con:
+#   docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool \
+#     prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+rule_files:
+  - reglas.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'argosisp_routeros_colas_simples{router_id="7",router="Torre Norte"}'
+        values: '1203x30'
+      - series: 'argosisp_routeros_colas_simples{router_id="8",router="Torre Sur"}'
+        values: '40x30'
+      - series: 'argosisp_routeros_colas_leidas_timestamp_seconds{router_id="8",router="Torre Sur"}'
+        values: '0x120'
+    alert_rule_test:
+      # 1203 colas durante 15 min: alerta solo para Torre Norte
+      - eval_time: 10m
+        alertname: RouterDemasiadasColasSimples
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: RouterDemasiadasColasSimples
+        exp_alerts:
+          - exp_labels:
+              alertname: RouterDemasiadasColasSimples
+              router_id: '7'
+              router: Torre Norte
+            exp_annotations:
+              summary: 'Router Torre Norte con 1203 colas simples: pasarlo a arbol_pcq (contratos/velocidad.md)'
+      # la última lectura fue en t=0: a los 61 min ya está vieja
+      - eval_time: 59m
+        alertname: RouterColasSinLeer
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: RouterColasSinLeer
+        exp_alerts:
+          - exp_labels:
+              alertname: RouterColasSinLeer
+              router_id: '8'
+              router: Torre Sur
+            exp_annotations:
+              summary: 'Hace más de 1 h que no se cuentan las colas del router Torre Sur (¿reconciliador detenido o router sin API?)'
+
+  # aaa y coa
+  - interval: 1m
+    input_series:
+      - series: 'up{job="coa",instance="coa:3200"}'
+        values: '1 1 0x10'
+      - series: 'argosisp_coa_consumidor_activo{job="coa",instance="coa:3200"}'
+        values: '1 0x10'
+      - series: 'argosisp_aaa_redis_arriba{job="aaa",instance="aaa:3100"}'
+        values: '1x10'
+    alert_rule_test:
+      # coa deja de responder en t=2m: alerta tras 2 min
+      - eval_time: 3m
+        alertname: ServicioSinMetricas
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ServicioSinMetricas
+        exp_alerts:
+          - exp_labels:
+              alertname: ServicioSinMetricas
+              job: coa
+              instance: coa:3200
+            exp_annotations:
+              summary: 'coa no responde /metrics (¿caído o METRICS_TOKEN distinto?)'
+      - eval_time: 4m
+        alertname: CoaConsumidorInactivo
+        exp_alerts:
+          - exp_labels:
+              alertname: CoaConsumidorInactivo
+              job: coa
+              instance: coa:3200
+            exp_annotations:
+              summary: 'coa no consume el grupo coa de argos:eventos: los cortes y reactivaciones no llegan al router'
+      - eval_time: 5m
+        alertname: AaaSinRedis
+        exp_alerts: []
+
+  # Latencia de aaa: 100 autorizaciones por minuto, todas entre 50 y 250 ms (p95 > 100 ms)
+  - interval: 1m
+    input_series:
+      - series: 'argosisp_aaa_autorizacion_duracion_segundos_bucket{resultado="accept",le="0.05"}'
+        values: '0x20'
+      - series: 'argosisp_aaa_autorizacion_duracion_segundos_bucket{resultado="accept",le="0.25"}'
+        values: '0+100x20'
+      - series: 'argosisp_aaa_autorizacion_duracion_segundos_bucket{resultado="accept",le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: AaaLatenciaAlta
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: AaaLatenciaAlta
+        exp_alerts:
+          - exp_labels:
+              alertname: AaaLatenciaAlta
+            exp_annotations:
+              summary: 'p95 de autorización de aaa en 240ms (objetivo < 100 ms)'

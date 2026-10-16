@@ -17,8 +17,22 @@ scrape_configs:
     static_configs:
       - targets: ['api:3333']
 
-  # aaa y coa: cuando A2 exponga /metrics (pedido en .claude/integration/a6.md). Mientras tanto
-  # su salud la cubren los healthchecks del compose.
-  # - job_name: aaa
-  #   static_configs:
-  #     - targets: ['aaa:3100']
+  # aaa (A2): autorizaciones por resultado, latencia (histograma), accounting y Redis arriba.
+  # Mismo METRICS_TOKEN: aaa y coa lo exigen si tiene valor y lo ignoran si está vacío.
+  # Perfil lab: sin aaa ni coa levantados, sus targets quedan en down (alerta ServicioSinMetricas).
+  - job_name: aaa
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/metrics_token
+    static_configs:
+      - targets: ['aaa:3100']
+
+  # coa (A2): envíos CoA/Disconnect por tipo y resultado, RTT, eventos pendientes y consumidor activo.
+  - job_name: coa
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/metrics_token
+    static_configs:
+      - targets: ['coa:3200']

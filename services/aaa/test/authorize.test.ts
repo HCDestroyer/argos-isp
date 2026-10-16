@@ -100,8 +100,35 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         assert.equal(cuerpo?.['reply:Framed-Pool'], 'argos-v4-pppoe')
         assert.equal(cuerpo?.['reply:Framed-IPv6-Pool'], 'argos-v6-enlace')
         assert.equal(cuerpo?.['reply:Mikrotik-Delegated-IPv6-Pool'], 'argos-v6-pd')
+        assert.equal(cuerpo?.['reply:Delegated-IPv6-Prefix-Pool'], 'argos-v6-pd')
+        assert.equal(cuerpo?.['reply:Framed-IPv6-Prefix'], undefined)
+        assert.equal(cuerpo?.['reply:Delegated-IPv6-Prefix'], undefined)
         assert.equal(cuerpo?.['reply:Framed-IP-Address'], undefined)
         assert.equal(cuerpo?.['reply:Mikrotik-Address-List'], undefined)
+    })
+
+    it('rate-limit completo de A1 (plan.rate_limit / rate_limit_limitado) tal cual', async () => {
+        const plan = {
+            id: 7,
+            subida_kbps: 5000,
+            bajada_kbps: 20000,
+            subida_limitada_kbps: 1000,
+            bajada_limitada_kbps: 2000,
+            rate_limit_override: null,
+            profile_ppp: null,
+            rate_limit: '5M/20M 10M/40M 3750k/15M 16/16 2 1250k/5M',
+            rate_limit_limitado: '1M/2M 0/0 0/0 0/0 2 250k/500k',
+        }
+        await guardar(servicio({ user_ppp: 'u-rl-activo', plan }))
+        await guardar(servicio({ user_ppp: 'u-rl-limitado', estado: 'limitado', plan }))
+        assert.equal(
+            (await autorizar('u-rl-activo')).cuerpo?.['reply:Mikrotik-Rate-Limit'],
+            '5M/20M 10M/40M 3750k/15M 16/16 2 1250k/5M',
+        )
+        assert.equal(
+            (await autorizar('u-rl-limitado')).cuerpo?.['reply:Mikrotik-Rate-Limit'],
+            '1M/2M 0/0 0/0 0/0 2 250k/500k',
+        )
     })
 
     it('suspendido se ACEPTA con el perfil de corte y conserva sus IPs', async () => {

@@ -2,11 +2,16 @@
 #
 # PPPoE dual-stack con RADIUS (FreeRADIUS → aaa), CoA en 3799, perfil "suspendido",
 # DHCPv6-PD, firewall de corte IPv4/IPv6 y WireGuard opcional hacia el servidor.
+# Semana 2: clientes WISP sin PPPoE (ip_estatica, dhcp_fija, amarre IP-MAC), FastTrack excluido
+# para clientes con colas, ejemplo de arbol_pcq y usuario de API REST con HTTPS
+# (contratos/routeros.md y contratos/velocidad.md).
 # Documentación y verificación: infra/mikrotik/README.md
 #
 # Uso:  edita SOLO la cabecera (bloque "Variables"), sube el archivo y ejecuta
 #       /import file-name=lab.rsc verbose=yes
-# Es re-ejecutable: todo lo que crea lleva comentario "argosisp..." y se reemplaza al reaplicar.
+# Es re-ejecutable: todo lo que crea lleva comentario "argosisp: ..." o "argosisp:top ..." y se
+# reemplaza al reaplicar. Lo que crea ArgosIsp por la API ("argosisp:servicio:<id>",
+# "argosisp:plan:<id>") NO se toca.
 # Todo va dentro de un bloque { } para que las variables :local valgan en todo el script.
 # Valores de ejemplo: RFC 5737 / RFC 1918 para IPv4, 2001:db8::/32 (RFC 3849) para IPv6 y
 # dominios .example (RFC 2606). Sustitúyelos por los reales del laboratorio.
@@ -30,8 +35,10 @@
 # rango, p. ej. 10.10.1.0/24, que NO debe solaparse con este pool.
 :local poolV4 "argos-v4-pppoe"
 :local poolV4Rangos "10.10.0.10-10.10.0.250"
-# Prefijo de todos los clientes (para NAT de salida en el laboratorio)
+# Prefijo de todos los clientes PPPoE (NAT de salida y exclusión de FastTrack)
 :local clientesV4 "10.10.0.0/16"
+# Prefijos IPv6 de clientes (pools e IPAM): exclusión de FastTrack en IPv6
+:local clientesV6 {"2001:db8:100::/48";"2001:db8:101::/48";"2001:db8:200::/40";"2001:db8:300::/40"}
 # Rate-limit del perfil suspendido (rx/tx desde el router = subida/bajada del cliente)
 :local suspRateLimit "256k/256k"
 
@@ -76,6 +83,65 @@
 :local dnsV4 {"192.0.2.53";"198.51.100.53"}
 :local dnsV6 {"2001:db8:ffff::53"}
 
+# --- WISP sin PPPoE (contratos/routeros.md): ip_estatica y dhcp_fija ---
+:local wispHabilitar true
+# Interfaz (o bridge) de las antenas/CPE sin PPPoE
+:local wispIf "ether3"
+# Gateway y red de los clientes WISP (= una network.redes_ipv4 del router; el IPAM asigna las IPs)
+:local wispGateway "10.20.0.1/24"
+:local wispRed "10.20.0.0/24"
+# Servidor DHCP de dhcp_fija: SOLO leases estáticos (address-pool=static-only). ArgosIsp crea un
+# lease por servicio (mac-address, address, server=wispDhcp); una MAC desconocida no recibe IP.
+:local wispDhcp "argos-dhcp-wisp"
+:local wispLease "30m"
+# IPv6 del segmento WISP (opcional): /64 COMPARTIDO con RA para la WAN de los CPE. El límite por
+# cliente en IPv6 va por su /56 delegado (DUID, semana 2), nunca por este /64. Vacío = sin IPv6.
+:local wispV6Gateway ""
+:local wispV6Red ""
+# Amarre IP-MAC opcional (amarre_ip_mac = true): VLAN de ejemplo sobre wispIf con arp=reply-only.
+# El router solo responde ARP a las IPs con entrada estática en /ip arp (la crea ArgosIsp) o con
+# lease de su DHCP (add-arp=yes). Un equipo con IP clonada pero otra MAC no navega.
+:local amarreHabilitar true
+:local amarreVlanId 120
+:local amarreIf "wisp-amarre"
+:local amarreGateway "10.21.0.1/24"
+:local amarreRed "10.21.0.0/24"
+:local amarreDhcp "argos-dhcp-amarre"
+
+# --- Control de velocidad (contratos/velocidad.md) ---
+# Capacidad del enlace en bps (= capacidad_bajada_kbps/subida_kbps × 1000 del router): techo de
+# los padres globales del arbol_pcq
+:local capBajada 100000000
+:local capSubida 50000000
+# Ejemplo de arbol_pcq con un plan ficticio (id 0: 20M/10M, reuso 1:4, 4 clientes activos,
+# limitado a 2M/1M). En producción ArgosIsp (A2) crea el árbol de cada plan al pasar el router a
+# arbol_pcq; el ejemplo usa sus mismos nombres con el id 0, que ningún plan real tiene.
+:local arbolEjemplo true
+:local arbolPlanId 0
+:local arbolMirBajada 20000000
+:local arbolMirSubida 10000000
+:local arbolLimBajada 2000000
+:local arbolLimSubida 1000000
+:local arbolReuso 4
+:local arbolActivos 4
+:local arbolPrioridad 8
+# IPv4, /64 y /56 de los clientes de ejemplo (address-list argosisp-plan-<id>)
+:local arbolClientes {"10.20.0.101";"10.20.0.102";"10.20.0.103";"10.20.0.104"}
+:local arbolClientesV6 {"2001:db8:101:1::/64";"2001:db8:300:100::/56"}
+
+# --- API REST de RouterOS (dispatcher WISP y colas de ArgosIsp) ---
+:local apiUsuario "argosisp-api"
+# Contraseña del usuario (la misma se guarda cifrada en network.routers.api_password). Generar
+# con `openssl rand -base64 24`. Con "CAMBIAR" no se crea el usuario.
+:local apiPassword "CAMBIAR"
+# Desde dónde se acepta la API (IP del servidor ArgosIsp: túnel WireGuard o LAN)
+:local apiDesde "10.255.255.1/32"
+# Nombre e IP con que ArgosIsp llega al router (van al certificado: CN y subjectAltName)
+:local apiNombre "mikrotik-lab.argosisp.example"
+:local apiIp "10.255.255.2"
+# Apagar www (HTTP en claro), api (8728) y api-ssl (8729): ArgosIsp solo usa la API REST por www-ssl
+:local apiSoloHttps true
+
 # --- WireGuard opcional hacia el servidor (si el servidor no está en la LAN del router) ---
 :local wgHabilitar false
 :local wgIf "wg-argosisp"
@@ -93,13 +159,22 @@
 # 0. Limpieza de lo aplicado antes por este script
 # ============================================================================
 :put "argosisp: limpiando configuración anterior"
-/ip firewall filter remove [find where comment~"^argosisp"]
-/ip firewall nat remove [find where comment~"^argosisp"]
-/ip firewall address-list remove [find where dynamic=no comment~"^argosisp"]
-/ipv6 firewall filter remove [find where comment~"^argosisp"]
-/ipv6 firewall nat remove [find where comment~"^argosisp"]
-/ipv6 firewall address-list remove [find where dynamic=no comment~"^argosisp"]
-/radius remove [find where comment~"^argosisp"]
+# Solo lo de este script ("argosisp: " con espacio y "argosisp:top "): las entradas de ArgosIsp
+# ("argosisp:servicio:<id>" en suspendidos o argosisp-plan-<id>, colas "argosisp:plan:<id>") quedan.
+:local propio "^argosisp(: |:top )"
+/ip firewall filter remove [find where comment~$propio]
+/ip firewall nat remove [find where comment~$propio]
+/ip firewall mangle remove [find where comment~$propio]
+/ip firewall address-list remove [find where dynamic=no comment~$propio]
+/ipv6 firewall filter remove [find where comment~$propio]
+/ipv6 firewall nat remove [find where comment~$propio]
+/ipv6 firewall mangle remove [find where comment~$propio]
+/ipv6 firewall address-list remove [find where dynamic=no comment~$propio]
+/radius remove [find where comment~$propio]
+/queue tree remove [find where comment~$propio]
+# /queue type no tiene comentario: se borran por nombre solo los del ejemplo
+/queue type remove [find where name~("^argosisp-plan-" . $arbolPlanId . "-")]
+/system script remove [find where name~"^argosisp-"]
 
 # ============================================================================
 # 1. WireGuard (opcional)
@@ -158,6 +233,10 @@
 
 # Perfil default: IPv4 por pool (o Framed-IP-Address de RADIUS), /64 de enlace y /56 por PD.
 # Los atributos RADIUS (Framed-*, Delegated-IPv6-Prefix, Mikrotik-Rate-Limit) tienen prioridad.
+# Con dhcpv6-pd-pool, cada sesion crea un servidor DHCPv6 dinamico con el nombre de su interfaz,
+# "<pppoe-USUARIO>" (con los < >), y el binding del /56 queda en /ipv6/dhcp-server/binding con
+# server = active-server = "<pppoe-USUARIO>", dynamic=yes, prefix-pool=argos-v6-pd. Ambos
+# desaparecen al cerrar la sesion. Verificado en CHR 7.24.5 (infra/mikrotik/README.md, "Binding").
 /ppp profile set [find where name="default"] local-address=$pppLocalV4 remote-address=$poolV4 \
     remote-ipv6-prefix-pool=$poolV6Enlace dhcpv6-pd-pool=$poolV6Pd use-ipv6=yes \
     dns-server=$pppLocalV4 change-tcp-mss=yes
@@ -207,11 +286,17 @@
 /ip firewall address-list add list=argos-dns address=$pppLocalV4 comment="argosisp: DNS del router"
 :foreach d in=$dnsV4 do={ /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
 :foreach d in=$walledGarden do={ /ip firewall address-list add list=argos-walled address=$d comment="argosisp: walled garden" }
+# Clientes con colas (PPPoE y WISP): NAT de salida del laboratorio y exclusión de FastTrack
+/ip firewall address-list add list=argos-clientes address=$clientesV4 comment="argosisp: clientes PPPoE"
+:if ($wispHabilitar) do={ /ip firewall address-list add list=argos-clientes address=$wispRed comment="argosisp: clientes WISP" }
+:if ($wispHabilitar && $amarreHabilitar) do={ /ip firewall address-list add list=argos-clientes address=$amarreRed comment="argosisp: clientes WISP con amarre" }
 
 /ipv6 firewall address-list add list=argos-portal address=$portalV6 comment="argosisp: portal IP"
 /ipv6 firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
 :foreach d in=$dnsV6 do={ /ipv6 firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
 :foreach d in=$walledGarden do={ /ipv6 firewall address-list add list=argos-walled address=$d comment="argosisp: walled garden" }
+:foreach d in=$clientesV6 do={ /ipv6 firewall address-list add list=argos-clientes address=$d comment="argosisp: clientes IPv6" }
+:if ($wispHabilitar && $wispV6Red != "") do={ /ipv6 firewall address-list add list=argos-clientes address=$wispV6Red comment="argosisp: clientes WISP IPv6" }
 
 # ============================================================================
 # 8. Firewall IPv4
@@ -235,6 +320,12 @@ add chain=forward src-address-list=suspendidos action=jump jump-target=argos-cor
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 # Reglas dinámicas que RouterOS crea por Filter-Id (RADIUS o CoA) en la cadena "ppp"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
+# FastTrack excluido para clientes con colas (contratos/velocidad.md): con FastTrack los paquetes
+# saltan colas simples, queue tree y mangle. Aceptar aquí lo establecido de los clientes, DESPUÉS
+# de los saltos de corte y ANTES de "defconf: fasttrack", deja esas conexiones fuera de FastTrack.
+# Verificación: /system script run argosisp-verificar-fasttrack
+add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
+add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
 
 # Cadena de corte (tráfico del cliente suspendido hacia fuera). Filter-Id = "argos-corte.in".
 add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
@@ -263,7 +354,7 @@ add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-cor
 add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
 add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
 add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
-add chain=srcnat src-address=$clientesV4 out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
+add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
 
 # ============================================================================
 # 9. Firewall IPv6 (espejo del IPv4, SIN NAT: decisión del PM, día 4)
@@ -292,6 +383,8 @@ add chain=input in-interface-list=suspendidos action=jump jump-target=argos-cort
 add chain=forward src-address-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por address-list"
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
+add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
+add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
 
 add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
 add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
@@ -312,7 +405,132 @@ add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment
 add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro)"
 
 # ============================================================================
-# 10. Reglas "argosisp:top" al inicio de cada tabla (antes de fasttrack y de
+# 10. WISP sin PPPoE: gateway, DHCP de dhcp_fija y amarre IP-MAC (contratos/routeros.md)
+# ============================================================================
+# ArgosIsp (dispatcher de A2) crea por la API, con comment "argosisp:servicio:<id>": la cola simple
+# (target = IPv4/32 y prefijos IPv6), la entrada en suspendidos (solo en suspendido), el lease DHCP
+# (dhcp_fija) y el ARP estático (amarre_ip_mac). Este script solo deja el segmento listo.
+:if ($wispHabilitar) do={
+    :put "argosisp: WISP"
+    /ip address remove [find where comment="argosisp: gateway WISP"]
+    /ip address add address=$wispGateway interface=$wispIf comment="argosisp: gateway WISP"
+    # ip_estatica: la IP va a mano en la antena/CPE (gateway = wispGateway, DNS = el router).
+    # dhcp_fija: solo leases estáticos; una MAC sin lease no recibe dirección.
+    :local gw [:pick $wispGateway 0 [:find $wispGateway "/"]]
+    :if ([:len [/ip dhcp-server find where name=$wispDhcp]] = 0) do={
+        /ip dhcp-server add name=$wispDhcp interface=$wispIf address-pool=static-only lease-time=$wispLease comment="argosisp: dhcp_fija (solo leases estaticos)"
+    }
+    /ip dhcp-server set [find where name=$wispDhcp] interface=$wispIf address-pool=static-only lease-time=$wispLease disabled=no
+    /ip dhcp-server network remove [find where comment="argosisp: red WISP"]
+    /ip dhcp-server network add address=$wispRed gateway=$gw dns-server=$gw comment="argosisp: red WISP"
+
+    :if ($wispV6Gateway != "") do={
+        /ipv6 address remove [find where comment="argosisp: gateway WISP IPv6"]
+        /ipv6 address add address=$wispV6Gateway interface=$wispIf advertise=yes comment="argosisp: gateway WISP IPv6"
+    }
+
+    # Amarre IP-MAC: interfaz con arp=reply-only. Solo responde a IPs con ARP estático (lo crea
+    # ArgosIsp si amarre_ip_mac = true) o con lease de su DHCP (add-arp=yes). Cada servicio de esta
+    # interfaz debe tener amarre o lease: sin ninguno, el router no le responde ARP y no navega.
+    :if ($amarreHabilitar) do={
+        :if ([:len [/interface vlan find where name=$amarreIf]] = 0) do={
+            /interface vlan add name=$amarreIf vlan-id=$amarreVlanId interface=$wispIf comment="argosisp: WISP con amarre IP-MAC"
+        }
+        /interface vlan set [find where name=$amarreIf] vlan-id=$amarreVlanId interface=$wispIf arp=reply-only disabled=no
+        /ip address remove [find where comment="argosisp: gateway WISP amarre"]
+        /ip address add address=$amarreGateway interface=$amarreIf comment="argosisp: gateway WISP amarre"
+        :local gwA [:pick $amarreGateway 0 [:find $amarreGateway "/"]]
+        :if ([:len [/ip dhcp-server find where name=$amarreDhcp]] = 0) do={
+            /ip dhcp-server add name=$amarreDhcp interface=$amarreIf address-pool=static-only lease-time=$wispLease add-arp=yes comment="argosisp: dhcp_fija con amarre"
+        }
+        /ip dhcp-server set [find where name=$amarreDhcp] interface=$amarreIf address-pool=static-only lease-time=$wispLease add-arp=yes disabled=no
+        /ip dhcp-server network remove [find where comment="argosisp: red WISP amarre"]
+        /ip dhcp-server network add address=$amarreRed gateway=$gwA dns-server=$gwA comment="argosisp: red WISP amarre"
+    }
+}
+
+# ============================================================================
+# 11. Ejemplo de arbol_pcq (contratos/velocidad.md, modo arbol_pcq)
+# ============================================================================
+# Padres globales con la capacidad del enlace; debajo, un hijo por plan (max-limit = MIR × activos /
+# reuso, limit-at = CIR × activos, CIR = MIR / reuso) con un PCQ por plan: cada cliente tiene su
+# tope (pcq-rate = MIR) y el padre reparte el reuso. IPv6 cuenta por /64 (pcq-*-address6-mask=64),
+# no por dirección. Marcado: address-list argosisp-plan-<id> (IPv4, /64 y /56 del cliente) y mangle
+# mark-packet sin passthrough. Limitado: lista y PCQ propios (argosisp-plan-<id>-limitado).
+:if ($arbolEjemplo) do={
+    :put "argosisp: ejemplo arbol_pcq"
+    :local plan ("argosisp-plan-" . $arbolPlanId)
+    :local maxB ($arbolMirBajada * $arbolActivos / $arbolReuso)
+    :local maxS ($arbolMirSubida * $arbolActivos / $arbolReuso)
+    :local limB ($arbolMirBajada / $arbolReuso * $arbolActivos)
+    :local limS ($arbolMirSubida / $arbolReuso * $arbolActivos)
+
+    /queue type add name=($plan . "-bajada") kind=pcq pcq-rate=$arbolMirBajada pcq-classifier=dst-address pcq-dst-address6-mask=64
+    /queue type add name=($plan . "-subida") kind=pcq pcq-rate=$arbolMirSubida pcq-classifier=src-address pcq-src-address6-mask=64
+    /queue type add name=($plan . "-limitado-bajada") kind=pcq pcq-rate=$arbolLimBajada pcq-classifier=dst-address pcq-dst-address6-mask=64
+    /queue type add name=($plan . "-limitado-subida") kind=pcq pcq-rate=$arbolLimSubida pcq-classifier=src-address pcq-src-address6-mask=64
+
+    /queue tree add name=argosisp-ejemplo-bajada parent=global max-limit=$capBajada comment="argosisp: ejemplo padre global bajada"
+    /queue tree add name=argosisp-ejemplo-subida parent=global max-limit=$capSubida comment="argosisp: ejemplo padre global subida"
+    /queue tree add name=($plan . "-bajada") parent=argosisp-ejemplo-bajada packet-mark=($plan . "-bajada") queue=($plan . "-bajada") max-limit=$maxB limit-at=$limB priority=$arbolPrioridad comment="argosisp: ejemplo plan bajada"
+    /queue tree add name=($plan . "-subida") parent=argosisp-ejemplo-subida packet-mark=($plan . "-subida") queue=($plan . "-subida") max-limit=$maxS limit-at=$limS priority=$arbolPrioridad comment="argosisp: ejemplo plan subida"
+    /queue tree add name=($plan . "-limitado-bajada") parent=argosisp-ejemplo-bajada packet-mark=($plan . "-limitado-bajada") queue=($plan . "-limitado-bajada") priority=$arbolPrioridad comment="argosisp: ejemplo plan limitado bajada"
+    /queue tree add name=($plan . "-limitado-subida") parent=argosisp-ejemplo-subida packet-mark=($plan . "-limitado-subida") queue=($plan . "-limitado-subida") priority=$arbolPrioridad comment="argosisp: ejemplo plan limitado subida"
+
+    :foreach d in=$arbolClientes do={ /ip firewall address-list add list=$plan address=$d comment="argosisp: ejemplo cliente del plan" }
+    :foreach d in=$arbolClientesV6 do={ /ipv6 firewall address-list add list=$plan address=$d comment="argosisp: ejemplo cliente del plan" }
+
+    # Mangle (IPv4 e IPv6 iguales). Bajada = destino en la lista; subida = origen en la lista.
+    :foreach lista in=($plan, ($plan . "-limitado")) do={
+        /ip firewall mangle add chain=forward dst-address-list=$lista action=mark-packet new-packet-mark=($lista . "-bajada") passthrough=no comment=("argosisp: ejemplo marca " . $lista . " bajada")
+        /ip firewall mangle add chain=forward src-address-list=$lista action=mark-packet new-packet-mark=($lista . "-subida") passthrough=no comment=("argosisp: ejemplo marca " . $lista . " subida")
+        /ipv6 firewall mangle add chain=forward dst-address-list=$lista action=mark-packet new-packet-mark=($lista . "-bajada") passthrough=no comment=("argosisp: ejemplo marca " . $lista . " bajada")
+        /ipv6 firewall mangle add chain=forward src-address-list=$lista action=mark-packet new-packet-mark=($lista . "-subida") passthrough=no comment=("argosisp: ejemplo marca " . $lista . " subida")
+    }
+}
+
+# ============================================================================
+# 12. Usuario de la API REST con permisos mínimos y HTTPS (www-ssl)
+# ============================================================================
+# Grupo argosisp-api: read, write, api y rest-api. Sin ftp, ssh, telnet, winbox, web, policy,
+# password, sensitive, reboot, sniff, test, romon ni local: no puede cambiar usuarios ni leer
+# secretos, y la API solo acepta conexiones desde apiDesde.
+:put "argosisp: usuario de API REST"
+:if ([:len [/user group find where name="argosisp-api"]] = 0) do={
+    /user group add name=argosisp-api policy=read,write,api,rest-api comment="argosisp: API REST de ArgosIsp"
+}
+/user group set [find where name="argosisp-api"] policy=read,write,api,rest-api
+:if ($apiPassword = "CAMBIAR") do={
+    :put "argosisp: AVISO apiPassword sin cambiar: no se crea el usuario de API"
+} else={
+    :if ([:len [/user find where name=$apiUsuario]] = 0) do={
+        /user add name=$apiUsuario group=argosisp-api password=$apiPassword address=$apiDesde comment="argosisp: API REST de ArgosIsp"
+    } else={
+        /user set [find where name=$apiUsuario] group=argosisp-api password=$apiPassword address=$apiDesde disabled=no
+    }
+}
+
+# Certificado: CA propia del laboratorio y certificado del servidor con CN = apiNombre y SAN =
+# DNS:apiNombre, IP:apiIp. Se crean una vez (para regenerarlos, bórralos y reaplica). La CA se
+# exporta a argosisp-ca.crt para que ArgosIsp verifique el certificado del router.
+:if ([:len [/certificate find where name="argosisp-ca"]] = 0) do={
+    /certificate add name=argosisp-ca common-name="ArgosIsp lab CA" key-usage=key-cert-sign,crl-sign days-valid=3650 key-size=2048
+    /certificate sign argosisp-ca
+}
+:if ([:len [/certificate find where name="argosisp-www"]] = 0) do={
+    /certificate add name=argosisp-www common-name=$apiNombre subject-alt-name=("DNS:" . $apiNombre . ",IP:" . $apiIp) key-usage=digital-signature,key-encipherment,tls-server days-valid=825 key-size=2048
+    /certificate sign argosisp-www ca=argosisp-ca
+}
+/certificate export-certificate argosisp-ca file-name=argosisp-ca
+/ip service set www-ssl certificate=argosisp-www tls-version=only-1.2 available-from=$apiDesde disabled=no
+:if ($apiSoloHttps) do={
+    /ip service set www disabled=yes
+    /ip service set api disabled=yes
+    /ip service set api-ssl disabled=yes
+}
+
+# ============================================================================
+# 13. Reglas "argosisp:top" al inicio de cada tabla (antes de fasttrack y de
 #     "accept established,related", que dejarían pasar al suspendido)
 # ============================================================================
 :put "argosisp: ordenando reglas"
@@ -347,6 +565,47 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 :if ([:typeof $destinoNat6] != "nothing") do={
     :foreach id in=[/ipv6 firewall nat find where comment~"^argosisp:top"] do={ /ipv6 firewall nat move $id destination=$destinoNat6 }
 }
+
+# ============================================================================
+# 14. Verificación de FastTrack (también a mano: /system script run argosisp-verificar-fasttrack)
+# ============================================================================
+# Falla si alguna regla fasttrack-connection de IPv4 o IPv6 queda antes de la exclusión de
+# clientes, o si hay conexiones vivas de clientes (argos-clientes, IPv4) en FastTrack.
+/system script add name=argosisp-verificar-fasttrack policy=read,test comment="argosisp: verificar FastTrack" source={
+    :local errores ""
+    :local excl false
+    :foreach id in=[/ip firewall filter find where chain=forward && !disabled && dynamic=no] do={
+        :if ([:tostr [/ip firewall filter get $id comment]] ~ "^argosisp:top sin fasttrack") do={ :set excl true }
+        :if ([/ip firewall filter get $id action] = "fasttrack-connection" && !$excl) do={ :set errores ($errores . " ipv4:fasttrack-antes-de-la-exclusion") }
+    }
+    :if (!$excl) do={ :set errores ($errores . " ipv4:sin-exclusion") }
+    :local excl6 false
+    :foreach id in=[/ipv6 firewall filter find where chain=forward && !disabled && dynamic=no] do={
+        :if ([:tostr [/ipv6 firewall filter get $id comment]] ~ "^argosisp:top sin fasttrack") do={ :set excl6 true }
+        :if ([/ipv6 firewall filter get $id action] = "fasttrack-connection" && !$excl6) do={ :set errores ($errores . " ipv6:fasttrack-antes-de-la-exclusion") }
+    }
+    :if (!$excl6) do={ :set errores ($errores . " ipv6:sin-exclusion") }
+    :local vivas 0
+    :foreach cx in=[/ip firewall connection find where fasttrack] do={
+        :foreach campo in={"src-address";"dst-address"} do={
+            :local txt [:tostr [/ip firewall connection get $cx $campo]]
+            :local fin [:find $txt ":"]
+            :if ([:typeof $fin] = "nil") do={ :set fin [:len $txt] }
+            :local ip [:toip [:pick $txt 0 $fin]]
+            :if ([:typeof $ip] = "ip") do={
+                :if ([:len [/ip firewall address-list find where list=argos-clientes && $ip in address]] > 0) do={ :set vivas ($vivas + 1) }
+            }
+        }
+    }
+    :if ($vivas > 0) do={ :set errores ($errores . " ipv4:" . $vivas . "-conexiones-de-clientes-en-fasttrack") }
+    :if ($errores = "") do={
+        :put "argosisp: FastTrack OK (excluido para argos-clientes en IPv4 e IPv6)"
+    } else={
+        :log error ("argosisp: FastTrack MAL:" . $errores)
+        :error ("argosisp: FastTrack MAL:" . $errores)
+    }
+}
+/system script run argosisp-verificar-fasttrack
 
 :log info "argosisp: lab.rsc aplicado"
 :put "argosisp: listo. Verificacion en infra/mikrotik/README.md"

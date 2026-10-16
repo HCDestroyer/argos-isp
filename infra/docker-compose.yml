@@ -50,6 +50,12 @@ x-api-env: &api-env
   # Notificaciones (apps/api/app/notify). Sin TELEGRAM_BOT_TOKEN el canal Telegram no se usa
   # y los clientes con esa preferencia reciben correo.
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Bot (POST /api/v1/telegram/webhook, contratos/telegram.md): usuario del bot sin @, secreto del
+  # header X-Telegram-Bot-Api-Secret-Token y URL pública HTTPS para `node ace telegram:webhook`.
+  TELEGRAM_BOT_NOMBRE: ${TELEGRAM_BOT_NOMBRE:-}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+  TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+  TELEGRAM_CODIGO_VIGENCIA_S: ${TELEGRAM_CODIGO_VIGENCIA_S:-900}
   # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
   TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
   NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
@@ -73,7 +79,8 @@ x-api-env: &api-env
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
   COMPROBANTES_DIR: /comprobantes
 
-# Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, worker).
+# Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, routeros-worker,
+# aaa-vigia, worker).
 x-proceso-fondo: &proceso-fondo
   image: argosisp/api:${IMAGE_TAG:-dev}
   build:
@@ -312,6 +319,32 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js aaa:vigilar'"]
 
+  # RouterOS (A2): servicios sin PPPoE por la API REST de los routers (grupo routeros del bus),
+  # crons del reconciliador (cola routeros-cron) y prefijo delegado de las sesiones en modo
+  # radius_pool (cola routeros-prefijos). Una réplica: los crons llevan lock. Debe alcanzar la API
+  # REST de los routers (HTTPS, servicio www-ssl): en el laboratorio, por la LAN o el túnel WireGuard.
+  # Usuario y contraseña de cada router salen de network.routers (cifrados con AAA_PPP_KEY).
+  routeros-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, routeros:worker]
+    deploy:
+      replicas: 1
+    environment:
+      <<: *api-env
+      ROUTEROS_TLS_VERIFICAR: ${ROUTEROS_TLS_VERIFICAR:-true}
+      ROUTEROS_TIMEOUT_MS: ${ROUTEROS_TIMEOUT_MS:-5000}
+      ROUTEROS_REINTENTOS: ${ROUTEROS_REINTENTOS:-3}
+      ROUTEROS_ESPERA_MS: ${ROUTEROS_ESPERA_MS:-500}
+      ROUTEROS_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      ROUTEROS_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
+      ROUTEROS_DHCP_SERVIDOR: ${ROUTEROS_DHCP_SERVIDOR:-all}
+      ROUTEROS_RECONCILIAR_CADA_MS: ${ROUTEROS_RECONCILIAR_CADA_MS:-900000}
+      ROUTEROS_RECUPERAR_CADA_MS: ${ROUTEROS_RECUPERAR_CADA_MS:-30000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js routeros:worker'"]
+
   # Notificaciones (A6): cola de envíos, cron de recordatorios y cron mensual de particiones.
   worker:
     <<: *proceso-fondo
@@ -418,6 +451,8 @@ services:
       AAA_SUSPENDIDO_GRUPO: ${AAA_SUSPENDIDO_GRUPO:-suspendido}
       AAA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
@@ -467,6 +502,15 @@ services:
       # Suspender sesiones con IPv6: coa (sin reconectar; IPv6 bloqueado con reset) o disconnect
       # (reconecta con el perfil suspendido y el router redirige IPv6 a /corte). Decide el PM.
       COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
+      # Prefijo de aaa:user:<user_ppp> en Redis (mismo que aaa y la API): rate-limit de los CoA de velocidad
+      AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
+      # Respaldo por la API interna (A2) cuando Redis no tiene el servicio: GET /internal/aaa/servicio
+      # con Authorization: Bearer <INTERNAL_TOKEN> (el mismo token que aaa y la API).
+      API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
+      AAA_API_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
+      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      # GET /metrics (job coa de Prometheus). Vacío = abierto en la red interna.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     ports:
       - 127.0.0.1:${COA_PORT_HOST:-3200}:3200
     depends_on:

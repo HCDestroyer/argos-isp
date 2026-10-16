@@ -21,10 +21,13 @@ import {
     PortalFactura,
     PortalFacturaDetalle,
     PortalPago,
+    PortalPagoEnLinea,
     PortalPromesa,
     PortalPromesaSolicitada,
     PortalSesion,
     PortalSolicitudCodigo,
+    PortalTelegram,
+    PortalVinculoTelegram,
     QuienSoy,
 } from '#portal/esquemas'
 import {
@@ -32,6 +35,7 @@ import {
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
+    iniciarPagoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
     solicitarCodigoValidator,
@@ -54,6 +58,9 @@ import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
 import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
 import EditarContactoPortal from '#portal/actions/editar_contacto'
+import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
+import DesvincularTelegramPortal from '#portal/actions/desvincular_telegram'
+import { estadoTelegram } from '#portal/acceso/telegram'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
 import EditarEmpresa from '#portal/actions/editar_empresa'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
@@ -82,6 +89,15 @@ import {
     errorComprobanteParaCliente,
     titularDeLaPeticion,
 } from '#portal/comprobantes'
+import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
+import {
+    cobroDeLaPeticion,
+    cobroParaCliente,
+    errorPagoParaCliente,
+    facturasAPagar,
+    pagadorDeLaPeticion,
+    pagoEnLineaDisponible,
+} from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
 
@@ -333,6 +349,66 @@ const autenticadas: Ruta[] = [
     }),
 ]
 
+const SOBRE_TELEGRAM = 'Contrato con el bot en `.claude/integration/contratos/telegram.md`.'
+
+const telegram: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/telegram',
+        operacion: 'portalTelegram',
+        resumen: 'Estado de la vinculación de Telegram del cliente de la sesión',
+        descripcion: `${SOBRE_LA_SESION} El portal la consulta cada 3 s mientras el código está vigente. ${SOBRE_TELEGRAM}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
+        handler: async (ctx) => estadoTelegram(await clienteDeLaSesion(ctx)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/telegram/vincular',
+        operacion: 'portalVincularTelegram',
+        resumen: 'Genera el código de un solo uso y el enlace al bot para vincular Telegram',
+        descripcion:
+            `${SOBRE_LA_SESION} Llama \`GenerarCodigoTelegram\` de A6 (\`notificaciones.telegram_codigo\`, canal ` +
+            'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
+            `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
+        handler: async (ctx) => {
+            await ipDelCliente(ctx, 'telegram-vincular')
+            const sesion = await exigirSesionPortal(ctx)
+            return new GenerarCodigoTelegram().execute(
+                { cliente_id: sesion.clienteId },
+                ctx.contextoAccion('portal'),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/telegram/desvincular',
+        operacion: 'portalDesvincularTelegram',
+        resumen: 'Quita el chat de Telegram del cliente de la sesión',
+        descripcion:
+            `${SOBRE_LA_SESION} Acción \`portal.desvincular_telegram\` sobre \`clientes.desvincular_telegram\`. ` +
+            'Si el canal preferido era Telegram pasa a correo. Idempotente.',
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
+        handler: async (ctx) => {
+            const sesion = await exigirSesionPortal(ctx)
+            return new DesvincularTelegramPortal().execute(
+                { clienteId: sesion.clienteId },
+                ctx.contextoAccion('portal'),
+            )
+        },
+    }),
+]
+
 const documentos: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -485,6 +561,69 @@ const promesas: Ruta[] = [
     }),
 ]
 
+const SOBRE_EL_PAGO =
+    'Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado ' +
+    'de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.'
+
+const pagosEnLinea: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/pagos/iniciar',
+        operacion: 'portalIniciarPago',
+        resumen: 'Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor',
+        descripcion:
+            'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
+            '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
+            'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
+            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a ' +
+            `\`/corte?pago=<id>\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        idempotente: true,
+        permiso: null,
+        cuerpo: iniciarPagoValidator,
+        respuesta: { status: 201, descripcion: 'Cobro creado', esquema: PortalPagoEnLinea },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'pagos-iniciar')
+            const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
+            const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
+            try {
+                const cobro = await new CrearCobroPasarela().execute(
+                    { cliente_id: pagador.clienteId, servicio_id: pagador.servicioId, facturas },
+                    ctx.contextoAccion('portal'),
+                )
+                return cobroParaCliente(cobro)
+            } catch (error) {
+                throw errorPagoParaCliente(error)
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/pagos/en-linea/:id',
+        operacion: 'portalPagoEnLinea',
+        resumen: 'Estado de un pago en línea (página de retorno `/corte?pago=<id>`)',
+        descripcion:
+            'Solo lectura: `pendiente` hasta que llegue el webhook, luego `pagado`, `fallido` o `expirado`. ' +
+            'Responde solo si el cobro es del cliente de la sesión del portal o del servicio de la IP de origen; ' +
+            `cualquier otro, 404. ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Pago en línea', esquema: PortalPagoEnLinea },
+        handler: async (ctx, { params }) => {
+            const ip = await ipDelCliente(ctx, 'pagos-en-linea')
+            const id = Number(params.id)
+            if (!Number.isSafeInteger(id) || id < 1) {
+                throw new NoEncontrado('No encontramos ese pago en línea')
+            }
+            return cobroDeLaPeticion(ctx, ip, id)
+        },
+    }),
+]
+
 const empresa: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -500,7 +639,11 @@ const empresa: Ruta[] = [
         handler: async (ctx) => {
             await ipDelCliente(ctx, 'empresa')
             const datos = await leerEmpresa()
-            return { ...datos, cuentas_deposito: await fuenteCuentasDeposito().activas() }
+            return {
+                ...datos,
+                cuentas_deposito: await fuenteCuentasDeposito().activas(),
+                pago_en_linea: pagoEnLineaDisponible(),
+            }
         },
     }),
     definirRuta({
@@ -608,6 +751,15 @@ const comprobantes: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas, ...promesas, ...comprobantes, ...documentos, ...empresa]
+const portal: Ruta[] = [
+    ...publicas,
+    ...autenticadas,
+    ...telegram,
+    ...promesas,
+    ...comprobantes,
+    ...pagosEnLinea,
+    ...documentos,
+    ...empresa,
+]
 
 export default portal

@@ -5,8 +5,9 @@ Endpoints REST que FreeRADIUS 3.2 (`rlm_rest`) llama para autorizar y contabiliz
 | Ruta                   | Llamada desde                     | Estado                       |
 | ---------------------- | --------------------------------- | ---------------------------- |
 | `GET /health`          | healthcheck de compose            | hecho (incluye estado Redis) |
+| `GET /metrics`         | Prometheus (A6)                   | hecho (semana 2, tarea 5)    |
 | `POST /aaa/authorize`  | `authorize` de FreeRADIUS         | hecho (tarea 1)              |
-| `POST /aaa/post-auth`  | `post-auth` (no bloqueante)       | 204, solo registra           |
+| `POST /aaa/post-auth`  | `post-auth`, solo en Reject       | 204, registra el rechazo     |
 | `POST /aaa/accounting` | `accounting` (Start/Interim/Stop) | hecho (tarea 4): encola      |
 
 Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accounting de `apps/api` (`app/network/sesiones`) a partir de lo que encola `aaa`; `aaa.caido` / `aaa.recuperado` los emite el vigía de `apps/api` (`node ace aaa:vigilar`, que sondea `GET /health` de cada nodo; ver `apps/api/app/network/sesiones/README.md`). No consume eventos: la caché la mantiene A1.
@@ -37,10 +38,13 @@ Además, en todo Accept:
 | `Framed-IPv6-Prefix`           | `ipv6.modo = radius_servicio` (/64 de enlace)      |
 | `Delegated-IPv6-Prefix`        | `ipv6.modo = radius_servicio` (/56 o /48 delegado) |
 | `Framed-IPv6-Pool`             | `ipv6.modo = radius_pool` (pool de enlace)         |
+| `Delegated-IPv6-Prefix-Pool`   | `ipv6.modo = radius_pool` (pool de delegación) ¹   |
 | `Mikrotik-Delegated-IPv6-Pool` | `ipv6.modo = radius_pool` (pool de delegación) ¹   |
 | `Acct-Interim-Interval`        | siempre, 300                                       |
 
-¹ FreeRADIUS 3.2 no define `Delegated-IPv6-Pool`; RouterOS usa el VSA `Mikrotik-Delegated-IPv6-Pool` (vendor 14988, atributo 22).
+¹ El "Delegated-IPv6-Pool" del brief es `Delegated-IPv6-Prefix-Pool` (RFC 6911, atributo 171) en FreeRADIUS 3.2; RouterOS lee el VSA `Mikrotik-Delegated-IPv6-Pool` (vendor 14988, atributo 22). Se mandan los dos. El /56 que eligió el router no llega en el accounting de RouterOS 7.24.5: lo lee `apps/api` del binding DHCPv6-PD (`app/network/sesiones/README.md`).
+
+`Mikrotik-Rate-Limit` (semana 2): si el registro trae `plan.rate_limit` / `plan.rate_limit_limitado` (cadena completa de `apps/api/app/network/velocidad.ts`, `contratos/aaa.md`), se manda tal cual; si no (registros viejos), `subida/bajada` como antes.
 
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
 
@@ -56,6 +60,19 @@ El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la pá
 | Redis no acepta el job en 1,5 s                         | 503  | fail → sin respuesta: el NAS reintenta           |
 
 `aaa` no escribe en Postgres ni decide nada sobre la sesión. RouterOS 7.24.5 no manda `Delegated-IPv6-Prefix` en accounting (lo comprobó el PM): el worker lo toma de la asignación vigente en modo `radius_servicio` (ver `apps/api/app/network/sesiones/README.md`).
+
+## Observabilidad (semana 2, tarea 5)
+
+`GET /metrics` (texto Prometheus 0.0.4; con `METRICS_TOKEN` exige `Authorization: Bearer <token>`, vacío = abierto en la red interna):
+
+| Métrica                                       | Tipo                    | Etiquetas                                                                               |
+| --------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
+| `argosisp_aaa_autorizaciones_total`           | counter                 | `resultado` = `accept` (200), `reject` (401, retirado), `notfound` (404), `error` (5xx) |
+| `argosisp_aaa_autorizacion_duracion_segundos` | histogram (0,005 a 1 s) | `resultado`                                                                             |
+| `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                 |
+| `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                       |
+
+Autorizaciones por segundo: `rate(argosisp_aaa_autorizaciones_total[1m])`; p95: `histogram_quantile(0.95, sum by (le) (rate(argosisp_aaa_autorizacion_duracion_segundos_bucket[5m])))`. Cada línea de log lleva `request_id` (el `X-Request-Id` de la petición o un UUID nuevo; se devuelve en la respuesta).
 
 ## Comandos
 
@@ -155,6 +172,50 @@ DB_DATABASE=argosisp_test_a2 PORT=3422 node ace test --files tests/network/freer
 - Publica el 3799 del contenedor en `127.0.0.6:<puerto libre>` (el `nas_ip` del router de la prueba); FreeRADIUS llega a `aaa` por `host.docker.internal`.
 - Sin Docker se omite (`AAA_PRUEBAS_DOCKER=0` también la omite). Tarda unos 15 s.
 - Las de `services/aaa` (`pnpm --filter @argosisp/aaa test`, `test/freeradius.test.ts`) y `services/coa` (`test/nas.test.ts`, firma contra `radclient`) siguen cubriendo cada servicio por separado.
+
+## Prueba de carga (semana 2): `pnpm aaa:carga`
+
+Criterio del plan: 200 reconexiones PPPoE simultáneas dual-stack, **cero rechazos por timeout y p95 de autorización < 100 ms**.
+
+```
+NODE_ENV=test DB_DATABASE=argosisp_test_a2 PORT=3422 pnpm aaa:carga
+# opcionales: AAA_CARGA_CLIENTES=200  AAA_CARGA_REPETICIONES=3  AAA_CARGA_SALIDA=res.json  AAA_CARGA_LOG=aaa.log
+```
+
+Es `apps/api/tests/network/carga_radius.spec.ts` (se omite sin `AAA_CARGA=1` o sin Docker). Monta el camino real, cada pieza en su proceso como en el compose:
+
+```
+generador (carga/cli.ts, proceso propio) ──UDP──▶ FreeRADIUS 3.2.10 (Docker, config del repo, cliente mikrotik-lab)
+  → rlm_rest → aaa (proceso, valores por defecto de producción) → Redis | GET /internal/aaa/servicio (API, Postgres)
+  → accounting → BullMQ → sesiones:worker (proceso) → network.sesiones
+```
+
+- **Generador** (`carga/generador.ts`, sin dependencias): por cliente, Accounting **Stop** de la sesión anterior (Lost-Carrier) → **Access-Request CHAP** con `Message-Authenticator` (como RouterOS 7.15+) → Accounting **Start** con `Framed-IP-Address` y `Framed-IPv6-Prefix`. Mide la latencia Access-Request → Accept en el cliente (FreeRADIUS + aaa + Redis o API) y cuenta como timeout lo que tarda más de 1 s (`/radius timeout` del laboratorio). Comprueba que cada Accept trae `/64` y `/56`. `node services/aaa/carga/cli.ts <opciones.json>` sirve también contra un FreeRADIUS de laboratorio.
+- **Rondas:** arranque (procesos recién iniciados, Redis vacío) y tres pares de reconexión con Redis vaciado (todas las autorizaciones por la API) y con caché caliente.
+- **Comprueba:** 200 Accept por ronda, cero timeouts, cero rechazos, accounting sin pérdidas, `network.sesiones` con 200 sesiones abiertas (IPv4, /64 y /56) y las anteriores cerradas; p95 (mediana de las repeticiones) < 100 ms con caché caliente y < 400 ms con Redis vacío.
+
+### Resultados (2026-10-16, contenedor de 4 vCPU compartido con otros agentes, loadavg 7)
+
+| Ronda (200 clientes)                  | Timeouts | p50 ms | p95 ms  | p99 ms  | máx ms  |
+| ------------------------------------- | -------- | ------ | ------- | ------- | ------- |
+| Arranque, Redis vacío                 | 0        | 225    | 363     | 373     | 375     |
+| Reconexión, Redis vacío (3 rondas)    | 0        | 86–131 | 189–242 | 200–282 | 205–301 |
+| Reconexión, caché caliente (3 rondas) | 0        | 58–64  | 82–166  | 88–175  | 91–179  |
+| Otra corrida, caché caliente          | 0        | 41–77  | 60–106  | 62–111  | 65–126  |
+
+Cero rechazos y cero timeouts en todas las rondas desde los arreglos. Dentro de `aaa`, una autorización con caché caliente tarda p50 5–12 ms y p95 20–37 ms bajo la ráfaga; el resto del p95 del cliente es la cola en FreeRADIUS y Docker con la máquina saturada por otros procesos (el p95 con caché caliente varía de 55 a 166 ms entre corridas idénticas). **El criterio de < 100 ms con caché caliente se cumple en la mediana solo cuando la máquina no está saturada**; hay que repetir la prueba en el hardware del laboratorio (pedido a A6 en `.claude/integration/a2.md`). Con Redis vacío el p95 queda en ~200 ms: lo limita la API (una consulta HTTP por usuario, ~3 ms cada una en serie); el arreglo es del lado de A1 (consulta por lotes y repoblado de Redis, pedidos en `a2.md`).
+
+### Cuellos de botella encontrados y arreglados (antes → después, misma máquina)
+
+| Hallazgo                                                                                                                                                                            | Arreglo                                                                                                       | Efecto                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `AAA_API_TIMEOUT_MS=300`: con Redis vacío y 200 consultas a la vez la API pasaba de 300 ms → 503 → Reject (FreeRADIUS lo demora 1 s con `reject_delay` → el NAS lo ve como timeout) | Timeout 600 ms (Redis 150 + API 600 < 800 ms de rlm_rest)                                                     | De 2–166 timeouts a 0 en la ronda de arranque                                  |
+| `fetch` abría un socket por consulta a la API: 200 handshakes simultáneos                                                                                                           | Agente keep-alive con 16 conexiones (`AAA_API_CONEXIONES`) y calentamiento al arrancar (`FuenteApi.calentar`) | Arranque p95 925 → 363 ms                                                      |
+| `post-auth` llamaba a `aaa` en cada Accept solo para un log de nivel debug: dos HTTP por autorización                                                                               | `post-auth` solo en `Post-Auth-Type REJECT` (registra el rechazo con su causa)                                | La mitad de peticiones HTTP en FreeRADIUS por login                            |
+| Cada paquete de accounting era un `Queue.add` (script Lua + escritura) y cada GET su propia escritura; en esta máquina cada syscall cuesta ~50 µs                                   | `addBulk` por tick en `ColaAccountingBullmq` y `enableAutoPipelining` en el Redis de autorización             | Caché caliente (sin API) p95 60–130 → 25–80 ms con fixtures, sin API ni worker |
+| El generador en el proceso de la prueba compartía bucle con la API y el worker                                                                                                      | Generador y `sesiones:worker` en procesos propios                                                             | Mide lo que vería el NAS                                                       |
+
+Probado y descartado: subir el pool de hilos de FreeRADIUS (`start_servers` 16–32, `max_servers` 64) no mejoró de forma medible en esta máquina; queda la variable `AAA_CARGA_RADIUSD` para montar otro `radiusd.conf` y repetir la comparación en el laboratorio.
 
 ## Dependencias
 
