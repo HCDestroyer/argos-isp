@@ -34,6 +34,8 @@ import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
 import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
+import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
+import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
 import CrearZona from '#core/actions/crear_zona'
 import EditarZona from '#core/actions/editar_zona'
 import { buscarClientes, dimensionesDeCliente, listarZonas, verCliente } from '#core/consultas/clientes'
@@ -300,6 +302,42 @@ const clientes: Ruta[] = [
             exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
             if (cuerpo.zona_id !== undefined) exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
             return new EditarCliente().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/vincular-telegram',
+        operacion: 'clientesVincularTelegram',
+        resumen: 'Vincular el chat de Telegram del cliente',
+        descripcion:
+            'Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.vincular_telegram',
+        cuerpo: v.vincularTelegramValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente con el chat vinculado', esquema: Cliente },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new VincularTelegramCliente().execute(
+                { id, chat_id: cuerpo.chat_id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/desvincular-telegram',
+        operacion: 'clientesDesvincularTelegram',
+        resumen: 'Quitar el chat de Telegram del cliente',
+        etiqueta: 'clientes',
+        permiso: 'clientes.desvincular_telegram',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Cliente sin chat de Telegram', esquema: Cliente },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
         },
     }),
     definirRuta({

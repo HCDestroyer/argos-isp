@@ -103,6 +103,17 @@ export const listarClientesValidator = vine.compile(
     }),
 )
 
+/** `POST /clientes/:id/vincular-telegram` (el bot de A6 llama la acción directamente). */
+export const vincularTelegramValidator = vine.compile(
+    vine.object({
+        chat_id: vine
+            .string()
+            .trim()
+            .regex(/^-?\d{1,20}$/)
+            .meta({ description: 'chat id de Telegram (entero con signo, como texto)' }),
+    }),
+)
+
 export const crearZonaValidator = vine.compile(
     vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100) }),
 )
