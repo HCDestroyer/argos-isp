@@ -92,6 +92,31 @@ export interface CatalogoEventos {
         servicio_id: number
         campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac'>
     }
+    /**
+     * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
+     * reuso, garantizado, ráfaga o prioridad del plan (`router_id: null`, afecta todos los routers)
+     * o su excepción en un router (`router_id`), o el `rate_limit_override`. A2 recalcula los
+     * padres y perfiles PPP del plan; `aaa-cache` reescribe `aaa:user:*` de sus servicios.
+     */
+    'plan.velocidad_cambiada': {
+        plan_id: number
+        router_id: number | null
+        campos: string[]
+    }
+    /**
+     * Cambió el control de velocidad de un router (`routers.cambiar_control_velocidad`) o la
+     * capacidad del enlace (`routers.editar`). `de`/`a` iguales si solo cambió la capacidad. A2
+     * ejecuta el cambio en el router (padres, árbol, PCQ) por lotes.
+     */
+    'router.control_cambiado': {
+        router_id: number
+        de: 'simple' | 'arbol_pcq'
+        a: 'simple' | 'arbol_pcq'
+        capacidad_bajada_kbps: number | null
+        capacidad_subida_kbps: number | null
+        campos: Array<'control_velocidad' | 'capacidad'>
+        motivo: string | null
+    }
     'asignacion.cambiada': {
         servicio_id: number
         ipv4: string[]
@@ -163,6 +188,8 @@ export const EVENTOS = [
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
     'asignacion.cambiada',
+    'plan.velocidad_cambiada',
+    'router.control_cambiado',
     'sesion.iniciada',
     'sesion.terminada',
     'sesion.desconexion_solicitada',

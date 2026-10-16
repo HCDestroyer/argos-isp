@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrarOpcional } from '#shared/cifrado'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
+import type { ControlVelocidad } from '#network/velocidad'
 
 export interface DatosRouter {
     nombre?: string
@@ -10,11 +11,14 @@ export interface DatosRouter {
     radius_secret?: string | null
     nas_ip?: string
     modo_seguridad?: 'radius' | 'api'
-    modo_velocidad?: 'simple' | 'pcq'
+    capacidad_bajada_kbps?: number | null
+    capacidad_subida_kbps?: number | null
     activo?: boolean
 }
 
 export interface EntradaCrearRouter extends DatosRouter {
+    /** en el alta; después solo con `CambiarControlVelocidad` */
+    control_velocidad?: ControlVelocidad
     nombre: string
     host: string
     nas_ip: string
@@ -35,7 +39,14 @@ export function columnasRouter(datos: DatosRouter): Record<string, unknown> {
 
 /** Instantánea auditable: las credenciales se registran solo como "definida" o null. */
 export function auditableRouter(router: RouterVista) {
-    const { tiene_api_password: api, tiene_radius_secret: secreto, ...resto } = router
+    // modo_velocidad es derivado de control_velocidad: no se audita dos veces
+    const {
+        tiene_api_password: api,
+        tiene_radius_secret: secreto,
+        modo_velocidad: derivado,
+        ...resto
+    } = router
+    void derivado
     return { ...resto, api_password: api ? 'definida' : null, radius_secret: secreto ? 'definido' : null }
 }
 

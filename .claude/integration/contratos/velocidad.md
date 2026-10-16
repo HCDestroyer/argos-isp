@@ -53,3 +53,14 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
 - **Prioridades:** 1 a 8 según el plan. Corporativos con prioridad alta, residenciales con 8.
 - **Cambios auditados e idempotentes:** cada escritura de cola, perfil, lista o mangle queda en `audit.red`; el reconciliador de `contratos/routeros.md` también corrige colas, listas y padres.
 - **Cambio de modo de un router:** acción explícita `routers.cambiar_control_velocidad` con vista previa de lo que se crea y lo que se borra. Ejecuta por lotes y es reversible.
+
+## Implementación (A1, semana 2)
+
+- **Función única:** `apps/api/app/network/velocidad.ts`.
+  - `rateLimitServicio(planEfectivo, estado)`: `Mikrotik-Rate-Limit` completo. Activo: velocidad normal con ráfaga, o el `rate_limit_override` del router. `limitado`, `suspendido` y `retirado`: velocidad limitada sin ráfaga, con la misma prioridad y el mismo % garantizado.
+  - `limitesPadrePlan(plan, activos)`: `max_limit` y `limit_at` (`subida/bajada`), la prioridad y los mismos valores en kbps.
+  - `velocidadEfectiva(plan, excepcion)`: aplica las excepciones de `planes_routers` (null hereda). `validarVelocidad(plan)`: errores 422 por campo.
+- **Unidades y redondeos:** `k` = 1000 y `M` = 1 000 000 bit/s; múltiplos de 1000 kbps en `M`. CIR y umbral se redondean hacia abajo; el `max-limit` del padre, hacia arriba. Con 0 activos el padre se calcula como 1 (un `max-limit` 0 en RouterOS es "sin límite").
+- **Coherencia:** `garantizado_pct ≤ 100 / reuso` (garantiza Σ `limit-at` de los hijos ≤ `max-limit` del padre), `rafaga_umbral_pct` entre 1 y 99, `rafaga_*_kbps` mayor que la velocidad de esa dirección, prioridad 1..8, reuso 1..64. Las excepciones por router se validan junto con el plan.
+- **Router:** `control_velocidad` reemplaza a `modo_velocidad` (`pcq` → `arbol_pcq`); la vista sigue trayendo `modo_velocidad` derivado y obsoleto. Solo cambia con `POST /routers/:id/cambiar-control-velocidad` (permiso `routers.cambiar_control_velocidad`, solo `admin`), que cambia el campo y emite `router.control_cambiado`. `PUT /routers/:id` cambia la capacidad (mismo evento con `campos: ['capacidad']`).
+- **Eventos:** `plan.velocidad_cambiada` y `router.control_cambiado` (`contratos/eventos.md`).

@@ -12,6 +12,7 @@ Redis `aaa:user:<user_ppp>` (sin TTL) y `GET /internal/aaa/servicio?user_ppp=<us
   "pass_ppp": "v1.<iv>.<tag>.<datos>",
   "estado": "activo",
   "router_id": 1,
+  "control_velocidad": "simple",
   "plan": {
     "id": 1,
     "subida_kbps": 5120,
@@ -19,7 +20,10 @@ Redis `aaa:user:<user_ppp>` (sin TTL) y `GET /internal/aaa/servicio?user_ppp=<us
     "subida_limitada_kbps": 1024,
     "bajada_limitada_kbps": 2048,
     "rate_limit_override": null,
-    "profile_ppp": null
+    "profile_ppp": null,
+    "rate_limit": "5120k/20480k 0/0 0/0 0/0 8 5120k/20480k",
+    "rate_limit_limitado": "1024k/2048k 0/0 0/0 0/0 8 1024k/2048k",
+    "reuso": 1
   },
   "ipv4": { "modo": "estatico", "ip": "10.10.1.10" },
   "ipv6": { "modo": "radius_servicio", "prefijo_enlace": "2001:db8:101:1::/64", "prefijo_delegado": "2001:db8:300:100::/56" }
@@ -29,6 +33,8 @@ Redis `aaa:user:<user_ppp>` (sin TTL) y `GET /internal/aaa/servicio?user_ppp=<us
 - **Solo servicios `pppoe`** (semana 2, `contratos/routeros.md`): un servicio `ip_estatica` o `dhcp_fija` no tiene `user_ppp` ni `pass_ppp` y es inexistente para `aaa` (no está en Redis; el endpoint no lo encuentra). Al cambiar un servicio de `pppoe` a otro tipo, la clave del `user_ppp` viejo recibe la lápida (`eliminado`, `user_ppp`, `servicio_id`, `version`), nunca credenciales.
 - `estado`: `activo` | `limitado` | `suspendido` | `retirado` (`core.servicios.estado` tal cual; `aaa` no decide estados).
 - `plan.*`: de `network.planes`; `rate_limit_override` y `profile_ppp` de `network.planes_routers` para el router del servicio (null si no hay fila o no está definido).
+- `plan.rate_limit` y `plan.rate_limit_limitado` (semana 2, `contratos/velocidad.md`): la cadena **completa** de `Mikrotik-Rate-Limit` (`rx/tx ráfaga-rx/ráfaga-tx umbral-rx/umbral-tx tiempo-rx/tiempo-tx prioridad limit-at-rx/limit-at-tx`) que calcula `rateLimitServicio(planEfectivo, estado)` de `apps/api/app/network/velocidad.ts` con el plan y sus excepciones del router. `rate_limit` (estado activo) ya incluye `rate_limit_override` si el router lo define; `rate_limit_limitado` va sin ráfaga. `aaa` manda una de las dos tal cual, sin recalcular (así PPPoE y WISP no difieren). Unidades: `k` = 1000, `M` = 1 000 000; un múltiplo de 1000 kbps sale en `M`. Un plan sin campos nuevos conserva su velocidad; lo único nuevo es el `limit-at` que sale del reuso (con reuso 1, `limit-at` = MIR). `subida_kbps`, `bajada_kbps`, `*_limitada_kbps` y `rate_limit_override` se siguen enviando por compatibilidad.
+- `plan.reuso` (reuso efectivo en el router) y `control_velocidad` (`network.routers`): con reuso > 1 en modo `simple`, `aaa` manda `Mikrotik-Group = plan-<plan.id>` (perfil con `parent-queue`); en `arbol_pcq` el marcado lo hace el dispatcher.
 - `ipv4`: `{"modo":"estatico","ip":"<ipv4>"}` con la asignación vigente de `network.ipv4_asignaciones`, `{"modo":"pool","pool":"<planes_routers.pool_ipv4>"}`, o `null`.
 - `ipv6`: según `core.servicios.ipv6_modo`. `radius_servicio` → `{"modo":"radius_servicio","prefijo_enlace":"<.../64>","prefijo_delegado":"<.../56|/48>"}` (asignaciones vigentes, `null` si falta alguna); `radius_pool` → `{"modo":"radius_pool","pool_enlace":"<planes_routers.pool_ipv6_enlace>","pool_delegacion":"<planes_routers.pool_ipv6_delegacion>"}`; `duid`, `estatico`, `ninguno` → `{"modo":"<modo>"}`. `null` equivale a `ninguno`.
 - `pass_ppp`: siempre cifrada, nunca en claro en Redis ni en la respuesta HTTP.
