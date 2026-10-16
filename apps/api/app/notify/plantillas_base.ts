@@ -57,7 +57,9 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         evento: 'alerta.aaa.recuperado',
         canal: 'telegram',
         asunto: null,
-        cuerpo: 'RESUELTO · RADIUS (aaa) recuperado\nNodo: {{alerta.nodo}}\nCaído desde: {{alerta.desde}} ({{alerta.duracion}})',
+        cuerpo:
+            'RESUELTO · RADIUS (aaa) recuperado\nNodo: {{alerta.nodo}}\nCaído desde: {{alerta.desde}} hasta {{alerta.hasta}} ({{alerta.duracion}})' +
+            '{{#alerta.ultimo_error}}\nÚltimo error: {{alerta.ultimo_error}}{{/alerta.ultimo_error}}',
     },
     {
         evento: 'alerta.coa.fallido',

@@ -146,10 +146,15 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                 if (!incidente) return sinAlerta(null)
                 const desdeIso = texto(incidente.detalle.desde) || texto(p.desde)
                 const desde = desdeIso ? DateTime.fromISO(desdeIso).toJSDate() : incidente.abierto_en
+                // `hasta` = primer health check bueno (contrato de A2); si no viene, el procesamiento
+                const hastaDt = texto(p.hasta) ? DateTime.fromISO(texto(p.hasta)) : ahora
+                const hasta = hastaDt.isValid ? hastaDt.toJSDate() : ahora.toJSDate()
                 return avisar(incidente, 'cerrado', 'alerta.aaa.recuperado', {
                     nodo,
                     desde: instanteLocal(desde),
-                    duracion: duracion(desde, ahora.toJSDate()),
+                    hasta: instanteLocal(hasta),
+                    duracion: duracion(desde, hasta),
+                    ultimo_error: texto(p.ultimo_error),
                 })
             }
             case 'coa.fallido': {

@@ -265,6 +265,22 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js sesiones:worker'"]
 
+  # Vigía de aaa (A2): health check de los nodos aaa; emite aaa.caido / aaa.recuperado por outbox
+  # (notify los manda al chat del equipo). Perfil lab, como aaa. Una réplica basta (tiene lock).
+  aaa-vigia:
+    <<: *proceso-fondo
+    profiles: [lab]
+    command: [node, ace.js, aaa:vigilar]
+    environment:
+      <<: *api-env
+      # nombre=url separados por coma (segundo nodo: aaa=http://aaa:3100,aaa2=http://<ip>:3100)
+      AAA_SALUD_NODOS: ${AAA_SALUD_NODOS:-aaa=http://aaa:3100}
+      AAA_CAIDO_TRAS_MS: ${AAA_CAIDO_TRAS_MS:-60000}
+      AAA_SALUD_CADA_MS: ${AAA_SALUD_CADA_MS:-5000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js aaa:vigilar'"]
+
   # Notificaciones (A6): cola de envíos, cron de recordatorios y cron mensual de particiones.
   worker:
     <<: *proceso-fondo
@@ -417,6 +433,9 @@ services:
       COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
       COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      # Suspender sesiones con IPv6: coa (sin reconectar; IPv6 bloqueado con reset) o disconnect
+      # (reconecta con el perfil suspendido y el router redirige IPv6 a /corte). Decide el PM.
+      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
     ports:
       - 127.0.0.1:${COA_PORT_HOST:-3200}:3200
     depends_on:

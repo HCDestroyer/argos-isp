@@ -98,7 +98,9 @@ test.group('notify · alertas internas', (group) => {
         assert.include(envios[0]!.cuerpo, 'ECONNREFUSED redis')
         assert.deepEqual([...new Set(cola.ids)], [envios[0]!.id], 'la reentrega reencola el mismo envío')
 
-        const recuperado = evento('aaa.recuperado', { nodo, desde, ultimo_error: null })
+        // Payload del contrato de A2: { nodo, desde, hasta, ultimo_error }; hasta = desde + 40 min
+        const hasta = DateTime.fromISO(desde!).plus({ minutes: 40 }).toISO()
+        const recuperado = evento('aaa.recuperado', { nodo, desde, hasta, ultimo_error: 'ECONNREFUSED' })
         await consumidor.procesar(recuperado)
         await consumidor.procesar(recuperado)
         await consumidor.procesar(evento('aaa.recuperado', { nodo, desde }))
@@ -109,7 +111,8 @@ test.group('notify · alertas internas', (group) => {
         envios = await enviosDe(abierto!.id)
         assert.lengthOf(envios, 2)
         assert.equal(envios[1]!.evento, 'alerta.aaa.recuperado')
-        assert.match(envios[1]!.cuerpo, /RESUELTO[\s\S]*1[12] min/)
+        assert.match(envios[1]!.cuerpo, /RESUELTO[\s\S]*\(40 min\)/)
+        assert.include(envios[1]!.cuerpo, 'Último error: ECONNREFUSED')
 
         // Una caída posterior es otro incidente con su propia alerta
         await consumidor.procesar(evento('aaa.caido', { nodo, desde: DateTime.utc().toISO() }))
