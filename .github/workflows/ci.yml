@@ -103,7 +103,8 @@ jobs:
         run: pnpm test
 
       # Ciclo completo de infra/backups sobre la base que dejaron las pruebas: dump → base nueva →
-      # filas por tabla iguales al dump y a la base de origen → migraciones al día.
+      # filas por tabla iguales al dump y a la base de origen → migraciones al día. Incluye el tar de
+      # los comprobantes que subieron las pruebas (COMPROBANTES_DIR por defecto de apps/api).
       - name: Respaldo y restauración
         env:
           PGHOST: localhost
@@ -113,12 +114,16 @@ jobs:
           BACKUP_BASE: argosisp_test
           BACKUP_DIR: ${{ runner.temp }}/respaldos
           DB_OWNER_USER: argosisp
+          COMPROBANTES_DIR: apps/api/storage/comprobantes
         run: |
           pg_dump --version
+          mkdir -p "$COMPROBANTES_DIR"
           infra/backups/respaldar.sh
           infra/backups/restaurar.sh "$(ls "$BACKUP_DIR"/argosisp_test-*.dump)" \
             --base argosisp_restaurada --comparar-con argosisp_test \
+            --comprobantes-dir "$RUNNER_TEMP/comprobantes-restaurados" \
             --migrar 'cd apps/api && node ace migration:run --force'
+          diff -r "$COMPROBANTES_DIR" "$RUNNER_TEMP/comprobantes-restaurados"
 
       - name: Build
         run: pnpm build

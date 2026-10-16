@@ -141,10 +141,24 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
         'Tu promesa de pago por {{promesa.monto_q}} venció el {{promesa.vence}} sin completarse. Tu servicio puede ser suspendido.' +
             portal,
     ),
+    // Pago de terceros: a cada dueño de factura distinto del pagador (avisos_pago.ts)
+    ...ambos(
+        'pago.registrado.tercero',
+        'Pago recibido de tu factura {{pago.facturas_cliente}}',
+        'Recibimos el pago de {{#pago.varias_facturas}}tus facturas{{/pago.varias_facturas}}{{^pago.varias_facturas}}tu factura{{/pago.varias_facturas}} {{pago.facturas_cliente}}' +
+            '{{#pago.monto_cliente_q}} por {{pago.monto_cliente_q}}{{/pago.monto_cliente_q}}, hecho por {{pagador.nombre}}. ¡Gracias!',
+    ),
+    ...ambos(
+        'comprobante.recibido',
+        'Recibimos tu comprobante de pago',
+        'Recibimos tu comprobante de pago{{#comprobante.monto_q}} por {{comprobante.monto_q}}{{/comprobante.monto_q}}' +
+            '{{#comprobante.referencia}} (referencia {{comprobante.referencia}}){{/comprobante.referencia}}. Lo revisaremos y te avisaremos cuando quede aplicado a tu cuenta.',
+    ),
+    // Al aprobar, este es el único aviso de pago del pagador (pago.registrado se omite, avisos_pago.ts)
     ...ambos(
         'comprobante.aprobado',
         'Comprobante de pago aprobado',
-        'Verificamos tu comprobante de pago. Ya está aplicado a tu cuenta.',
+        'Verificamos tu comprobante de pago{{#pago.monto_q}} por {{pago.monto_q}}{{/pago.monto_q}}. Ya está aplicado a tu cuenta. ¡Gracias!',
     ),
     ...ambos(
         'comprobante.rechazado',
