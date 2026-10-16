@@ -1,13 +1,15 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import type { MetodoPago } from '#shared/eventos'
-import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
+import { CERO, aTexto, dec, tieneCentavosExactos, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import {
     aplicarAFacturas,
     aplicarAnticipos,
-    bloquearCliente,
+    bloquearClientes,
+    clientesDelPago,
+    duenosDeFacturas,
     facturasPendientes,
     serviciosDe,
 } from '#billing/cobros'
@@ -84,7 +86,11 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 { field: 'cliente_id', message: `El cliente ${input.cliente_id} no existe`, rule: 'exists' },
             ])
         }
-        await bloquearCliente(t.trx, input.cliente_id)
+        // pago de terceros: se bloquean el pagador y los dueños de las facturas pedidas
+        await bloquearClientes(t.trx, [
+            input.cliente_id,
+            ...(await duenosDeFacturas(t.trx, input.facturas ?? [])),
+        ])
 
         const referencia = input.referencia?.trim() || null
         const bancario = await this.datosBancarios(t, input, referencia)
@@ -135,14 +141,19 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         t.fijarEntidad('pago', pagoId)
 
         const facturas = await facturasPendientes(t.trx, input.cliente_id, input.facturas ?? [])
-        const { aplicaciones, aplicado, restante } = await aplicarAFacturas(t.trx, pagoId, monto, facturas)
+        const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, monto, facturas)
 
+        // un solo asiento: el débito por el total y el crédito en el auxiliar CxC de cada dueño
         const movimientos: LineaAsiento[] = [{ cuenta: cuentaDebe, debe: aTexto(monto) }]
-        if (aplicado.gt(0)) {
+        const porCliente = new Map<number, Dec>()
+        for (const a of aplicaciones) {
+            porCliente.set(a.cliente_id, (porCliente.get(a.cliente_id) ?? CERO).plus(a.monto))
+        }
+        for (const [clienteId, aplicadoCliente] of [...porCliente].sort(([x], [y]) => x - y)) {
             movimientos.push({
                 cuenta: CUENTAS.CXC_CLIENTES,
-                haber: aTexto(aplicado),
-                cliente_id: input.cliente_id,
+                haber: aTexto(aplicadoCliente),
+                cliente_id: clienteId,
             })
         }
         if (restante.gt(0)) {
@@ -174,6 +185,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             monto: aTexto(monto),
             metodo: input.metodo,
             facturas: aplicaciones.map((a) => a.factura_id),
+            clientes: clientesDelPago(input.cliente_id, aplicaciones),
         })
 
         const servicios = []

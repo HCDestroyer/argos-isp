@@ -1311,6 +1311,9 @@ export interface components {
         AplicacionPago: {
             factura_id: number;
             monto: components["schemas"]["Dinero"];
+            /** @description Dueño de la factura (pago de terceros: puede no ser el pagador) */
+            cliente_id?: number;
+            cliente_nombre?: string;
         };
         Asiento: {
             id: number;

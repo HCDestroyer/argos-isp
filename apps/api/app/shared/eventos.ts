@@ -38,10 +38,17 @@ interface PayloadFactura {
 
 interface PayloadPago {
     pago_id: number
+    /** quien paga */
     cliente_id: number
     monto: Dinero
     metodo: MetodoPago
     facturas: number[]
+    /**
+     * el pagador y los dueños de las facturas aplicadas (pago de terceros: una persona paga la
+     * factura de un familiar). Siempre lo envía billing desde 2026-10-16; opcional por eventos
+     * anteriores.
+     */
+    clientes?: number[]
 }
 
 interface PayloadPromesa {

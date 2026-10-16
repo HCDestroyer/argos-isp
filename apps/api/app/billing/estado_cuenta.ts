@@ -64,9 +64,22 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
         .from('ledger.movimientos as m')
         .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        // pago de terceros: el movimiento del dueño dice quién pagó
+        .leftJoin('billing.pagos as p', (j) =>
+            j.on('p.id', 'a.origen_id').andOnVal('a.origen_tipo', '=', 'pago'),
+        )
+        .leftJoin('core.clientes as pagador', 'pagador.id', 'p.cliente_id')
         .where('c.codigo', CUENTAS.CXC_CLIENTES)
         .where('m.cliente_id', clienteId)
-        .groupBy('a.id', 'a.fecha', 'a.origen_tipo', 'a.origen_id', 'a.descripcion')
+        .groupBy(
+            'a.id',
+            'a.fecha',
+            'a.origen_tipo',
+            'a.origen_id',
+            'a.descripcion',
+            'p.cliente_id',
+            'pagador.nombre',
+        )
         .orderBy([
             { column: 'a.fecha', order: 'asc' },
             { column: 'a.id', order: 'asc' },
@@ -76,7 +89,10 @@ export async function estadoCuenta(clienteId: number): Promise<EstadoCuenta> {
             db.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
             'a.origen_tipo',
             'a.origen_id',
-            'a.descripcion',
+            db.raw(
+                "case when p.cliente_id is not null and p.cliente_id <> ? then a.descripcion || ' · pagado por ' || pagador.nombre else a.descripcion end as descripcion",
+                [clienteId],
+            ),
             db.raw('sum(m.debe)::text as cargo'),
             db.raw('sum(m.haber)::text as abono'),
         )) as Array<{

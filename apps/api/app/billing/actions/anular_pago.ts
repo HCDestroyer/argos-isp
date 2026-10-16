@@ -5,7 +5,8 @@ import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import {
     aplicarAnticipos,
-    bloquearCliente,
+    bloquearClientes,
+    clientesDelPago,
     serviciosDe,
     sumarAPagado,
     type FacturaPendiente,
@@ -21,7 +22,9 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  *   `RevertirAsiento` (asiento espejo con `reversa_de`).
  * - Lo aplicado se descuenta de cada factura y su estado se recalcula (`vencida` si ya había
  *   vencido). Las filas de `pagos_aplicaciones` quedan como historia del pago anulado.
- * - Evento `pago.anulado`; luego aplica otros anticipos del cliente si los hay y re-evalúa cada
+ * - Pago de terceros: revierte también los auxiliares CxC de los dueños de las facturas (el
+ *   reverso es espejo del asiento) y re-evalúa sus servicios.
+ * - Evento `pago.anulado` (con `clientes`); luego aplica otros anticipos del cliente si los hay y re-evalúa cada
  *   servicio afectado (puede volver a limitar o cortar, respetando la hora de corte).
  */
 
@@ -41,7 +44,13 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, PagoVist
             .select('cliente_id')
             .first()
         if (!previo) throw new NoEncontrado(`El pago ${input.pago_id} no existe`)
-        await bloquearCliente(t.trx, previo.cliente_id)
+        // pago de terceros: también los dueños de las facturas a las que se aplicó
+        const duenos = (await t.trx
+            .from('billing.pagos_aplicaciones as a')
+            .join('billing.facturas as f', 'f.id', 'a.factura_id')
+            .where('a.pago_id', input.pago_id)
+            .distinct('f.cliente_id')) as Array<{ cliente_id: number }>
+        await bloquearClientes(t.trx, [previo.cliente_id, ...duenos.map((d) => d.cliente_id)])
 
         const pago = (await t.trx
             .from('billing.pagos')
@@ -75,7 +84,7 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, PagoVist
             )
             .orderBy('id', 'asc')
             .forUpdate()
-            .select('id', 'servicio_id', 'total', 'pagado', 'vencida_en')) as FacturaPendiente[]
+            .select('id', 'cliente_id', 'servicio_id', 'total', 'pagado', 'vencida_en')) as FacturaPendiente[]
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!
             await sumarAPagado(t.trx, factura, dec(aplicado.monto).negated())
@@ -115,6 +124,7 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, PagoVist
             monto: pago.monto,
             metodo: pago.metodo,
             facturas: aplicaciones.map((a) => a.factura_id),
+            clientes: clientesDelPago(pago.cliente_id, facturas),
         })
 
         const otras = await aplicarAnticipos(t, pago.cliente_id)

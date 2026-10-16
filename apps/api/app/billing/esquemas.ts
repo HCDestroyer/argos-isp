@@ -170,7 +170,21 @@ export const ResultadoCorte = definirEsquema(
     }),
 )
 
-export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
+export const AplicacionPago = definirEsquema(
+    'AplicacionPago',
+    objeto(
+        {
+            factura_id: id,
+            monto: Dinero,
+            cliente_id: {
+                ...id,
+                description: 'Dueño de la factura (pago de terceros: puede no ser el pagador)',
+            },
+            cliente_nombre: texto,
+        },
+        ['cliente_id', 'cliente_nombre'],
+    ),
+)
 
 export const ServicioEvaluado = definirEsquema(
     'ServicioEvaluado',

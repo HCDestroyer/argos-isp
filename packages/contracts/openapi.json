@@ -10905,6 +10905,14 @@
           },
           "monto": {
             "$ref": "#/components/schemas/Dinero"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Dueño de la factura (pago de terceros: puede no ser el pagador)"
+          },
+          "cliente_nombre": {
+            "type": "string"
           }
         }
       },

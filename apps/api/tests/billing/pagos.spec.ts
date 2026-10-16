@@ -54,7 +54,7 @@ test.group('billing · registrarPago', () => {
         const pago = await pagar(clienteId, '100')
         await afirmarLibroCuadrado(assert)
         const [septiembre] = await facturasDe(servicioId)
-        assert.deepEqual(pago.aplicaciones, [{ factura_id: septiembre!.id, monto: '100.00' }])
+        assert.containSubset(pago.aplicaciones, [{ factura_id: septiembre!.id, monto: '100.00' }])
         assert.containSubset(pago, { monto: '100.00', metodo: 'caja', estado: 'registrado' })
         assert.isNotNull(pago.caja_id)
         assert.deepEqual(
@@ -80,6 +80,7 @@ test.group('billing · registrarPago', () => {
             monto: '100.00',
             metodo: 'caja',
             facturas: [septiembre!.id],
+            clientes: [clienteId],
         })
         assert.equal(await saldoTexto(clienteId), '200.00')
     })
@@ -134,7 +135,7 @@ test.group('billing · registrarPago', () => {
             cuenta_bancaria_id: cuenta.id,
             referencia: unico('boleta'),
         })
-        assert.deepEqual(pago.aplicaciones, [{ factura_id: octubre!.id, monto: '150.00' }])
+        assert.containSubset(pago.aplicaciones, [{ factura_id: octubre!.id, monto: '150.00' }])
         assert.isNull(pago.caja_id)
         const [banco] = await asientoDe('pago', pago.id)
         assert.equal(banco!.codigo, cuenta.cuenta_codigo)

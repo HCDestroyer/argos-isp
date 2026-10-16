@@ -30,7 +30,8 @@ export interface PagoVista {
     banco_origen_nombre: string | null
     cuenta_bancaria_id: number | null
     cuenta_bancaria_nombre: string | null
-    aplicaciones: Array<{ factura_id: number; monto: string }>
+    /** cliente_id/cliente_nombre: dueño de la factura (en un pago de terceros, no es el pagador) */
+    aplicaciones: Array<{ factura_id: number; monto: string; cliente_id: number; cliente_nombre: string }>
     version: number
     created_at: Date
     updated_at: Date
@@ -67,22 +68,37 @@ async function conAplicaciones(
 ): Promise<PagoVista[]> {
     if (pagos.length === 0) return []
     const filas = (await cliente
-        .from('billing.pagos_aplicaciones')
+        .from('billing.pagos_aplicaciones as a')
+        .join('billing.facturas as f', 'f.id', 'a.factura_id')
+        .join('core.clientes as c', 'c.id', 'f.cliente_id')
         .whereIn(
-            'pago_id',
+            'a.pago_id',
             pagos.map((p) => p.id),
         )
-        .orderBy('id', 'asc')
-        .select('pago_id', 'factura_id', 'monto')) as Array<{
+        .orderBy('a.id', 'asc')
+        .select(
+            'a.pago_id',
+            'a.factura_id',
+            'a.monto',
+            'f.cliente_id',
+            'c.nombre as cliente_nombre',
+        )) as Array<{
         pago_id: number
         factura_id: number
         monto: string
+        cliente_id: number
+        cliente_nombre: string
     }>
     return pagos.map((pago) => ({
         ...pago,
         aplicaciones: filas
             .filter((f) => f.pago_id === pago.id)
-            .map((f) => ({ factura_id: f.factura_id, monto: f.monto })),
+            .map((f) => ({
+                factura_id: f.factura_id,
+                monto: f.monto,
+                cliente_id: f.cliente_id,
+                cliente_nombre: f.cliente_nombre,
+            })),
     }))
 }
 

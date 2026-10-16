@@ -232,6 +232,11 @@ const pagos: Ruta[] = [
                 ])
             })
             exigirAlcance(ctx.alcance, { ...dimensiones, ...(cajaId ? { caja: [cajaId] } : {}) })
+            // pago de terceros: cada factura pedida también debe estar en su alcance
+            for (const facturaId of new Set(cuerpo.facturas ?? [])) {
+                const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
+                if (deFactura) exigirAlcance(ctx.alcance, deFactura)
+            }
             return new RegistrarPago().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
         },
     }),
