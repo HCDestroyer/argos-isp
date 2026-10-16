@@ -73,10 +73,9 @@ export async function resolverCliente(
     const comprobanteId = entero(payload.comprobante_id)
     if (comprobanteId) {
         const fila = await cliente
-            .from('billing.comprobantes as c')
-            .join('billing.pagos as p', 'p.id', 'c.pago_id')
-            .where('c.id', comprobanteId)
-            .select('p.cliente_id')
+            .from('billing.comprobantes')
+            .where('id', comprobanteId)
+            .select('cliente_id')
             .first()
         if (fila) return fila.cliente_id as number
     }
@@ -202,6 +201,86 @@ function variablesEstado(payload: Payload): Variables {
     }
 }
 
+async function variablesPagador(cliente: QueryClientContract, pagadorId: number): Promise<Variables> {
+    const fila = await cliente.from('core.clientes').where('id', pagadorId).select('id', 'nombre').first()
+    return { id: pagadorId, nombre: fila?.nombre ?? '' }
+}
+
+function numeroFactura(fila: { id: number; fel_serie: string | null; fel_numero: string | null }): string {
+    return fila.fel_serie && fila.fel_numero ? `${fila.fel_serie}-${fila.fel_numero}` : String(fila.id)
+}
+
+/**
+ * Lo que un pago aplicó a las facturas de un cliente (pago de terceros): `facturas_cliente`
+ * (números separados por coma), `varias_facturas`, `monto_cliente` y `monto_cliente_q`.
+ */
+async function aplicadoAlCliente(
+    cliente: QueryClientContract,
+    pagoId: number,
+    clienteId: number,
+): Promise<Variables> {
+    const filas = (await cliente
+        .from('billing.pagos_aplicaciones as a')
+        .join('billing.facturas as f', 'f.id', 'a.factura_id')
+        .where('a.pago_id', pagoId)
+        .where('f.cliente_id', clienteId)
+        .orderBy('a.id', 'asc')
+        .select('f.id', 'f.fel_serie', 'f.fel_numero', 'a.monto')) as Array<{
+        id: number
+        fel_serie: string | null
+        fel_numero: string | null
+        monto: string
+    }>
+    const numeros = [...new Set(filas.map(numeroFactura))]
+    const total = filas.reduce((suma, f) => suma.plus(f.monto), new Decimal(0))
+    return {
+        facturas_cliente: numeros.join(', '),
+        varias_facturas: numeros.length > 1,
+        monto_cliente: filas.length > 0 ? monto(total) : '',
+        monto_cliente_q: filas.length > 0 ? quetzales(total) : '',
+    }
+}
+
+/** Pago de `billing.pagos` con sus facturas (para `comprobante.aprobado`). */
+async function variablesPago(cliente: QueryClientContract, pagoId: number): Promise<Variables | null> {
+    const fila = await cliente
+        .from('billing.pagos')
+        .where('id', pagoId)
+        .select('id', 'monto', 'metodo', 'created_at')
+        .first()
+    if (!fila) return null
+    const facturas = (await cliente
+        .from('billing.pagos_aplicaciones')
+        .where('pago_id', pagoId)
+        .orderBy('id', 'asc')
+        .select('factura_id')) as Array<{ factura_id: number }>
+    return {
+        id: fila.id,
+        monto: monto(fila.monto),
+        monto_q: quetzales(fila.monto),
+        metodo: fila.metodo,
+        facturas: [...new Set(facturas.map((f) => f.factura_id))].join(', '),
+        fecha: fechaHora(fila.created_at),
+    }
+}
+
+/** Datos del comprobante de depósito: monto, referencia (boleta), fecha del depósito y método. */
+async function variablesComprobante(cliente: QueryClientContract, comprobanteId: number): Promise<Variables> {
+    const fila = await cliente
+        .from('billing.comprobantes')
+        .where('id', comprobanteId)
+        .select('monto', 'referencia', 'metodo', cliente.raw('fecha_deposito::text as fecha_deposito'))
+        .first()
+    if (!fila) return {}
+    return {
+        monto: monto(fila.monto),
+        monto_q: quetzales(fila.monto),
+        referencia: fila.referencia ?? '',
+        metodo: fila.metodo ?? '',
+        fecha_deposito: fila.fecha_deposito ? fechaCorta(fechaCalendario(fila.fecha_deposito)) : '',
+    }
+}
+
 /**
  * Variables completas de un evento para un destinatario. `ahora` se inyecta para que los
  * recordatorios y las pruebas calculen días al vencimiento de forma determinista.
@@ -242,6 +321,15 @@ export async function construirVariables(
             facturas: facturas.join(', '),
             fecha: fechaHora(ahora.toJSDate()),
         }
+        const pagadorId = entero(payload.pagador_id) ?? entero(payload.cliente_id)
+        if (pagadorId) variables.pagador = await variablesPagador(cliente, pagadorId)
+        const pagoId = entero(payload.pago_id)
+        if (pagoId && pagadorId && pagadorId !== destinatario.clienteId) {
+            Object.assign(
+                variables.pago as Variables,
+                await aplicadoAlCliente(cliente, pagoId, destinatario.clienteId),
+            )
+        }
     }
 
     if (evento.startsWith('promesa.')) {
@@ -265,9 +353,17 @@ export async function construirVariables(
     }
 
     if (evento.startsWith('comprobante.')) {
+        const comprobanteId = entero(payload.comprobante_id)
         variables.comprobante = {
-            id: entero(payload.comprobante_id),
+            id: comprobanteId,
             motivo: texto(payload.motivo) ?? texto(payload.motivo_rechazo) ?? '',
+            ...(comprobanteId ? await variablesComprobante(cliente, comprobanteId) : {}),
+        }
+        // comprobante.aprobado: el aviso de pago del pagador (avisos_pago.ts), con los datos del pago
+        const pagoId = entero(payload.pago_id)
+        if (pagoId) {
+            const pago = await variablesPago(cliente, pagoId)
+            if (pago) variables.pago = pago
         }
     }
 

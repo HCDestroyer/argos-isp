@@ -30,8 +30,8 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `aaa.caido` | A2 (`node ace aaa:vigilar`, `RegistrarCaidaAaa`) | `nodo`, `desde` (ISO, primer health check fallido), `ultimo_error` (p. ej. `ECONNREFUSED`, `HTTP 503`, `sin respuesta en 2000 ms`) | A6 (`notify`): alerta por Telegram al equipo |
 | `aaa.recuperado` | A2 (`RegistrarRecuperacionAaa`) | `nodo`, `desde` (el de la caída), `hasta` (ISO, primer health check bueno), `ultimo_error` | A6 (`notify`): aviso de recuperación |
 
-| `comprobante.recibido` | A3 (`RegistrarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null` | A6 (`notify`), si hay plantilla (hoy no la hay) |
-| `comprobante.aprobado` | A3 (`AprobarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id` (el pago creado), `motivo: null` | A6 (`notify`): "Comprobante de pago aprobado" |
+| `comprobante.recibido` | A3 (`RegistrarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null` | A6 (`notify`): "Recibimos tu comprobante de pago" |
+| `comprobante.aprobado` | A3 (`AprobarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id` (el pago creado), `motivo: null` | A6 (`notify`): "Comprobante de pago aprobado" (el único aviso de pago del pagador) |
 | `comprobante.rechazado` | A3 (`RechazarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo` (texto del revisor) | A6 (`notify`): "Comprobante de pago rechazado" con `{{comprobante.motivo}}` |
 
 `aaa.caido` se emite cuando un nodo lleva `AAA_CAIDO_TRAS_MS` (60 s) sin responder `GET /health` con 2xx; una sola vez por caída (las acciones miran el último evento del nodo en `audit.outbox`), y `aaa.recuperado` solo después de un `aaa.caido`. El payload de la tabla de `CLAUDE.md` (`nodo`, `desde`) sigue valiendo: `ultimo_error` es un campo más.
@@ -66,14 +66,14 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 
 - `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
 - `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.
-- Consumidores: `billing` revisa las promesas de cada cliente de `clientes`; `notify` debería avisar también a cada dueño de factura distinto del pagador.
+- Consumidores: `billing` revisa las promesas de cada cliente de `clientes`; `notify` avisa al pagador (`pago.registrado`) y a cada dueño de factura distinto del pagador (`pago.registrado.tercero`: "Recibimos el pago de tu factura N, hecho por <pagador>"), idempotente por (evento, cliente).
 
 ## Payloads de comprobantes (A3)
 
 `comprobante.recibido`, `comprobante.aprobado` y `comprobante.rechazado`: `{ comprobante_id, cliente_id, pago_id, motivo }`, siempre con las cuatro claves (`null` cuando no aplica).
 
 - `cliente_id` es el dueño del comprobante (quien depositó); notify no necesita resolverlo por `billing.pagos` (un comprobante pendiente o rechazado no tiene pago).
-- Al aprobar, el pago emite además su propio `pago.registrado` en la misma transacción: notify debería avisar una sola vez (por ejemplo, solo `comprobante.aprobado` cuando el pago viene de un comprobante, o solo `pago.registrado`). Lo decide A6.
+- Al aprobar, el pago emite además su propio `pago.registrado` en la misma transacción. Decisión de A6 (día 4): el pagador recibe un solo aviso, el de `comprobante.aprobado`; notify omite `pago.registrado` para el pagador cuando `billing.comprobantes.pago_id` es ese pago (y la plantilla de `comprobante.aprobado` está activa), y deduplica por `pago_id`. Los dueños de facturas distintos del pagador reciben igual su aviso de `pago.registrado` (`pago.registrado.tercero`). Detalle en `apps/api/app/notify/README.md`, "Avisos de pago".
 
 ## Pruebas
 
