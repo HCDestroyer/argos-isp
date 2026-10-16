@@ -56,7 +56,7 @@ import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
 import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
 import EditarContactoPortal from '#portal/actions/editar_contacto'
-import GenerarVinculoTelegram from '#portal/actions/generar_vinculo_telegram'
+import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
 import DesvincularTelegramPortal from '#portal/actions/desvincular_telegram'
 import { estadoTelegram } from '#portal/acceso/telegram'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
@@ -346,7 +346,7 @@ const telegram: Ruta[] = [
         ruta: '/portal/telegram',
         operacion: 'portalTelegram',
         resumen: 'Estado de la vinculación de Telegram del cliente de la sesión',
-        descripcion: `${SOBRE_LA_SESION} El portal la consulta cada pocos segundos mientras hay un enlace pendiente. ${SOBRE_TELEGRAM}`,
+        descripcion: `${SOBRE_LA_SESION} El portal la consulta cada 3 s mientras el código está vigente. ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         permiso: null,
@@ -357,19 +357,21 @@ const telegram: Ruta[] = [
         metodo: 'post',
         ruta: '/portal/telegram/vincular',
         operacion: 'portalVincularTelegram',
-        resumen: 'Genera el enlace de un solo uso para vincular Telegram con el bot',
+        resumen: 'Genera el código de un solo uso y el enlace al bot para vincular Telegram',
         descripcion:
-            `${SOBRE_LA_SESION} Acción \`portal.generar_vinculo_telegram\`: código de un solo uso con vencimiento ` +
-            '(`PORTAL_TELEGRAM_VIGENCIA_S`), reemplaza los anteriores sin usar. 503 `telegram_no_configurado` sin ' +
-            `\`PORTAL_TELEGRAM_BOT\`. ${SOBRE_TELEGRAM}`,
+            `${SOBRE_LA_SESION} Llama \`GenerarCodigoTelegram\` de A6 (\`notificaciones.telegram_codigo\`, canal ` +
+            'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
+            `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
         seguridad: 'publico',
+        limitada: true,
         permiso: null,
         respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
         handler: async (ctx) => {
+            await ipDelCliente(ctx, 'telegram-vincular')
             const sesion = await exigirSesionPortal(ctx)
-            return new GenerarVinculoTelegram().execute(
-                { clienteId: sesion.clienteId, sesionId: sesion.id },
+            return new GenerarCodigoTelegram().execute(
+                { cliente_id: sesion.clienteId },
                 ctx.contextoAccion('portal'),
             )
         },

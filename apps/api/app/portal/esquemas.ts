@@ -115,19 +115,20 @@ export const PortalTelegram = definirEsquema(
         vinculado: { ...booleano, description: 'El cliente tiene un chat de Telegram vinculado' },
         disponible: { ...booleano, description: 'Hay bot configurado: se puede pedir un enlace' },
         bot: nulable({ ...texto, description: 'Usuario del bot sin @' }),
-        pendiente_hasta: nulable({
-            ...instante,
-            description: 'Vence el último enlace sin usar (null si no hay uno vigente)',
-        }),
     }),
 )
 
 export const PortalVinculoTelegram = definirEsquema(
     'PortalVinculoTelegram',
     objeto({
-        enlace: { ...texto, description: 'https://t.me/<bot>?start=<código de un solo uso>' },
-        bot: texto,
-        expira_en: instante,
+        codigo: {
+            ...texto,
+            description:
+                'Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano',
+        },
+        enlace: { ...texto, description: 'https://t.me/<bot>?start=<código>' },
+        bot: { ...texto, description: 'Usuario del bot sin @' },
+        vence_en: instante,
     }),
 )
 

@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BOT_FIXTURE, fijarSesionFixture, fijarTelegramFixture } from '~~/fixtures'
+import { BOT_FIXTURE, CODIGO_TELEGRAM_FIXTURE, fijarSesionFixture, fijarTelegramFixture } from '~~/fixtures'
 import CuentaTelegram from '~/components/cuenta/Telegram.vue'
 import CuentaContacto from '~/components/cuenta/Contacto.vue'
 import { CONTACTO_FIXTURE } from '~~/fixtures/cuenta'
@@ -29,6 +29,7 @@ async function montar(vinculado = false) {
 }
 
 afterEach(() => {
+    sessionStorage.clear()
     fijarSesionFixture(false)
     fijarTelegramFixture(true)
 })
@@ -42,7 +43,8 @@ describe('vincular Telegram', () => {
         await wrapper.find('[data-testid="telegram-vincular"]').trigger('click')
         await flushPromises()
         const abrir = wrapper.find('[data-testid="telegram-abrir"]')
-        expect(abrir.attributes('href')).toMatch(new RegExp(`^https://t\\.me/${BOT_FIXTURE}\\?start=vt_[A-Za-z0-9_-]{32}$`))
+        expect(abrir.attributes('href')).toBe(`https://t.me/${BOT_FIXTURE}?start=${CODIGO_TELEGRAM_FIXTURE}`)
+        expect(wrapper.find('[data-testid="telegram-codigo"]').text()).toBe(`/start ${CODIGO_TELEGRAM_FIXTURE}`)
         expect(abrir.attributes('target')).toBe('_blank')
         expect(wrapper.text()).toContain(`@${BOT_FIXTURE}`)
 
@@ -50,6 +52,17 @@ describe('vincular Telegram', () => {
         expect(wrapper.find('[data-testid="telegram-vinculado"]').text()).toContain('Vinculado')
         expect(wrapper.find('[data-testid="telegram-desvincular"]').exists()).toBe(true)
         expect(wrapper.emitted('cambio')).toEqual([[true]])
+    })
+
+    it('al recargar con un código vigente sigue esperando al bot sin mostrar el código', async () => {
+        fijarSesionFixture(true)
+        await useApi().POST('/api/v1/portal/telegram/vincular')
+        sessionStorage.setItem('argos:telegram:vence', String(Date.now() + 60_000))
+        const wrapper = await montar()
+        expect(wrapper.text()).toContain('Esperando la confirmación del bot de Telegram')
+        expect(wrapper.find('[data-testid="telegram-codigo"]').exists()).toBe(false)
+        await esperarHasta(() => wrapper.find('[data-testid="telegram-vinculado"]').exists())
+        expect(sessionStorage.getItem('argos:telegram:vence')).toBeNull()
     })
 
     it('desvincular pide confirmación y vuelve a ofrecer "Vincular Telegram"', async () => {

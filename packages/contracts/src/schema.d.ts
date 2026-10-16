@@ -1333,7 +1333,7 @@ export interface paths {
         };
         /**
          * Estado de la vinculación de Telegram del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada pocos segundos mientras hay un enlace pendiente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         get: operations["portalTelegram"];
         put?: never;
@@ -1374,8 +1374,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Genera el enlace de un solo uso para vincular Telegram con el bot
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.generar_vinculo_telegram`: código de un solo uso con vencimiento (`PORTAL_TELEGRAM_VIGENCIA_S`), reemplaza los anteriores sin usar. 503 `telegram_no_configurado` sin `PORTAL_TELEGRAM_BOT`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * Genera el código de un solo uso y el enlace al bot para vincular Telegram
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         post: operations["portalVincularTelegram"];
         delete?: never;
@@ -2903,18 +2903,16 @@ export interface components {
             disponible: boolean;
             /** @description Usuario del bot sin @ */
             bot: string | null;
-            /**
-             * Format: date-time
-             * @description Vence el último enlace sin usar (null si no hay uno vigente)
-             */
-            pendiente_hasta: string | null;
         };
         PortalVinculoTelegram: {
-            /** @description https://t.me/<bot>?start=<código de un solo uso> */
+            /** @description Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano */
+            codigo: string;
+            /** @description https://t.me/<bot>?start=<código> */
             enlace: string;
+            /** @description Usuario del bot sin @ */
             bot: string;
             /** Format: date-time */
-            expira_en: string;
+            vence_en: string;
         };
         Problem: {
             type: string;
@@ -8215,6 +8213,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalVinculoTelegram"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

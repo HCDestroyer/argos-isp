@@ -8802,7 +8802,7 @@
       "get": {
         "operationId": "portalTelegram",
         "summary": "Estado de la vinculación de Telegram del cliente de la sesión",
-        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada pocos segundos mientras hay un enlace pendiente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. El portal la consulta cada 3 s mientras el código está vigente. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
         "tags": [
           "portal"
         ],
@@ -8847,8 +8847,8 @@
     "/api/v1/portal/telegram/vincular": {
       "post": {
         "operationId": "portalVincularTelegram",
-        "summary": "Genera el enlace de un solo uso para vincular Telegram con el bot",
-        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.generar_vinculo_telegram`: código de un solo uso con vencimiento (`PORTAL_TELEGRAM_VIGENCIA_S`), reemplaza los anteriores sin usar. 503 `telegram_no_configurado` sin `PORTAL_TELEGRAM_BOT`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "summary": "Genera el código de un solo uso y el enlace al bot para vincular Telegram",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
         "tags": [
           "portal"
         ],
@@ -8859,6 +8859,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalVinculoTelegram"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -17941,8 +17951,7 @@
         "required": [
           "vinculado",
           "disponible",
-          "bot",
-          "pendiente_hasta"
+          "bot"
         ],
         "properties": {
           "vinculado": {
@@ -17959,33 +17968,31 @@
               "null"
             ],
             "description": "Usuario del bot sin @"
-          },
-          "pendiente_hasta": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "description": "Vence el último enlace sin usar (null si no hay uno vigente)"
           }
         }
       },
       "PortalVinculoTelegram": {
         "type": "object",
         "required": [
+          "codigo",
           "enlace",
           "bot",
-          "expira_en"
+          "vence_en"
         ],
         "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano"
+          },
           "enlace": {
             "type": "string",
-            "description": "https://t.me/<bot>?start=<código de un solo uso>"
+            "description": "https://t.me/<bot>?start=<código>"
           },
           "bot": {
-            "type": "string"
+            "type": "string",
+            "description": "Usuario del bot sin @"
           },
-          "expira_en": {
+          "vence_en": {
             "type": "string",
             "format": "date-time"
           }

@@ -27,16 +27,21 @@ const error = ref<string | null>(null)
 
 const vinculado = computed(() => telegram.estado.value?.vinculado ?? props.vinculado)
 const disponible = computed(() => telegram.estado.value?.disponible ?? false)
-const enlaceVencido = computed(() => {
-    const vence = telegram.estado.value?.pendiente_hasta
-    return enlace.value !== null && !telegram.esperando.value && !vinculado.value && (!vence || new Date(vence).getTime() <= Date.now())
-})
+/** Se pidió un código y dejó de esperarse sin vincular: venció. */
+const enlaceVencido = computed(() => enlace.value !== null && !telegram.esperando.value && !vinculado.value)
+/** Recargó la página con un código vigente: se sigue esperando, aunque el código ya no se muestra. */
+const reanudado = ref(false)
 
 onMounted(async () => {
     const resultado = await telegram.cargar()
-    // Volvió del chat del bot con un enlace aún vigente: sigue esperando el vínculo.
-    if (resultado.ok && !resultado.data.vinculado && resultado.data.pendiente_hasta) {
-        telegram.esperarVinculo()
+    if (resultado.ok && !resultado.data.vinculado) {
+        reanudado.value = telegram.reanudar()
+    }
+})
+
+watch(() => telegram.esperando.value, (actual) => {
+    if (!actual) {
+        reanudado.value = false
     }
 })
 
@@ -61,6 +66,7 @@ async function generar() {
         return
     }
     enlace.value = resultado.data
+    reanudado.value = false
 }
 
 async function quitar() {
@@ -155,14 +161,45 @@ async function quitar() {
                     class="size-4 animate-spin"
                     aria-hidden="true"
                 />
-                Esperando la confirmación del bot. El enlace vence a las {{ formatearFechaHora(enlace.expira_en) }}.
+                Esperando la confirmación del bot. El código vence el {{ formatearFechaHora(enlace.vence_en) }}.
             </p>
+            <p class="text-xs text-muted">
+                ¿No se abrió? Busca <span class="font-medium">@{{ enlace.bot }}</span> en Telegram y envíale
+                <span
+                    class="font-mono font-medium text-highlighted"
+                    data-testid="telegram-codigo"
+                >/start {{ enlace.codigo }}</span>
+            </p>
+        </template>
+
+        <template v-else-if="reanudado">
+            <p
+                class="flex items-center gap-2 text-sm text-muted"
+                role="status"
+            >
+                <UIcon
+                    name="i-lucide-loader-circle"
+                    class="size-4 animate-spin"
+                    aria-hidden="true"
+                />
+                Esperando la confirmación del bot de Telegram.
+            </p>
+            <UButton
+                label="Generar otro enlace"
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="outline"
+                size="lg"
+                block
+                :loading="generando"
+                @click="generar"
+            />
         </template>
 
         <template v-else>
             <p class="text-sm text-muted">
                 {{ enlaceVencido
-                    ? 'El enlace venció sin confirmarse. Genera uno nuevo.'
+                    ? 'El código venció sin confirmarse. Genera uno nuevo.'
                     : 'Recibe tus avisos de cobro y pagos en Telegram. Te llevamos al chat con nuestro bot.' }}
             </p>
             <UButton

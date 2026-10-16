@@ -97,7 +97,7 @@ function escenarioComprobante(): EscenarioComprobante {
 const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
 
 /**
- * Telegram en fixtures: tras `POST /portal/telegram/vincular`, la segunda consulta de
+ * Telegram en fixtures (contrato de A6): tras `POST /portal/telegram/vincular`, la segunda consulta de
  * `GET /portal/telegram` lo da por vinculado (como si el bot hubiera recibido `/start`).
  * `fijarTelegramFixture(false)` simula un portal sin bot configurado.
  */
@@ -119,13 +119,13 @@ export function fijarTelegramFixture(disponible: boolean): void {
 }
 
 export const BOT_FIXTURE = 'ArgosIspBot'
+export const CODIGO_TELEGRAM_FIXTURE = 'K7QX2M9PTA'
 
 function estadoTelegramFixture(): Schema<'PortalTelegram'> {
     return {
         vinculado: sesion.contacto.telegram_vinculado,
         disponible: telegram.disponible,
         bot: telegram.disponible ? BOT_FIXTURE : null,
-        pendiente_hasta: telegram.pendienteHasta,
     }
 }
 
@@ -312,9 +312,10 @@ export const rutasFixture: RutasFixture = {
         telegram.pendienteHasta = new Date(Date.now() + 15 * 60_000).toISOString()
         telegram.consultas = 0
         const cuerpo: Schema<'PortalVinculoTelegram'> = {
-            enlace: `https://t.me/${BOT_FIXTURE}?start=vt_${'f'.repeat(32)}`,
+            codigo: CODIGO_TELEGRAM_FIXTURE,
+            enlace: `https://t.me/${BOT_FIXTURE}?start=${CODIGO_TELEGRAM_FIXTURE}`,
             bot: BOT_FIXTURE,
-            expira_en: telegram.pendienteHasta,
+            vence_en: telegram.pendienteHasta,
         }
         return { status: 201, cuerpo }
     }),

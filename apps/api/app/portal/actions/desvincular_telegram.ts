@@ -12,7 +12,7 @@ export interface EntradaDesvincularPortal {
  *
  * Delega en `DesvincularTelegramCliente` de A1 (misma transacción). Si el canal preferido era
  * `telegram`, lo cambia a `correo` con `EditarCliente` para que los avisos no apunten a un canal
- * sin destino. También anula los códigos de vinculación pendientes.
+ * sin destino. Los códigos pendientes son de A6 (`notify.telegram_codigos`) y vencen solos.
  */
 export default class DesvincularTelegramPortal extends DomainAction<
     EntradaDesvincularPortal,
@@ -32,12 +32,6 @@ export default class DesvincularTelegramPortal extends DomainAction<
                 { trx: t.trx },
             )
         }
-        await t.trx
-            .from('core.portal_vinculos_telegram')
-            .where('cliente_id', input.clienteId)
-            .whereNull('usado_en')
-            .whereNull('reemplazado_en')
-            .update({ reemplazado_en: t.trx.knexRawQuery('now()') })
         return estadoTelegram(input.clienteId, t.trx)
     }
 }
