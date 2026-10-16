@@ -81,6 +81,7 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 | Corregir la lista del día 5 | Todos | Lista vacía el miércoles |
 | Prueba de carga: 200 reconexiones PPPoE simultáneas dual-stack | A2 + PM | Cero rechazos por timeout; p95 de autorización < 100 ms |
 | IPv6 por DUID (DHCPv6-PD estático) y prefijo estático ruteado vía API RouterOS | A6 | Un cliente sin PPPoE recibe su /56 y navega |
+| **Servicios WISP sin PPPoE** (decisión del PM, día 4): conexión `ip_estatica` y `dhcp_fija` (lease por MAC), velocidad por cola simple, corte por address-list `suspendidos` vía API REST de RouterOS, amarre IP-MAC opcional. Contrato en `.claude/integration/contratos/routeros.md` | A1 (modelo) + A2 (control del router) + A4 (alta) + A6 (`lab.rsc`) | Un cliente con IP estática y otro con DHCP fijo se limitan, cortan (llegan a `/corte`) y reactivan por evento en menos de 30 s; el reconciliador corrige una cola o address-list borrada a mano |
 | Modo pool del router para IPv6 (`Framed-IPv6-Pool`, `Delegated-IPv6-Pool`) | A2 | El accounting registra el prefijo que entregó el router |
 | Telegram: bot, vinculación desde el portal, avisos al cliente y alertas internas | A6 | Cliente vinculado recibe su recordatorio; el equipo recibe alerta si `aaa` no responde |
 | Reportes: cartera vencida por antigüedad, ingresos por periodo y método, facturado vs cobrado, cobranza y cierre de caja, IVA del periodo, promesas, altas y bajas, egresos; exportación Excel y CSV | A3 | Cada reporte cuadra contra el libro con datos de prueba |
