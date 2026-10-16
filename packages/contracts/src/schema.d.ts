@@ -1166,6 +1166,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pasarela/falsa/{cobro}/formulario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Laboratorio: botones de la página de la pasarela falsa (pagar o rechazar y volver)
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.
+         */
+        post: operations["pasarelaFalsaFormulario"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pasarela/falsa/{cobro}/pagar": {
         parameters: {
             query?: never;
@@ -1177,7 +1197,7 @@ export interface paths {
         put?: never;
         /**
          * Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)
-         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido. Para scripts y pruebas; el navegador usa /formulario (303).
          */
         post: operations["pasarelaFalsaPagar"];
         delete?: never;
@@ -2814,6 +2834,8 @@ export interface components {
             estado: "pendiente" | "pagado" | "fallido" | "expirado";
             /** @description Adonde se manda al cliente para pagar */
             url_pago: string | null;
+            /** @description Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto) */
+            url_retorno?: string | null;
             /** Format: date-time */
             expira_en: string | null;
             canal: string;
@@ -8724,6 +8746,8 @@ export interface operations {
                     /** @description Facturas a pagar (primero) */
                     facturas?: number[];
                     servicio_id?: number | null;
+                    /** @description Adonde el proveedor devuelve al cliente al terminar. Solo orígenes de PASARELA_RETORNO_ORIGENES (422); {cobro_id} se reemplaza por el id del cobro */
+                    url_retorno?: string | null;
                 };
             };
         };
@@ -8971,6 +8995,60 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaFormulario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado?: "pagado" | "fallido";
+                    /**
+                     * @description Simular un pago por otro monto
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /** @description false simula un webhook perdido */
+                    notificar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description En la práctica 303 al retorno (ver descripción) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

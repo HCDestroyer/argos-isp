@@ -416,26 +416,34 @@ export const ArchivoComprobante = {
 
 export const CobroPasarela = definirEsquema(
     'CobroPasarela',
-    objeto({
-        id,
-        proveedor: texto,
-        id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
-        cliente_id: id,
-        cliente_nombre: texto,
-        servicio_id: nulable(id),
-        monto: Dinero,
-        facturas: lista(id),
-        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
-        url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
-        expira_en: nulable(instante),
-        canal: texto,
-        pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
-        monto_pagado: nulable(Dinero),
-        comision: Dinero,
-        pagado_en: nulable(instante),
-        conciliado_en: nulable(instante),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            proveedor: texto,
+            id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
+            cliente_id: id,
+            cliente_nombre: texto,
+            servicio_id: nulable(id),
+            monto: Dinero,
+            facturas: lista(id),
+            estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+            url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
+            url_retorno: {
+                ...nulable(texto),
+                description:
+                    'Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto)',
+            },
+            expira_en: nulable(instante),
+            canal: texto,
+            pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
+            monto_pagado: nulable(Dinero),
+            comision: Dinero,
+            pagado_en: nulable(instante),
+            conciliado_en: nulable(instante),
+            ...auditable,
+        },
+        ['url_retorno'],
+    ),
 )
 
 export const ResultadoWebhookPasarela = definirEsquema(

@@ -17,6 +17,7 @@ export interface CobroPasarelaVista {
     facturas: number[]
     estado: EstadoCobroProveedor
     url_pago: string | null
+    url_retorno: string | null
     expira_en: Date | null
     canal: string
     pago_id: number | null
@@ -44,6 +45,7 @@ function consultaCobros(cliente: QueryClientContract) {
             cliente.raw('pc.facturas::int[] as facturas'),
             'pc.estado',
             'pc.url_pago',
+            'pc.url_retorno',
             'pc.expira_en',
             'pc.canal',
             'pc.pago_id',

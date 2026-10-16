@@ -20,9 +20,13 @@ Dueños: A5 (portal) consume; A3 (billing) es dueño del cobro, el webhook y el 
    - cobro `pagado` y el servicio aún no activo (queda otra deuda) → "Recibimos tu pago".
    - `GET /portal/pagos/en-linea/:id` responde solo si el cobro es del cliente de la sesión o del servicio de la IP; si no, 404.
 
-## Pendiente (pedido a A3 en `a5.md`)
+## URL de retorno
 
-- `url_retorno` en `CrearCobroPasarela` / `EntradaCrearCobro` para que el proveedor (y la página de la pasarela falsa, tras "Pagar (simulado)") devuelva al cliente a `/corte?pago=<id>`. Mientras tanto el retorno es con "Atrás".
+- `CrearCobroPasarela` acepta `url_retorno` opcional (también `POST /pasarela/cobros` del panel). El portal manda `<PORTAL_URL_PUBLICA>/corte?pago={cobro_id}`: A3 reemplaza `{cobro_id}` por el id del cobro (existe recién al crearlo) y guarda la URL resuelta en `CobroPasarela.url_retorno`.
+- Solo se aceptan orígenes (`esquema://host[:puerto]`) de `PASARELA_RETORNO_ORIGENES` (API, separados por comas; vacía = el origen de `NOTIFY_PORTAL_URL`). Otro origen, otro esquema que no sea http/https, usuario o clave en la URL, o una ruta relativa → 422 con `errors[].field = url_retorno` (`rule`: `origen_no_permitido` o `url`), sin crear el cobro. Evita que el cobro sirva de redirección abierta.
+- El adaptador recibe la URL resuelta en `EntradaCrearCobro.url_retorno` (el proveedor real la recibe como `return_url`).
+- Pasarela falsa: los botones de su página ("Pagar (simulado)", "Rechazar tarjeta (simulado)") envían `POST /api/v1/pasarela/falsa/<id_proveedor>/formulario`, que procesa el webhook firmado y responde **303** a `url_retorno` con `estado=<pagado|fallido|pendiente>` agregado (p. ej. `/corte?pago=42&estado=pagado`). Sin `url_retorno`, el 303 vuelve a la página de la pasarela. `POST …/pagar` sigue respondiendo JSON (scripts y pruebas).
+- `estado` en la URL de retorno es solo una pista para la pantalla: el portal sigue leyendo el estado real con `GET /api/v1/portal/pagos/en-linea/:id` (el pago puede llegar después por webhook).
 
 ## Walled garden (A6)
 

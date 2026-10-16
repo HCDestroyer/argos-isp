@@ -7376,6 +7376,14 @@
                       "null"
                     ],
                     "minimum": 1
+                  },
+                  "url_retorno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 2000,
+                    "description": "Adonde el proveedor devuelve al cliente al terminar. Solo orígenes de PASARELA_RETORNO_ORIGENES (422); {cobro_id} se reemplaza por el id del cobro"
                   }
                 },
                 "required": [
@@ -7765,11 +7773,98 @@
         "x-implementado": true
       }
     },
+    "/api/v1/pasarela/falsa/{cobro}/formulario": {
+      "post": {
+        "operationId": "pasarelaFalsaFormulario",
+        "summary": "Laboratorio: botones de la página de la pasarela falsa (pagar o rechazar y volver)",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "pagado",
+                      "fallido"
+                    ]
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Simular un pago por otro monto",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "notificar": {
+                    "description": "false simula un webhook perdido",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "En la práctica 303 al retorno (ver descripción)",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/pasarela/falsa/{cobro}/pagar": {
       "post": {
         "operationId": "pasarelaFalsaPagar",
         "summary": "Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)",
-        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido. Para scripts y pruebas; el navegador usa /formulario (303).",
         "tags": [
           "pagos"
         ],
@@ -19032,6 +19127,13 @@
               "null"
             ],
             "description": "Adonde se manda al cliente para pagar"
+          },
+          "url_retorno": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto)"
           },
           "expira_en": {
             "type": [
