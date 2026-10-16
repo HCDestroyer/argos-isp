@@ -6,7 +6,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
-import { pagina } from '#shared/openapi/esquemas'
+import { lista, pagina } from '#shared/openapi/esquemas'
 import {
     ArchivoPdf,
     Empresa,
@@ -14,22 +14,29 @@ import {
     EstadoPortal,
     PlantillaDocumento,
     PortalContacto,
+    PortalCondicionesPromesa,
+    PortalBanco,
+    PortalComprobante,
     PortalCuenta,
     PortalFactura,
     PortalFacturaDetalle,
     PortalPago,
     PortalPromesa,
+    PortalPromesaSolicitada,
     PortalSesion,
     PortalSolicitudCodigo,
     QuienSoy,
 } from '#portal/esquemas'
 import {
+    condicionesPromesaValidator,
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
     solicitarCodigoValidator,
+    solicitarPromesaValidator,
+    subirComprobanteValidator,
     verificarCodigoValidator,
 } from '#portal/validators'
 import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
@@ -58,6 +65,23 @@ import {
     type DocumentoPdf,
 } from '#portal/documentos/render'
 import { VARIABLES_AVISO_COBRO, vistaDeEjemplo } from '#portal/documentos/variables'
+import {
+    condicionesPromesa,
+    errorParaCliente,
+    promesaParaCliente,
+    servicioDeLaPeticion,
+    venceAlFinalDelDia,
+} from '#portal/promesas'
+import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import RegistrarComprobante from '#billing/actions/registrar_comprobante'
+import {
+    archivoDeLaPeticion,
+    bancosPortal,
+    comprobanteParaCliente,
+    comprobantesPortal,
+    errorComprobanteParaCliente,
+    titularDeLaPeticion,
+} from '#portal/comprobantes'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
 
@@ -396,6 +420,71 @@ const documentos: Ruta[] = [
     }),
 ]
 
+const SOBRE_LA_IDENTIFICACION =
+    'Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` ' +
+    'si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, ' +
+    '401 sin ella) y que el servicio sea del cliente (404 si no).'
+
+const promesas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/promesas/condiciones',
+        operacion: 'portalPromesaCondiciones',
+        resumen: 'Límites de una promesa de pago desde el portal (antes de enviarla)',
+        descripcion:
+            'Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si ' +
+            'requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las ' +
+            `dice el resultado de \`POST /portal/promesas\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        query: condicionesPromesaValidator,
+        respuesta: { status: 200, descripcion: 'Condiciones', esquema: PortalCondicionesPromesa },
+        handler: async (ctx, { query }) => {
+            const ip = await ipDelCliente(ctx, 'promesas-condiciones')
+            return condicionesPromesa(await servicioDeLaPeticion(ctx, ip, query.servicio_id))
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/promesas',
+        operacion: 'portalSolicitarPromesa',
+        resumen: 'El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)',
+        descripcion:
+            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa ' +
+            'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
+            '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
+            '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
+            `pasó. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        idempotente: true,
+        permiso: null,
+        cuerpo: solicitarPromesaValidator,
+        respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: PortalPromesaSolicitada },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'promesas')
+            const servicioId = await servicioDeLaPeticion(ctx, ip, cuerpo.servicio_id)
+            try {
+                const promesa = await new CrearPromesaPago().execute(
+                    {
+                        servicio_id: servicioId,
+                        vence_en: venceAlFinalDelDia(cuerpo.vence_el),
+                        monto: cuerpo.monto,
+                        canal: 'portal',
+                    },
+                    ctx.contextoAccion('portal'),
+                )
+                return promesaParaCliente(promesa)
+            } catch (error) {
+                throw errorParaCliente(error)
+            }
+        },
+    }),
+]
+
 const empresa: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -441,6 +530,84 @@ const empresa: Ruta[] = [
     }),
 ]
 
-const portal: Ruta[] = [...publicas, ...autenticadas, ...documentos, ...empresa]
+const comprobantes: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/bancos',
+        operacion: 'portalBancos',
+        resumen: 'Bancos de origen para el comprobante (transferencia y ACH)',
+        descripcion: `Sin login: catálogo \`billing.bancos\` de A3, solo los activos. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Bancos', esquema: lista(PortalBanco) },
+        handler: async (ctx) => {
+            await ipDelCliente(ctx, 'bancos')
+            return bancosPortal()
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/comprobantes',
+        operacion: 'portalSubirComprobante',
+        resumen: 'El cliente sube el comprobante de un depósito, transferencia, ACH o remesa',
+        descripcion:
+            '**`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o ' +
+            'PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` ' +
+            '(`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que ' +
+            'el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente ' +
+            '(`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. ' +
+            `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        idempotente: true,
+        permiso: null,
+        cuerpo: subirComprobanteValidator,
+        respuesta: { status: 201, descripcion: 'Comprobante recibido', esquema: PortalComprobante },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'comprobantes')
+            const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
+            const archivo = await archivoDeLaPeticion(ctx)
+            try {
+                const comprobante = await new RegistrarComprobante().execute(
+                    {
+                        cliente_id: titular.clienteId,
+                        servicio_id: titular.servicioId,
+                        metodo: cuerpo.metodo,
+                        cuenta_bancaria_id: cuerpo.cuenta_bancaria_id,
+                        banco_origen_id: cuerpo.banco_origen_id ?? null,
+                        referencia: cuerpo.referencia,
+                        monto: cuerpo.monto,
+                        fecha_deposito: cuerpo.fecha_deposito,
+                        nota: cuerpo.nota ?? null,
+                        canal: 'portal',
+                        archivo,
+                    },
+                    ctx.contextoAccion('portal'),
+                )
+                return comprobanteParaCliente(comprobante)
+            } catch (error) {
+                throw errorComprobanteParaCliente(error)
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/comprobantes',
+        operacion: 'portalComprobantes',
+        resumen: 'Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)',
+        descripcion: `${SOBRE_LA_SESION} Incluye el motivo cuando se rechazó.`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        permiso: null,
+        query: paginaPortalValidator,
+        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(PortalComprobante) },
+        handler: async (ctx, { query }) => comprobantesPortal(await clienteDeLaSesion(ctx), query),
+    }),
+]
+
+const portal: Ruta[] = [...publicas, ...autenticadas, ...promesas, ...comprobantes, ...documentos, ...empresa]
 
 export default portal

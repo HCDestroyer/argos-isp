@@ -68,6 +68,10 @@ x-api-env: &api-env
   PORTAL_CABECERA_IP: x-forwarded-for
   SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+  # Comprobantes de depósito (A3, billing/comprobantes_archivos.ts): fuera de Postgres, en el volumen
+  # `comprobantes` (o COMPROBANTES_HOST_DIR) montado solo en api, que los guarda y los sirve
+  # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
+  COMPROBANTES_DIR: /comprobantes
 
 # Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, worker).
 x-proceso-fondo: &proceso-fondo
@@ -154,7 +158,8 @@ services:
       timeout: 3s
       retries: 5
 
-  # Respaldo diario de Postgres (infra/backups, infra/README.md "Respaldos"): pg_dump a BACKUP_HOST_DIR
+  # Respaldo diario de Postgres y de los comprobantes (infra/backups, infra/README.md "Respaldos"):
+  # pg_dump y tar de /comprobantes a BACKUP_HOST_DIR
   # (un disco externo o NFS montado en el host), retención por días, cifrado con age y copia con rclone
   # opcionales. Restaurar: docker compose run --rm backup restaurar.sh /backups/<archivo> ...
   backup:
@@ -179,13 +184,19 @@ services:
       BACKUP_AGE_IDENTITY: ${BACKUP_AGE_IDENTITY:-/config/age.key}
       BACKUP_RCLONE_DESTINO: ${BACKUP_RCLONE_DESTINO:-}
       RCLONE_CONFIG: /config/rclone.conf
+      # tar de los comprobantes junto al dump (mismo cifrado y retención); restaurar.sh --comprobantes-dir
+      COMPROBANTES_DIR: /comprobantes
     volumes:
       - ${BACKUP_HOST_DIR:-./backups/datos}:/backups
+      # Lectura y escritura: restaurar.sh --comprobantes-dir /comprobantes los devuelve aquí
+      - ${COMPROBANTES_HOST_DIR:-comprobantes}:/comprobantes
       # rclone.conf (y age.key al restaurar), solo lectura
       - ${BACKUP_CONFIG_DIR:-./backups/config}:/config:ro
     depends_on:
       postgres:
         condition: service_healthy
+      comprobantes-permisos:
+        condition: service_completed_successfully
     healthcheck:
       # Sano mientras el último intento no haya fallado (BACKUP_DIR/.estado lo escribe programar.sh)
       test: [CMD-SHELL, "! grep -q '^error' /backups/.estado 2>/dev/null"]
@@ -193,6 +204,20 @@ services:
       timeout: 5s
       retries: 1
       start_period: 1m
+
+  # Deja la carpeta de comprobantes a nombre del usuario de la app (node, uid 1000, de la imagen de
+  # api): un volumen nuevo o un directorio del host nacen de root, y una restauración trae los
+  # permisos del tar. Sin acceso para otros (u=rwX,g=rX,o=). Corre como root una vez por `up`.
+  comprobantes-permisos:
+    image: argosisp/api:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    user: '0:0'
+    command: [sh, -c, 'chown -R node:node /comprobantes && chmod -R u=rwX,g=rX,o= /comprobantes']
+    volumes:
+      - ${COMPROBANTES_HOST_DIR:-comprobantes}:/comprobantes
+    restart: 'no'
 
   # Migraciones de apps/api (AdonisJS) antes de levantar la API. Misma imagen que api.
   migrate:
@@ -221,8 +246,12 @@ services:
     environment: *api-env
     ports:
       - 127.0.0.1:${API_PORT_HOST:-3333}:3333
+    volumes:
+      - ${COMPROBANTES_HOST_DIR:-comprobantes}:/comprobantes
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      comprobantes-permisos:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
@@ -531,3 +560,5 @@ volumes:
   pgdata:
   redisdata:
   promdata:
+  # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
+  comprobantes:

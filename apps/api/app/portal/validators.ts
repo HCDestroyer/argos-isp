@@ -1,6 +1,6 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { versionEsperada } from '#shared/validadores'
+import { dinero, fechaIso, idEntidad, versionEsperada } from '#shared/validadores'
 
 /**
  * Validadores del portal del cliente (A5). Espejo en `apps/portal` (esquemas de `UForm`).
@@ -87,5 +87,50 @@ export const editarContactoValidator = vine.compile(
         telefono: telefono().nullable().optional(),
         movil: telefono().nullable().optional(),
         canal_preferido: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
+    }),
+)
+
+const servicioDeLaSesion = () =>
+    idEntidad()
+        .optional()
+        .meta({ description: 'Solo con la sesión del portal; sin él se identifica por la IP de origen' })
+
+/**
+ * `POST /portal/promesas` (tarea 4). Sin `servicio_id` identifica por la IP de origen (página de
+ * corte); con `servicio_id` exige la sesión del portal y que el servicio sea del cliente.
+ */
+export const solicitarPromesaValidator = vine.compile(
+    vine.object({
+        // Día de pago (YYYY-MM-DD, hora de Guatemala); la promesa vence a las 23:59:59 de ese día.
+        vence_el: fechaIso(),
+        monto: dinero(),
+        servicio_id: servicioDeLaSesion(),
+    }),
+)
+
+/** `GET /portal/promesas/condiciones`: mismo criterio de identificación que `POST /portal/promesas`. */
+export const condicionesPromesaValidator = vine.compile(vine.object({ servicio_id: servicioDeLaSesion() }))
+
+/**
+ * `POST /portal/comprobantes` (tarea 5), `multipart/form-data`: estos campos más el archivo
+ * `archivo` (foto JPG, PNG o WebP, o PDF, hasta 5 MB; lo valida `RegistrarComprobante` por el
+ * contenido). Los campos llegan como texto y los vacíos como `null`. Mismo criterio de
+ * identificación que la promesa.
+ */
+export const subirComprobanteValidator = vine.compile(
+    vine.object({
+        metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const),
+        cuenta_bancaria_id: idEntidad().meta({
+            description: 'id de una de `cuentas_deposito` (GET /portal/empresa)',
+        }),
+        banco_origen_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Solo con transferencia y ACH (catálogo GET /portal/bancos)' }),
+        referencia: vine.string().trim().minLength(1).maxLength(100),
+        monto: dinero(),
+        fecha_deposito: fechaIso(),
+        nota: vine.string().trim().maxLength(500).nullable().optional(),
+        servicio_id: servicioDeLaSesion(),
     }),
 )

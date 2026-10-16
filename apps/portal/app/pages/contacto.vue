@@ -55,6 +55,7 @@ const enlaces = computed(() => enlacesContacto(empresa.value))
                     external
                     size="xl"
                     block
+                    :ui="{ label: 'whitespace-normal text-center [overflow-wrap:anywhere]' }"
                 />
                 <p
                     v-if="enlaces.some(e => e.tipo === 'whatsapp')"

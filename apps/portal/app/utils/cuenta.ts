@@ -28,6 +28,9 @@ export const METODOS_PAGO: Record<Schema<'PortalPago'>['metodo'], string> = {
     caja: 'Pago en oficina',
     pasarela: 'Pago en línea',
     deposito: 'Depósito bancario',
+    transferencia: 'Transferencia',
+    ach: 'Transferencia ACH',
+    remesa: 'Remesa',
     agente: 'Agente autorizado',
     debito: 'Débito automático',
 }

@@ -4,6 +4,7 @@ import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { D, aTexto, dec } from '#ledger/dinero'
 import { saldoDelServicio, type EstadoServicio } from '#portal/consultas'
+import type { MetodoPago } from '#shared/eventos'
 
 /**
  * Lecturas del portal autenticado (sesión por código). TODAS reciben el `clienteId` de la sesión
@@ -77,7 +78,7 @@ export interface FacturaPortalDetalle extends FacturaPortal {
 
 export interface PagoPortal {
     id: number
-    metodo: 'caja' | 'pasarela' | 'deposito' | 'agente' | 'debito'
+    metodo: MetodoPago
     monto: string
     referencia: string | null
     estado: 'registrado' | 'pendiente_verificacion' | 'anulado'

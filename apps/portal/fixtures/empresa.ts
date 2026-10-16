@@ -15,8 +15,8 @@ export const EMPRESA_FIXTURE: Schema<'EmpresaPublica'> = {
     horario: 'Lunes a sábado de 8:00 a 18:00',
     instrucciones_pago: 'Escribe tu NIT en la boleta y sube la foto del comprobante.',
     cuentas_deposito: [
-        { banco: 'Banco Industrial', alias: 'Monetaria Red Altiplano', numero: '123-456789-0', moneda: 'GTQ' },
-        { banco: 'Banrural', alias: 'Ahorro Red Altiplano', numero: '3-033-12345-6', moneda: 'GTQ' },
+        { id: 3, banco: 'Banco Industrial', alias: 'Monetaria Red Altiplano', numero: '123-456789-0', moneda: 'GTQ' },
+        { id: 5, banco: 'Banrural', alias: 'Ahorro Red Altiplano', numero: '3-033-12345-6', moneda: 'GTQ' },
     ],
 }
 
