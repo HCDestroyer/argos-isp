@@ -84,6 +84,45 @@ export async function listarCuentasBancarias(filtros: { activa?: boolean } = {})
         ])) as CuentaBancariaVista[]
 }
 
+/** Lo que el cliente ve en `/corte` para depositar (sin datos internos del libro). */
+export interface CuentaDeposito {
+    /** se envía como `cuenta_bancaria_id` al subir el comprobante (`RegistrarComprobante`) */
+    id: number
+    banco_nombre: string
+    alias: string
+    /** número completo, tal como se escribe en la boleta */
+    numero: string
+    moneda: 'GTQ'
+}
+
+/**
+ * Cuentas para depósito del portal (A5), solo lectura: activas y en quetzales (una cuenta en USD
+ * no recibe pagos: `POST /pagos` y los comprobantes la rechazan con 422 `moneda`). Mismo orden
+ * que el panel (orden del banco, alias). El número va completo: el cliente lo necesita para
+ * depositar, y es el dato que el ISP publica en sus avisos de cobro.
+ */
+export async function listarCuentasDeposito(
+    cliente: QueryClientContract = db.connection(),
+): Promise<CuentaDeposito[]> {
+    return (await cliente
+        .from('billing.cuentas_bancarias as cb')
+        .join('billing.bancos as b', 'b.id', 'cb.banco_id')
+        .where('cb.activa', true)
+        .where('cb.moneda', 'GTQ')
+        .orderBy([
+            { column: 'b.orden', order: 'asc' },
+            { column: 'cb.alias', order: 'asc' },
+            { column: 'cb.id', order: 'asc' },
+        ])
+        .select(
+            'cb.id',
+            'b.nombre as banco_nombre',
+            'cb.alias',
+            'cb.numero',
+            'cb.moneda',
+        )) as CuentaDeposito[]
+}
+
 export async function verCuentaBancaria(
     id: number,
     cliente: QueryClientContract = db.connection(),

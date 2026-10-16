@@ -124,6 +124,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - `billing.bancos`: catálogo de bancos de Guatemala (sembrado en su migración). `GET /bancos` (cualquier usuario con sesión).
 - `billing.cuentas_bancarias`: cuentas propias (banco, número, alias, moneda `GTQ`/`USD`, activa). **Fuente única** de las cuentas para depósito del panel y del portal. `cuentas_bancarias.crear` (`POST /cuentas-bancarias`) crea además su subcuenta `1.1.02.NN` en el libro; `cuentas_bancarias.editar` (`PUT /cuentas-bancarias/:id`, con `version`) renombra la subcuenta y nunca la desactiva. Ambas con permiso `cuentas_bancarias.editar`; `GET /cuentas-bancarias[?activa]` y `/:id` con `cuentas_bancarias.ver`. Cambios en `audit.cambios` (`cuenta_bancaria`).
 - Una cuenta inactiva o en USD no recibe pagos (422).
+- Para el portal (A5, `/corte`): `listarCuentasDeposito()` (solo lectura): activas y en GTQ, con `id` (el `cuenta_bancaria_id` del comprobante), `banco_nombre`, `alias`, `numero` completo y `moneda`; sin datos del libro. `listarCuentasBancarias({ activa: true })` sigue disponible con todos los campos.
 
 ## Comprobantes de depósito (`comprobantes.ts`, `comprobantes_archivos.ts`)
 
