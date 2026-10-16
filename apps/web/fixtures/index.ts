@@ -13,6 +13,7 @@ import { bd } from './bd'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
+import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
 import { rutasClientes } from './clientes/rutas'
@@ -114,4 +115,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCajas,
     ...rutasPromesas,
     ...rutasUsuarios,
+    ...rutasBancos,
 })

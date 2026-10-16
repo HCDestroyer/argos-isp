@@ -84,11 +84,36 @@ function periodo(facturaId: number): string {
             <dd class="text-right">
                 {{ ETIQUETAS_METODO[pago.metodo] }}
             </dd>
+            <template v-if="pago.banco_origen_nombre">
+                <dt class="text-muted">
+                    Banco de origen
+                </dt>
+                <dd
+                    class="text-right"
+                    data-prueba="recibo-banco-origen"
+                >
+                    {{ pago.banco_origen_nombre }}
+                </dd>
+            </template>
+            <template v-if="pago.cuenta_bancaria_nombre">
+                <dt class="text-muted">
+                    Cuenta de destino
+                </dt>
+                <dd
+                    class="text-right"
+                    data-prueba="recibo-cuenta-destino"
+                >
+                    {{ pago.cuenta_bancaria_nombre }}
+                </dd>
+            </template>
             <template v-if="pago.referencia">
                 <dt class="text-muted">
-                    Referencia
+                    {{ etiquetaReferencia(pago.metodo) }}
                 </dt>
-                <dd class="break-all text-right font-mono">
+                <dd
+                    class="break-all text-right font-mono"
+                    data-prueba="recibo-referencia"
+                >
                     {{ pago.referencia }}
                 </dd>
             </template>

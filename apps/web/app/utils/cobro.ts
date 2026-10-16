@@ -127,51 +127,121 @@ export function montoSugerido(resumen: ResumenPendiente): string {
     return resumen.pendiente.gt(0) ? resumen.pendiente.toFixed(2) : ''
 }
 
-/**
- * Métodos que se cobran a mano, con los valores del enum del contrato (`Pago.metodo`).
- * `pasarela` no aparece: lo registra la pasarela de pago en línea, no el cajero.
- * El contrato no tiene "transferencia"; se registra como `deposito` (pedido a A3 confirmarlo).
- */
-export const METODOS_COBRO: { metodo: Metodo, etiqueta: string, icono: string }[] = [
+/** Métodos que registra el cajero (todos los del enum salvo `pasarela`, que llega por la pasarela). */
+export type MetodoCobro = Exclude<Metodo, 'pasarela'>
+
+export interface OpcionMetodo {
+    metodo: MetodoCobro
+    etiqueta: string
+    icono: string
+}
+
+/** Métodos del cobro, con los valores del enum del contrato (`Pago.metodo`). */
+export const METODOS_COBRO: OpcionMetodo[] = [
     { metodo: 'caja', etiqueta: 'Efectivo en caja', icono: 'i-lucide-banknote' },
-    { metodo: 'deposito', etiqueta: 'Depósito o transferencia', icono: 'i-lucide-landmark' },
+    { metodo: 'deposito', etiqueta: 'Depósito bancario', icono: 'i-lucide-landmark' },
+    { metodo: 'transferencia', etiqueta: 'Transferencia', icono: 'i-lucide-arrow-right-left' },
+    { metodo: 'ach', etiqueta: 'ACH', icono: 'i-lucide-building-2' },
+    { metodo: 'remesa', etiqueta: 'Remesa', icono: 'i-lucide-send' },
     { metodo: 'agente', etiqueta: 'Agente bancario', icono: 'i-lucide-store' },
     { metodo: 'debito', etiqueta: 'Débito / tarjeta', icono: 'i-lucide-credit-card' },
 ]
 
 export const ETIQUETAS_METODO: Record<Metodo, string> = {
     caja: 'Efectivo en caja',
-    deposito: 'Depósito o transferencia',
-    agente: 'Agente bancario',
-    debito: 'Débito / tarjeta',
-    pasarela: 'Pago en línea',
+    deposito: 'Depósito bancario',
     transferencia: 'Transferencia',
     ach: 'ACH',
     remesa: 'Remesa',
+    agente: 'Agente bancario',
+    debito: 'Débito / tarjeta',
+    pasarela: 'Pago en línea',
+}
+
+type DatoBancario = 'referencia' | 'cuenta_bancaria_id' | 'banco_origen_id'
+
+/**
+ * Datos obligatorios por método, igual que `DATOS_POR_METODO` de `registrarPago` (A3). Con otro
+ * método, `cuenta_bancaria_id` y `banco_origen_id` no se mandan (la API responde `no_aplica`).
+ */
+export const DATOS_POR_METODO: Record<MetodoCobro, readonly DatoBancario[]> = {
+    caja: [],
+    deposito: ['cuenta_bancaria_id', 'referencia'],
+    transferencia: ['banco_origen_id', 'cuenta_bancaria_id', 'referencia'],
+    ach: ['banco_origen_id', 'cuenta_bancaria_id', 'referencia'],
+    remesa: ['cuenta_bancaria_id', 'referencia'],
+    agente: [],
+    debito: [],
+}
+
+export function pideDato(metodo: MetodoCobro, dato: DatoBancario): boolean {
+    return DATOS_POR_METODO[metodo].includes(dato)
+}
+
+/** Cómo se llama la referencia en cada método (boleta, código de remesa, autorización…). */
+export function etiquetaReferencia(metodo: Metodo): string {
+    switch (metodo) {
+        case 'deposito':
+            return 'Número de boleta'
+        case 'transferencia':
+            return 'Referencia de la transferencia'
+        case 'ach':
+            return 'Referencia ACH'
+        case 'remesa':
+            return 'Código de la remesa'
+        case 'debito':
+            return 'Autorización'
+        default:
+            return 'Referencia'
+    }
+}
+
+/** Una referencia ya registrada (409 `referencia_duplicada`, única por método y cuenta). */
+export function esReferenciaDuplicada(problema: { status: number, type: string }): boolean {
+    return problema.status === 409 && problema.type.endsWith(':referencia_duplicada')
 }
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 
 /**
- * Espejo del validador de `POST /pagos`: monto string con hasta 2 decimales y mayor que cero;
- * `caja_id` opcional (con `caja` y sin caja, la API usa la caja principal); referencia hasta
- * 100 y obligatoria salvo en efectivo (regla del panel: sin referencia no se puede conciliar un
- * depósito); nota hasta 500.
+ * Espejo del validador de `POST /pagos` y de `registrarPago`: monto string con hasta 2 decimales
+ * y mayor que cero; `caja_id` opcional (sin caja, la del turno abierto o la principal);
+ * referencia hasta 100; nota hasta 500; y por método los datos de `DATOS_POR_METODO`
+ * (transferencia y ACH: banco de origen, cuenta de destino y referencia; remesa: cuenta y
+ * código; depósito: cuenta y boleta). La cuenta debe ser activa y en GTQ (el selector solo
+ * ofrece esas).
  */
 export const esquemaCobro = z.object({
     monto: z.string()
         .trim()
         .regex(MONTO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 175.00)')
         .refine(valor => !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero'),
-    metodo: z.enum(['caja', 'deposito', 'agente', 'debito']),
+    metodo: z.enum(['caja', 'deposito', 'transferencia', 'ach', 'remesa', 'agente', 'debito']),
     caja_id: z.number().int().positive().nullable(),
+    cuenta_bancaria_id: z.number().int().positive().nullable(),
+    banco_origen_id: z.number().int().positive().nullable(),
     referencia: z.string().trim().max(100, 'Máximo 100 caracteres'),
     nota: z.string().trim().max(500, 'Máximo 500 caracteres'),
 }).superRefine((datos, ctx) => {
-    if (datos.metodo !== 'caja' && !datos.referencia) {
-        ctx.addIssue({ code: 'custom', path: ['referencia'], message: 'La referencia es obligatoria salvo en efectivo' })
+    if (pideDato(datos.metodo, 'banco_origen_id') && datos.banco_origen_id === null) {
+        ctx.addIssue({ code: 'custom', path: ['banco_origen_id'], message: 'Elige el banco de origen' })
+    }
+    if (pideDato(datos.metodo, 'cuenta_bancaria_id') && datos.cuenta_bancaria_id === null) {
+        ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta de destino' })
+    }
+    if (pideDato(datos.metodo, 'referencia') && !datos.referencia) {
+        ctx.addIssue({ code: 'custom', path: ['referencia'], message: `${etiquetaReferencia(datos.metodo)}: obligatorio con este método` })
     }
 })
 
 export type EntradaCobro = z.input<typeof esquemaCobro>
 export type SalidaCobro = z.output<typeof esquemaCobro>
+
+/** Datos bancarios del cuerpo de `POST /pagos`: solo los que pide el método. */
+export function datosBancarios(datos: SalidaCobro): { cuenta_bancaria_id?: number | null, banco_origen_id?: number | null, caja_id?: number | null } {
+    return {
+        ...(datos.metodo === 'caja' ? { caja_id: datos.caja_id } : {}),
+        ...(pideDato(datos.metodo, 'cuenta_bancaria_id') ? { cuenta_bancaria_id: datos.cuenta_bancaria_id } : {}),
+        ...(pideDato(datos.metodo, 'banco_origen_id') ? { banco_origen_id: datos.banco_origen_id } : {}),
+    }
+}

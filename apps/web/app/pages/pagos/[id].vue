@@ -206,9 +206,19 @@ onMounted(cargar)
                         :valor="ETIQUETAS_METODO[pago.metodo]"
                     />
                     <DatoFicha
-                        etiqueta="Referencia"
+                        :etiqueta="etiquetaReferencia(pago.metodo)"
                         :valor="pago.referencia"
                         mono
+                    />
+                    <DatoFicha
+                        v-if="pago.banco_origen_nombre"
+                        etiqueta="Banco de origen"
+                        :valor="pago.banco_origen_nombre"
+                    />
+                    <DatoFicha
+                        v-if="pago.cuenta_bancaria_nombre"
+                        etiqueta="Cuenta de destino"
+                        :valor="pago.cuenta_bancaria_nombre"
                     />
                     <DatoFicha
                         v-if="pago.caja_id"

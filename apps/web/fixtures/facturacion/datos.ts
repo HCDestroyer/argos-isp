@@ -108,6 +108,11 @@ export const pagos: Pago[] = facturas
             aplicaciones: [{ factura_id: factura.id, monto: factura.pagado }],
             anulado_en: null,
             motivo_anulacion: null,
+            // Como la vista `Pago` de la API: siempre trae los datos bancarios (null en efectivo).
+            banco_origen_id: null,
+            banco_origen_nombre: null,
+            cuenta_bancaria_id: null,
+            cuenta_bancaria_nombre: null,
             version: 1,
             created_at: fecha,
             updated_at: fecha,

@@ -57,9 +57,23 @@ const cajaElegida = computed({
     },
 })
 
+// Datos bancarios (depósito, transferencia, ACH, remesa): banco de origen y cuenta propia de destino.
+const bancos = shallowRef<Banco[]>([])
+const problemaBancos = ref<Problem | null>(null)
+const cuentasBancarias = shallowRef<CuentaBancaria[]>([])
+const problemaCuentas = ref<Problem | null>(null)
+/** Solo las activas en quetzales reciben pagos (una cuenta en USD responde 422). */
+const cuentasDestino = computed(() => cuentasBancarias.value.filter(c => c.activa && c.moneda === 'GTQ'))
+const itemsBanco = computed(() => bancos.value.map(b => ({ label: b.nombre, value: b.id })))
+const itemsCuenta = computed(() => cuentasDestino.value.map(c => ({
+    label: `${c.banco_nombre} · ${c.alias}`,
+    description: c.numero,
+    value: c.id,
+})))
+
 // Formulario
 const formulario = useTemplateRef('formulario')
-const estado = reactive<EntradaCobro>({ monto: '', metodo: 'caja', caja_id: null, referencia: '', nota: '' })
+const estado = reactive<EntradaCobro>({ monto: '', metodo: 'caja', caja_id: null, cuenta_bancaria_id: null, banco_origen_id: null, referencia: '', nota: '' })
 const enviando = ref(false)
 const problemaPago = ref<Problem | null>(null)
 let claveIdempotencia = nuevaClaveIdempotencia()
@@ -68,6 +82,26 @@ let claveIdempotencia = nuevaClaveIdempotencia()
 const pago = shallowRef<Pago | null>(null)
 const facturasAntes = shallowRef<EstadoCuenta['facturas_pendientes']>([])
 const seguimiento = useSeguimientoReactivacion()
+
+/** Campos del formulario: un 422 en otro campo (p. ej. `facturas.0`) se lista en el aviso. */
+const CAMPOS_COBRO = new Set(['monto', 'metodo', 'caja_id', 'cuenta_bancaria_id', 'banco_origen_id', 'referencia', 'nota'])
+const erroresSinCampo = computed(() => (problemaPago.value?.status === 422
+    ? (problemaPago.value.errors ?? []).filter(e => !CAMPOS_COBRO.has(e.field))
+    : []))
+
+/** Los selectores de Nuxt UI usan `undefined` para "sin elegir"; el esquema, `null`. */
+const bancoOrigen = computed<number | undefined>({
+    get: () => estado.banco_origen_id ?? undefined,
+    set: (valor) => {
+        estado.banco_origen_id = valor ?? null
+    },
+})
+const cuentaDestino = computed<number | undefined>({
+    get: () => estado.cuenta_bancaria_id ?? undefined,
+    set: (valor) => {
+        estado.cuenta_bancaria_id = valor ?? null
+    },
+})
 
 const itemsMetodo: SelectItem[] = METODOS_COBRO.map(m => ({ label: m.etiqueta, value: m.metodo, icon: m.icono }))
 
@@ -151,6 +185,30 @@ async function cargarCajas() {
     cajaPorDefecto()
 }
 
+async function cargarBancos() {
+    const resultado = await useBancos().listar()
+    bancos.value = resultado.ok ? resultado.data : []
+    problemaBancos.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarCuentasBancarias() {
+    if (!puede('cuentas_bancarias.ver')) {
+        return
+    }
+    const resultado = await useCuentasBancarias().listar({ activa: true })
+    cuentasBancarias.value = resultado.ok ? resultado.data : []
+    problemaCuentas.value = resultado.ok ? null : resultado.problema
+    cuentaPorDefecto()
+}
+
+/** Con una sola cuenta de destino posible, queda elegida. */
+function cuentaPorDefecto() {
+    if (estado.cuenta_bancaria_id !== null && cuentasDestino.value.some(c => c.id === estado.cuenta_bancaria_id)) {
+        return
+    }
+    estado.cuenta_bancaria_id = cuentasDestino.value.length === 1 ? (cuentasDestino.value[0]?.id ?? null) : null
+}
+
 async function cargarCuenta() {
     if (!clienteId.value || !puede('clientes.estado_cuenta')) {
         return
@@ -178,6 +236,8 @@ function limpiarFormulario() {
     estado.monto = totalMarcadas.value?.gt(0) ? totalMarcadas.value.toFixed(2) : ''
     estado.metodo = 'caja'
     estado.referencia = ''
+    estado.banco_origen_id = null
+    cuentaPorDefecto()
     estado.nota = ''
     cajaPorDefecto()
     problemaPago.value = null
@@ -220,7 +280,8 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         metodo: datos.metodo,
         monto: new Decimal(datos.monto).toFixed(2),
         referencia: datos.referencia || null,
-        caja_id: datos.metodo === 'caja' ? datos.caja_id : null,
+        // Solo los datos que pide el método: con otro, la API responde `no_aplica`.
+        ...datosBancarios(datos),
         nota: datos.nota || null,
         // En el orden de la pantalla; sin marcadas, la API aplica a la más antigua.
         ...(marcadas.value.length ? { facturas: [...marcadas.value] } : {}),
@@ -230,13 +291,19 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
     if (!resultado.ok) {
         problemaPago.value = resultado.problema
         // Un rechazo definitivo (4xx salvo 409 "en curso") estrena clave; un error de red o 5xx
-        // la conserva para que reintentar no cobre dos veces.
+        // la conserva para que reintentar no cobre dos veces. La referencia duplicada también es
+        // definitiva: el cajero corrige la referencia y eso ya es otro pago.
         const { status } = resultado.problema
-        if (status >= 400 && status < 500 && status !== 409) {
+        const duplicada = esReferenciaDuplicada(resultado.problema)
+        if ((status >= 400 && status < 500 && status !== 409) || duplicada) {
             claveIdempotencia = nuevaClaveIdempotencia()
         }
         if (status === 422) {
+            // Cada error junto a su campo; los de `facturas.<i>` van en el aviso de abajo.
             formulario.value?.setErrors(erroresDeFormulario(resultado.problema))
+        }
+        if (duplicada) {
+            formulario.value?.setErrors([{ name: 'referencia', message: 'Ya está registrada en otro pago con este método y cuenta. Revisa el número.' }])
         }
         return
     }
@@ -292,11 +359,16 @@ watch(() => estado.metodo, (metodo) => {
     if (metodo === 'caja') {
         cajaPorDefecto()
     }
+    if (pideDato(metodo, 'cuenta_bancaria_id')) {
+        cuentaPorDefecto()
+    }
 })
 
 onMounted(() => {
     window.addEventListener('keydown', alTeclear)
     void cargarCajas()
+    void cargarBancos()
+    void cargarCuentasBancarias()
     if (clienteId.value) {
         void elegirCliente(clienteId.value)
     }
@@ -757,15 +829,101 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     </UFormField>
 
                     <UFormField
-                        label="Referencia"
+                        v-if="pideDato(estado.metodo, 'banco_origen_id')"
+                        label="Banco de origen"
+                        name="banco_origen_id"
+                        required
+                        description="Banco desde el que el cliente envió el dinero"
+                    >
+                        <USelectMenu
+                            v-model="bancoOrigen"
+                            :items="itemsBanco"
+                            value-key="value"
+                            placeholder="Elegir banco…"
+                            icon="i-lucide-landmark"
+                            :search-input="{ placeholder: 'Buscar banco…' }"
+                            class="w-full"
+                            aria-label="Banco de origen"
+                        />
+                        <div
+                            v-if="problemaBancos"
+                            class="mt-1 flex flex-wrap items-center gap-x-2 text-sm"
+                            data-prueba="bancos-error"
+                        >
+                            <span class="text-error">No se pudo leer el catálogo de bancos ({{ problemaBancos.status }})</span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarBancos"
+                            />
+                        </div>
+                    </UFormField>
+
+                    <UFormField
+                        v-if="pideDato(estado.metodo, 'cuenta_bancaria_id')"
+                        label="Cuenta de destino"
+                        name="cuenta_bancaria_id"
+                        required
+                        description="Cuenta propia donde entró el dinero (activas, en quetzales)"
+                    >
+                        <USelect
+                            v-if="cuentasDestino.length"
+                            v-model="cuentaDestino"
+                            :items="itemsCuenta"
+                            placeholder="Elegir cuenta…"
+                            icon="i-lucide-wallet-cards"
+                            class="w-full"
+                            aria-label="Cuenta de destino"
+                        />
+                        <p
+                            v-else-if="!puede('cuentas_bancarias.ver')"
+                            class="text-sm text-error"
+                        >
+                            Te falta el permiso para ver las cuentas bancarias (cuentas_bancarias.ver).
+                        </p>
+                        <div
+                            v-else-if="problemaCuentas"
+                            class="flex flex-wrap items-center gap-x-2 text-sm"
+                            data-prueba="cuentas-error"
+                        >
+                            <span class="text-error">No se pudo leer las cuentas bancarias ({{ problemaCuentas.status }})</span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarCuentasBancarias"
+                            />
+                        </div>
+                        <p
+                            v-else
+                            class="text-sm text-warning"
+                        >
+                            No hay cuentas bancarias activas en quetzales.
+                            <ULink
+                                v-if="puede('cuentas_bancarias.editar')"
+                                to="/cuentas-bancarias"
+                                class="text-primary"
+                            >
+                                Crear una
+                            </ULink>
+                        </p>
+                    </UFormField>
+
+                    <UFormField
+                        :label="etiquetaReferencia(estado.metodo)"
                         name="referencia"
-                        :required="estado.metodo !== 'caja'"
-                        :hint="estado.metodo === 'caja' ? 'Opcional' : undefined"
+                        :required="pideDato(estado.metodo, 'referencia')"
+                        :hint="pideDato(estado.metodo, 'referencia') ? undefined : 'Opcional'"
                     >
                         <UInput
                             v-model="estado.referencia"
                             autocomplete="off"
-                            placeholder="No. de boleta, transferencia o autorización"
+                            :placeholder="estado.metodo === 'remesa' ? 'Código que dio la remesadora' : 'Tal como aparece en el comprobante'"
                             class="w-full"
                         />
                     </UFormField>
@@ -782,8 +940,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         />
                     </UFormField>
 
+                    <UAlert
+                        v-if="problemaPago && esReferenciaDuplicada(problemaPago)"
+                        color="error"
+                        variant="subtle"
+                        icon="i-lucide-copy-x"
+                        title="Esa referencia ya se registró"
+                        :description="`${problemaPago.detail ?? ''}. No se cobró de nuevo: revisa el comprobante o busca el pago anterior en Pagos.`"
+                        data-prueba="referencia-duplicada"
+                    />
                     <ProblemaAlerta
-                        v-if="problemaPago && problemaPago.status !== 422"
+                        v-else-if="problemaPago && problemaPago.status !== 422"
                         :problema="problemaPago"
                     />
                     <UAlert
@@ -793,7 +960,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         icon="i-lucide-circle-alert"
                         :title="problemaPago.title"
                         :description="problemaPago.detail ?? 'Corrige los campos marcados.'"
-                    />
+                    >
+                        <template
+                            v-if="erroresSinCampo.length"
+                            #description
+                        >
+                            <p>{{ problemaPago.detail ?? 'Corrige los campos marcados.' }}</p>
+                            <ul
+                                class="mt-1 list-disc ps-4"
+                                data-prueba="errores-sin-campo"
+                            >
+                                <li
+                                    v-for="error in erroresSinCampo"
+                                    :key="`${error.field}-${error.message}`"
+                                >
+                                    {{ error.message }}
+                                </li>
+                            </ul>
+                        </template>
+                    </UAlert>
 
                     <div class="flex flex-wrap items-center gap-2">
                         <UButton

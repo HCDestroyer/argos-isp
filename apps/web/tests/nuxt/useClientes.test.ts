@@ -53,11 +53,10 @@ describe('useClientes · lista y búsqueda', () => {
         }
     })
 
-    it('las zonas requieren zonas.ver (el cajero no lo tiene)', async () => {
+    it('el cajero ve las zonas (zonas.ver en su rol desde el día 4, como el seed de A1)', async () => {
         expect((await useZonas().listar()).ok).toBe(true)
         iniciarSesion('fixture-cajero')
-        const resultado = await useZonas().listar()
-        expect(!resultado.ok && resultado.problema.status).toBe(403)
+        expect((await useZonas().listar()).ok).toBe(true)
     })
 })
 
