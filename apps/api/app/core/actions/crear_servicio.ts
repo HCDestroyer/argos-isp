@@ -12,6 +12,7 @@ import {
 } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { registrarTramo } from '#network/historial'
+import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 
 export interface EntradaCrearServicio {
@@ -19,6 +20,11 @@ export interface EntradaCrearServicio {
     router_id: number
     plan_id: number
     plantilla_facturacion_id?: number | null
+    /**
+     * Sin `plantilla_facturacion_id` (undefined), usar la plantilla por defecto
+     * (`plantillaPorDefecto`). Lo pide `POST /servicios`; las llamadas internas no.
+     */
+    plantillaPorDefecto?: boolean
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
@@ -78,11 +84,15 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             ])
         }
         if (!router.activo) throw new ReglaNegocio('El router está desactivado', 'router_inactivo')
-        if (input.plantilla_facturacion_id) {
+        let plantillaId = input.plantilla_facturacion_id ?? null
+        if (input.plantilla_facturacion_id === undefined && input.plantillaPorDefecto) {
+            plantillaId = await plantillaPorDefecto(t.trx)
+        }
+        if (plantillaId) {
             await exigirReferencia(
                 t,
                 'billing.plantillas_facturacion',
-                input.plantilla_facturacion_id,
+                plantillaId,
                 'plantilla_facturacion_id',
             )
         }
@@ -106,7 +116,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 cliente_id: input.cliente_id,
                 router_id: input.router_id,
                 plan_id: input.plan_id,
-                plantilla_facturacion_id: input.plantilla_facturacion_id ?? null,
+                plantilla_facturacion_id: plantillaId,
                 user_ppp: userPpp,
                 pass_ppp: cifrar(input.pass_ppp ?? generarPassPpp()),
                 mac: input.mac ?? null,

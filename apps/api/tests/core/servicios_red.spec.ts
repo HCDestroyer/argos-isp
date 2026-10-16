@@ -33,6 +33,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: routerId,
                     plan_id: planId,
@@ -47,7 +48,12 @@ test.group('Servicios · alta con red_ipv4_id', () => {
             client
                 .post('/api/v1/servicios')
                 .bearerToken(token)
-                .json({ cliente_id: await crearClienteFila(), router_id: routerId, plan_id: planId }),
+                .json({
+                    plantilla_facturacion_id: null,
+                    cliente_id: await crearClienteFila(),
+                    router_id: routerId,
+                    plan_id: planId,
+                }),
             201,
         )
         assert.equal(normal.body().ipv4, `${base}.2`)
@@ -58,6 +64,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: routerId,
                     plan_id: planId,
@@ -72,6 +79,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: routerId,
                     plan_id: planId,
@@ -100,6 +108,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: a.routerId,
                     plan_id: planId,
@@ -115,6 +124,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: a.routerId,
                     plan_id: planId,
@@ -132,6 +142,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                     .post('/api/v1/servicios')
                     .bearerToken(token)
                     .json({
+                        plantilla_facturacion_id: null,
                         cliente_id: await crearClienteFila(),
                         router_id: a.routerId,
                         plan_id: planId,

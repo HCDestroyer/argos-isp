@@ -7673,7 +7673,8 @@
                       "integer",
                       "null"
                     ],
-                    "minimum": 1
+                    "minimum": 1,
+                    "description": "Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla"
                   },
                   "user_ppp": {
                     "type": "string",

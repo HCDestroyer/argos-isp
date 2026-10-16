@@ -35,7 +35,12 @@ test.group('Servicios · historial de asignaciones', () => {
             client
                 .post('/api/v1/servicios')
                 .bearerToken(token)
-                .json({ cliente_id: await crearClienteFila(), router_id: routerId, plan_id: planA }),
+                .json({
+                    plantilla_facturacion_id: null,
+                    cliente_id: await crearClienteFila(),
+                    router_id: routerId,
+                    plan_id: planA,
+                }),
             201,
         )
         const id = creado.body().id
@@ -129,6 +134,7 @@ test.group('Servicios · historial de asignaciones', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: a.routerId,
                     plan_id: await crearPlanFila(),

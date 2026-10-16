@@ -109,6 +109,7 @@ test.group('Servicios · excepciones a la plantilla', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: routerId,
                     plan_id: await crearPlanFila(),
@@ -173,7 +174,7 @@ test.group('Servicios · excepciones a la plantilla', () => {
             client
                 .post('/api/v1/servicios')
                 .bearerToken(token)
-                .json({ ...base, excepciones: { ciclo: 'aniversario' } }),
+                .json({ plantilla_facturacion_id: null, ...base, excepciones: { ciclo: 'aniversario' } }),
             422,
         )
         assert.deepEqual(
@@ -185,7 +186,11 @@ test.group('Servicios · excepciones a la plantilla', () => {
             client
                 .post('/api/v1/servicios')
                 .bearerToken(token)
-                .json({ ...base, excepciones: { dia: 31, hora_corte: '25:00' } }),
+                .json({
+                    plantilla_facturacion_id: null,
+                    ...base,
+                    excepciones: { dia: 31, hora_corte: '25:00' },
+                }),
             422,
         )
         assert.sameMembers(

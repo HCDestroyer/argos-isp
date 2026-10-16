@@ -397,7 +397,8 @@ const servicios: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             const cliente = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => ({ zona: [] }))
             exigirAlcance(ctx.alcance, { router: [cuerpo.router_id], zona: cliente.zona ?? [] })
-            return new CrearServicio().execute(cuerpo, ctx.contextoAccion())
+            // sin plantilla_facturacion_id → plantilla por defecto (app/core/plantilla_por_defecto.ts)
+            return new CrearServicio().execute({ ...cuerpo, plantillaPorDefecto: true }, ctx.contextoAccion())
         },
     }),
     definirRuta({

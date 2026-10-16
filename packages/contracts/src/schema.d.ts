@@ -6216,6 +6216,7 @@ export interface operations {
                     cliente_id: number;
                     router_id: number;
                     plan_id: number;
+                    /** @description Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
                     /** @description Se genera si no viene */
                     user_ppp?: string;

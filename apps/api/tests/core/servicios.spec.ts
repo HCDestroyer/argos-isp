@@ -63,7 +63,13 @@ test.group('Servicios · alta', () => {
                 .bearerToken(token)
                 .header('X-Request-Id', requestId)
                 .header('X-Canal', 'panel')
-                .json({ cliente_id: clienteId, router_id: routerId, plan_id: planId, direccion: 'Zona 1' }),
+                .json({
+                    plantilla_facturacion_id: null,
+                    cliente_id: clienteId,
+                    router_id: routerId,
+                    plan_id: planId,
+                    direccion: 'Zona 1',
+                }),
             201,
         )
         const s = respuesta.body()
@@ -130,7 +136,12 @@ test.group('Servicios · alta', () => {
         const { routerId, base, raiz } = await escenarioRouter()
         const planId = await planDual()
         const clienteId = await crearClienteFila({ nombre: 'Óscar Pérez' })
-        const cuerpo = { cliente_id: clienteId, router_id: routerId, plan_id: planId }
+        const cuerpo = {
+            plantilla_facturacion_id: null,
+            cliente_id: clienteId,
+            router_id: routerId,
+            plan_id: planId,
+        }
 
         const a = await estado(client.post('/api/v1/servicios').bearerToken(token).json(cuerpo), 201)
         const b = await estado(client.post('/api/v1/servicios').bearerToken(token).json(cuerpo), 201)
@@ -168,6 +179,7 @@ test.group('Servicios · alta', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: await crearClienteFila(),
                     router_id: routerId,
                     plan_id: await planDual(),
@@ -208,10 +220,12 @@ test.group('Servicios · alta', () => {
         const dual = await planDual()
 
         const v4 = await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: clienteId, router_id: routerId, plan_id: soloV4 }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: routerId,
+                plan_id: soloV4,
+            }),
             201,
         )
         assert.containsSubset(v4.body(), {
@@ -221,6 +235,7 @@ test.group('Servicios · alta', () => {
         })
         await estado(
             client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
                 cliente_id: clienteId,
                 router_id: routerId,
                 plan_id: soloV4,
@@ -232,6 +247,7 @@ test.group('Servicios · alta', () => {
         const manual = `${raiz}f0::/56`
         const estatico = await estado(
             client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
                 cliente_id: clienteId,
                 router_id: routerId,
                 plan_id: dual,
@@ -246,6 +262,7 @@ test.group('Servicios · alta', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: clienteId,
                     router_id: routerId,
                     plan_id: dual,
@@ -259,6 +276,7 @@ test.group('Servicios · alta', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: clienteId,
                     router_id: routerId,
                     plan_id: dual,
@@ -269,6 +287,7 @@ test.group('Servicios · alta', () => {
 
         const pool = await estado(
             client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
                 cliente_id: clienteId,
                 router_id: routerId,
                 plan_id: dual,
@@ -283,10 +302,12 @@ test.group('Servicios · alta', () => {
             .table('network.redes_ipv4')
             .insert({ router_id: sinPools, cidr: redUnica(), tipo: 'estatico' })
         const rechazo = await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: clienteId, router_id: sinPools, plan_id: dual }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: sinPools,
+                plan_id: dual,
+            }),
             422,
         )
         assert.equal(rechazo.body().type, 'urn:argosisp:problema:sin_pool_ipv6')
@@ -301,18 +322,22 @@ test.group('Servicios · alta', () => {
         const clienteId = await crearClienteFila()
         const local = await planDual({ global: false })
         const noDisponible = await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: clienteId, router_id: routerId, plan_id: local }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: routerId,
+                plan_id: local,
+            }),
             422,
         )
         assert.equal(noDisponible.body().type, 'urn:argosisp:problema:plan_no_disponible')
         await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: 999999, router_id: routerId, plan_id: local }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: 999999,
+                router_id: routerId,
+                plan_id: local,
+            }),
             422,
         )
         const vacio = await crearRouterFila()
@@ -321,6 +346,7 @@ test.group('Servicios · alta', () => {
                 .post('/api/v1/servicios')
                 .bearerToken(token)
                 .json({
+                    plantilla_facturacion_id: null,
                     cliente_id: clienteId,
                     router_id: vacio,
                     plan_id: await planDual({ dual_stack: 'v4' }),
@@ -334,6 +360,7 @@ test.group('Servicios · alta', () => {
         const { token } = await usuarioConRoles(['soporte'])
         const { routerId } = await escenarioRouter()
         const cuerpo = {
+            plantilla_facturacion_id: null,
             cliente_id: await crearClienteFila(),
             router_id: routerId,
             plan_id: await planDual(),
@@ -360,7 +387,12 @@ test.group('Servicios · edición y retiro', () => {
             client
                 .post('/api/v1/servicios')
                 .bearerToken(token)
-                .json({ cliente_id: await crearClienteFila(), router_id: esc.routerId, plan_id: planId }),
+                .json({
+                    plantilla_facturacion_id: null,
+                    cliente_id: await crearClienteFila(),
+                    router_id: esc.routerId,
+                    plan_id: planId,
+                }),
             201,
         )
         return { ...esc, planId, servicio: r.body() }
@@ -543,6 +575,7 @@ test.group('Servicios · edición y retiro', () => {
         // la IP liberada queda disponible
         const nuevo = await estado(
             client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
                 cliente_id: servicio.cliente_id,
                 router_id: servicio.router_id,
                 plan_id: servicio.plan_id,
@@ -573,17 +606,21 @@ test.group('Servicios · lectura y alcance', () => {
         const planId = await planDual()
         const clienteId = await crearClienteFila({ nombre: unico('Listado') })
         const enA = await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(admin)
-                .json({ cliente_id: clienteId, router_id: a.routerId, plan_id: planId }),
+            client.post('/api/v1/servicios').bearerToken(admin).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: a.routerId,
+                plan_id: planId,
+            }),
             201,
         )
         const enB = await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(admin)
-                .json({ cliente_id: clienteId, router_id: b.routerId, plan_id: planId }),
+            client.post('/api/v1/servicios').bearerToken(admin).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: b.routerId,
+                plan_id: planId,
+            }),
             201,
         )
 
@@ -622,10 +659,12 @@ test.group('Servicios · lectura y alcance', () => {
         )
         await estado(client.get(`/api/v1/servicios/${enB.body().id}`).bearerToken(token), 403)
         await estado(
-            client
-                .post('/api/v1/servicios')
-                .bearerToken(token)
-                .json({ cliente_id: clienteId, router_id: b.routerId, plan_id: planId }),
+            client.post('/api/v1/servicios').bearerToken(token).json({
+                plantilla_facturacion_id: null,
+                cliente_id: clienteId,
+                router_id: b.routerId,
+                plan_id: planId,
+            }),
             403,
         )
         await estado(

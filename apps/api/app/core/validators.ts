@@ -152,7 +152,10 @@ export const crearServicioValidator = vine.compile(
         cliente_id: idEntidad(),
         router_id: idEntidad(),
         plan_id: idEntidad(),
-        plantilla_facturacion_id: idEntidad().nullable().optional(),
+        plantilla_facturacion_id: idEntidad().nullable().optional().meta({
+            description:
+                'Ausente: la plantilla por defecto (si hay una sola; 422 si hay varias). null: sin plantilla',
+        }),
         user_ppp: vine
             .string()
             .trim()

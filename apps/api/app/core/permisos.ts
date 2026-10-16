@@ -96,6 +96,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
+            'zonas.ver',
             'servicios.ver',
             'planes.ver',
             'facturas.ver',
@@ -169,6 +170,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
+            'zonas.ver',
             'servicios.ver',
             'planes.ver',
             'plantillas.ver',
