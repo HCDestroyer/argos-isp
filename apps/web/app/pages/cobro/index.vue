@@ -759,7 +759,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                                 :to="`/servicios/${servicio.id}`"
                                                 class="font-mono text-highlighted hover:text-primary"
                                             >
-                                                {{ servicio.user_ppp }}
+                                                {{ etiquetaServicio(servicio) }}
                                             </ULink>
                                             <UBadge
                                                 v-if="reactivados.has(servicio.id)"
@@ -872,7 +872,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                     :to="`/servicios/${servicio.id}`"
                                     class="font-mono text-sm text-highlighted hover:text-primary"
                                 >
-                                    {{ servicio.user_ppp }}
+                                    {{ etiquetaServicio(servicio) }}
                                 </ULink>
                                 <div class="flex flex-wrap items-center gap-1">
                                     <UBadge

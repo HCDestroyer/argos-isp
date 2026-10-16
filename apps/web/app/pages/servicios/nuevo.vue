@@ -40,21 +40,24 @@ interface Paso extends StepperItem {
     campos: (keyof EntradaServicio)[]
 }
 
-const pasos: Paso[] = [
+/** El quinto paso es "Credenciales PPP" en PPPoE y "Equipo" (MAC y amarre) sin PPPoE. */
+const pasos = computed<Paso[]>(() => [
     { title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] },
-    { title: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id'] },
+    { title: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
     { title: 'IPv4', icon: 'i-lucide-network', campos: ['asignacion', 'red_id', 'ipv4'] },
     { title: 'IPv6', icon: 'i-lucide-globe', campos: ['ipv6_modo', 'ipv6_duid', 'prefijo_delegado_v6'] },
-    { title: 'Credenciales PPP', icon: 'i-lucide-key-round', campos: ['user_ppp', 'pass_ppp'] },
+    estado.tipo_conexion === 'pppoe'
+        ? { title: 'Credenciales PPP', icon: 'i-lucide-key-round', campos: ['user_ppp', 'pass_ppp'] }
+        : { title: 'Equipo', icon: 'i-lucide-cpu', campos: ['mac', 'amarre_ip_mac'] },
     { title: 'Facturación', icon: 'i-lucide-receipt-text', campos: ['plantilla_facturacion_id', 'costo_override', 'excluir_firewall', 'mac', 'direccion', 'coordenadas', 'fecha_instalacion'] },
     { title: 'Confirmar', icon: 'i-lucide-check', campos: [] },
-]
+])
 
 const paso = ref(clienteInicial ? 1 : 0)
 /** Paso más lejano alcanzado: los anteriores se pueden revisitar desde el stepper. */
 const alcanzado = ref(paso.value)
-const itemsStepper = computed(() => pasos.map((p, indice) => ({ ...p, value: indice, disabled: indice > alcanzado.value })))
-const ultimo = pasos.length - 1
+const itemsStepper = computed(() => pasos.value.map((p, indice) => ({ ...p, value: indice, disabled: indice > alcanzado.value })))
+const ultimo = 6
 
 /*
 |--------------------------------------------------------------------------
@@ -67,6 +70,7 @@ const plan = computed(() => planes.value.find(p => p.id === estado.plan_id) ?? n
 const red = computed(() => redes.value.find(r => r.id === estado.red_id) ?? null)
 const plantilla = computed(() => plantillas.value.find(p => p.id === estado.plantilla_facturacion_id) ?? null)
 const soloIpv4 = computed(() => plan.value?.dual_stack === 'v4')
+const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 /** El esquema base más la regla que necesita las redes cargadas: la IP fija cae en la red elegida. */
 const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
@@ -74,12 +78,22 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
     if (datos.asignacion === 'fija' && elegida && PATRON_IPV4.test(datos.ipv4) && !ipEnCidr(datos.ipv4, elegida.cidr)) {
         ctx.addIssue({ code: 'custom', path: ['ipv4'], message: `La IP no pertenece a ${elegida.cidr}` })
     }
+    const elegido = planes.value.find(p => p.id === datos.plan_id)
+    if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
+        ctx.addIssue({ code: 'custom', path: ['tipo_conexion'], message: 'Un servicio sin PPPoE necesita IPv4 y el plan es solo IPv6' })
+    }
+}))
+
+const itemsTipoConexion: RadioGroupItem[] = (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
+    label: TIPOS_CONEXION[tipo].etiqueta,
+    value: tipo,
+    description: TIPOS_CONEXION[tipo].descripcion,
 }))
 
 const itemsRouter = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
     label: r.nombre,
     value: r.id,
-    description: `${r.host} · velocidad ${r.modo_velocidad === 'pcq' ? 'PCQ' : 'simple'}`,
+    description: `${r.host} · ${CONTROLES_VELOCIDAD[r.control_velocidad ?? (r.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')].etiqueta.toLowerCase()}`,
 })))
 
 const itemsPlan = computed<RadioGroupItem[]>(() => planes.value.filter(p => p.activo).map(p => ({
@@ -114,8 +128,8 @@ const redAutomatica = computed({
 const itemsIpv6 = computed<RadioGroupItem[]>(() => {
     const delegado = plan.value ? `/${plan.value.tamano_prefijo_delegado}` : ''
     return [
-        { label: 'RADIUS por servicio', value: 'radius_servicio', description: `Prefijo de enlace /64 y delegado ${delegado} asignados por ArgosIsp desde los pools del router.`, disabled: soloIpv4.value },
-        { label: 'Pool del router', value: 'radius_pool', description: 'El router asigna desde su pool (Framed-IPv6-Pool).', disabled: soloIpv4.value },
+        { label: 'RADIUS por servicio', value: 'radius_servicio', description: conPppoe.value ? `Prefijo de enlace /64 y delegado ${delegado} asignados por ArgosIsp desde los pools del router.` : 'Solo con PPPoE (necesita RADIUS).', disabled: soloIpv4.value || !conPppoe.value },
+        { label: 'Pool del router', value: 'radius_pool', description: conPppoe.value ? 'El router asigna desde su pool (Framed-IPv6-Pool).' : 'Solo con PPPoE (necesita RADIUS).', disabled: soloIpv4.value || !conPppoe.value },
         { label: 'DHCPv6-PD por DUID', value: 'duid', description: 'Prefijo estático para un equipo identificado por su DUID.', disabled: soloIpv4.value },
         { label: 'Prefijo estático', value: 'estatico', description: 'Prefijo delegado fijo, escrito a mano.', disabled: soloIpv4.value },
         { label: 'Sin IPv6', value: 'ninguno', description: 'Solo IPv4.' },
@@ -200,8 +214,21 @@ watch(soloIpv4, (valor) => {
     if (valor) {
         estado.ipv6_modo = 'ninguno'
     }
-    else if (estado.ipv6_modo === 'ninguno') {
+    else if (estado.ipv6_modo === 'ninguno' && conPppoe.value) {
         estado.ipv6_modo = 'radius_servicio'
+    }
+})
+
+// Sin PPPoE no hay RADIUS: el modo IPv6 por RADIUS pasa a "Sin IPv6"; con PPPoE no hay amarre.
+watch(() => estado.tipo_conexion, (tipo) => {
+    if (tipo !== 'pppoe' && modoIpv6PorRadius(estado.ipv6_modo)) {
+        estado.ipv6_modo = 'ninguno'
+    }
+    if (tipo === 'pppoe') {
+        estado.amarre_ip_mac = false
+        if (estado.ipv6_modo === 'ninguno' && !soloIpv4.value) {
+            estado.ipv6_modo = 'radius_servicio'
+        }
     }
 })
 
@@ -230,7 +257,7 @@ onMounted(async () => {
 */
 
 async function siguiente() {
-    const campos = pasos[paso.value]?.campos ?? []
+    const campos = pasos.value[paso.value]?.campos ?? []
     const valido = campos.length === 0 || await formulario.value?.validate({ name: campos, silent: true })
     if (valido === false) {
         return
@@ -264,7 +291,7 @@ async function copiar(texto: string, que: string) {
 
 /** Primer paso que contiene alguno de los campos con error (para un 422 de la API). */
 function pasoDeCampo(campo: string): number {
-    const indice = pasos.findIndex(p => p.campos.includes(campo as keyof EntradaServicio))
+    const indice = pasos.value.findIndex(p => p.campos.includes(campo as keyof EntradaServicio))
     return indice === -1 ? ultimo : indice
 }
 
@@ -276,7 +303,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
     if (resultado.ok) {
         toast.add({
             title: 'Servicio creado',
-            description: `${resultado.data.user_ppp}${resultado.data.ipv4 ? ` · ${resultado.data.ipv4}` : ''}`,
+            description: `${TIPOS_CONEXION[tipoConexionDe(resultado.data)].corta} · ${etiquetaServicio(resultado.data)}${resultado.data.user_ppp && resultado.data.ipv4 ? ` · ${resultado.data.ipv4}` : ''}`,
             color: 'success',
             icon: 'i-lucide-circle-check',
         })
@@ -429,6 +456,21 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             :ui="{ fieldset: 'grid gap-2' }"
                         />
                     </UFormField>
+
+                    <UFormField
+                        name="tipo_conexion"
+                        label="Tipo de conexión"
+                        required
+                    >
+                        <URadioGroup
+                            v-model="estado.tipo_conexion"
+                            :items="itemsTipoConexion"
+                            variant="card"
+                            class="w-full"
+                            :ui="{ fieldset: 'grid gap-2 sm:grid-cols-3' }"
+                            data-prueba="tipo-conexion"
+                        />
+                    </UFormField>
                 </div>
 
                 <!-- 3 · IPv4 -->
@@ -436,6 +478,14 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     v-show="paso === 2"
                     class="flex flex-col gap-4"
                 >
+                    <UAlert
+                        v-if="!conPppoe"
+                        color="neutral"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        :title="`${TIPOS_CONEXION[estado.tipo_conexion].etiqueta}: la IPv4 es obligatoria`"
+                        description="Automática de una red del router o fija. Sin redes IPv4 en el router la API rechaza el alta."
+                    />
                     <UFormField
                         name="asignacion"
                         label="Asignación de IPv4"
@@ -595,9 +645,45 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     </div>
                 </div>
 
-                <!-- 5 · Credenciales -->
+                <!-- 5 · Credenciales (PPPoE) o equipo (WISP) -->
                 <div
-                    v-show="paso === 4"
+                    v-show="paso === 4 && !conPppoe"
+                    class="flex flex-col gap-4"
+                    data-prueba="paso-equipo"
+                >
+                    <p class="text-sm text-muted">
+                        Sin PPPoE no hay usuario ni contraseña: el router identifica al cliente por su IP{{ estado.tipo_conexion === 'dhcp_fija' ? ' y su MAC' : '' }}.
+                    </p>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <UFormField
+                            name="mac"
+                            label="MAC del equipo"
+                            :required="estado.tipo_conexion === 'dhcp_fija' || estado.amarre_ip_mac"
+                            :description="estado.tipo_conexion === 'dhcp_fija' ? 'El lease estático se crea con esta MAC.' : 'Obligatoria si amarras la IP a la MAC.'"
+                        >
+                            <UInput
+                                v-model="estado.mac"
+                                placeholder="4C:5E:0C:12:34:56"
+                                class="w-full font-mono"
+                                data-prueba="mac-wisp"
+                            />
+                        </UFormField>
+                        <UFormField
+                            name="amarre_ip_mac"
+                            label="Amarre IP-MAC"
+                            description="ARP estático en el router: solo esa MAC puede usar la IP."
+                        >
+                            <UCheckbox
+                                v-model="estado.amarre_ip_mac"
+                                label="Amarrar la IP a la MAC"
+                                data-prueba="amarre-ip-mac"
+                            />
+                        </UFormField>
+                    </div>
+                </div>
+
+                <div
+                    v-show="paso === 4 && conPppoe"
                     class="grid gap-4 sm:grid-cols-2"
                 >
                     <UFormField
@@ -746,6 +832,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 />
                             </UFormField>
                             <UFormField
+                                v-if="conPppoe"
                                 name="mac"
                                 label="MAC del equipo"
                             >
@@ -809,15 +896,32 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         :valor="ETIQUETAS_IPV6[estado.ipv6_modo]"
                     />
                     <DatoFicha
-                        etiqueta="Usuario PPP"
-                        :valor="estado.user_ppp"
-                        mono
+                        etiqueta="Tipo de conexión"
+                        :valor="TIPOS_CONEXION[estado.tipo_conexion].etiqueta"
                     />
-                    <DatoFicha
-                        etiqueta="Contraseña PPP"
-                        :valor="estado.pass_ppp"
-                        mono
-                    />
+                    <template v-if="conPppoe">
+                        <DatoFicha
+                            etiqueta="Usuario PPP"
+                            :valor="estado.user_ppp"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Contraseña PPP"
+                            :valor="estado.pass_ppp"
+                            mono
+                        />
+                    </template>
+                    <template v-else>
+                        <DatoFicha
+                            etiqueta="MAC"
+                            :valor="estado.mac || 'Sin MAC'"
+                            mono
+                        />
+                        <DatoFicha
+                            etiqueta="Amarre IP-MAC"
+                            :valor="estado.amarre_ip_mac ? 'Sí (ARP estático)' : 'No'"
+                        />
+                    </template>
                     <DatoFicha
                         etiqueta="Plantilla"
                         :valor="puede('plantillas.ver') ? (plantilla?.nombre ?? 'Sin plantilla') : 'La plantilla por defecto'"

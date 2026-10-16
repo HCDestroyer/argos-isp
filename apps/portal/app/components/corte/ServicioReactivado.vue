@@ -10,8 +10,11 @@
 withDefaults(defineProps<{
     url: string
     promesa?: Pick<PromesaSolicitada, 'monto' | 'vence_en'> | null
+    /** Pago en línea confirmado con el que volvió de la pasarela. */
+    pago?: Pick<PagoEnLinea, 'monto'> | null
 }>(), {
     promesa: null,
+    pago: null,
 })
 </script>
 
@@ -35,6 +38,16 @@ withDefaults(defineProps<{
                 Tu servicio está activo de nuevo. Si alguna página no abre, espera unos segundos y vuelve a intentarlo.
             </p>
         </div>
+        <UAlert
+            v-if="pago"
+            color="success"
+            variant="subtle"
+            icon="i-lucide-receipt"
+            :title="`Recibimos tu pago de ${montoEnTexto(pago.monto)}`"
+            description="Gracias. El pago ya quedó aplicado a tu cuenta."
+            class="text-start"
+            data-testid="reactivado-pago"
+        />
         <UAlert
             v-if="promesa"
             color="info"

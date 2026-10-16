@@ -24,8 +24,18 @@ import { Exposicion, type Muestra } from '#monitoreo/prometheus'
  * | `process_*`, `nodejs_heap_*` | proceso de la API |
  */
 
-/** Colas BullMQ conocidas (dueño): notify (A6), billing (A3), accounting de aaa (A2). */
-export const COLAS = ['notify-envios', 'notify-cron', 'billing-cron', 'aaa-accounting'] as const
+/**
+ * Colas BullMQ conocidas (dueño): notify (A6), billing (A3), accounting de aaa y RouterOS (A2:
+ * crons del reconciliador y prefijo delegado de `radius_pool`, `node ace routeros:worker`).
+ */
+export const COLAS = [
+    'notify-envios',
+    'notify-cron',
+    'billing-cron',
+    'aaa-accounting',
+    'routeros-cron',
+    'routeros-prefijos',
+] as const
 const ESTADOS = ['waiting', 'active', 'delayed', 'failed', 'prioritized', 'waiting-children'] as const
 
 /** Acciones de los crons (las audita la acción con canal `cron`). */
@@ -142,6 +152,15 @@ export function registrarSeccionMetricas(seccion: string, leer: () => Promise<Me
 /** Para pruebas. */
 export function quitarSeccionMetricas(seccion: string) {
     seccionesExtra.delete(seccion)
+}
+
+/**
+ * Para pruebas: la función registrada hoy para `seccion` (o `undefined`). Una prueba que reemplaza
+ * una sección real (p. ej. `routeros`, que registra `start/routes/network.ts`) la guarda con esto y
+ * la devuelve al terminar con `registrarSeccionMetricas`, para no romper otras pruebas de la corrida.
+ */
+export function seccionMetricas(seccion: string): (() => Promise<MetricaExtra[]>) | undefined {
+    return seccionesExtra.get(seccion)
 }
 
 /** Arma el texto de exposición. Una sección que falla no tumba las demás. */

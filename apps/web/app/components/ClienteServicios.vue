@@ -50,7 +50,7 @@ onMounted(async () => {
                     :to="`/servicios/${row.original.id}`"
                     class="font-mono text-sm font-medium text-highlighted hover:text-primary"
                 >
-                    {{ row.original.user_ppp }}
+                    {{ etiquetaServicio(row.original) }}
                 </ULink>
                 <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
                 <span

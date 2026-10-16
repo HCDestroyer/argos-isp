@@ -5,3 +5,29 @@
     /* Fuentes del sistema: nada de descargas externas. */
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/*
+ * Colores de las gráficas (`GraficaColumnas`). Paleta de referencia de la guía de gráficas,
+ * validada contra las superficies del panel (blanco y slate-900) con su validador:
+ * categórica (azul, naranja, aqua) en orden fijo, y secuencial de un solo tono (azul) para
+ * datos ordenados como la antigüedad de la cartera. El modo oscuro tiene sus propios pasos.
+ */
+:root {
+    --viz-1: #2a78d6;
+    --viz-2: #eb6834;
+    --viz-3: #1baf7a;
+    --viz-sec-1: #86b6ef;
+    --viz-sec-2: #3987e5;
+    --viz-sec-3: #1c5cab;
+    --viz-sec-4: #0d366b;
+}
+
+.dark {
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-sec-1: #184f95;
+    --viz-sec-2: #2a78d6;
+    --viz-sec-3: #6da7ec;
+    --viz-sec-4: #b7d3f6;
+}

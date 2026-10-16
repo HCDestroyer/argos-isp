@@ -35,6 +35,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-hand-coins', ruta: '/cobro', permiso: 'pagos.registrar' },
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
+            { id: 'comprobantes', etiqueta: 'Comprobantes', descripcion: 'Depósitos y transferencias por verificar: aprobar registra el pago y reactiva.', icono: 'i-lucide-file-check-2', ruta: '/comprobantes', permiso: 'comprobantes.ver' },
             { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
             { id: 'promesas', etiqueta: 'Promesas', descripcion: 'Promesas de pago y su evaluación.', icono: 'i-lucide-calendar-clock', ruta: '/promesas', permiso: 'promesas.ver' },
         ],
@@ -42,8 +43,10 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
     {
         etiqueta: 'Control',
         secciones: [
+            { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cartera vencida, ingresos, IVA, cobranza, cierres de caja y más, en CSV o Excel.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
-            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y egresos.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y cierre mensual.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
             { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
         ],
     },

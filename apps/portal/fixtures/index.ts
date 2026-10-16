@@ -22,11 +22,13 @@ import {
 } from './cuenta'
 import { EMPRESA_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
+import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import {
+    condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
     condicionesFixture,
     promesaSolicitadaFixture,
-    type ResultadoPromesaFixture,
+    type EscenarioResultadoFixture,
 } from './promesas'
 
 /**
@@ -42,12 +44,12 @@ function escenarioCorte(): EscenarioCorte {
 let consultasEstado = 0
 
 /**
- * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|pendiente_aprobacion|con_promesa` en la
+ * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|rechazada_fecha|pendiente_aprobacion|con_promesa` en la
  * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
  * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
  */
-type EscenarioPromesa = ResultadoPromesaFixture | 'con_promesa'
-const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'pendiente_aprobacion', 'con_promesa']
+type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa' | 'con_pago_previo'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa', 'con_pago_previo']
 const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
 
 export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {
@@ -93,13 +95,75 @@ function escenarioComprobante(): EscenarioComprobante {
     return pedido === 'duplicada' || pedido === 'archivo' ? pedido : 'recibido'
 }
 
+/**
+ * Pago en línea en fixtures: `fijarPagoFixture` en pruebas o `?pago_fixture=pagado|fallido|expirado|pendiente|sin_pasarela`
+ * en la URL (solo desarrollo). Por defecto `pagado`: el cobro responde `pendiente` en la primera
+ * consulta y `pagado` desde la segunda, y entonces `/portal/estado` responde `activo` (el webhook
+ * reactivó). `url_pago` de los fixtures vuelve a `/corte?pago=<id>` (no hay pasarela).
+ */
+type EscenarioPago = 'pagado' | 'fallido' | 'expirado' | 'pendiente' | 'sin_pasarela'
+const ESCENARIOS_PAGO: readonly EscenarioPago[] = ['pagado', 'fallido', 'expirado', 'pendiente', 'sin_pasarela']
+const pagos: { escenario: EscenarioPago | null, consultas: number, pagado: boolean, iniciados: number } = {
+    escenario: null,
+    consultas: 0,
+    pagado: false,
+    iniciados: 0,
+}
+
+export function fijarPagoFixture(escenario: EscenarioPago | null): void {
+    pagos.escenario = escenario
+    pagos.consultas = 0
+    pagos.pagado = false
+    pagos.iniciados = 0
+}
+
+/** Pruebas: cuántas veces se llamó `POST /portal/pagos/iniciar`. */
+export function pagosIniciadosFixture(): number {
+    return pagos.iniciados
+}
+
+function escenarioPago(): EscenarioPago {
+    if (pagos.escenario) {
+        return pagos.escenario
+    }
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('pago_fixture')
+    return ESCENARIOS_PAGO.find(e => e === pedido) ?? 'pagado'
+}
+
 /** Sesión del portal simulada. */
 const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
+
+/**
+ * Telegram en fixtures (contrato de A6): tras `POST /portal/telegram/vincular`, la segunda consulta de
+ * `GET /portal/telegram` lo da por vinculado (como si el bot hubiera recibido `/start`).
+ * `fijarTelegramFixture(false)` simula un portal sin bot configurado.
+ */
+const telegram = { disponible: true, pendienteHasta: null as string | null, consultas: 0 }
 
 /** Pruebas: abre o cierra la sesión simulada y restablece el contacto. */
 export function fijarSesionFixture(abierta: boolean): void {
     sesion.abierta = abierta
     sesion.contacto = { ...CONTACTO_FIXTURE }
+    telegram.pendienteHasta = null
+    telegram.consultas = 0
+}
+
+/** Pruebas: con o sin bot configurado. */
+export function fijarTelegramFixture(disponible: boolean): void {
+    telegram.disponible = disponible
+    telegram.pendienteHasta = null
+    telegram.consultas = 0
+}
+
+export const BOT_FIXTURE = 'ArgosIspBot'
+export const CODIGO_TELEGRAM_FIXTURE = 'K7QX2M9PTA'
+
+function estadoTelegramFixture(): Schema<'PortalTelegram'> {
+    return {
+        vinculado: sesion.contacto.telegram_vinculado,
+        disponible: telegram.disponible,
+        bot: telegram.disponible ? BOT_FIXTURE : null,
+    }
 }
 
 function problema(status: number, codigo: string, title: string, detail: string): RespuestaFixture {
@@ -130,7 +194,7 @@ export const rutasFixture: RutasFixture = {
     'GET /api/v1/portal/estado': () => {
         consultasEstado += 1
         const escenario = escenarioCorte()
-        if (promesa.aprobada || (escenario === 'reactivacion' && consultasEstado >= 2)) {
+        if (promesa.aprobada || pagos.pagado || (escenario === 'reactivacion' && consultasEstado >= 2)) {
             return { status: 200, cuerpo: ESTADO_REACTIVADO }
         }
         return { status: 200, cuerpo: estadoDe(ESCENARIOS_CORTE[escenario]) }
@@ -191,7 +255,9 @@ export const rutasFixture: RutasFixture = {
             status: 200,
             cuerpo: escenarioPromesa() === 'con_promesa' || promesa.aprobada
                 ? condicionesConPromesaFixture()
-                : condicionesFixture(),
+                : escenarioPromesa() === 'con_pago_previo'
+                    ? condicionesConPagoPrevioFixture()
+                    : condicionesFixture(),
         }
     },
     'POST /api/v1/portal/promesas': ({ cuerpo }) => {
@@ -219,8 +285,43 @@ export const rutasFixture: RutasFixture = {
         }
         return {
             status: 201,
-            cuerpo: promesaSolicitadaFixture(escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
+            cuerpo: promesaSolicitadaFixture(escenario === 'con_pago_previo' ? 'rechazada' : escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
         }
+    },
+    'POST /api/v1/portal/pagos/iniciar': ({ cuerpo }) => {
+        const datos = (cuerpo ?? {}) as { servicio_id?: number }
+        if (datos.servicio_id !== undefined && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        pagos.iniciados += 1
+        if (escenarioPago() === 'sin_pasarela') {
+            return problema(
+                503,
+                'pasarela_no_configurada',
+                'Pago en línea no disponible',
+                'El pago en línea no está disponible en este momento. Paga por depósito o en nuestra oficina.',
+            )
+        }
+        pagos.consultas = 0
+        return {
+            status: 201,
+            cuerpo: pagoEnLineaFixture({ url_pago: `/corte?pago=${PAGO_EN_LINEA_ID_FIXTURE}&pago_fixture=${escenarioPago()}` }),
+        }
+    },
+    'GET /api/v1/portal/pagos/en-linea/:id': ({ params }) => {
+        if (Number(params.id) !== PAGO_EN_LINEA_ID_FIXTURE) {
+            return problema(404, 'no_encontrado', 'No encontrado', 'No encontramos ese pago en línea')
+        }
+        pagos.consultas += 1
+        const escenario = escenarioPago()
+        if (escenario === 'pendiente' || escenario === 'sin_pasarela' || pagos.consultas < 2) {
+            return { status: 200, cuerpo: pagoEnLineaFixture() }
+        }
+        if (escenario === 'pagado') {
+            pagos.pagado = true
+            return { status: 200, cuerpo: pagoEnLineaFixture({ estado: 'pagado', url_pago: null, pagado_en: '2026-10-16T18:05:00.000Z' }) }
+        }
+        return { status: 200, cuerpo: pagoEnLineaFixture({ estado: escenario, url_pago: null }) }
     },
     'GET /api/v1/portal/bancos': () => ({ status: 200, cuerpo: BANCOS_FIXTURE }),
     'GET /api/v1/portal/comprobantes': conSesion(() => pagina([...comprobantes.recibidos, ...COMPROBANTES_FIXTURE])),
@@ -268,6 +369,42 @@ export const rutasFixture: RutasFixture = {
         comprobantes.recibidos.unshift(recibido)
         return { status: 201, cuerpo: recibido }
     },
+    'GET /api/v1/portal/telegram': conSesion(() => {
+        if (telegram.pendienteHasta) {
+            telegram.consultas += 1
+            if (telegram.consultas >= 2) {
+                telegram.pendienteHasta = null
+                sesion.contacto = { ...sesion.contacto, telegram_vinculado: true, version: sesion.contacto.version + 1 }
+            }
+        }
+        return { status: 200, cuerpo: estadoTelegramFixture() }
+    }),
+    'POST /api/v1/portal/telegram/vincular': conSesion(() => {
+        if (!telegram.disponible) {
+            return problema(503, 'telegram_no_configurado', 'Telegram no disponible', 'La vinculación con Telegram aún no está disponible. Intenta más tarde.')
+        }
+        telegram.pendienteHasta = new Date(Date.now() + 15 * 60_000).toISOString()
+        telegram.consultas = 0
+        const cuerpo: Schema<'PortalVinculoTelegram'> = {
+            codigo: CODIGO_TELEGRAM_FIXTURE,
+            enlace: `https://t.me/${BOT_FIXTURE}?start=${CODIGO_TELEGRAM_FIXTURE}`,
+            bot: BOT_FIXTURE,
+            vence_en: telegram.pendienteHasta,
+        }
+        return { status: 201, cuerpo }
+    }),
+    'POST /api/v1/portal/telegram/desvincular': conSesion(() => {
+        telegram.pendienteHasta = null
+        if (sesion.contacto.telegram_vinculado) {
+            sesion.contacto = {
+                ...sesion.contacto,
+                telegram_vinculado: false,
+                canal_preferido: sesion.contacto.canal_preferido === 'telegram' ? 'correo' : sesion.contacto.canal_preferido,
+                version: sesion.contacto.version + 1,
+            }
+        }
+        return { status: 200, cuerpo: estadoTelegramFixture() }
+    }),
     'PUT /api/v1/portal/contacto': ({ cuerpo }) => {
         if (!sesion.abierta) {
             return SIN_SESION()

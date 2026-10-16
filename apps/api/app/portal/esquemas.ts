@@ -109,6 +109,29 @@ export const PortalContacto = definirEsquema(
     }),
 )
 
+export const PortalTelegram = definirEsquema(
+    'PortalTelegram',
+    objeto({
+        vinculado: { ...booleano, description: 'El cliente tiene un chat de Telegram vinculado' },
+        disponible: { ...booleano, description: 'Hay bot configurado: se puede pedir un enlace' },
+        bot: nulable({ ...texto, description: 'Usuario del bot sin @' }),
+    }),
+)
+
+export const PortalVinculoTelegram = definirEsquema(
+    'PortalVinculoTelegram',
+    objeto({
+        codigo: {
+            ...texto,
+            description:
+                'Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano',
+        },
+        enlace: { ...texto, description: 'https://t.me/<bot>?start=<código>' },
+        bot: { ...texto, description: 'Usuario del bot sin @' },
+        vence_en: instante,
+    }),
+)
+
 export const PortalServicio = definirEsquema(
     'PortalServicio',
     objeto({
@@ -236,6 +259,24 @@ export const PortalCondicionesPromesa = definirEsquema(
             ),
             description: 'La plantilla exige abonar este porcentaje de la deuda antes de prometer',
         },
+        deuda_maxima: {
+            ...nulable(
+                objeto({
+                    maximo: Dinero,
+                    vencida: Dinero,
+                    faltante: {
+                        ...Dinero,
+                        description: 'Lo que hay que pagar para quedar dentro del máximo',
+                    },
+                }),
+            ),
+            description: 'La plantilla no admite promesas con más deuda vencida que `maximo`',
+        },
+        pago_previo: {
+            ...nulable(Dinero),
+            description:
+                'Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada',
+        },
         requiere_aprobacion: { ...booleano, description: 'La promesa quedará pendiente de aprobación' },
     }),
 )
@@ -248,6 +289,12 @@ export const PortalPromesaSolicitada = definirEsquema(
         vence_en: instante,
         monto: Dinero,
         motivo: { ...texto, description: 'Resultado en palabras del cliente (nunca el código de la regla)' },
+        corregible: {
+            ...booleano,
+            description:
+                'Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, ' +
+                'cambiar fecha o monto no sirve: el portal ofrece el contacto',
+        },
         servicio_estado: {
             ...nulable(EstadoServicio),
             description: 'Estado del servicio tras la promesa (solo si quedó aprobada)',
@@ -304,6 +351,10 @@ export const EmpresaPublica = definirEsquema(
             ...lista(CuentaDeposito),
             description:
                 'Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran',
+        },
+        pago_en_linea: {
+            ...booleano,
+            description: 'Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita)',
         },
     }),
 )
@@ -370,5 +421,26 @@ export const PortalComprobante = definirEsquema(
         motivo_rechazo: { ...nulable(texto), description: 'Por qué se rechazó (lo escribe quien lo revisó)' },
         created_at: instante,
         verificado_en: nulable(instante),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Pago en línea (semana 2)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalPagoEnLinea = definirEsquema(
+    'PortalPagoEnLinea',
+    objeto({
+        id: { ...id, description: 'Cobro en línea; el retorno es `/corte?pago=<id>`' },
+        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+        monto: Dinero,
+        url_pago: {
+            ...nulable(texto),
+            description: 'Página de pago del proveedor (solo mientras el cobro está pendiente)',
+        },
+        expira_en: nulable(instante),
+        pagado_en: nulable(instante),
     }),
 )

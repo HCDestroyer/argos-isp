@@ -11,11 +11,18 @@ const DINERO = /^\d{1,12}(\.\d{1,2})?$/
 
 /**
  * Espejo de `solicitarPromesaValidator` (apps/api/app/portal/validators.ts) más los límites que
- * mostró `GET /portal/promesas/condiciones`. Solo ayuda a corregir antes de enviar: la decisión es
- * del backend.
+ * mostró `GET /portal/promesas/condiciones` (de `limitesPromesa()` de A3): fecha dentro del plazo,
+ * monto hasta la deuda y, si hay `pago_previo` (abono inicial o deuda vencida sobre el máximo), no
+ * se envía: la evaluación de A3 la rechazaría. Solo ayuda a corregir antes de enviar: la decisión
+ * es del backend.
  */
-export function esquemaPromesa(condiciones: Pick<Condiciones, 'fecha_minima' | 'fecha_maxima' | 'monto_maximo'>) {
+export function esquemaPromesa(
+    condiciones: Pick<Condiciones, 'fecha_minima' | 'fecha_maxima' | 'monto_maximo'> & Partial<Pick<Condiciones, 'pago_previo'>>,
+) {
     const { fecha_minima: minima, fecha_maxima: maxima, monto_maximo: maximo } = condiciones
+    const previo = condiciones.pago_previo && new Decimal(condiciones.pago_previo).greaterThan(0)
+        ? condiciones.pago_previo
+        : null
     return z.object({
         vence_el: z.string()
             .regex(FECHA, 'Elige una fecha')
@@ -27,8 +34,23 @@ export function esquemaPromesa(condiciones: Pick<Condiciones, 'fecha_minima' | '
             .refine(
                 monto => !maximo || !DINERO.test(monto) || new Decimal(monto).lessThanOrEqualTo(maximo),
                 `El monto no puede pasar de ${formatearQuetzales(maximo)}`,
-            ),
+            )
+            .refine(() => previo === null, `Primero paga ${formatearQuetzales(previo)}; después solicita la promesa`),
     })
+}
+
+/**
+ * Por qué hay que pagar antes de prometer. El abono ya está en la lista de límites; aquí se agrega
+ * solo lo que la lista no dice: que el saldo vencido pasa del máximo.
+ */
+export function textoPagoPrevio(condiciones: Pick<Condiciones, 'deuda_maxima'>): string {
+    const partes: string[] = []
+    const deuda = condiciones.deuda_maxima
+    if (deuda && new Decimal(deuda.faltante).greaterThan(0)) {
+        partes.push(`Tu saldo vencido (${montoEnTexto(deuda.vencida)}) pasa del máximo para una promesa (${montoEnTexto(deuda.maximo)}).`)
+    }
+    partes.push('Paga en línea, en la oficina o por depósito y luego solicita la promesa.')
+    return partes.join(' ')
 }
 
 export type DatosPromesa = z.output<ReturnType<typeof esquemaPromesa>>

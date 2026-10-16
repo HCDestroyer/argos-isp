@@ -61,19 +61,20 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
 | Datos de depósito: cuentas de A3 e instrucciones de pago del panel (`GET /portal/empresa`) | `app/components/corte/DatosDeposito.vue` |
-| Acciones: "Ver datos de depósito" es la principal (primario) mientras no hay pago en línea; "Pagar en línea" apagado en neutro con "Pronto" hasta la semana 2; comprobante deshabilitado (siguiente tanda); "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
+| Acciones: "Pagar en línea" es la principal si hay pasarela (`pago_en_linea` de `GET /portal/empresa`); si no, se ve apagado en neutro y "Ver datos de depósito" pasa a primario; "Subir comprobante de pago"; "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
+| Pago en línea: `POST /portal/pagos/iniciar` con `Idempotency-Key` (también en `/cuenta` con el servicio de la sesión); antes de salir a `url_pago` la URL pasa a `/corte?pago=<id>` (retorno con "Atrás"; bfcache recarga). En el retorno se sigue `GET /portal/pagos/en-linea/:id` cada 5 s junto con el estado: "Procesando tu pago…" → "Recibimos tu pago" → "Ya tienes servicio"; rechazado, vencido o 404 con error claro y "Entendido". Con un pago pendiente no se ofrece pagar otra vez, sino "Volver a la página de pago". Contrato en `.claude/integration/contratos/pago-en-linea.md` | `app/components/pago/EnLinea.vue`, `app/composables/usePagoEnLinea.ts`, `app/utils/pago.ts`, `app/plugins/retorno-pago.client.ts`, `app/components/corte/EstadoEnVivo.vue` |
 | Estado en vivo: `GET /api/v1/portal/estado` cada 5 s hasta 2 min, tras una acción del cliente ("Ya pagué: revisar mi servicio"; luego comprobante, promesa y pago), al volver a la pestaña o con promesa activa. Al ver `activo`: "Ya tienes servicio" y "Seguir navegando" (`NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL`) | `app/composables/useEstadoServicio.ts`, `app/components/corte/EstadoEnVivo.vue`, `app/components/corte/ServicioReactivado.vue` |
-| Fixtures tipados contra el contrato (`?fixture=reactivacion` simula la reactivación) | `fixtures/corte.ts` |
+| Fixtures tipados contra el contrato (`?fixture=reactivacion` simula la reactivación; `?pago_fixture=pagado\|fallido\|expirado\|pendiente\|sin_pasarela` el pago en línea) | `fixtures/corte.ts`, `fixtures/pagos.ts` |
 
 ### Promesa de pago (tarea 4)
 
 | Pieza | Dónde |
 | --- | --- |
 | Modal "Solicitar promesa de pago" (en `/corte` por IP y en `/cuenta` con `servicioId` y la sesión): al abrir lee `GET /portal/promesas/condiciones` y muestra los límites antes de enviar (plazo y fecha máxima, monto máximo, abono inicial, si requiere aprobación); prellena la fecha máxima y el saldo vencido | `app/components/promesa/Solicitar.vue`, `useSolicitudPromesa` en `app/composables/usePromesas.ts` |
-| `UForm` + zod espejo de `solicitarPromesaValidator` más los límites leídos (la decisión es del backend); un 422 de la API queda en su campo | `app/utils/promesa.ts` |
+| `UForm` + zod espejo de `solicitarPromesaValidator` más los límites leídos de `limitesPromesa()` de A3 (fecha máxima, monto máximo y `pago_previo`: con abono inicial o deuda vencida sobre el máximo sin cubrir no deja enviar y explica cuánto pagar antes); la decisión es del backend; un 422 de la API queda en su campo | `app/utils/promesa.ts` |
 | `POST /portal/promesas` con `Idempotency-Key` (UUID v4 con `getRandomValues`: `randomUUID` no existe por HTTP); la misma clave en el reintento de un envío sin respuesta, otra cuando la API respondió | `useSolicitudPromesa().solicitar`, `claveIdempotencia` |
 | **Aprobada**: cierra el modal, aviso en la página y el estado en vivo hasta "Ya tienes servicio" (`/corte`); en `/cuenta` recarga la cuenta y dice "Ya tienes servicio" si el servicio quedó activo. **Rechazada**: el `motivo` de la API en palabras del cliente y "Cambiar fecha o monto". **Pendiente**: aviso en el modal y en la página; no ofrece otra | `app/pages/corte.vue`, `app/pages/cuenta.vue` |
-| Fixtures: `?promesa=` (`aprobada`, `rechazada`, `pendiente_aprobacion`, `con_promesa`) (por defecto aprobada; `fijarPromesaFixture` en pruebas) | `fixtures/promesas.ts`, `fixtures/index.ts` |
+| Fixtures: `?promesa=` (`aprobada`, `rechazada`, `pendiente_aprobacion`, `con_promesa`, `con_pago_previo`) (por defecto aprobada; `fijarPromesaFixture` en pruebas) | `fixtures/promesas.ts`, `fixtures/index.ts` |
 
 Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos personales completos.
 
@@ -90,6 +91,29 @@ Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos person
 | Fixtures: el código correcto es `123456`; la sesión es un estado en memoria (`fijarSesionFixture` en pruebas) | `fixtures/cuenta.ts`, `fixtures/index.ts` |
 
 Dependencia nueva: `zod` (misma versión que `apps/web`) para los esquemas de `UForm`.
+
+### Telegram en "Mis datos" (semana 2)
+
+Contrato de A6 en `.claude/integration/contratos/telegram.md`. "Vincular Telegram" pide el código
+(`POST /portal/telegram/vincular`), ofrece "Abrir Telegram" (`t.me/<bot>?start=<código>`) y de respaldo
+`/start <código>`, y consulta `GET /portal/telegram` cada 3 s hasta ver "Vinculado" o hasta que venza.
+Tras recargar sigue esperando (solo `vence_en` en `sessionStorage`, nunca el código). Desvincular pide
+confirmación. Telegram como canal preferido solo se habilita con el chat vinculado.
+
+### Promesa rechazada
+
+"Cambiar fecha o monto" aparece solo si `corregible` (la regla fue el plazo o la próxima factura); por
+cupo, historial o deuda se ofrece "Contactar a la oficina".
+
+## Accesibilidad
+
+- Controles de al menos 44 × 44 px: `min-h-11 min-w-11` en `UButton`, `min-h-11` en `UInput`, `USelect`
+  y `USelectMenu`, casillas del código de 44 px (`app.config.ts`); el logo y el enlace del pie también.
+- Contraste 4.5:1 en claro y oscuro: en claro los colores semánticos usan el tono 700 (verde 800) y
+  `text-dimmed` el slate-500; en oscuro, los 400 (`assets/css/main.css`).
+- Foco visible: el anillo de Nuxt UI en controles y un `outline` del color primario en enlaces.
+- Revisión automática con Playwright (tamaño de toque, nombre accesible, contraste de texto y foco con
+  Tab) en `/corte`, `/entrar`, el paso del código y los modales de promesa, depósito y comprobante.
 
 ## Datos de la empresa y contacto (configurables desde el panel)
 

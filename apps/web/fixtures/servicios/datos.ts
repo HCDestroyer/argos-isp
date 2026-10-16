@@ -53,6 +53,9 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         plantilla_facturacion_id: cliente.tipo === 'empresa' ? 2 : 1,
         estado,
         promesa_activa: cliente.id === 12,
+        // Como la API (A1, semana 2): siempre trae el tipo de conexión y el amarre.
+        tipo_conexion: 'pppoe',
+        amarre_ip_mac: false,
         user_ppp: sucursal ? `${usuarioPpp(cliente.nombre, cliente.id)}-b` : usuarioPpp(cliente.nombre, cliente.id),
         mac: `4C:5E:0C:${String(10 + id).padStart(2, '0')}:A${id % 10}:${String(id).padStart(2, '0')}`,
         direccion: sucursal ? 'Sucursal 2, local 4' : cliente.direccion,

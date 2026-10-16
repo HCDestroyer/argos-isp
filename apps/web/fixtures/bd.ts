@@ -6,6 +6,8 @@ import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
+import { comprobantes } from './comprobantes/datos'
+import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
@@ -34,11 +36,14 @@ interface BaseFixtures {
     sesiones: Schema<'Sesion'>[]
     facturas: Schema<'Factura'>[]
     pagos: Schema<'Pago'>[]
+    comprobantes: Schema<'Comprobante'>[]
     cajas: Schema<'Caja'>[]
     turnos: Schema<'CajaTurno'>[]
     promesas: Schema<'Promesa'>[]
     cuentas: Schema<'Cuenta'>[]
     asientos: Schema<'Asiento'>[]
+    egresos: Schema<'Egreso'>[]
+    cierres: Schema<'CierrePeriodo'>[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -70,11 +75,14 @@ function inicial(): BaseFixtures {
         sesiones,
         facturas,
         pagos,
+        comprobantes,
         cajas,
         turnos,
         promesas,
         cuentas,
         asientos,
+        egresos,
+        cierres,
         bancos,
         cuentasBancarias,
         empresa,

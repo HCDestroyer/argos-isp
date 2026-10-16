@@ -9,7 +9,7 @@ import { escenario, estadoServicio, generar } from '#tests/billing/ayudas_billin
 import { EnviadorFalso, cookieDeSesion, nitAleatorio } from '#tests/portal/ayudas_portal'
 import { aTexto, dec } from '#ledger/dinero'
 import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
-import { fechaLegible, motivoParaCliente, venceAlFinalDelDia } from '#portal/promesas'
+import { esCorregible, fechaLegible, motivoParaCliente, venceAlFinalDelDia } from '#portal/promesas'
 import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
@@ -126,6 +126,8 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             monto_maximo: s.deuda,
             monto_sugerido: s.deuda,
             abono_inicial: null,
+            deuda_maxima: null,
+            pago_previo: null,
             requiere_aprobacion: false,
         })
         assert.equal(respuesta.header('cache-control'), 'no-store')
@@ -159,6 +161,50 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             abonado: '0.00',
             faltante: aTexto(dec(s.deuda).div(2)),
         })
+        // sin abonar, la promesa no se aprobaría: el portal no deja enviar
+        assert.equal(cuerpo.pago_previo, aTexto(dec(s.deuda).div(2)))
+    })
+
+    test('condiciones de limitesPromesa (A3): deuda máxima y pago previo, iguales a lo que decide crear', async ({
+        client,
+        assert,
+    }) => {
+        const s = await cortado({ deuda_maxima: '100.00' })
+        const leidas = await estado(
+            client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
+            200,
+        )
+        const cuerpo = leidas.body()
+        assert.isTrue(cuerpo.disponible)
+        const exceso = aTexto(dec(s.deuda).minus('100.00'))
+        assert.deepEqual(cuerpo.deuda_maxima, { maximo: '100.00', vencida: s.deuda, faltante: exceso })
+        assert.equal(cuerpo.pago_previo, exceso)
+
+        // lo que anunció el portal es lo que decide CrearPromesaPago
+        const promesa = await estado(
+            client
+                .post('/api/v1/portal/promesas')
+                .header('X-Forwarded-For', s.ip)
+                .json({ vence_el: cuerpo.fecha_maxima, monto: cuerpo.monto_sugerido }),
+            201,
+        )
+        assert.equal(promesa.body().resultado, 'rechazada')
+        assert.include(promesa.body().motivo, 'saldo vencido es mayor que el permitido')
+    })
+
+    test('condiciones: cupo del periodo agotado → no disponible con el motivo', async ({
+        client,
+        assert,
+    }) => {
+        const s = await cortado({ canales: { portal: { max_por_periodo: 0 } } })
+        const leidas = await estado(
+            client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
+            200,
+        )
+        const cuerpo = leidas.body()
+        assert.isFalse(cuerpo.disponible)
+        assert.include(cuerpo.motivo, 'Ya usaste las promesas de pago disponibles para este periodo')
+        assert.isNull(cuerpo.fecha_maxima)
     })
 
     test('por IP: aprobada reactiva el servicio y /portal/estado lo ve; auditoría como sistema/portal', async ({
@@ -177,6 +223,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         )
         const cuerpo = respuesta.body()
         assert.deepEqual(Object.keys(cuerpo).sort(), [
+            'corregible',
             'id',
             'monto',
             'motivo',
@@ -230,6 +277,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             resultado: 'rechazada',
             servicio_estado: null,
             motivo: 'La fecha de pago debe estar dentro de los próximos 3 días.',
+            corregible: true,
         })
         assert.notInclude(JSON.stringify(respuesta.body()), 'plazo_max_dias')
         assert.equal(await estadoServicio(s.servicioId), 'suspendido')
@@ -455,5 +503,26 @@ test.group('Portal: motivo de la promesa en palabras del cliente', () => {
         // Una regla nueva de A3 cae en su motivo (ya legible), no en el código.
         assert.equal(motivoParaCliente(evaluacion('regla_futura', null)), 'motivo interno de regla_futura')
         assert.equal(fechaLegible('2026-01-31'), '31 de enero')
+    })
+
+    test('solo el plazo y la próxima factura se corrigen cambiando la fecha o el monto', ({ assert }) => {
+        assert.isTrue(esCorregible(evaluacion('plazo_max_dias', 3)))
+        assert.isTrue(esCorregible(evaluacion('no_exceder_siguiente_facturacion', '2026-11-01')))
+        for (const regla of [
+            'max_por_periodo',
+            'habilitadas',
+            'canal_permitido',
+            'sin_deuda',
+            'deuda_maxima',
+            'abono_inicial_pct',
+            'antiguedad_minima_dias',
+            'cumplimiento_minimo_pct',
+            'bloqueo_tras_incumplida_dias',
+            'regla_futura',
+        ]) {
+            assert.isFalse(esCorregible(evaluacion(regla, null)), regla)
+        }
+        const aprobada = { ...evaluacion('plazo_max_dias', 3), resultado: 'aprobada' } as ResultadoEvaluacion
+        assert.isFalse(esCorregible(aprobada))
     })
 })

@@ -358,29 +358,35 @@ function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
     }
 }
 
+/**
+ * Todo `POST /pagos` después del ACL: validar, 409 por referencia, aplicar, asiento, bitácora y
+ * `servicios[]`. Lo reutiliza `POST /comprobantes/:id/aprobar`, que registra el pago anidado.
+ */
+export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
+    const errores = validar(cuerpoObjeto(solicitud))
+    if (errores.length) {
+        return datosInvalidos(errores)
+    }
+    const repetida = referenciaRepetida(cuerpoObjeto(solicitud))
+    if (repetida) {
+        return repetida
+    }
+    const resultado = registrarPago(solicitud)
+    if (Array.isArray(resultado)) {
+        return datosInvalidos(resultado)
+    }
+    bd.pagos.push(resultado)
+    bd.asientos.push(asientoPago(siguienteId(bd.asientos), resultado))
+    registrarAccion(solicitud, 'pagos.registrar', { tipo: 'pago', id: resultado.id }, cuerpoObjeto(solicitud))
+    const tocados = new Set(resultado.aplicaciones
+        .map(a => bd.facturas.find(f => f.id === a.factura_id)?.servicio_id)
+        .filter((id): id is number => typeof id === 'number'))
+    const servicios = evaluarServicios([...tocados])
+    return { status: 201, cuerpo: { ...resultado, servicios } }
+}
+
 export const rutasFacturacion: RutasFixture = {
-    'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia((solicitud) => {
-        const errores = validar(cuerpoObjeto(solicitud))
-        if (errores.length) {
-            return datosInvalidos(errores)
-        }
-        const repetida = referenciaRepetida(cuerpoObjeto(solicitud))
-        if (repetida) {
-            return repetida
-        }
-        const resultado = registrarPago(solicitud)
-        if (Array.isArray(resultado)) {
-            return datosInvalidos(resultado)
-        }
-        bd.pagos.push(resultado)
-        bd.asientos.push(asientoPago(siguienteId(bd.asientos), resultado))
-        registrarAccion(solicitud, 'pagos.registrar', { tipo: 'pago', id: resultado.id }, cuerpoObjeto(solicitud))
-        const tocados = new Set(resultado.aplicaciones
-            .map(a => bd.facturas.find(f => f.id === a.factura_id)?.servicio_id)
-            .filter((id): id is number => typeof id === 'number'))
-        const servicios = evaluarServicios([...tocados])
-        return { status: 201, cuerpo: { ...resultado, servicios } }
-    })),
+    'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia(procesarPago)),
 
     'GET /api/v1/pagos': conPermiso('pagos.ver', (solicitud) => {
         const cliente = numeroQuery(solicitud, 'cliente_id')
