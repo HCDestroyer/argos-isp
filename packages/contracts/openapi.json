@@ -14255,7 +14255,8 @@
             "minimum": 1
           },
           "campo": {
-            "type": "string"
+            "type": "string",
+            "description": "Nombre del campo en snake_case (`ipv4`, `prefijo_enlace_v6`). Filas anteriores al día 4 pueden traer `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6`"
           },
           "antes": {},
           "despues": {},
@@ -14277,6 +14278,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "actor_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del usuario (null para el sistema)"
           },
           "request_id": {
             "type": [
