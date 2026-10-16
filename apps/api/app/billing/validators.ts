@@ -414,3 +414,18 @@ export const simularPagoFalsaValidator = vine.compile(
         notificar: vine.boolean().optional().meta({ description: 'false simula un webhook perdido' }),
     }),
 )
+
+export const simularPromesaValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad(),
+        canal: vine
+            .enum(['portal', 'ia', 'operador', 'supervisor'] as const)
+            .optional()
+            .meta({ description: 'Por defecto el de la petición (portal/ia por X-Canal) u operador' }),
+        vence_en: instanteIso().optional().meta({ description: 'Por defecto: el fin de mañana (Guatemala)' }),
+        monto: dinero().optional().meta({ description: 'Por defecto: la deuda pendiente del servicio' }),
+        evaluar_en: instanteIso()
+            .optional()
+            .meta({ description: 'Simular como si fuera este instante (por defecto ahora)' }),
+    }),
+)

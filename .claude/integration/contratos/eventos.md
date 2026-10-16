@@ -45,7 +45,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | Grupo | Dueño | Eventos que le interesan |
 | --- | --- | --- |
 | `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
-| `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
+| `billing` | A3 | `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar las vistas del dashboard, `ConsumidorResumenes`) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y cambios de plan (reescribe `aaa:user:<user_ppp>`) |
 

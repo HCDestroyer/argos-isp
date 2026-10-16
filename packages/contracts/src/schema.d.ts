@@ -1709,6 +1709,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/promesas/simular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simular una promesa: evalúa todas las reglas sin crear nada
+         * @description Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.
+         */
+        post: operations["promesasSimular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/altas-bajas": {
         parameters: {
             query?: never;
@@ -3508,6 +3528,20 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ReglaSimulada: {
+            regla: string;
+            ok: boolean;
+            /** @description false: la configuración no exige esta regla */
+            aplica: boolean;
+            /** @description Lo medido (días, monto, cantidad, %) */
+            valor: string | number | boolean | null;
+            /** @description Límite aplicado (null = sin límite) */
+            limite: string | number | boolean | null;
+            /** @description general o el canal cuyo límite reemplazó al general */
+            origen: string;
+            /** @description Explicación para la pantalla */
+            detalle: string;
+        };
         ReglasPromesa: {
             habilitadas: boolean;
             /** @description Promesas por periodo de facturación */
@@ -4055,6 +4089,75 @@ export interface components {
             /** @description Token Bearer opaco */
             token: string;
             usuario: components["schemas"]["Me"];
+        };
+        SimulacionPromesa: {
+            servicio_id: number;
+            cliente_id: number;
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            vence_en: string;
+            monto: components["schemas"]["Dinero"];
+            /** Format: date-time */
+            evaluada_en: string;
+            /**
+             * @description Lo que deciden las reglas (igual que al crear con estos datos)
+             * @enum {string}
+             */
+            resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
+            /** @description Primera regla que falla o requiere_aprobacion */
+            regla: string | null;
+            motivo: string;
+            /**
+             * @description error: crear respondería 422/409 por alguna validación
+             * @enum {string}
+             */
+            resultado_creacion: "aprobada" | "rechazada" | "pendiente_aprobacion" | "error";
+            /** @description Todas las reglas, en el orden en que se evalúan */
+            reglas: components["schemas"]["ReglaSimulada"][];
+            validaciones: {
+                /** @enum {string} */
+                campo: "monto" | "vence_en" | "servicio_id";
+                ok: boolean;
+                regla: string;
+                detalle: string;
+            }[];
+            deuda: {
+                pendiente: components["schemas"]["Dinero"];
+                vencida: components["schemas"]["Dinero"];
+                pagado_pendientes: components["schemas"]["Dinero"];
+                facturas_vencidas: number;
+            };
+            historial: {
+                ventana: number;
+                resueltas: number;
+                cumplidas: number;
+                cumplimiento_pct: number | null;
+            };
+            /** Format: date */
+            siguiente_facturacion: string | null;
+            limites: {
+                habilitadas: boolean;
+                permitido: boolean;
+                requiere_aprobacion: boolean;
+                plazo_max_dias: number;
+                /**
+                 * Format: date
+                 * @description Último día en que puede vencer
+                 */
+                fecha_maxima: string;
+                /** Format: date */
+                siguiente_facturacion: string | null;
+                deuda_pendiente: components["schemas"]["Dinero"];
+                deuda_vencida: components["schemas"]["Dinero"];
+                deuda_maxima: components["schemas"]["Dinero"] | null;
+                abono_requerido: components["schemas"]["Dinero"];
+                abono_pagado: components["schemas"]["Dinero"];
+                max_por_periodo: number;
+                en_periodo: number;
+            };
+            /** @description Suspendido a mano: la promesa no lo reactivaría */
+            suspension_manual: boolean;
         };
         TokenApi: {
             id: number;
@@ -10397,6 +10500,79 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    promesasSimular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    servicio_id: number;
+                    /**
+                     * @description Por defecto el de la petición (portal/ia por X-Canal) u operador
+                     * @enum {string}
+                     */
+                    canal?: "portal" | "ia" | "operador" | "supervisor";
+                    /**
+                     * Format: date-time
+                     * @description Por defecto: el fin de mañana (Guatemala)
+                     */
+                    vence_en?: string;
+                    /**
+                     * @description Por defecto: la deuda pendiente del servicio
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /**
+                     * Format: date-time
+                     * @description Simular como si fuera este instante (por defecto ahora)
+                     */
+                    evaluar_en?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Simulación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulacionPromesa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso promesas.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

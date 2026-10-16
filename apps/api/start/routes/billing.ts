@@ -28,6 +28,7 @@ import { NoEncontrado, Prohibido } from '#shared/errores'
 import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import { simularPromesa } from '#billing/simulador_promesas'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
 import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
@@ -80,6 +81,7 @@ import {
     ResumenDashboard,
 } from '#billing/reportes/esquemas'
 import {
+    SimulacionPromesa,
     CobroPasarela,
     ConciliacionPasarela,
     ResultadoWebhookPasarela,
@@ -341,6 +343,31 @@ const promesas: Ruta[] = [
                 { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, monto: cuerpo.monto, canal },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/promesas/simular',
+        operacion: 'promesasSimular',
+        resumen: 'Simular una promesa: evalúa todas las reglas sin crear nada',
+        etiqueta: 'promesas',
+        permiso: 'promesas.ver',
+        cuerpo: v.simularPromesaValidator,
+        descripcion:
+            'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
+        respuesta: { status: 200, descripcion: 'Simulación', esquema: SimulacionPromesa },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(cuerpo.servicio_id))
+            const canalPeticion = ctx.contextoAccion().canal
+            return simularPromesa({
+                servicio_id: cuerpo.servicio_id,
+                canal:
+                    cuerpo.canal ??
+                    (canalPeticion === 'portal' || canalPeticion === 'ia' ? canalPeticion : 'operador'),
+                vence_en: cuerpo.vence_en,
+                monto: cuerpo.monto,
+                ahora: cuerpo.evaluar_en,
+            })
         },
     }),
     definirRuta({

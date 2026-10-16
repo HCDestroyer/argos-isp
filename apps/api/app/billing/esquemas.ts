@@ -462,3 +462,81 @@ export const ConciliacionPasarela = definirEsquema(
         ['ejecutado_por', 'created_at'],
     ),
 )
+
+const valorRegla = { type: ['string', 'number', 'boolean', 'null'] }
+
+export const ReglaSimulada = definirEsquema(
+    'ReglaSimulada',
+    objeto({
+        regla: texto,
+        ok: booleano,
+        aplica: { ...booleano, description: 'false: la configuración no exige esta regla' },
+        valor: { ...valorRegla, description: 'Lo medido (días, monto, cantidad, %)' },
+        limite: { ...valorRegla, description: 'Límite aplicado (null = sin límite)' },
+        origen: { ...texto, description: 'general o el canal cuyo límite reemplazó al general' },
+        detalle: { ...texto, description: 'Explicación para la pantalla' },
+    }),
+)
+
+export const SimulacionPromesa = definirEsquema(
+    'SimulacionPromesa',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+        vence_en: instante,
+        monto: Dinero,
+        evaluada_en: instante,
+        resultado: {
+            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
+            description: 'Lo que deciden las reglas (igual que al crear con estos datos)',
+        },
+        regla: { ...nulable(texto), description: 'Primera regla que falla o requiere_aprobacion' },
+        motivo: texto,
+        resultado_creacion: {
+            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion', 'error']),
+            description: 'error: crear respondería 422/409 por alguna validación',
+        },
+        reglas: { ...lista(ReglaSimulada), description: 'Todas las reglas, en el orden en que se evalúan' },
+        validaciones: lista(
+            objeto({
+                campo: enumerado(['monto', 'vence_en', 'servicio_id']),
+                ok: booleano,
+                regla: texto,
+                detalle: texto,
+            }),
+        ),
+        deuda: objeto({
+            pendiente: Dinero,
+            vencida: Dinero,
+            pagado_pendientes: Dinero,
+            facturas_vencidas: entero,
+        }),
+        historial: objeto({
+            ventana: entero,
+            resueltas: entero,
+            cumplidas: entero,
+            cumplimiento_pct: nulable(entero),
+        }),
+        siguiente_facturacion: nulable(fecha),
+        limites: objeto({
+            habilitadas: booleano,
+            permitido: booleano,
+            requiere_aprobacion: booleano,
+            plazo_max_dias: entero,
+            fecha_maxima: { ...fecha, description: 'Último día en que puede vencer' },
+            siguiente_facturacion: nulable(fecha),
+            deuda_pendiente: Dinero,
+            deuda_vencida: Dinero,
+            deuda_maxima: nulable(Dinero),
+            abono_requerido: Dinero,
+            abono_pagado: Dinero,
+            max_por_periodo: entero,
+            en_periodo: entero,
+        }),
+        suspension_manual: {
+            ...booleano,
+            description: 'Suspendido a mano: la promesa no lo reactivaría',
+        },
+    }),
+)

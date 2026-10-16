@@ -11219,6 +11219,113 @@
         "x-implementado": true
       }
     },
+    "/api/v1/promesas/simular": {
+      "post": {
+        "operationId": "promesasSimular",
+        "summary": "Simular una promesa: evalúa todas las reglas sin crear nada",
+        "description": "Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "portal",
+                      "ia",
+                      "operador",
+                      "supervisor"
+                    ],
+                    "description": "Por defecto el de la petición (portal/ia por X-Canal) u operador"
+                  },
+                  "vence_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Por defecto: el fin de mañana (Guatemala)"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Por defecto: la deuda pendiente del servicio",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "evaluar_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Simular como si fuera este instante (por defecto ahora)"
+                  }
+                },
+                "required": [
+                  "servicio_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Simulación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulacionPromesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/altas-bajas": {
       "get": {
         "operationId": "reportesAltasBajas",
@@ -21667,6 +21774,56 @@
           }
         }
       },
+      "ReglaSimulada": {
+        "type": "object",
+        "required": [
+          "regla",
+          "ok",
+          "aplica",
+          "valor",
+          "limite",
+          "origen",
+          "detalle"
+        ],
+        "properties": {
+          "regla": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "aplica": {
+            "type": "boolean",
+            "description": "false: la configuración no exige esta regla"
+          },
+          "valor": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Lo medido (días, monto, cantidad, %)"
+          },
+          "limite": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Límite aplicado (null = sin límite)"
+          },
+          "origen": {
+            "type": "string",
+            "description": "general o el canal cuyo límite reemplazó al general"
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Explicación para la pantalla"
+          }
+        }
+      },
       "ReglasPromesa": {
         "type": "object",
         "required": [
@@ -24182,6 +24339,257 @@
           },
           "usuario": {
             "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "SimulacionPromesa": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "cliente_id",
+          "canal",
+          "vence_en",
+          "monto",
+          "evaluada_en",
+          "resultado",
+          "regla",
+          "motivo",
+          "resultado_creacion",
+          "reglas",
+          "validaciones",
+          "deuda",
+          "historial",
+          "siguiente_facturacion",
+          "limites",
+          "suspension_manual"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ]
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "evaluada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion"
+            ],
+            "description": "Lo que deciden las reglas (igual que al crear con estos datos)"
+          },
+          "regla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Primera regla que falla o requiere_aprobacion"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "resultado_creacion": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion",
+              "error"
+            ],
+            "description": "error: crear respondería 422/409 por alguna validación"
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaSimulada"
+            },
+            "description": "Todas las reglas, en el orden en que se evalúan"
+          },
+          "validaciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "campo",
+                "ok",
+                "regla",
+                "detalle"
+              ],
+              "properties": {
+                "campo": {
+                  "type": "string",
+                  "enum": [
+                    "monto",
+                    "vence_en",
+                    "servicio_id"
+                  ]
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "regla": {
+                  "type": "string"
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "deuda": {
+            "type": "object",
+            "required": [
+              "pendiente",
+              "vencida",
+              "pagado_pendientes",
+              "facturas_vencidas"
+            ],
+            "properties": {
+              "pendiente": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "vencida": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "pagado_pendientes": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "facturas_vencidas": {
+                "type": "integer"
+              }
+            }
+          },
+          "historial": {
+            "type": "object",
+            "required": [
+              "ventana",
+              "resueltas",
+              "cumplidas",
+              "cumplimiento_pct"
+            ],
+            "properties": {
+              "ventana": {
+                "type": "integer"
+              },
+              "resueltas": {
+                "type": "integer"
+              },
+              "cumplidas": {
+                "type": "integer"
+              },
+              "cumplimiento_pct": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "siguiente_facturacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "limites": {
+            "type": "object",
+            "required": [
+              "habilitadas",
+              "permitido",
+              "requiere_aprobacion",
+              "plazo_max_dias",
+              "fecha_maxima",
+              "siguiente_facturacion",
+              "deuda_pendiente",
+              "deuda_vencida",
+              "deuda_maxima",
+              "abono_requerido",
+              "abono_pagado",
+              "max_por_periodo",
+              "en_periodo"
+            ],
+            "properties": {
+              "habilitadas": {
+                "type": "boolean"
+              },
+              "permitido": {
+                "type": "boolean"
+              },
+              "requiere_aprobacion": {
+                "type": "boolean"
+              },
+              "plazo_max_dias": {
+                "type": "integer"
+              },
+              "fecha_maxima": {
+                "type": "string",
+                "format": "date",
+                "description": "Último día en que puede vencer"
+              },
+              "siguiente_facturacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "deuda_pendiente": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "deuda_vencida": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "deuda_maxima": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "abono_requerido": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "abono_pagado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "max_por_periodo": {
+                "type": "integer"
+              },
+              "en_periodo": {
+                "type": "integer"
+              }
+            }
+          },
+          "suspension_manual": {
+            "type": "boolean",
+            "description": "Suspendido a mano: la promesa no lo reactivaría"
           }
         }
       },

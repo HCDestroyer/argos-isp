@@ -186,6 +186,10 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 
 `Factura`, `Pago` (pagador) y `Promesa` traen `cliente_nombre`. Filtros: `GET /facturas?tipo=servicio|mora`, `GET /pagos?factura_id=` (pagos aplicados a esa factura). `POST /pagos/:id/anular` responde `servicios[]` como el registro.
 
+### Simulador (semana 2, `simulador_promesas.ts`)
+
+`POST /promesas/simular { servicio_id, canal?, vence_en?, monto?, evaluar_en? }` (`promesas.ver`): la misma evaluación que crear (`datosEvaluacion` + `evaluarReglas` en modo `completo`), sin guardar nada ni auditar. Devuelve todas las reglas con `ok`, `aplica`, `valor`, `limite`, `origen` y `detalle`; `resultado`/`regla` iguales a los de crear con esos datos; `validaciones` (monto, vencimiento futuro, promesa abierta) y `resultado_creacion` (`error` si crear respondería 422/409); `limites` del canal (plazo, fecha máxima, abono, deuda, cupo). Por defecto vence mañana al final del día y el monto es la deuda pendiente. `limitesPromesa(servicioId, canal)` da solo los límites (portal). Contrato: `.claude/integration/contratos/promesas.md`.
+
 ## Estado de cuenta (tarea 11)
 
 `estado_cuenta.ts`: `GET /clientes/:id/estado-cuenta` (permiso `clientes.estado_cuenta`, alcance por zona/router del cliente). Es el **auxiliar CxC** del libro:

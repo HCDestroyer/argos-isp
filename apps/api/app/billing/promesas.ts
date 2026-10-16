@@ -60,6 +60,8 @@ export interface ReglaEvaluada {
     /** `general` o el canal cuyo límite reemplazó al general */
     origen: 'general' | CanalPromesa
     detalle: string
+    /** false: la regla no se exige con esta configuración (solo en la evaluación completa) */
+    aplica?: boolean
 }
 
 export type ResultadoPromesa = 'aprobada' | 'rechazada' | 'pendiente_aprobacion'
@@ -121,8 +123,13 @@ export function cumplimiento(resueltas: EstadoPromesa[], ventana: number) {
  * son null, **reemplazan** al general. `permitido: false` rechaza y `requiere_aprobacion: true`
  * deja la promesa `pendiente_aprobacion` cuando todo lo demás pasa.
  */
-export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
+export function evaluarReglas(
+    datos: DatosEvaluacion,
+    opciones: { completo?: boolean } = {},
+): ResultadoEvaluacion {
     const { reglas, canal } = datos
+    const completo = opciones.completo ?? false
+    let primera: ReglaEvaluada | null = null
     const limitesCanal = reglas.canales[canal]
     const historial = cumplimiento(datos.resueltas, reglas.historial_ventana)
     const evaluadas: ReglaEvaluada[] = []
@@ -145,10 +152,30 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         motivo,
         reglas: evaluadas,
     })
-    /** Registra la regla; devuelve true si falló. */
+    /**
+     * Registra la regla; devuelve true si falló y hay que detenerse. En la evaluación completa
+     * (simulador) no se detiene: anota la primera que falló y sigue con las demás.
+     */
     const revisar = (r: ReglaEvaluada) => {
-        evaluadas.push(r)
-        return !r.ok
+        evaluadas.push(completo ? { ...r, aplica: true } : r)
+        if (r.ok) return false
+        if (!completo) return true
+        primera ??= r
+        return false
+    }
+    /** Simulador: la regla no se exige con esta configuración. */
+    const omitir = (regla: NombreRegla, detalle: string, limite: ReglaEvaluada['limite'] = null) => {
+        if (completo) {
+            evaluadas.push({
+                regla,
+                ok: true,
+                valor: null,
+                limite,
+                origen: 'general',
+                detalle,
+                aplica: false,
+            })
+        }
     }
 
     if (
@@ -234,6 +261,12 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'no_exceder_siguiente_facturacion', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir(
+            'no_exceder_siguiente_facturacion',
+            'La plantilla no limita la promesa a la siguiente facturación',
+            false,
+        )
     }
 
     const deudaMaxima = limitesCanal.deuda_maxima ?? reglas.deuda_maxima
@@ -254,6 +287,8 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'deuda_maxima', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir('deuda_maxima', 'Sin deuda máxima para prometer')
     }
 
     if (reglas.abono_inicial_pct > 0) {
@@ -273,6 +308,8 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'abono_inicial_pct', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir('abono_inicial_pct', 'No se exige abono inicial', 0)
     }
 
     if (reglas.antiguedad_minima_dias > 0) {
@@ -292,6 +329,8 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'antiguedad_minima_dias', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir('antiguedad_minima_dias', 'No se exige antigüedad mínima', 0)
     }
 
     if (reglas.cumplimiento_minimo_pct !== null && historial.cumplimiento_pct !== null) {
@@ -310,6 +349,14 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'cumplimiento_minimo_pct', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir(
+            'cumplimiento_minimo_pct',
+            reglas.cumplimiento_minimo_pct === null
+                ? 'No se exige cumplimiento mínimo'
+                : 'Sin promesas resueltas: el cumplimiento mínimo no se aplica todavía',
+            reglas.cumplimiento_minimo_pct,
+        )
     }
 
     if (reglas.bloqueo_tras_incumplida_dias > 0 && datos.ultima_incumplida) {
@@ -333,6 +380,14 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
         ) {
             return fin('rechazada', 'bloqueo_tras_incumplida_dias', evaluadas.at(-1)!.detalle)
         }
+    } else {
+        omitir(
+            'bloqueo_tras_incumplida_dias',
+            reglas.bloqueo_tras_incumplida_dias > 0
+                ? 'No tiene promesas incumplidas'
+                : 'Sin bloqueo tras una promesa incumplida',
+            reglas.bloqueo_tras_incumplida_dias,
+        )
     }
 
     const buenHistorial =
@@ -358,6 +413,9 @@ export function evaluarReglas(datos: DatosEvaluacion): ResultadoEvaluacion {
     ) {
         return fin('rechazada', 'max_por_periodo', evaluadas.at(-1)!.detalle)
     }
+
+    const falla = primera as ReglaEvaluada | null
+    if (falla) return fin('rechazada', falla.regla, falla.detalle)
 
     if (limitesCanal.requiere_aprobacion) {
         revisar({
