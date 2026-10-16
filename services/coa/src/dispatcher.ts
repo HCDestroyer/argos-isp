@@ -1,7 +1,7 @@
 import type { Almacen, SesionActiva } from './almacen.ts'
 import { descifrar } from './cifrado.ts'
-import type { PerfilSuspendido } from './config.ts'
-import { decidir, leerEvento, type Decision } from './decision.ts'
+import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
+import { decidir, EVENTOS_COA, leerDesconexion, leerEvento, type Decision } from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
 
 /**
@@ -35,6 +35,8 @@ export interface OpcionesDispatcher {
     nas: ClienteNas
     claveSecretos: Buffer
     suspendido: PerfilSuspendido
+    /** `COA_SUSPENDER_CON_IPV6` (ver `config.ts`); por defecto `coa` */
+    suspenderConIpv6?: ModoSuspensionIpv6
     puertoNas: number
     timeoutMs: number
     reintentos: number
@@ -66,10 +68,11 @@ export class Dispatcher {
     }
 
     acepta(evento: string): boolean {
-        return evento === 'servicio.estado_cambiado' || evento === 'servicio.config_cambiada'
+        return (EVENTOS_COA as readonly string[]).includes(evento)
     }
 
     async procesar(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        if (entrada.evento === 'sesion.desconexion_solicitada') return this.#desconectar(entrada)
         const evento = leerEvento(entrada.evento, entrada.payload)
         if (!evento) return { decision: null, sesiones: [] }
         const eventoId = String(entrada.id)
@@ -92,16 +95,69 @@ export class Dispatcher {
         const resultados: ResultadoSesion[] = []
         for (const sesion of sesiones) {
             resultados.push(
-                await this.#enviarASesion(entrada, eventoId, evento.servicio_id, sesion, decision),
+                await this.#enviarASesion(
+                    entrada,
+                    eventoId,
+                    evento.servicio_id,
+                    sesion,
+                    this.#paraSesion(decision, sesion),
+                ),
             )
         }
         return { decision, sesiones: resultados }
     }
 
+    /**
+     * Ajuste por sesión: con `suspenderConIpv6 = disconnect`, una sesión con prefijo IPv6 se suspende
+     * con Disconnect (al reconectar entra con el perfil `suspendido`, que sí mete el /64 y el /56 en la
+     * address-list IPv6 y permite el redirect a `/corte`). Sin IPv6 sigue por CoA.
+     */
+    #paraSesion(
+        decision: Exclude<Decision, { accion: 'nada' }>,
+        sesion: SesionActiva,
+    ): Exclude<Decision, { accion: 'nada' }> {
+        if (
+            decision.accion === 'coa' &&
+            decision.suspender &&
+            this.#op.suspenderConIpv6 === 'disconnect' &&
+            (sesion.prefijo_enlace_v6 !== null || sesion.prefijo_delegado_v6 !== null)
+        ) {
+            return {
+                accion: 'disconnect',
+                razon: `${decision.razon} (sesión con IPv6: reconecta con el perfil suspendido)`,
+            }
+        }
+        return decision
+    }
+
+    /**
+     * Desconexión manual: un Disconnect-Request a la sesión del evento si sigue abierta. Si ya
+     * terminó (el cliente se fue o la cortó otro evento) no hay nada que mandar.
+     */
+    async #desconectar(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        const evento = leerDesconexion(entrada.payload)
+        const eventoId = String(entrada.id)
+        const sesion = await this.#op.almacen.sesionAbierta(evento.sesion_id)
+        if (!sesion) {
+            const decision: Decision = { accion: 'nada', razon: 'la sesión ya terminó' }
+            this.#op.log.info(
+                { evento_id: eventoId, sesion_id: evento.sesion_id, razon: decision.razon },
+                'coa: nada que enviar',
+            )
+            return { decision, sesiones: [] }
+        }
+        const decision: Decision = {
+            accion: 'disconnect',
+            razon: evento.motivo ? `manual: ${evento.motivo}` : 'manual',
+        }
+        const resultado = await this.#enviarASesion(entrada, eventoId, sesion.servicio_id, sesion, decision)
+        return { decision, sesiones: [resultado] }
+    }
+
     async #enviarASesion(
         entrada: EventoEntrante,
         eventoId: string,
-        servicioId: number,
+        servicioId: number | null,
         sesion: SesionActiva,
         decision: Exclude<Decision, { accion: 'nada' }>,
     ): Promise<ResultadoSesion> {

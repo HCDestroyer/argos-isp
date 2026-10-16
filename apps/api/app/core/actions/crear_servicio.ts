@@ -11,12 +11,20 @@ import {
     validarModoIpv6,
 } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { registrarTramo } from '#network/historial'
+import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
+import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 
 export interface EntradaCrearServicio {
     cliente_id: number
     router_id: number
     plan_id: number
     plantilla_facturacion_id?: number | null
+    /**
+     * Sin `plantilla_facturacion_id` (undefined), usar la plantilla por defecto
+     * (`plantillaPorDefecto`). Lo pide `POST /servicios`; las llamadas internas no.
+     */
+    plantillaPorDefecto?: boolean
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
@@ -26,9 +34,13 @@ export interface EntradaCrearServicio {
     costo_override?: string | null
     excluir_firewall?: boolean
     ipv4?: string
+    /** red IPv4 del router de la que asignar (pedido de A4); si no viene, la regla general */
+    red_ipv4_id?: number
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
+    /** excepciones a la plantilla `{ campo: valor }` (campos de `app/billing/excepciones.ts`) */
+    excepciones?: Record<string, unknown>
 }
 
 /** Valida que existan las referencias del cuerpo (422 por campo, no 404). */
@@ -40,8 +52,8 @@ export async function exigirReferencia(t: Transaccion, tabla: string, id: number
 /**
  * Alta de un servicio PPPoE: valida cliente, router activo, plan disponible en el router y
  * plantilla; genera `user_ppp` y `pass_ppp` si no vienen (la contraseña se guarda cifrada v1);
- * asigna IPv4 y reserva prefijos IPv6 según el modo; emite `servicio.creado` y
- * `asignacion.cambiada`.
+ * asigna IPv4 y reserva prefijos IPv6 según el modo; guarda las excepciones a la plantilla
+ * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`.
  */
 export default class CrearServicio extends DomainAction<EntradaCrearServicio, ServicioVista> {
     readonly nombre = 'servicios.crear'
@@ -72,17 +84,23 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             ])
         }
         if (!router.activo) throw new ReglaNegocio('El router está desactivado', 'router_inactivo')
-        if (input.plantilla_facturacion_id) {
+        let plantillaId = input.plantilla_facturacion_id ?? null
+        if (input.plantilla_facturacion_id === undefined && input.plantillaPorDefecto) {
+            plantillaId = await plantillaPorDefecto(t.trx)
+        }
+        if (plantillaId) {
             await exigirReferencia(
                 t,
                 'billing.plantillas_facturacion',
-                input.plantilla_facturacion_id,
+                plantillaId,
                 'plantilla_facturacion_id',
             )
         }
         await exigirReferencia(t, 'network.planes', input.plan_id, 'plan_id')
         const plan = await obtenerImplementacionPlan(input.plan_id, input.router_id, t.trx)
         if (!plan.activo) throw new ReglaNegocio(`El plan ${plan.nombre} está inactivo`, 'plan_inactivo')
+
+        const excepciones = input.excepciones ? await validarExcepciones(input.excepciones) : {}
 
         const modo = input.ipv6_modo ?? modoIpv6PorDefecto(plan)
         validarModoIpv6(plan, modo, input)
@@ -98,7 +116,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 cliente_id: input.cliente_id,
                 router_id: input.router_id,
                 plan_id: input.plan_id,
-                plantilla_facturacion_id: input.plantilla_facturacion_id ?? null,
+                plantilla_facturacion_id: plantillaId,
                 user_ppp: userPpp,
                 pass_ppp: cifrar(input.pass_ppp ?? generarPassPpp()),
                 mac: input.mac ?? null,
@@ -120,11 +138,18 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             plan,
             modo,
             ipv4: input.ipv4,
+            redIpv4Id: input.red_ipv4_id,
             prefijoEstatico: input.prefijo_delegado_v6,
         })
 
+        await registrarTramo(t.trx, id, 'alta')
+        await guardarExcepciones(t.trx, id, excepciones)
+
         const servicio = await verServicio(id, t.trx)
-        await t.registrarCambios({ tipo: 'servicio', id }, null, { ...servicio, pass_ppp: 'definida' })
+        await t.registrarCambios({ tipo: 'servicio', id }, null, {
+            ...paraAuditoriaServicio(servicio),
+            pass_ppp: 'definida',
+        })
         await t.emit('servicio.creado', {
             servicio_id: id,
             cliente_id: input.cliente_id,

@@ -149,3 +149,25 @@ export const Sesion = definirEsquema(
         causa_fin: nulable(texto),
     }),
 )
+
+/** Tramo del historial de asignaciones de un servicio (`network.asignaciones_historial`). */
+export const TramoAsignacion = definirEsquema(
+    'TramoAsignacion',
+    objeto({
+        id,
+        servicio_id: id,
+        router_id: nulable(id),
+        router_nombre: nulable(texto),
+        plan_id: nulable(id),
+        plan_nombre: nulable(texto),
+        ipv4: nulable(texto),
+        prefijo_enlace_v6: nulable(texto),
+        prefijo_delegado_v6: nulable(texto),
+        inicio: instante,
+        fin: { ...nulable(instante), description: 'null = tramo vigente' },
+        motivo: {
+            ...nulable(texto),
+            description: 'alta, edicion: <campos>, retiro: <motivo> o inicial (migración)',
+        },
+    }),
+)

@@ -4,6 +4,7 @@ import type { EstadoServicio } from '#shared/eventos'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { liberarAsignaciones } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { registrarTramo } from '#network/historial'
 
 export interface EntradaRetirarServicio {
     id: number
@@ -42,6 +43,8 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         await liberarAsignaciones(t.trx, input.id)
+        // cierra el tramo vigente del historial (un retirado no abre otro)
+        await registrarTramo(t.trx, input.id, `retiro: ${input.motivo}`)
 
         const despues = await verServicio(input.id, t.trx)
         await t.registrarCambios({ tipo: 'servicio', id: input.id }, antes, despues)
