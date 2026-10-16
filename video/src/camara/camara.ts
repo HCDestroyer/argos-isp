@@ -157,14 +157,48 @@ export function puntoEnMundo(panel: Colocacion, punto: { x: number; y: number })
     return { x: panel.x + lx * Math.cos(a), y: panel.y + ly, z: panel.z - lx * Math.sin(a) }
 }
 
-/** Cámara que mira de frente un punto de la captura con un zoom dado (dolly). */
+/**
+ * Holgura (px de pantalla) que se permite ver más allá del borde de una
+ * captura al acercarse: un poco de fondo alrededor se ve como una ventana; más
+ * se ve como un encuadre fallido.
+ */
+export const HOLGURA_BORDE = 150
+
+/**
+ * Acota el punto al que mira la cámara para que, con ese zoom, la captura
+ * llene el cuadro salvo `holgura` px. Si la captura es más chica que el cuadro
+ * en un eje, se centra en ese eje. El punto de interés sigue a la vista, solo
+ * que no necesariamente en el centro.
+ */
+export function acotarAlPanel(
+    panel: Colocacion,
+    punto: { x: number; y: number },
+    zoom: number,
+    holgura = HOLGURA_BORDE
+): { x: number; y: number } {
+    const acotar = (valor: number, tamano: number, mitadPantalla: number) => {
+        const mitad = (mitadPantalla - holgura) / (zoom * panel.escala)
+        if (mitad * 2 >= tamano) return tamano / 2
+        return Math.min(Math.max(valor, mitad), tamano - mitad)
+    }
+    return { x: acotar(punto.x, panel.ancho, ANCHO_CUADRO / 2), y: acotar(punto.y, panel.alto, ALTO_CUADRO / 2) }
+}
+
+const ANCHO_CUADRO = 1920
+const ALTO_CUADRO = 1080
+
+/**
+ * Cámara que mira de frente un punto de la captura con un zoom dado (dolly).
+ * Con zoom > 1 el punto se acota (`acotarAlPanel`) para no mostrar vacío;
+ * `libre: true` lo desactiva.
+ */
 export function enfocar(
     panel: Colocacion,
     punto: { x: number; y: number },
     zoom: number,
-    desvio: { ry?: number; rx?: number; rz?: number } = {}
+    desvio: { ry?: number; rx?: number; rz?: number; libre?: boolean } = {}
 ): Camara {
-    const objetivo = puntoEnMundo(panel, punto)
+    const objetivo = puntoEnMundo(panel, zoom > 1 && !desvio.libre ? acotarAlPanel(panel, punto, zoom) : punto)
     return orbita(objetivo, PERSPECTIVA / zoom, panel.ry + (desvio.ry ?? 0), desvio.rx ?? 0, desvio.rz ?? 0)
 }
 

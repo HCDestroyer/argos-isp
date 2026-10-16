@@ -60,6 +60,17 @@ export function Root() {
                 width={ANCHO}
                 height={ALTO / 2}
             />
+            {/* Símbolo solo sobre fondo oscuro, 1024 px (logo.png) */}
+            <Still
+                id="LogoSolo"
+                component={() => (
+                    <AbsoluteFill style={{ background: COLOR.fondo, alignItems: 'center', justifyContent: 'center' }}>
+                        <LogoArgos tamano={640} />
+                    </AbsoluteFill>
+                )}
+                width={1024}
+                height={1024}
+            />
         </>
     )
 }

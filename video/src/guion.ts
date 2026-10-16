@@ -203,6 +203,79 @@ export const CAPTURAS = {
 
 export type IdCaptura = keyof typeof CAPTURAS
 
+/**
+ * Punto de interés medido sobre una captura real (formato de
+ * `public/capturas/puntos.json`). `x`, `y` en px lógicos (1280×800), desde la
+ * esquina superior izquierda del contenido. `etiqueta` es la clave del punto en
+ * este guion (p. ej. `chipCortados`) o su `texto` (p. ej. "Cortados · 37",
+ * basta con el comienzo: "Cortados").
+ */
+export interface PuntoExterno {
+    archivo: string
+    x: number
+    y: number
+    etiqueta: string
+    ancho?: number
+    alto?: number
+}
+
+const normalizar = (texto: string) =>
+    texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+
+/**
+ * Sobrescribe, en el sitio, las coordenadas de los puntos del guion con las de
+ * `puntos.json`. Se modifica cada objeto existente (no se reemplaza) para que
+ * las escenas que ya guardaron una referencia vean los valores nuevos.
+ * Devuelve los avisos (puntos que no se pudieron emparejar).
+ */
+export function aplicarPuntos(lista: PuntoExterno[]): string[] {
+    const avisos: string[] = []
+    for (const externo of lista) {
+        const archivo = externo.archivo.replace(/^.*\//, '').replace(/(\.png)?$/i, '.png')
+        const capturas = Object.values(CAPTURAS).filter((c) => c.archivo === archivo)
+        if (capturas.length === 0) {
+            avisos.push(`puntos.json: no hay captura "${archivo}" en el guion`)
+            continue
+        }
+        const buscado = normalizar(externo.etiqueta)
+        let aplicado = false
+        for (const captura of capturas) {
+            const puntos = captura.puntos as Record<string, PuntoInteres>
+            const clave =
+                Object.keys(puntos).find((k) => normalizar(k) === buscado) ??
+                Object.keys(puntos).find((k) => normalizar(puntos[k].texto) === buscado) ??
+                Object.keys(puntos).find((k) => normalizar(puntos[k].texto).startsWith(buscado))
+            if (!clave) continue
+            const punto = puntos[clave]
+            punto.x = externo.x
+            punto.y = externo.y
+            if (externo.ancho !== undefined) punto.ancho = externo.ancho
+            if (externo.alto !== undefined) punto.alto = externo.alto
+            aplicado = true
+        }
+        if (!aplicado) avisos.push(`puntos.json: "${externo.etiqueta}" no coincide con ningún punto de ${archivo}`)
+    }
+    return avisos
+}
+
+/** Todos los puntos del guion en el formato de `puntos.json` (plantilla para medir las capturas reales). */
+export function plantillaPuntos(): PuntoExterno[] {
+    return Object.values(CAPTURAS).flatMap((captura) =>
+        Object.entries(captura.puntos as Record<string, PuntoInteres>).map(([clave, p]) => ({
+            archivo: captura.archivo,
+            x: p.x,
+            y: p.y,
+            etiqueta: clave,
+            ...(p.ancho !== undefined ? { ancho: p.ancho } : {}),
+            ...(p.alto !== undefined ? { alto: p.alto } : {}),
+        }))
+    )
+}
+
 export interface Efecto {
     /** Nombre de un momento de la escena o segundos desde su inicio. */
     en: string | number

@@ -1,6 +1,6 @@
 import { interpolate, useCurrentFrame } from 'remotion'
 import type { Camara, Clave, Colocacion } from '../camara/camara'
-import { animarCamara, deriva, sumarCamaras } from '../camara/camara'
+import { PERSPECTIVA, acotarAlPanel, animarCamara, deriva, puntoEnMundo, sumarCamaras } from '../camara/camara'
 import { CAPTURAS, type EscenaCalculada, FPS, type IdCaptura } from '../guion'
 
 export interface PropsEscena {
@@ -33,13 +33,26 @@ export function camaraDeEscena(
     frame: number,
     claves: Clave[],
     objetivo?: { x: number; y: number },
-    amplitudDeriva = 1
+    amplitudDeriva = 1,
+    /** Captura plana (ry = 0) dentro de la cual se acota el seguimiento del objetivo. */
+    limite?: Colocacion
 ): Camara {
     const { cam, seguir } = animarCamara(frame, claves)
-    const seguida =
+    let seguida =
         objetivo && seguir > 0
             ? { ...cam, x: cam.x + (objetivo.x - cam.x) * seguir, y: cam.y + (objetivo.y - cam.y) * seguir }
             : cam
+    if (limite && seguir > 0) {
+        const zoom = PERSPECTIVA / Math.max(1, seguida.z - limite.z)
+        if (zoom > 1) {
+            const local = {
+                x: (seguida.x - limite.x) / limite.escala + limite.ancho / 2,
+                y: (seguida.y - limite.y) / limite.escala + limite.alto / 2,
+            }
+            const acotado = puntoEnMundo(limite, acotarAlPanel(limite, local, zoom))
+            seguida = { ...seguida, x: acotado.x, y: acotado.y }
+        }
+    }
     return sumarCamaras(seguida, deriva(frame, amplitudDeriva))
 }
 

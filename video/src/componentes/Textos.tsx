@@ -40,7 +40,7 @@ export function TituloSeccion({
                     right: 0,
                     height: 330,
                     opacity: opacidad,
-                    background: `linear-gradient(180deg, ${conAlfa(COLOR.fondo, 0.97)} 0%, ${conAlfa(COLOR.fondo, 0.9)} 55%, ${conAlfa(COLOR.fondo, 0)} 100%)`,
+                    background: `linear-gradient(180deg, ${conAlfa(COLOR.fondo, 0.98)} 0%, ${conAlfa(COLOR.fondo, 0.96)} 58%, ${conAlfa(COLOR.fondo, 0.6)} 78%, ${conAlfa(COLOR.fondo, 0)} 100%)`,
                 }}
             />
             <div
@@ -107,7 +107,7 @@ export function Leyenda({
                     bottom: 0,
                     height: 270,
                     opacity: opacidad,
-                    background: `linear-gradient(0deg, ${conAlfa(COLOR.fondo, 0.96)} 0%, ${conAlfa(COLOR.fondo, 0.85)} 50%, ${conAlfa(COLOR.fondo, 0)} 100%)`,
+                    background: `linear-gradient(0deg, ${conAlfa(COLOR.fondo, 0.98)} 0%, ${conAlfa(COLOR.fondo, 0.95)} 52%, ${conAlfa(COLOR.fondo, 0.55)} 75%, ${conAlfa(COLOR.fondo, 0)} 100%)`,
                 }}
             />
             <div

@@ -39,15 +39,16 @@ export function Servicio({ escena }: PropsEscena) {
             { t: m('vista'), cam: generalDesplazada, curva: 'salida' },
             { t: m('ips') + 16, cam: enfocar(panel, IPS, 1.65, { ry: -4 }) },
             { t: m('clicSuspender') - 26, cam: enfocar(panel, IPS, 1.7, { ry: -2 }) },
-            { t: m('clicSuspender') + 2, cam: enfocar(panel, ACCIONES, 1.9) },
-            { t: m('badge') + 14, cam: enfocar(panel, P.badge, 2.4) },
-            { t: m('clicReactivar') - 22, cam: enfocar(panel, P.badge, 2.4, { ry: 3 }) },
-            { t: m('clicReactivar') + 2, cam: enfocar(panel, ACCIONES, 2.0) },
+            { t: m('clicSuspender') + 2, cam: enfocar(panel, ACCIONES, 1.75) },
+            { t: m('badge') + 14, cam: enfocar(panel, P.badge, 1.9) },
+            { t: m('clicReactivar') - 22, cam: enfocar(panel, P.badge, 1.9, { ry: 3 }) },
+            { t: m('clicReactivar') + 2, cam: enfocar(panel, ACCIONES, 1.8) },
             { t: m('salida'), cam: enfocar(panel, ACCIONES, 1.8, { ry: -3 }) },
             { t: fin, cam: enfocar(panel, { x: 640, y: 400 }, 0.7, { ry: -34 }), curva: 'entrada' },
         ],
         objetivo,
-        0.8
+        0.8,
+        panel
     )
 
     return (

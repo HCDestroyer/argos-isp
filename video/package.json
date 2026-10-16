@@ -12,7 +12,9 @@
         "render": "remotion render src/index.ts Tour out/tour.mp4 --codec=h264 --crf=18",
         "render:prueba": "remotion render src/index.ts Tour out/tour-prueba.mp4 --codec=h264 --scale=0.5 --crf=30 --x264-preset=veryfast",
         "stills": "node scripts/generar-stills.mjs",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "puntos:plantilla": "node scripts/plantilla-puntos.mjs",
+        "logo": "node scripts/exportar-logo.mjs"
     },
     "dependencies": {
         "@remotion/cli": "4.0.535",

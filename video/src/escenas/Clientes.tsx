@@ -34,15 +34,17 @@ export function Clientes({ escena }: PropsEscena) {
             { t: 0, cam: orbita({ x: 0, y: 30, z: 0 }, PERSPECTIVA * 1.5, -32, 8) },
             { t: m('vista'), cam: generalDesplazada, curva: 'salida' },
             { t: m('clicCortados') - 18, cam: generalDesplazada },
-            { t: m('clicCortados') + 2, cam: enfocar(panel, P.chipCortados, 2.1) },
-            { t: m('seguir') + 30, cam: enfocar(panel, P.chipCortados, 2.1) },
+            { t: m('clicCortados') + 2, cam: enfocar(panel, P.chipCortados, 1.85) },
+            { t: m('seguir') + 30, cam: enfocar(panel, P.chipCortados, 1.85) },
             { t: m('clicRouter') - 8, cam: enfocar(panel, P.filtroRouter, 1.55), seguir: 1 },
             { t: m('clicPlan') + 14, cam: enfocar(panel, P.filtroPlan, 1.55), seguir: 1 },
             { t: m('alejar') + 16, cam: enfocar(panel, { x: 700, y: 420 }, 0.95, { ry: 5 }) },
             { t: m('salida'), cam: enfocar(panel, { x: 700, y: 420 }, 1.0, { ry: 8 }) },
             { t: fin, cam: enfocar(panel, { x: 700, y: 420 }, 0.7, { ry: 34 }), curva: 'entrada' },
         ],
-        objetivo
+        objetivo,
+        1,
+        panel
     )
 
     return (

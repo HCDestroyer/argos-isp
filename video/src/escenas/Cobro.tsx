@@ -13,10 +13,12 @@ const recibo = CAPTURAS.cobroRecibo
 const P = facturas.puntos
 const R = recibo.puntos
 const panelFacturas = colocar('cobroFacturas', { y: 30 })
-const panelRecibo = colocar('cobroRecibo', { x: 1750, y: 30, z: -420, ry: -32 })
+const panelRecibo = colocar('cobroRecibo', { x: 2050, y: 30, z: -420, ry: -32 })
 const METODOS = [P.efectivo, P.deposito, P.transferencia, P.ach, P.remesa]
 const CENTRO_METODOS = { x: 1000, y: 326 }
 const CENTRO_PAGO = { x: 1000, y: 610 }
+/** Recibo y badge "Servicio reactivado" a la vez. */
+const VISTA_RECIBO = { x: 640, y: 450 }
 
 /** 4. Cobro rápido: buscar, marcar facturas (también de un familiar), método, recibo y reactivación. */
 export function Cobro({ escena }: PropsEscena) {
@@ -51,8 +53,8 @@ export function Cobro({ escena }: PropsEscena) {
             { t: m('clicCobrar') + 2, cam: enfocar(panelFacturas, CENTRO_PAGO, 1.6) },
             { t: m('vuelo'), cam: enfocar(panelFacturas, CENTRO_PAGO, 1.5, { ry: -2 }) },
             { t: m('reactivado') - 16, cam: encuadrar(panelRecibo, 0.85), curva: 'suave' },
-            { t: m('reactivado') + 8, cam: enfocar(panelRecibo, R.reactivado, 1.9) },
-            { t: m('salida'), cam: enfocar(panelRecibo, R.reactivado, 1.8, { ry: 4 }) },
+            { t: m('reactivado') + 8, cam: enfocar(panelRecibo, VISTA_RECIBO, 1.3) },
+            { t: m('salida'), cam: enfocar(panelRecibo, VISTA_RECIBO, 1.26, { ry: 4 }) },
             { t: fin, cam: enfocar(panelRecibo, { x: 640, y: 400 }, 0.7, { ry: 30 }), curva: 'entrada' },
         ],
         objetivo

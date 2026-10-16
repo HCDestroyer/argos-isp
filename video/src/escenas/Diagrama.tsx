@@ -8,7 +8,7 @@ import { type PropsEscena, camaraDeEscena, useEscena } from './comun'
 
 const ANCHO = 1800
 const ALTO = 900
-const RX = 690
+const RX = 640
 const RY = 300
 const CY = 30
 const TOTAL = 8
