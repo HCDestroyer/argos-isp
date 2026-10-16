@@ -88,6 +88,8 @@ Ambas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con 
 
 Con la configuración efectiva (plantilla + excepciones). Bajar de estado espera a la `hora_corte` del día (Guatemala); subir es inmediato. Si cambia, llama `CambiarEstadoServicio` de A1 (evento `servicio.estado_cambiado`).
 
+Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escribe en `audit.acciones` cuando `cambiado = true` (`auditarExito`); los errores se auditan siempre. Las acciones que la llaman dejan su propia fila: `pagos.registrar`, `pagos.anular`, `promesas.*`, `facturas.anular` y, para el corte, cada corrida queda en `registrar_corrida` (`servicios.corte` con evaluados y cambiados).
+
 ## Cron de corte y worker (tarea 7)
 
 `node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto) y `promesas` (cada minuto, `incumplirPromesas`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
