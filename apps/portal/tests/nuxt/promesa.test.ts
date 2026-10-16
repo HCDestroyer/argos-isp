@@ -150,6 +150,10 @@ describe('/corte y /cuenta con promesa', () => {
         await enviarFormulario()
         await esperar()
         expect(wrapper.find('[data-testid="servicio-reactivado"]').text()).toContain('Ya tienes servicio')
+        // la reactivación llega casi al instante: la promesa se recuerda en esa misma pantalla
+        const recordatorio = wrapper.find('[data-testid="reactivado-promesa"]').text()
+        expect(recordatorio).toContain('Recuerda tu promesa de pago')
+        expect(recordatorio).toContain('Pagarás Q\u00A0350.00 a más tardar el')
     })
 
     it('/corte: pendiente → aviso en la página y ya no ofrece otra promesa', async () => {

@@ -121,6 +121,7 @@ const hayDatosDeposito = computed(() => !empresa.value
         <CorteServicioReactivado
             v-else-if="reactivado"
             :url="seguirNavegandoUrl"
+            :promesa="promesa?.resultado === 'aprobada' ? promesa : null"
         />
 
         <template v-else>
