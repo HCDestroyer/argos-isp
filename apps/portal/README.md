@@ -106,6 +106,20 @@ que hay que pagar para reactivarlo). En `/cuenta` cada servicio muestra su saldo
 cobra un servicio, así que con dos o más servicios con saldo el cliente elige cuál en un selector
 (con su monto). Pruebas de la API en `apps/api/tests/portal/varios_servicios.spec.ts`.
 
+## Seguridad
+
+Checklist completo en `docs/seguridad/portal.md`. En el portal:
+
+| Pieza | Dónde |
+| --- | --- |
+| CSP por página con el hash de cada script en línea (sin `unsafe-inline` ni `unsafe-eval` en scripts, nada externo, `frame-ancestors 'none'`); sin `X-Powered-By` | `server/plugins/seguridad.ts`, `server/utils/cabecerasSeguridad.ts` |
+| `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` en toda respuesta (también redirecciones y proxy) | `server/middleware/0-seguridad.ts` |
+| El proxy no sale de `/api/v1/portal/` (`../` y `%2e%2e` → 404) | `destinoReenvio` en `server/utils/reenvioApi.ts` |
+| POST/PUT/DELETE solo desde el mismo origen (`Origin` y `Sec-Fetch-Site`; si no, 403) | `origenPermitido` en `server/utils/reenvioApi.ts` |
+| zod sin JIT (`new Function`), para no chocar con la CSP | `app/plugins/zod.ts` |
+
+En desarrollo (`nuxt dev`) no se pone CSP: Vite necesita scripts propios.
+
 ## Pruebas
 
 `pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y

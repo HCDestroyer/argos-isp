@@ -1,11 +1,13 @@
+import { isIP } from 'node:net'
 import type { HttpContext } from '@adonisjs/core/http'
+import { configIpOrigen, listaConfiables, normalizarIp } from '#portal/ip_origen'
 import db from '@adonisjs/lucid/services/db'
 import { NoAutenticado } from '#shared/errores'
 import { COOKIE_SESION, PREFIJO_TOKEN, RUTA_COOKIE, configAcceso, hashToken } from '#portal/acceso/codigos'
 
 /**
  * Sesión del cliente en el portal: token opaco en la cookie httpOnly `argos_portal`
- * (mismo origen, `SameSite=Lax`, ruta `/api/v1/portal`). Alcance: un solo cliente; todas las
+ * (mismo origen, `SameSite=Strict`, ruta `/api/v1/portal`). Alcance: un solo cliente; todas las
  * lecturas del portal autenticado filtran por `clienteId`.
  *
  * Cada uso extiende la sesión `PORTAL_SESION_INACTIVIDAD_S` sin pasar de `expira_max_en`.
@@ -57,11 +59,39 @@ export class SesionPortalRequerida extends NoAutenticado {
     }
 }
 
-function opcionesCookie(ctx: HttpContext) {
-    const https =
-        ctx.request.protocol() === 'https' ||
-        ctx.request.header('x-forwarded-proto')?.split(',')[0] === 'https'
-    return { httpOnly: true, sameSite: 'lax' as const, path: RUTA_COOKIE, secure: https }
+/**
+ * ¿La petición llegó por HTTPS? TLS directo en la API, o `X-Forwarded-Proto: https` puesto por un
+ * proxy de `PORTAL_PROXIES_CONFIABLES` (el portal de Nitro o el proxy que termina TLS). La cabecera
+ * de cualquier otro origen no cuenta.
+ */
+export function llegoPorHttps(
+    remota: string | undefined,
+    tls: boolean,
+    proto: string | undefined,
+    proxiesConfiables: string = configIpOrigen().proxiesConfiables,
+): boolean {
+    if (tls) return true
+    const ip = normalizarIp(remota)
+    if (!ip || !proxiesConfiables.trim() || !proto) return false
+    const lista = listaConfiables(proxiesConfiables)
+    const confiable = lista.check(ip, isIP(ip) === 4 ? 'ipv4' : 'ipv6')
+    return confiable && proto.split(',')[0]?.trim().toLowerCase() === 'https'
+}
+
+/**
+ * Atributos de la cookie: `HttpOnly` (el JS del portal nunca ve el token), `SameSite=Strict` (no
+ * viaja en peticiones iniciadas desde otro sitio; el portal la usa solo con `fetch` del mismo
+ * origen), ruta `/api/v1/portal` y `Secure` con HTTPS (`PORTAL_COOKIE_SEGURA=siempre` lo fuerza).
+ */
+export function opcionesCookie(ctx: HttpContext) {
+    const secure =
+        process.env.PORTAL_COOKIE_SEGURA === 'siempre' ||
+        llegoPorHttps(
+            ctx.request.request.socket.remoteAddress,
+            'encrypted' in ctx.request.request.socket && ctx.request.request.socket.encrypted === true,
+            ctx.request.header('x-forwarded-proto'),
+        )
+    return { httpOnly: true, sameSite: 'strict' as const, path: RUTA_COOKIE, secure }
 }
 
 export function ponerCookieSesion(ctx: HttpContext, token: string): void {

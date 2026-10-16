@@ -16,12 +16,23 @@ export default defineEventHandler(async (event) => {
     if (!destino) {
         throw createError({ statusCode: 404, statusMessage: 'Not Found' })
     }
+    const host = getRequestHost(event, { xForwardedHost: false })
+    if (!origenPermitido(event.method, host, getRequestHeader(event, 'origin'), getRequestHeader(event, 'sec-fetch-site'))) {
+        setResponseStatus(event, 403)
+        setResponseHeaders(event, { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' })
+        return {
+            type: 'urn:argosisp:problema:origen_no_permitido',
+            title: 'Origen no permitido',
+            status: 403,
+            detail: 'Esta acción solo se puede hacer desde el portal.',
+        }
+    }
 
     const xff = cadenaReenvio(getRequestHeader(event, 'x-forwarded-for'), getRequestIP(event))
     const headers: Record<string, string> = {
         'x-canal': 'portal',
         'x-forwarded-proto': getRequestProtocol(event, { xForwardedProto: false }),
-        'x-forwarded-host': getRequestHost(event, { xForwardedHost: false }),
+        'x-forwarded-host': host,
     }
     if (xff) {
         headers['x-forwarded-for'] = xff

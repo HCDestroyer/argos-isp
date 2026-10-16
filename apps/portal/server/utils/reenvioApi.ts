@@ -54,8 +54,55 @@ export function problemaApiNoDisponible(error: unknown): ProblemaProxy {
 
 /** URL de destino en la API para una ruta del portal (incluye query). `null` si no se reenvía. */
 export function destinoReenvio(rutaConQuery: string, apiBaseInternal: string): string | null {
-    if (!rutaConQuery.startsWith(PREFIJO_REENVIO)) {
+    if (!rutaConQuery.startsWith(PREFIJO_REENVIO) || rutaConQuery.includes('\\')) {
         return null
     }
-    return new URL(rutaConQuery, apiBaseInternal).toString()
+    let destino: URL
+    try {
+        destino = new URL(rutaConQuery, apiBaseInternal)
+    }
+    catch {
+        return null
+    }
+    // `URL` resuelve `/../` y también `%2e%2e`: `/api/v1/portal/%2e%2e/clientes` sería
+    // `/api/v1/clientes`. Se revisa la ruta ya resuelta, no la recibida.
+    if (!destino.pathname.startsWith(PREFIJO_REENVIO) || /%2e/i.test(destino.pathname)) {
+        return null
+    }
+    return destino.toString()
+}
+
+const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Protección CSRF para lo que cambia algo (POST, PUT…): solo desde páginas del mismo portal.
+ * Por IP no hace falta cookie, así que un sitio ajeno podría mandar un formulario a
+ * `/api/v1/portal/promesas` a nombre de quien lo visita. Los navegadores mandan `Origin` en esas
+ * peticiones (y `Sec-Fetch-Site`); si alguno dice que viene de otro sitio, se rechaza (403).
+ * Sin ninguna de las dos cabeceras (curl, pruebas) se deja pasar: no es un navegador engañado.
+ */
+export function origenPermitido(
+    metodo: string,
+    host: string | undefined,
+    origen: string | undefined,
+    secFetchSite: string | undefined,
+): boolean {
+    if (METODOS_SEGUROS.has(metodo.toUpperCase())) {
+        return true
+    }
+    if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'none') {
+        return false
+    }
+    if (origen) {
+        if (origen === 'null') {
+            return false
+        }
+        try {
+            return new URL(origen).host.toLowerCase() === (host ?? '').toLowerCase()
+        }
+        catch {
+            return false
+        }
+    }
+    return true
 }

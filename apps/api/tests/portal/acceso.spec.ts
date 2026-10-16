@@ -91,7 +91,7 @@ test.group('Portal: acceso por código', (group) => {
         assert.notProperty(verificado.body(), 'token')
         const setCookie = String(verificado.headers()['set-cookie'])
         assert.include(setCookie, 'HttpOnly')
-        assert.include(setCookie, 'SameSite=Lax')
+        assert.include(setCookie, 'SameSite=Strict')
         assert.include(setCookie, 'Path=/api/v1/portal')
         const cookie = cookieDeSesion(verificado)!
         assert.match(cookie, /^argos_portal=pcs_/)

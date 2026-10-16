@@ -9,6 +9,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { setup, startServer } from '@nuxt/test-utils/e2e'
 import { SONDAS } from '../../server/utils/portalCautivo'
+import { hashScript, scriptsEnLinea } from '../../server/utils/cabecerasSeguridad'
 import { BUILD_PRUEBAS, RAIZ_PORTAL, levantarApiFalsa, pedir, type Respuesta } from './ayudas'
 
 const api = await levantarApiFalsa()
@@ -104,6 +105,72 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         const respuesta = await pedir('/corte', { host: 'connectivitycheck.gstatic.com' })
         expect(respuesta.status).toBe(200)
         expect(respuesta.headers['content-type']).toContain('text/html')
+    })
+})
+
+describe('seguridad (semana 3, tarea 3)', () => {
+    let reiniciado = false
+    beforeEach(async () => {
+        if (reiniciado) return
+        await startServer({
+            env: { NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' },
+        })
+        api.rutas.length = 0
+        reiniciado = true
+    })
+
+    const HOST = 'portal.argosisp.example'
+
+    it.each(['/corte', '/entrar', '/cuenta', '/contacto'])('%s: CSP con el hash de cada script en línea, sin iframes ni X-Powered-By', async (ruta) => {
+        const respuesta = await pedir(ruta, { host: HOST })
+        expect(respuesta.status).toBe(200)
+        const csp = String(respuesta.headers['content-security-policy'])
+        expect(csp).toContain('frame-ancestors \'none\'')
+        expect(csp).not.toMatch(/script-src[^;]*unsafe-(inline|eval)/)
+        expect(csp).not.toMatch(/https?:\/\//)
+        const scripts = scriptsEnLinea(respuesta.cuerpo)
+        expect(scripts.length).toBeGreaterThan(0)
+        for (const script of scripts) {
+            expect(csp).toContain(hashScript(script))
+        }
+        expect(respuesta.headers['x-frame-options']).toBe('DENY')
+        expect(respuesta.headers['x-content-type-options']).toBe('nosniff')
+        expect(respuesta.headers['referrer-policy']).toBe('same-origin')
+        expect(respuesta.headers['x-powered-by']).toBeUndefined()
+    })
+
+    it('redirecciones del portal cautivo y respuestas del proxy también llevan las cabeceras', async () => {
+        for (const respuesta of [
+            await pedir('/generate_204', { host: 'connectivitycheck.gstatic.com' }),
+            await pedir('/api/v1/portal/quien-soy', { host: HOST }),
+        ]) {
+            expect(respuesta.headers['x-frame-options']).toBe('DENY')
+            expect(respuesta.headers['x-content-type-options']).toBe('nosniff')
+        }
+    })
+
+    it('el proxy nunca sale de /api/v1/portal/ (../, %2e%2e): 404 y la API no recibe nada', async () => {
+        api.rutas.length = 0
+        for (const ruta of ['/api/v1/portal/../clientes', '/api/v1/portal/%2e%2e/clientes', '/api/v1/portal/%2E%2E/%2e%2e/v1/usuarios']) {
+            const respuesta = await pedir(ruta, { host: HOST })
+            expect(respuesta.status, ruta).toBe(404)
+        }
+        expect(api.rutas).toEqual([])
+    })
+
+    it('POST desde otro sitio: 403 sin llegar a la API; desde el portal pasa', async () => {
+        api.rutas.length = 0
+        const cuerpo = { metodo: 'POST', headers: { 'content-type': 'application/json' } }
+        const ajeno = await pedir('/api/v1/portal/promesas', { ...cuerpo, host: HOST, headers: { ...cuerpo.headers, origin: 'http://malo.example' } })
+        expect(ajeno.status).toBe(403)
+        expect(ajeno.headers['content-type']).toContain('application/problem+json')
+        const formulario = await pedir('/api/v1/portal/comprobantes', { metodo: 'POST', host: HOST, headers: { 'sec-fetch-site': 'cross-site' } })
+        expect(formulario.status).toBe(403)
+        expect(api.rutas).toEqual([])
+
+        const propio = await pedir('/api/v1/portal/salir', { metodo: 'POST', host: HOST, headers: { 'origin': URL_PUBLICA, 'sec-fetch-site': 'same-origin' } })
+        expect(propio.status).toBe(200)
+        expect(api.rutas).toEqual(['/api/v1/portal/salir'])
     })
 })
 
