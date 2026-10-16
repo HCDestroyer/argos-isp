@@ -42,6 +42,15 @@ export interface Config {
     }
     suspendido: PerfilSuspendido
     suspenderConIpv6: ModoSuspensionIpv6
+    /** API REST de RouterOS (`src/routeros`) */
+    routeros: { verificarTls: boolean; timeoutMs: number; reintentos: number; esperaMs: number }
+}
+
+function booleano(valor: string | undefined, porDefecto: boolean): boolean {
+    if (valor === undefined || valor === '') return porDefecto
+    if (['1', 'true', 'yes', 'si'].includes(valor.toLowerCase())) return true
+    if (['0', 'false', 'no'].includes(valor.toLowerCase())) return false
+    throw new Error(`valor booleano inválido: ${valor}`)
 }
 
 function numero(valor: string | undefined, porDefecto: number): number {
@@ -94,5 +103,11 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             filterId: env.COA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',
         },
         suspenderConIpv6: modoSuspensionIpv6(env.COA_SUSPENDER_CON_IPV6),
+        routeros: {
+            verificarTls: booleano(env.ROUTEROS_TLS_VERIFICAR, true),
+            timeoutMs: numero(env.ROUTEROS_TIMEOUT_MS, 5000),
+            reintentos: numero(env.ROUTEROS_REINTENTOS, 3),
+            esperaMs: numero(env.ROUTEROS_ESPERA_MS, 500),
+        },
     }
 }
