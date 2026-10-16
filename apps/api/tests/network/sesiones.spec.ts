@@ -5,7 +5,7 @@ import { Queue, type Worker } from 'bullmq'
 import { contextoPrueba, unico } from '#tests/ayudas'
 import { crearClienteFila, crearRouterFila, crearServicioFila, ipUnica } from '#tests/core/fabricas'
 import { NOMBRE_COLA_ACCOUNTING, type RegistroAccounting } from '#network/sesiones/registro'
-import { crearWorkerAccounting, procesarAccounting } from '#network/sesiones/cola'
+import { crearWorkerAccounting, procesarAccounting, requestIdDelJob } from '#network/sesiones/cola'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import TerminarSesion from '#network/sesiones/actions/terminar_sesion'
 
@@ -385,5 +385,45 @@ test.group('network · sesiones:worker (BullMQ)', (group) => {
         const fallido = await cola.getJob(malo.id!)
         assert.equal(fallido?.attemptsMade, 1)
         assert.isNotNull(await sesion(e.nasIp, r.acct_session_id))
+    })
+
+    test('usa el request_id que puso aaa en audit.acciones y en el evento de la sesión', async ({
+        assert,
+    }) => {
+        const e = await escenario()
+        const r = { ...registro(e), request_id: `rad-${randomUUID().replaceAll('-', '')}` }
+        const job = await cola.add('Start', r, { attempts: 3 })
+        const limite = Date.now() + 10_000
+        while (Date.now() < limite && (await job.getState()) !== 'completed') {
+            await new Promise((resolver) => setTimeout(resolver, 50))
+        }
+        assert.equal(await job.getState(), 'completed')
+        const accion = await db
+            .from('audit.acciones')
+            .where('request_id', r.request_id)
+            .where('accion', 'sesiones.iniciar')
+            .first()
+        assert.isNotNull(accion)
+        const evento = await db
+            .from('audit.outbox')
+            .where('request_id', r.request_id)
+            .where('evento', 'sesion.iniciada')
+            .first()
+        assert.isNotNull(evento)
+    })
+})
+
+test.group('network · sesiones:worker · requestIdDelJob', () => {
+    test('toma request_id del job si es válido; si no, accounting-<job>-<intento>', ({ assert }) => {
+        assert.equal(
+            requestIdDelJob({ id: '7', attemptsMade: 0, data: { request_id: 'rad-abc' } }),
+            'rad-abc',
+        )
+        assert.equal(requestIdDelJob({ id: '7', attemptsMade: 1, data: { tipo: 'Start' } }), 'accounting-7-2')
+        assert.equal(
+            requestIdDelJob({ id: '8', attemptsMade: 0, data: { request_id: 'con espacio' } }),
+            'accounting-8-1',
+        )
+        assert.equal(requestIdDelJob({ id: '9', attemptsMade: 0, data: null }), 'accounting-9-1')
     })
 })

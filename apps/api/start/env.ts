@@ -56,8 +56,6 @@ export default await Env.create(new URL('../', import.meta.url), {
     | API REST de RouterOS (A2, servicios sin PPPoE; app/network/routeros)
     |----------------------------------------------------------
     */
-    /** Verificar el certificado HTTPS del router cuando el router no lo define (por defecto true) */
-    ROUTEROS_TLS_VERIFICAR: Env.schema.boolean.optional(),
     /** ms por petición (5000), reintentos ante red caída o 5xx (3) y espera base del backoff (500) */
     ROUTEROS_TIMEOUT_MS: Env.schema.number.optional(),
     ROUTEROS_REINTENTOS: Env.schema.number.optional(),

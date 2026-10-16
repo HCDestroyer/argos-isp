@@ -54,6 +54,11 @@ export interface RegistroAccounting {
     causa_fin: string | null
     /** Instante del hecho (UTC, ISO 8601): Event-Timestamp o recepción − Acct-Delay-Time */
     evento_en: string
+    /**
+     * `request_id` del paquete en `aaa` (`request_id.ts`): el worker lo usa en `audit.*` y en los
+     * eventos. Opcional: jobs encolados antes de la semana 3 no lo traen.
+     */
+    request_id?: string
 }
 
 export class ErrorAccounting extends Error {}

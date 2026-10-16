@@ -48,6 +48,21 @@ export async function procesarAccounting(registro: RegistroAccounting, requestId
     }
 }
 
+const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
+
+/**
+ * `request_id` del job: el que puso `aaa` (estable por sesión PPPoE, `services/aaa/src/request_id.ts`)
+ * para que `audit.*` y los eventos de la sesión se encuentren con el mismo id que los logs de `aaa`.
+ * Jobs sin él (o con uno inválido): `accounting-<job>-<intento>`, como antes.
+ */
+export function requestIdDelJob(job: Pick<Job<unknown>, 'id' | 'data' | 'attemptsMade'>): string {
+    const dato = job.data
+    const id =
+        typeof dato === 'object' && dato !== null ? (dato as { request_id?: unknown }).request_id : undefined
+    if (typeof id === 'string' && ID_VALIDO.test(id)) return id
+    return `accounting-${job.id}-${job.attemptsMade + 1}`
+}
+
 async function procesarJob(job: Job<unknown>) {
     let registro: RegistroAccounting
     try {
@@ -56,7 +71,7 @@ async function procesarJob(job: Job<unknown>) {
         if (error instanceof RegistroInvalido) throw new UnrecoverableError(error.message)
         throw error
     }
-    return procesarAccounting(registro, `accounting-${job.id}-${job.attemptsMade + 1}`)
+    return procesarAccounting(registro, requestIdDelJob(job))
 }
 
 export interface OpcionesWorkerAccounting {
