@@ -76,6 +76,15 @@ x-api-env: &api-env
   PORTAL_CABECERA_IP: x-forwarded-for
   SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+  # Pasarela de pago en línea (A3, app/billing/pasarelas; a3.md). La imagen corre con
+  # NODE_ENV=production: sin PASARELA_PROVEEDOR no hay pasarela (503). En el laboratorio,
+  # PASARELA_PROVEEDOR=falsa con su secreto HMAC y la URL pública de la API (página de pago simulada).
+  # El webhook del proveedor entra por POST /api/v1/pasarela/webhook/<proveedor>: el proxy debe
+  # pasar el cuerpo crudo (servicio proxy, infra/proxy/Caddyfile). billing-worker corre el cron
+  # diario de conciliación con estas mismas variables.
+  PASARELA_PROVEEDOR: ${PASARELA_PROVEEDOR:-}
+  PASARELA_FALSA_SECRETO: ${PASARELA_FALSA_SECRETO:-}
+  PASARELA_URL_PUBLICA: ${PASARELA_URL_PUBLICA:-${API_PUBLIC_URL:-http://localhost:3333}}
   # Comprobantes de depósito (A3, billing/comprobantes_archivos.ts): fuera de Postgres, en el volumen
   # `comprobantes` (o COMPROBANTES_HOST_DIR) montado solo en api, que los guarda y los sirve
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
@@ -507,10 +516,10 @@ services:
       # Prefijo de aaa:user:<user_ppp> en Redis (mismo que aaa y la API): rate-limit de los CoA de velocidad
       AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
       # Respaldo por la API interna (A2) cuando Redis no tiene el servicio: GET /internal/aaa/servicio
-      # con Authorization: Bearer <INTERNAL_TOKEN> (el mismo token que aaa y la API).
+      # con Authorization: Bearer <AAA_INTERNAL_TOKEN> (= INTERNAL_TOKEN de la API y el de aaa).
+      # Nombres de services/coa/.env.example.
       API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
-      AAA_API_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
-      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
       # GET /metrics (job coa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
     ports:
@@ -560,6 +569,34 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Perfil publico: proxy con TLS para la API (incluido el webhook de la pasarela, con el cuerpo
+  # crudo) y el panel. El portal no pasa por aquí (necesita la IP real del cliente). infra/proxy/
+  proxy:
+    profiles: [publico]
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      PROXY_DOMINIO_API: ${PROXY_DOMINIO_API:-api.localhost}
+      PROXY_DOMINIO_PANEL: ${PROXY_DOMINIO_PANEL:-panel.localhost}
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      # En producción 80 y 443 en la IP pública (distinta de PORTAL_BIND_IP, que usa el 80 del portal)
+      - ${PROXY_BIND_IP:-127.0.0.1}:${PROXY_HTTP_PORT:-8080}:80
+      - ${PROXY_BIND_IP:-127.0.0.1}:${PROXY_HTTPS_PORT:-8443}:443
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   # Perfil monitoreo: Prometheus con las métricas de la API y las reglas de infra/monitoring.
   prometheus:
@@ -633,5 +670,8 @@ volumes:
   redisdata:
   promdata:
   amdata:
+  # Certificados y estado de Caddy (servicio proxy)
+  caddydata:
+  caddyconfig:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:

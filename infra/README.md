@@ -148,6 +148,10 @@ Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a pub
 - Compose en entorno limpio (proyecto aparte): `comprobantes-permisos` deja `/comprobantes` a nombre de `node`; la API (usuario `node`) escribe tres archivos; respaldo cifrado con el servicio `backup` (dump + tar, `.conteo` = 3); `down -v` (sin volúmenes); `up postgres`; `restaurar.sh --base argosisp --reemplazar --comprobantes-dir /comprobantes` = 98 tablas iguales al dump y 3 archivos; `up --wait`: api y backup `healthy`, los archivos son de uid 1000 con `u=rwX,g=rX,o=`, la API los lee, escribe uno nuevo y `GET /comprobantes` responde 200.
 - Local: un comprobante de la base sin archivo en el tar, un `.conteo` alterado y un destino no vacío sin `--reemplazar` terminan con código 1; la retención borra también los tar viejos.
 
+## Proxy público y webhook de la pasarela
+
+Perfil `publico`: Caddy con TLS delante de la API y del panel; el webhook de la pasarela pasa con el cuerpo crudo (la firma HMAC va sobre él). Configuración, puertos y prueba en `infra/proxy/README.md`. Variables de la pasarela (`PASARELA_PROVEEDOR`, `PASARELA_FALSA_SECRETO`, `PASARELA_URL_PUBLICA`) en `infra/.env.example`; la imagen de la API corre en producción, así que sin `PASARELA_PROVEEDOR` no hay pasarela (503).
+
 ## Walled garden
 
 `walledGarden` de `mikrotik/lab.rsc` está vacío hasta la semana 2. El portal no carga nada externo: no usa fuentes, CDN ni iconos remotos, y llama a la API por su propio origen. Cuando A5 declare los dominios de la pasarela, se agregan ahí.

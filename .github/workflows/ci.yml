@@ -165,6 +165,9 @@ jobs:
       - name: Alertas de punta a punta (Telegram simulado)
         run: infra/monitoring/probar-alertas.sh
 
+      - name: Proxy pasa el cuerpo crudo del webhook de la pasarela
+        run: infra/proxy/probar-webhook.sh
+
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
   e2e-panel:
