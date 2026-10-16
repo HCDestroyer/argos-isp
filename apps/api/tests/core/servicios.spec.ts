@@ -708,5 +708,8 @@ test.group('Servicios · lectura y alcance', () => {
         assert.equal(config.plan.rate_limit, '5000k/20000k')
         assert.equal(config.plantilla_facturacion!.id, plantilla!.id)
         assert.deepEqual(config.excepciones, [])
+        assert.equal(config.facturacion!.plantilla_id, plantilla!.id)
+        assert.deepEqual(config.facturacion!.excepciones, [])
+        assert.deepEqual(config.servicio.excepciones, {})
     })
 })
