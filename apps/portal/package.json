@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "test": "vitest run"
+    "test": "vitest run && vitest run -c vitest.servidor.config.ts",
+    "test:servidor": "vitest run -c vitest.servidor.config.ts"
   },
   "dependencies": {
     "@argosisp/contracts": "workspace:*",

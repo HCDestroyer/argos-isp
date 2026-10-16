@@ -44,6 +44,48 @@ middleware `server/middleware/portal-cautivo.ts` (lógica pura en `server/utils/
 Las redirecciones llevan `Cache-Control: no-store` para que el navegador no las recuerde tras la reactivación.
 HTTPS no se puede redirigir (el certificado no coincide): el MikroTik corta 443 y el sistema operativo cae a la prueba HTTP.
 
+### Sondas de portal cautivo
+
+Cada sistema operativo pide una URL conocida y, si recibe exactamente la respuesta "de éxito", cree
+que hay Internet y no avisa. A un suspendido el portal **nunca** le da esa respuesta: responde 302 a
+`/corte` (absoluto con `NUXT_PORTAL_URL_PUBLICA`, relativo sin ella), con GET o HEAD, con o sin query,
+con el Host de la sonda o con el del portal (IPv4, `[portalV6]:80` o nombre). El teléfono muestra
+"Iniciar sesión en la red" y al tocarlo abre `/corte`. Catálogo en `SONDAS` de `server/utils/portalCautivo.ts`.
+
+| Sistema | Sonda | Espera con Internet | El portal responde |
+| --- | --- | --- | --- |
+| Android, ChromeOS, Chrome | `connectivitycheck.gstatic.com/generate_204`, `clients3.google.com/generate_204` | 204 sin cuerpo | 302 → `/corte` |
+| Android (Google) | `www.google.com/gen_204` | 204 | 302 → `/corte` |
+| Samsung, Xiaomi, Huawei | `connect.rom.miui.com/generate_204` y equivalentes | 204 | 302 → `/corte` |
+| Huawei / Honor antiguos | `/mobile/status.php` | 204 | 302 → `/corte` |
+| iOS, iPadOS, macOS | `captive.apple.com/hotspot-detect.html`, `www.apple.com/library/test/success.html` | 200 con `<TITLE>Success</TITLE>` | 302 → `/corte` |
+| Windows 10 / 11 | `www.msftconnecttest.com/connecttest.txt` | 200 `Microsoft Connect Test` | 302 → `/corte` |
+| Windows 10 / 11 (abre el navegador) | `www.msftconnecttest.com/redirect` | 200 | 302 → `/corte` |
+| Windows 7 / 8 | `www.msftncsi.com/ncsi.txt` | 200 `Microsoft NCSI` | 302 → `/corte` |
+| Firefox | `detectportal.firefox.com/success.txt`, `/canonical.html` | 200 `success` | 302 → `/corte` |
+| GNOME / NetworkManager | `nmcheck.gnome.org/check_network_status.txt` | 200 `NetworkManager is online` | 302 → `/corte` |
+| Fedora | `fedoraproject.org/static/hotspot.txt` | 200 `OK` | 302 → `/corte` |
+| Ubuntu | `connectivity-check.ubuntu.com/` y `/connectivity-check.html` | 204 | 302 → `/corte` |
+| KDE | `networkcheck.kde.org/` | 200 `OK` | 302 → `/corte` (Host ajeno) |
+| Kindle | `/kindle-wifi/wifistub.html`, `/kindle-wifi/wifiredirect.html` | 200 | 302 → `/corte` |
+| Cualquier otra URL HTTP de un suspendido | | | 302 → `/corte` (Host ajeno) |
+
+`/corte` responde 200 con HTML y no contiene ninguno de esos textos de éxito.
+
+Para A6: ningún dominio de esta tabla puede estar en el walled garden; si lo estuviera, la sonda
+llegaría al sitio real, recibiría su respuesta de éxito y el teléfono no avisaría.
+
+Pruebas: `tests/nuxt/portal-cautivo.test.ts` (reglas puras, cada sonda) y
+`tests/servidor/portal-cautivo.test.ts` (servidor Nitro de producción: cada sonda con GET y HEAD,
+con y sin URL pública).
+
+## Pruebas
+
+`pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y
+composables contra los fixtures) y `vitest.servidor.config.ts` (`tests/servidor/`, entorno node:
+compila el portal en `.nuxt/test/servidor` y lo levanta con una API falsa; unos 40 s).
+`pnpm test:servidor` corre solo la segunda.
+
 ## Walled garden
 
 La página de corte se abre con el servicio suspendido, así que todo sale de este servidor:
