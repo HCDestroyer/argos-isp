@@ -328,3 +328,46 @@ export const CuentaBancaria = definirEsquema(
         ...auditable,
     }),
 )
+
+export const Comprobante = definirEsquema(
+    'Comprobante',
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            cliente_nombre: texto,
+            servicio_id: nulable(id),
+            metodo: enumerado(['deposito', 'transferencia', 'ach', 'remesa']),
+            cuenta_bancaria_id: { ...id, description: 'Cuenta bancaria propia de destino' },
+            cuenta_bancaria_nombre: { ...texto, description: 'Banco y alias de la cuenta de destino' },
+            banco_origen_id: { ...nulable(id), description: 'Banco de origen (transferencia, ach)' },
+            banco_origen_nombre: nulable(texto),
+            referencia: texto,
+            monto: Dinero,
+            fecha_deposito: fecha,
+            archivo_tipo: enumerado(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+            archivo_tamano: { ...entero, description: 'Bytes (máximo 5 MB)' },
+            archivo_nombre: { ...nulable(texto), description: 'Nombre original del archivo subido' },
+            canal: enumerado(['portal', 'panel']),
+            nota: nulable(texto),
+            estado: enumerado(['pendiente', 'aprobado', 'rechazado']),
+            motivo_rechazo: nulable(texto),
+            pago_id: { ...nulable(id), description: 'Pago creado al aprobarlo' },
+            registrado_por: nulable(id),
+            verificado_por: { ...nulable(id), description: 'Quién lo aprobó o rechazó' },
+            verificado_en: nulable(instante),
+            pago: { ...Pago, description: 'Solo al aprobar: el pago registrado (aplicaciones y servicios)' },
+            ...auditable,
+        },
+        ['pago'],
+    ),
+)
+
+/** Respuesta binaria: la foto o el PDF del comprobante. */
+export const ArchivoComprobante = {
+    type: 'string',
+    format: 'binary',
+    description:
+        'Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo ' +
+        '(el generador de OpenAPI declara application/json)',
+}

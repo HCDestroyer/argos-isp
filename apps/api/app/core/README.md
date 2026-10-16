@@ -67,6 +67,13 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - `core.servicios`: `id`, `cliente_id`, `plan_id`, `plantilla_facturacion_id`, `costo_override` (numeric(14,2), null = precio del plan), `fecha_instalacion` (date), `estado` (`activo`/`limitado`/`suspendido`/`retirado`).
 - `network.planes`: `precio` (numeric(14,2)), `bajada_limitada_kbps`, `subida_limitada_kbps` (> 0).
 
+## Auditoría de cambios (`app/shared/domain_action.ts`, `app/shared/nombres_campo.ts`)
+
+- `Transaccion.registrarCambios` guarda en `audit.cambios.campo` el nombre con `nombreCampo`: las claves sin mayúsculas quedan igual (`ipv4`, `prefijo_enlace_v6`, `pass_ppp`) y las camelCase se convierten sin separar dígitos (`prefijoEnlaceV6` → `prefijo_enlace_v6`). `esCampoSensible` (`enmascarar.ts`) usa el mismo convertidor; `pass_ppp`/`passPpp`, `*password*`, `*secret*`, `*token*`, `*hash*`, `api_key` y `llave_*` se guardan como `***`.
+- **Nombres históricos (antes del 2026-10-16):** se usaba `string.snakeCase`, que separa dígitos. Las filas viejas de `audit.cambios` tienen `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6`, `ipv_6_modo`, `ipv_6_duid` y `red_ipv_4_id` (servicios) y `pool_ipv_4`, `pool_ipv_6_enlace`, `pool_ipv_6_delegacion` (planes y `planes_routers`). Regla para mostrarlas: quitar el `_` que precede a un dígito. No se reescriben (regla 4): quien muestre el historial debe tratarlas como sus nombres actuales (`ipv_4` ≡ `ipv4`, `prefijo_enlace_v_6` ≡ `prefijo_enlace_v6`, etc.).
+- `pass_ppp` nunca llega a `audit.*` ni en claro ni cifrada: el alta registra `pass_ppp: ***`, la edición solo `clave_ppp_cambiada: true` y `servicios.ver_credenciales` audita la entrada `{ id }`, no la respuesta.
+- `GET /bitacora/cambios` trae `actor_nombre` (como `/bitacora/acciones`).
+
 ## Autorización RADIUS (`aaa.ts`, tarea 9)
 
 - Contrato con A2: `.claude/integration/contratos/aaa.md`. `GET /api/v1/internal/aaa/servicio?user_ppp=` (Bearer `INTERNAL_TOKEN`) arma el JSON desde Postgres: 404 si no existe; retirado → 200 con `estado: retirado`.

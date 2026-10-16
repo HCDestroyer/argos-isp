@@ -8,7 +8,9 @@
 // y los usuarios PPP no se repiten). Variables: API_URL (http://localhost:3333),
 // DEMO_EMAIL y DEMO_PASSWORD (por defecto, el admin de desarrollo de apps/api/.env.example).
 // Crea 4 zonas, 2 routers con redes IPv4 e IPv6, 3 planes implementados en ambos routers,
-// 2 plantillas, 8 clientes (NIT con dígito verificador o CF) y 7 servicios, uno retirado.
+// 2 plantillas, 8 clientes (NIT con dígito verificador o CF) y 7 servicios, uno retirado; una
+// cuenta bancaria propia (Banrural · Monetaria) y un pago por transferencia que deja al día a un
+// cliente con servicio activo (facturado hasta hoy).
 const B = (process.env.API_URL ?? 'http://localhost:3333') + '/api/v1'
 let token
 async function api(m, p, body) {
@@ -181,4 +183,24 @@ for (const [i, plan, r] of [
 }
 const ret = (await api('GET', `/servicios?limit=50`)).data.at(-1)
 await api('POST', `/servicios/${ret.id}/retirar`, { motivo: 'Cliente se mudó fuera de cobertura' })
-console.log('ok', { clientes: ids.length, planes: planes.length })
+// Cobro por transferencia: cuenta bancaria propia de destino, facturas del primer cliente y su pago
+const bancos = await api('GET', '/bancos')
+const banco = (nombre) => bancos.find((b) => b.nombre === nombre).id
+const cuenta = await api('POST', '/cuentas-bancarias', {
+    banco_id: banco('Banrural'),
+    numero: '3-123-45678-9',
+    alias: 'Monetaria',
+})
+const servicio = (await api('GET', `/servicios?limit=50`)).data.find((s) => s.estado === 'activo')
+await api('POST', '/facturas/generar', { servicio_id: servicio.id })
+const { saldo } = await api('GET', `/clientes/${servicio.cliente_id}/estado-cuenta`)
+const pago = await api('POST', '/pagos', {
+    cliente_id: servicio.cliente_id,
+    metodo: 'transferencia',
+    monto: saldo,
+    banco_origen_id: banco('Banco Industrial'),
+    cuenta_bancaria_id: cuenta.id,
+    referencia: 'TRF-884512',
+    nota: 'Transferencia desde Banca Virtual BI',
+})
+console.log('ok', { clientes: ids.length, planes: planes.length, cuenta_bancaria: cuenta.id, pago: pago.id })

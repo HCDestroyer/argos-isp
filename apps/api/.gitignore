@@ -1,2 +1,5 @@
 # Valores de prueba no secretos (ver .env.test)
 !.env.test
+
+# Archivos subidos en desarrollo y pruebas (COMPROBANTES_DIR)
+storage/

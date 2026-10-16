@@ -25,14 +25,27 @@ import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/factu
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { Prohibido } from '#shared/errores'
-import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas } from '#billing/promesas'
+import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
 import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
 import AprobarPromesa from '#billing/actions/aprobar_promesa'
+import RechazarPromesa from '#billing/actions/rechazar_promesa'
+import CancelarPromesa from '#billing/actions/cancelar_promesa'
+import AprobarComprobante from '#billing/actions/aprobar_comprobante'
+import RechazarComprobante from '#billing/actions/rechazar_comprobante'
 import {
+    archivoDeComprobante,
+    dimensionesDeComprobante,
+    listarComprobantes,
+    verComprobante,
+} from '#billing/comprobantes'
+import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
+import {
+    ArchivoComprobante,
+    Comprobante,
     EstadoCuenta,
     Banco,
     CuentaBancaria,
@@ -307,6 +320,149 @@ const promesas: Ruta[] = [
             return new AprobarPromesa().execute({ promesa_id: id, nota: cuerpo.nota }, ctx.contextoAccion())
         },
     }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/promesas/:id/rechazar',
+        operacion: 'promesasRechazar',
+        resumen: 'Rechazar promesa pendiente de aprobación',
+        etiqueta: 'promesas',
+        permiso: 'promesas.rechazar',
+        cuerpo: v.rechazarPromesaValidator,
+        idempotente: true,
+        descripcion:
+            'Solo una pendiente_aprobacion: queda rechazada con el motivo en `resultado_evaluacion.cierre`. 409 promesa_no_pendiente en otro estado.',
+        respuesta: { status: 200, descripcion: 'Promesa rechazada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            await new RechazarPromesa().execute(
+                { promesa_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+            return verPromesa(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/promesas/:id/cancelar',
+        operacion: 'promesasCancelar',
+        resumen: 'Cancelar promesa activa o pendiente (el servicio se re-evalúa)',
+        etiqueta: 'promesas',
+        permiso: 'promesas.cancelar',
+        cuerpo: v.cancelarPromesaValidator,
+        idempotente: true,
+        descripcion:
+            'Una activa o pendiente_aprobacion queda cancelada con el motivo en `resultado_evaluacion.cierre`. Si estaba activa, el servicio se re-evalúa en la misma transacción (puede limitarse o cortarse, respetando la hora de corte). 409 promesa_no_pendiente si ya estaba cerrada.',
+        respuesta: { status: 200, descripcion: 'Promesa cancelada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            await new CancelarPromesa().execute(
+                { promesa_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+            return verPromesa(id)
+        },
+    }),
+]
+
+const comprobantes: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/comprobantes',
+        operacion: 'comprobantesListar',
+        resumen: 'Cola de comprobantes de depósito (portal y panel)',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.ver',
+        query: v.listarComprobantesValidator,
+        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(Comprobante) },
+        handler: (ctx, { query }) => listarComprobantes(query, ctx.alcance),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/comprobantes/:id',
+        operacion: 'comprobantesVer',
+        resumen: 'Ver comprobante de depósito',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.ver',
+        respuesta: { status: 200, descripcion: 'Comprobante', esquema: Comprobante },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            return verComprobante(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/comprobantes/:id/archivo',
+        operacion: 'comprobantesArchivo',
+        resumen: 'Foto o PDF del comprobante',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.ver',
+        descripcion:
+            'Responde el archivo con su Content-Type (image/jpeg, image/png, image/webp o application/pdf) y `Content-Disposition: inline`. 404 si el archivo ya no está en el almacenamiento.',
+        respuesta: { status: 200, descripcion: 'Archivo', esquema: ArchivoComprobante },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            const archivo = await archivoDeComprobante(id)
+            const contenido = await leerArchivoComprobante(archivo.archivo)
+            ctx.response.header('Content-Type', archivo.archivo_tipo)
+            ctx.response.header(
+                'Content-Disposition',
+                `inline; filename="comprobante-${id}.${extensionComprobante(archivo.archivo_tipo)}"`,
+            )
+            ctx.response.header('Cache-Control', 'private, no-store')
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            ctx.response.send(contenido)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/comprobantes/:id/aprobar',
+        operacion: 'comprobantesAprobar',
+        resumen: 'Aprobar comprobante: registra el pago con sus datos y reactiva',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.aprobar',
+        cuerpo: v.aprobarComprobanteValidator,
+        idempotente: true,
+        descripcion:
+            'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
+        respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: Comprobante },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            for (const facturaId of new Set(cuerpo.facturas ?? [])) {
+                const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
+                if (deFactura) exigirAlcance(ctx.alcance, deFactura)
+            }
+            return new AprobarComprobante().execute(
+                { comprobante_id: id, facturas: cuerpo.facturas, nota: cuerpo.nota },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/comprobantes/:id/rechazar',
+        operacion: 'comprobantesRechazar',
+        resumen: 'Rechazar comprobante con motivo (se notifica al cliente)',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.rechazar',
+        cuerpo: v.rechazarComprobanteValidator,
+        idempotente: true,
+        descripcion:
+            'Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.',
+        respuesta: { status: 200, descripcion: 'Comprobante rechazado', esquema: Comprobante },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            return new RechazarComprobante().execute(
+                { comprobante_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
 ]
 
 /**
@@ -402,4 +558,12 @@ const estadoCuenta: Ruta[] = [
     }),
 ]
 
-export default [...plantillas, ...facturas, ...pagos, ...promesas, ...bancos, ...estadoCuenta]
+export default [
+    ...plantillas,
+    ...facturas,
+    ...pagos,
+    ...promesas,
+    ...comprobantes,
+    ...bancos,
+    ...estadoCuenta,
+]

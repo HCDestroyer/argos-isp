@@ -294,18 +294,31 @@ export const AccionAuditoria = definirEsquema(
 
 export const CambioAuditoria = definirEsquema(
     'CambioAuditoria',
-    objeto({
-        id,
-        entidad_tipo: texto,
-        entidad_id: id,
-        campo: texto,
-        antes: {},
-        despues: {},
-        actor_tipo: nulable(enumerado(['usuario', 'token', 'agente', 'sistema'])),
-        actor_id: nulable(id),
-        request_id: nulable(texto),
-        created_at: instante,
-    }),
+    objeto(
+        {
+            id,
+            entidad_tipo: texto,
+            entidad_id: id,
+            campo: {
+                type: 'string',
+                description:
+                    'Nombre del campo en snake_case (`ipv4`, `prefijo_enlace_v6`). Filas anteriores al día 4 ' +
+                    'pueden traer `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6`',
+            },
+            antes: {},
+            despues: {},
+            actor_tipo: nulable(enumerado(['usuario', 'token', 'agente', 'sistema'])),
+            actor_id: nulable(id),
+            // aditivo (día 4): la API siempre lo envía; opcional en el esquema para no romper fixtures
+            actor_nombre: {
+                type: ['string', 'null'],
+                description: 'Nombre del usuario (null para el sistema)',
+            },
+            request_id: nulable(texto),
+            created_at: instante,
+        },
+        ['actor_nombre'],
+    ),
 )
 
 export const ResolucionIp = definirEsquema(
