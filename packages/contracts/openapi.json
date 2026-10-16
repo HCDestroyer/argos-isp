@@ -537,20 +537,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/abrir": {
@@ -671,26 +661,17 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.abrir",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/cerrar": {
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
+        "description": "esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -814,20 +795,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.cerrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/turnos": {
@@ -942,20 +913,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes": {
@@ -10743,6 +10704,22 @@
               "string",
               "null"
             ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que abrió el turno"
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que cerró el turno"
           },
           "version": {
             "type": "integer",

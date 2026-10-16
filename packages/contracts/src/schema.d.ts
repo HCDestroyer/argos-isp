@@ -115,7 +115,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cerrar turno de caja (esperado vs contado) */
+        /**
+         * Cerrar turno de caja (esperado vs contado)
+         * @description esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.
+         */
         post: operations["cajasCerrar"];
         delete?: never;
         options?: never;
@@ -1301,6 +1304,10 @@ export interface components {
             contado: components["schemas"]["Dinero"] | null;
             diferencia: components["schemas"]["Dinero"] | null;
             motivo: string | null;
+            /** @description Usuario que abrió el turno */
+            abierto_por?: number | null;
+            /** @description Usuario que cerró el turno */
+            cerrado_por?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2255,15 +2262,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     cajasAbrir: {
@@ -2337,15 +2335,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2435,15 +2424,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     cajasTurnos: {
@@ -2503,15 +2483,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

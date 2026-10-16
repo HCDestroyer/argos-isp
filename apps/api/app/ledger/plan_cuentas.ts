@@ -34,6 +34,7 @@ export const CUENTAS = {
     INGRESOS_INTERNET: '4.1.01',
     RECARGOS_MORA: '4.1.02',
     OTROS_INGRESOS: '4.1.03',
+    SOBRANTES_CAJA: '4.1.04',
     DESCUENTOS: '5.1.01',
     COMISIONES_PASARELAS: '5.1.02',
     GASTO_ENERGIA: '5.2.01',
@@ -41,6 +42,7 @@ export const CUENTAS = {
     GASTO_NOMINA: '5.2.03',
     GASTO_VEHICULOS: '5.2.04',
     GASTO_ALQUILERES: '5.2.05',
+    FALTANTES_CAJA: '5.2.06',
     GASTO_OTROS: '5.2.99',
 } as const
 
@@ -116,6 +118,13 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
         padre: '4.1',
         imputable: true,
     },
+    {
+        codigo: CUENTAS.SOBRANTES_CAJA,
+        nombre: 'Sobrantes de caja',
+        tipo: 'ingreso',
+        padre: '4.1',
+        imputable: true,
+    },
 
     { codigo: '5', nombre: 'Gastos', tipo: 'gasto', padre: null, imputable: false },
     { codigo: '5.1', nombre: 'Gastos de ventas', tipo: 'gasto', padre: '5', imputable: false },
@@ -145,6 +154,13 @@ export const PLAN_CUENTAS: readonly DefinicionCuenta[] = [
     { codigo: CUENTAS.GASTO_NOMINA, nombre: 'Nómina', tipo: 'gasto', padre: '5.2', imputable: true },
     { codigo: CUENTAS.GASTO_VEHICULOS, nombre: 'Vehículos', tipo: 'gasto', padre: '5.2', imputable: true },
     { codigo: CUENTAS.GASTO_ALQUILERES, nombre: 'Alquileres', tipo: 'gasto', padre: '5.2', imputable: true },
+    {
+        codigo: CUENTAS.FALTANTES_CAJA,
+        nombre: 'Faltantes de caja',
+        tipo: 'gasto',
+        padre: '5.2',
+        imputable: true,
+    },
     { codigo: CUENTAS.GASTO_OTROS, nombre: 'Otros gastos', tipo: 'gasto', padre: '5.2', imputable: true },
 ]
 

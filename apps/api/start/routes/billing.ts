@@ -15,6 +15,7 @@ import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { cajaDelCajero } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -198,8 +199,13 @@ const pagos: Ruta[] = [
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Pago registrado', esquema: Pago },
         handler: async (ctx, { cuerpo }) => {
-            // Efectivo sin caja: la principal (los turnos de caja llegan con la tarea 9).
-            const cajaId = cuerpo.metodo === 'caja' ? (cuerpo.caja_id ?? (await cajaPrincipalId())) : null
+            // Efectivo sin caja: la del turno abierto del cajero (dentro de su alcance) o la principal.
+            const cajaId =
+                cuerpo.metodo === 'caja'
+                    ? (cuerpo.caja_id ??
+                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance)) ??
+                      (await cajaPrincipalId()))
+                    : null
             const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
                 throw new ValidacionFallida([
                     {

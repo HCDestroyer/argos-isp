@@ -12,6 +12,7 @@ import {
     serviciosDe,
 } from '#billing/cobros'
 import { cajaPrincipalId, verPago, type PagoVista } from '#billing/pagos'
+import { cajaDelCajero } from '#ledger/cajas'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 
 /**
@@ -23,8 +24,9 @@ import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/act
  *   luego la más antigua (vencimiento, periodo, id). El excedente queda en Anticipos y se aplica
  *   solo a las facturas que se emitan después.
  * - Asiento: `Caja (o Bancos) / CxC (aplicado) + Anticipos (excedente)`. `caja` sin `caja_id` va a
- *   la caja principal (los turnos de caja llegan con la tarea 9); los demás métodos, al banco
- *   principal.
+ *   la caja del turno abierto del cajero (`cajaDelCajero`) o, si no tiene, a la caja principal. El
+ *   pago queda en el turno abierto de esa caja (`turno_id`, base del esperado del cierre). Los
+ *   demás métodos van al banco principal.
  * - Evento `pago.registrado` y, **en la misma transacción**, `evaluarEstadoServicio` de cada
  *   servicio cuyas facturas tocó: la reactivación sale con el pago (evento
  *   `servicio.estado_cambiado`), sin esperar al cron.
@@ -83,7 +85,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 )
             }
         }
-        const { cajaId, cuentaDebe } = await this.destino(t, input)
+        const { cajaId, cuentaDebe, turnoId } = await this.destino(t, input)
 
         // Anticipos previos primero: no puede quedar saldo a favor mientras haya deuda.
         const previas = await aplicarAnticipos(t, input.cliente_id)
@@ -97,6 +99,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 monto: aTexto(monto),
                 referencia,
                 caja_id: cajaId,
+                turno_id: turnoId,
                 estado: 'registrado',
                 nota: input.nota?.trim() || null,
                 registrado_por: t.ctx.actor.id,
@@ -164,13 +167,18 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         return { ...(await verPago(pagoId, t.trx)), servicios }
     }
 
-    /** Caja y cuenta del debe según el método. */
+    /** Caja, turno abierto y cuenta del debe según el método. */
     private async destino(
         t: Transaccion,
         input: EntradaRegistrarPago,
-    ): Promise<{ cajaId: number | null; cuentaDebe: string | number }> {
-        if (input.metodo !== 'caja') return { cajaId: null, cuentaDebe: CUENTAS.BANCO_PRINCIPAL }
-        const cajaId = input.caja_id ?? (await cajaPrincipalId(t.trx))
+    ): Promise<{ cajaId: number | null; cuentaDebe: string | number; turnoId: number | null }> {
+        if (input.metodo !== 'caja') {
+            return { cajaId: null, cuentaDebe: CUENTAS.BANCO_PRINCIPAL, turnoId: null }
+        }
+        const cajaId =
+            input.caja_id ??
+            (await cajaDelCajero(t.ctx.actor.id, undefined, t.trx)) ??
+            (await cajaPrincipalId(t.trx))
         if (!cajaId) throw new ReglaNegocio('No hay caja principal activa para pagos en efectivo', 'sin_caja')
         const caja = await t.trx
             .from('ledger.cajas')
@@ -182,6 +190,14 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 { field: 'caja_id', message: `La caja ${cajaId} no existe o está inactiva`, rule: 'caja' },
             ])
         }
-        return { cajaId, cuentaDebe: caja.cuenta_id as number }
+        // FOR SHARE: si el turno se está cerrando, este cobro espera y luego ya no entra en él.
+        const turno = await t.trx
+            .from('ledger.cajas_turnos')
+            .where('caja_id', cajaId)
+            .whereNull('cerrado_en')
+            .forShare()
+            .select('id')
+            .first()
+        return { cajaId, cuentaDebe: caja.cuenta_id as number, turnoId: (turno?.id as number) ?? null }
     }
 }
