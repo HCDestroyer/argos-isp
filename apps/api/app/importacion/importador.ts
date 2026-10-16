@@ -8,8 +8,6 @@ import { Problema, ValidacionFallida } from '#shared/errores'
 import { normalizarNitCui } from '#core/nit_cui'
 import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import CrearServicio, { type EntradaCrearServicio } from '#core/actions/crear_servicio'
-import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
-import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import { saldoAnticipos } from '#billing/cobros'
 import { saldoCliente } from '#ledger/consultas'
 import CrearCliente from '#core/actions/crear_cliente'
@@ -28,6 +26,7 @@ import type {
 } from '#importacion/fuente'
 import { conteoVacio, type ReporteImportacion } from '#importacion/reporte'
 import { idsExternosDe, type EntidadExterna, type IdsExternos } from '#importacion/ids_externos'
+import { cargaFinancieraA3, type CargaFinanciera } from '#importacion/carga_financiera'
 
 /**
  * Importador desde Mikrowisp. Crea routers, redes IPv4, planes (con su implementación en cada
@@ -66,6 +65,8 @@ export interface OpcionesImportacion {
      * plantilla y sus facturas pendientes no se pueden importar (queda en errores).
      */
     plantillaId?: number | null
+    /** acciones de carga histórica de A3 (pruebas o el adaptador nuevo); por defecto `cargaFinancieraA3` */
+    carga?: CargaFinanciera
     /** ids externos (pruebas); por defecto `core.ids_externos` si existe */
     idsExternos?: IdsExternos
     /** transacción externa (pruebas): no se confirma ni se revierte aquí */
@@ -128,6 +129,11 @@ class Importador {
     #plantilla: number | null = null
     /** planes del origen que no se pueden usar: plan_mw → motivo */
     readonly #planesSinEquivalente = new Map<string, { nombre: string | null; motivo: string }>()
+    readonly #carga: CargaFinanciera
+    /** índices del origen (evitan recorrer las listas en cada fila) */
+    readonly #servicioMw: Map<string, ServicioOrigen>
+    readonly #facturasPorCliente: Map<string, FacturaOrigen[]>
+    readonly #serviciosPorCliente: Map<string, ServicioOrigen[]>
 
     constructor(
         private readonly fuente: FuenteMikrowisp,
@@ -137,6 +143,10 @@ class Importador {
         private readonly ids: IdsExternos,
         private readonly tipoConexion: boolean,
     ) {
+        this.#carga = opciones.carga ?? cargaFinancieraA3
+        this.#servicioMw = new Map(fuente.servicios.map((s) => [s.id, s]))
+        this.#facturasPorCliente = agrupar(fuente.facturas, (f) => f.cliente_id)
+        this.#serviciosPorCliente = agrupar(fuente.servicios, (s) => s.cliente_id)
         const zonas = new Set(fuente.clientes.map((c) => c.zona).filter(Boolean))
         this.reporte = {
             modo: opciones.dryRun ? 'en_seco' : 'real',
@@ -154,6 +164,7 @@ class Importador {
                 servicios: conteoVacio(fuente.servicios.length),
                 facturas: conteoVacio(fuente.facturas.length),
                 saldos: conteoVacio(),
+                pagos: conteoVacio(fuente.pagos.length),
             },
             ids_externos: ids.modo,
             saldos: {
@@ -164,6 +175,10 @@ class Importador {
                 cuadra: true,
             },
             diferencias: {
+                routers_sin_credenciales: [],
+                clientes_nit_duplicado: [],
+                servicios_sin_plan: [],
+                pagos_cruzados: [],
                 ips_duplicadas: [],
                 ips_fuera_de_red: [],
                 ips_en_uso: [],
@@ -205,6 +220,7 @@ class Importador {
         await this.servicios()
         await this.facturas()
         await this.saldos()
+        await this.pagos()
         await this.compararSaldos()
     }
 
@@ -264,6 +280,14 @@ class Importador {
     async routers() {
         const conteo = this.reporte.resumen.routers
         for (const r of this.fuente.routers) {
+            const faltan = (['api_usuario', 'api_password', 'radius_secret'] as const).filter((c) => !r[c])
+            if (faltan.length > 0) {
+                this.reporte.diferencias.routers_sin_credenciales.push({
+                    router_mw: r.id,
+                    nombre: r.nombre,
+                    faltan: [...faltan],
+                })
+            }
             const existente = await this.#existente('router', r.id, async () => {
                 const fila = (await this.trx
                     .from('network.routers')
@@ -376,6 +400,7 @@ class Importador {
         // Planes que usan los servicios y no vienen en planes.csv
         const conocidos = new Set(this.fuente.planes.map((p) => p.id))
         for (const s of this.fuente.servicios) {
+            if (s.plan_id === null) continue // servicios_sin_plan
             if (!conocidos.has(s.plan_id) && !this.#planesSinEquivalente.has(s.plan_id)) {
                 this.#planesSinEquivalente.set(s.plan_id, { nombre: null, motivo: 'no está en planes.csv' })
             }
@@ -421,6 +446,14 @@ class Importador {
     async clientes() {
         const conteo = this.reporte.resumen.clientes
         const d = this.reporte.diferencias
+        // Mismo NIT en varios clientes: se importan todos (son cuentas distintas en el origen).
+        const conNit = this.fuente.clientes
+            .map((c) => ({ c, nit: revisarNit(c).nit }))
+            .filter((x): x is { c: ClienteOrigen; nit: string } => !!x.nit && x.nit !== 'CF')
+        for (const [nit, grupo] of agrupar(conNit, (x) => x.nit)) {
+            if (grupo.length < 2) continue
+            d.clientes_nit_duplicado.push({ nit, clientes_mw: grupo.map((x) => x.c.id) })
+        }
         for (const c of this.fuente.clientes) {
             const existente = await this.#existente('cliente', c.id, async () => {
                 const fila = (await this.trx
@@ -507,6 +540,15 @@ class Importador {
         const implementadas = new Set<string>()
         for (const s of this.fuente.servicios) {
             if (s.estado === 'retirado' || omitir.has(s.id)) {
+                conteo.omitidos++
+                continue
+            }
+            if (s.plan_id === null) {
+                d.servicios_sin_plan.push({
+                    servicio_mw: s.id,
+                    cliente_mw: s.cliente_id,
+                    etiqueta: etiqueta(s),
+                })
                 conteo.omitidos++
                 continue
             }
@@ -669,7 +711,7 @@ class Importador {
                 continue
             }
             const hecha = await this.#accion('factura', f.id, 'facturas.importar_pendiente', () =>
-                new ImportarFacturaPendiente().execute(
+                this.#carga.importarFactura(
                     {
                         clave_externa: clave,
                         servicio_id: servicioId,
@@ -679,7 +721,7 @@ class Importador {
                         concepto: f.concepto,
                     },
                     this.ctx,
-                    { trx: this.trx },
+                    this.trx,
                 ),
             )
             if (hecha) conteo.creados++
@@ -703,14 +745,14 @@ class Importador {
             return null
         }
         if (f.servicio_id) {
-            const servicio = this.fuente.servicios.find((s) => s.id === f.servicio_id)
+            const servicio = this.#servicioMw.get(f.servicio_id)
             if (!servicio || servicio.cliente_id !== f.cliente_id) {
                 return aSaldo(`el servicio ${f.servicio_id} no es del cliente en el origen`)
             }
             return this.#servicios.get(f.servicio_id) ?? aSaldo(`el servicio ${f.servicio_id} no se importó`)
         }
-        const delCliente = this.fuente.servicios
-            .filter((s) => s.cliente_id === f.cliente_id && this.#servicios.has(s.id))
+        const delCliente = (this.#serviciosPorCliente.get(f.cliente_id) ?? [])
+            .filter((s) => this.#servicios.has(s.id))
             .map((s) => this.#servicios.get(s.id)!)
         const unicos = [...new Set(delCliente)]
         if (unicos.length === 1) return unicos[0]!
@@ -737,8 +779,8 @@ class Importador {
         for (const [clienteMw, origen] of this.#saldosOrigen()) {
             const clienteId = this.#clientes.get(clienteMw)
             if (!clienteId) continue // ya está en referencias faltantes o no se pudo importar el cliente
-            const comoFactura = this.fuente.facturas
-                .filter((f) => f.cliente_id === clienteMw && new Decimal(f.pendiente).gt(0))
+            const comoFactura = (this.#facturasPorCliente.get(clienteMw) ?? [])
+                .filter((f) => new Decimal(f.pendiente).gt(0))
                 .filter((f) => this.#servicioDeFacturaSinAnotar(f) !== null)
                 .reduce((suma, f) => suma.plus(f.pendiente), new Decimal(0))
             const monto = origen.minus(comoFactura)
@@ -755,7 +797,7 @@ class Importador {
                 continue
             }
             const hecho = await this.#accion('saldo', clienteMw, 'facturas.registrar_saldo_inicial', () =>
-                new RegistrarSaldoInicial().execute(
+                this.#carga.registrarSaldoInicial(
                     {
                         clave_externa: clave,
                         cliente_id: clienteId,
@@ -763,9 +805,73 @@ class Importador {
                         descripcion: 'Saldo inicial importado de Mikrowisp',
                     },
                     this.ctx,
-                    { trx: this.trx },
+                    this.trx,
                 ),
             )
+            if (hecho) conteo.creados++
+            else conteo.omitidos++
+        }
+    }
+
+    /**
+     * Pagos del origen. Lo pendiente de cada factura ya descuenta lo pagado, así que los pagos no
+     * mueven saldos aquí: se reportan los de un cliente a facturas de otro (`pagos_cruzados`) y,
+     * cuando A3 publique la acción de pago histórico (`carga_financiera.ts`), se registran como
+     * historial. Sin ella, quedan en `pendiente`.
+     */
+    async pagos() {
+        const conteo = this.reporte.resumen.pagos
+        const duenos =
+            this.fuente.duenosFacturas ?? new Map(this.fuente.facturas.map((f) => [f.id, f.cliente_id]))
+        for (const p of this.fuente.pagos) {
+            const dueno = p.factura_id ? duenos.get(p.factura_id) : undefined
+            if (p.factura_id && dueno && dueno !== p.cliente_id) {
+                this.reporte.diferencias.pagos_cruzados.push({
+                    pago_mw: p.id,
+                    pagador_mw: p.cliente_id,
+                    factura_mw: p.factura_id,
+                    dueno_mw: dueno,
+                    monto: p.monto,
+                })
+            }
+        }
+        const registrar = this.#carga.registrarPagoHistorico
+        if (!registrar) {
+            conteo.omitidos = this.fuente.pagos.length
+            if (this.fuente.pagos.length > 0) {
+                this.reporte.pendiente.push(
+                    `Pagos históricos: ${this.fuente.pagos.length} pagos del origen no se importan hasta que A3 publique la acción de pago histórico (contratos/importacion.md). No cambia saldos: lo pendiente de cada factura ya los descuenta.`,
+                )
+            }
+            return
+        }
+        for (const p of this.fuente.pagos) {
+            const clienteId = this.#clientes.get(p.cliente_id)
+            if (!clienteId) {
+                this.#faltante('pago', p.id, 'cliente', p.cliente_id)
+                conteo.omitidos++
+                continue
+            }
+            const clave = `mikrowisp:pago:${p.id}`
+            if (await this.#carga.existePagoHistorico?.(clave, this.trx)) {
+                conteo.existentes++
+                continue
+            }
+            const hecho = await this.#accion('pago', p.id, 'pagos.registrar_historico', async () => {
+                await registrar(
+                    {
+                        clave_externa: clave,
+                        cliente_id: clienteId,
+                        monto: p.monto,
+                        fecha: p.fecha,
+                        metodo: p.metodo,
+                        factura_clave_externa: p.factura_id ? `mikrowisp:factura:${p.factura_id}` : null,
+                    },
+                    this.ctx,
+                    this.trx,
+                )
+                return true
+            })
             if (hecho) conteo.creados++
             else conteo.omitidos++
         }
