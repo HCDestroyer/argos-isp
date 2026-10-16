@@ -13,9 +13,12 @@ export interface CajaVista {
     id: number
     nombre: string
     cajero_id: number | null
+    cajero_nombre: string | null
     cuenta_id: number
     activa: boolean
     turno_abierto_id: number | null
+    turno_abierto_por: number | null
+    turno_abierto_por_nombre: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -33,6 +36,8 @@ export interface TurnoVista {
     motivo: string | null
     abierto_por: number | null
     cerrado_por: number | null
+    abierto_por_nombre: string | null
+    cerrado_por_nombre: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -50,6 +55,8 @@ const COLUMNAS_TURNO = [
     't.motivo',
     't.abierto_por',
     't.cerrado_por',
+    db.raw('(select u.nombre from core.usuarios u where u.id = t.abierto_por) as abierto_por_nombre'),
+    db.raw('(select u.nombre from core.usuarios u where u.id = t.cerrado_por) as cerrado_por_nombre'),
     't.version',
     't.created_at',
     't.updated_at',
@@ -64,9 +71,14 @@ export async function listarCajas(alcance?: Alcance): Promise<CajaVista[]> {
             'c.id',
             'c.nombre',
             'c.cajero_id',
+            db.raw('(select u.nombre from core.usuarios u where u.id = c.cajero_id) as cajero_nombre'),
             'c.cuenta_id',
             'c.activa',
             't.id as turno_abierto_id',
+            't.abierto_por as turno_abierto_por',
+            db.raw(
+                '(select u.nombre from core.usuarios u where u.id = t.abierto_por) as turno_abierto_por_nombre',
+            ),
             'c.version',
             'c.created_at',
             'c.updated_at',

@@ -17,6 +17,8 @@ const redis = new Redis({
     connectTimeout: 1000,
     maxRetriesPerRequest: 0,
     enableOfflineQueue: false,
+    // Los GET del mismo tick salen en una sola escritura al socket (reconexiones masivas).
+    enableAutoPipelining: true,
 })
 redis.on('error', () => {
     // El estado se ve en /health y en el log de cada autorización que use el respaldo.
@@ -40,6 +42,7 @@ const cola = new ColaAccountingBullmq({
 })
 
 const app = crearApp({
+    metricasToken: process.env.METRICS_TOKEN || undefined,
     resolutor: new ResolutorServicios({
         redis,
         prefijo: config.redis.prefijo,
@@ -54,6 +57,7 @@ const app = crearApp({
 })
 
 await app.listen({ port: config.port, host: config.host })
+if (respaldo instanceof FuenteApi) await respaldo.calentar()
 app.log.info(
     { respaldo: respaldo.nombre, redis: `${config.redis.host}:${config.redis.port}/${config.redis.db}` },
     'aaa listo',

@@ -30,6 +30,9 @@
       "name": "documentos"
     },
     {
+      "name": "egresos"
+    },
+    {
       "name": "empresa"
     },
     {
@@ -61,6 +64,9 @@
     },
     {
       "name": "red"
+    },
+    {
+      "name": "reportes"
     },
     {
       "name": "routers"
@@ -3176,6 +3182,55 @@
         "x-implementado": true
       }
     },
+    "/api/v1/dashboard/resumen": {
+      "get": {
+        "operationId": "dashboardResumen",
+        "summary": "KPIs del dashboard y series de 12 meses (vistas refrescadas por evento)",
+        "description": "Lee solo vistas materializadas que el grupo billing refresca al recibir factura.*, pago.*, promesa.* y servicio.estado_cambiado (nunca por intervalo). actualizado_en dice cuándo se refrescó cada una.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenDashboard"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/aviso-cobro/{facturaId}": {
       "get": {
         "operationId": "documentosAvisoCobroPdf",
@@ -3541,6 +3596,605 @@
         "x-implementado": true
       }
     },
+    "/api/v1/egresos": {
+      "get": {
+        "operationId": "egresosListar",
+        "summary": "Listar egresos",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "categoria",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "energia",
+                "transito",
+                "nomina",
+                "vehiculos",
+                "alquileres",
+                "otros"
+              ]
+            }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja",
+                "banco",
+                "cuenta_bancaria"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "registrado",
+                "anulado"
+              ]
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cuenta_bancaria_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de egresos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Egreso"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "egresosRegistrar",
+        "summary": "Registrar egreso (asiento Gasto / Caja o Banco)",
+        "description": "La categoría decide la cuenta de gasto. Con metodo caja el efectivo sale del turno abierto de la caja (baja el esperado del cierre); sin caja_id, la caja del turno abierto del usuario o la principal. 422 con un error por campo (no_aplica si se manda el origen de otro método).",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categoria": {
+                    "type": "string",
+                    "enum": [
+                      "energia",
+                      "transito",
+                      "nomina",
+                      "vehiculos",
+                      "alquileres",
+                      "otros"
+                    ],
+                    "description": "Categoría (GET /egresos/categorias)"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "caja",
+                      "banco",
+                      "cuenta_bancaria"
+                    ],
+                    "description": "De dónde sale el dinero: caja (efectivo), banco (del libro) o cuenta_bancaria propia"
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha contable (por defecto hoy; no futura)"
+                  },
+                  "caja_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con caja; sin ella, la del turno abierto del usuario o la principal"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con banco; por defecto el banco principal"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Obligatoria con cuenta_bancaria (GET /cuentas-bancarias)"
+                  },
+                  "proveedor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 150
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "comprobante": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Número o serie del documento del proveedor (opcional)"
+                  }
+                },
+                "required": [
+                  "categoria",
+                  "monto",
+                  "metodo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Egreso registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Egreso"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/egresos/{id}": {
+      "get": {
+        "operationId": "egresosVer",
+        "summary": "Ver egreso",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Egreso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Egreso"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/egresos/{id}/anular": {
+      "post": {
+        "operationId": "egresosAnular",
+        "summary": "Anular egreso (asiento de reverso)",
+        "description": "El reverso va con fecha de hoy (periodo abierto). 409 egreso_anulado si ya lo estaba.",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Egreso anulado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Egreso"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.anular",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.anular",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/egresos/categorias": {
+      "get": {
+        "operationId": "egresosCategorias",
+        "summary": "Categorías de egreso con su cuenta de gasto",
+        "tags": [
+          "egresos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Categorías",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoriaEgreso"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/empresa": {
       "get": {
         "operationId": "empresaVer",
@@ -3817,6 +4471,19 @@
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
               "format": "date"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "servicio",
+                "mora"
+              ]
             }
           }
         ],
@@ -4836,6 +5503,16 @@
                 "ajuste"
               ]
             }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "required": false,
+            "description": "Asientos de este origen (con origen_tipo: la factura, el pago…)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -5019,6 +5696,341 @@
           }
         },
         "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/periodos": {
+      "get": {
+        "operationId": "libroPeriodos",
+        "summary": "Cierres mensuales y reaperturas (el más reciente primero)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cerrado",
+                "reabierto"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de cierres",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CierrePeriodo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/periodos/cerrar": {
+      "post": {
+        "operationId": "libroCerrarPeriodo",
+        "summary": "Cerrar un mes del libro",
+        "description": "Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "mes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  }
+                },
+                "required": [
+                  "anio",
+                  "mes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Mes cerrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierrePeriodo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_periodo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_periodo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/periodos/reabrir": {
+      "post": {
+        "operationId": "libroReabrirPeriodo",
+        "summary": "Reabrir un mes cerrado (con motivo)",
+        "description": "No borra el cierre: registra la reapertura con motivo (auditada). Se puede volver a cerrar. 409 periodo_abierto si el mes no está cerrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "mes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "anio",
+                  "mes",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mes reabierto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierrePeriodo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.reabrir_periodo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.reabrir_periodo",
         "x-implementado": true
       }
     },
@@ -5665,6 +6677,16 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "factura_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los pagos aplicados a esta factura",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -6090,6 +7112,706 @@
         "x-implementado": true
       }
     },
+    "/api/v1/pasarela/cobros": {
+      "get": {
+        "operationId": "pasarelaListarCobros",
+        "summary": "Cobros en línea",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "pagado",
+                "fallido",
+                "expirado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de cobros",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CobroPasarela"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "pasarelaCrearCobro",
+        "summary": "Crear cobro en línea (\"Pagar en línea\"): devuelve la url de pago del proveedor",
+        "description": "No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "monto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Por defecto lo pendiente de las facturas pedidas o de todo el cliente",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Facturas a pagar (primero)"
+                  },
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "cliente_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cobro creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/cobros/{id}": {
+      "get": {
+        "operationId": "pasarelaVerCobro",
+        "summary": "Ver cobro en línea (estado y pago)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cobro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/conciliaciones": {
+      "get": {
+        "operationId": "pasarelaConciliaciones",
+        "summary": "Corridas de la conciliación con sus diferencias",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de conciliaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConciliacionPasarela"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/conciliar": {
+      "post": {
+        "operationId": "pasarelaConciliar",
+        "summary": "Conciliar los cobros en línea de un día contra el proveedor",
+        "description": "Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Día (Guatemala) a conciliar; por defecto ayer"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conciliación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConciliacionPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/falsa/{cobro}": {
+      "get": {
+        "operationId": "pasarelaFalsaPagina",
+        "summary": "Laboratorio: página de pago de la pasarela falsa",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón \"Pagar (simulado)\".",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página HTML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/falsa/{cobro}/pagar": {
+      "post": {
+        "operationId": "pasarelaFalsaPagar",
+        "summary": "Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "pagado",
+                      "fallido"
+                    ]
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Simular un pago por otro monto",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "notificar": {
+                    "description": "false simula un webhook perdido",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del webhook",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookPasarela"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/webhook/{proveedor}": {
+      "post": {
+        "operationId": "pasarelaWebhook",
+        "summary": "Webhook del proveedor de pago (firmado con HMAC)",
+        "description": "Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "proveedor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook procesado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookPasarela"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/permisos": {
       "get": {
         "operationId": "permisosListar",
@@ -6310,7 +8032,53 @@
                   "reuso": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 64
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   },
                   "dual_stack": {
                     "type": "string",
@@ -6532,7 +8300,53 @@
                   "reuso": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 64
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   },
                   "dual_stack": {
                     "type": "string",
@@ -6790,7 +8604,71 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 200
+                    "maxLength": 200,
+                    "description": "Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo"
+                  },
+                  "reuso": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   }
                 },
                 "required": [],
@@ -7242,6 +9120,10 @@
                     "required": [],
                     "additionalProperties": false,
                     "description": "Reglas de promesas; las claves que falten toman su valor por defecto"
+                  },
+                  "por_defecto": {
+                    "description": "Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -7709,6 +9591,10 @@
                     "required": [],
                     "additionalProperties": false,
                     "description": "Si se envía, reemplaza el objeto completo (lo que falte vuelve al valor por defecto)"
+                  },
+                  "por_defecto": {
+                    "description": "true la marca por defecto (desmarca la anterior); false le quita la marca",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -9568,6 +11454,1279 @@
         "x-implementado": true
       }
     },
+    "/api/v1/promesas/simular": {
+      "post": {
+        "operationId": "promesasSimular",
+        "summary": "Simular una promesa: evalúa todas las reglas sin crear nada",
+        "description": "Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
+        "tags": [
+          "promesas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "portal",
+                      "ia",
+                      "operador",
+                      "supervisor"
+                    ],
+                    "description": "Por defecto el de la petición (portal/ia por X-Canal) u operador"
+                  },
+                  "vence_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Por defecto: el fin de mañana (Guatemala)"
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Por defecto: la deuda pendiente del servicio",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "evaluar_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Simular como si fuera este instante (por defecto ahora)"
+                  }
+                },
+                "required": [
+                  "servicio_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Simulación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulacionPromesa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso promesas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "promesas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/altas-bajas": {
+      "get": {
+        "operationId": "reportesAltasBajas",
+        "summary": "Altas, bajas, suspensiones y reactivaciones por mes",
+        "description": "Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteAltasBajas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/cartera-vencida": {
+      "get": {
+        "operationId": "reportesCarteraVencida",
+        "summary": "Cartera vencida por antigüedad (0-30, 31-60, 61-90, +90 días)",
+        "description": "Saldo pendiente de cada factura por días de atraso al corte, agrupado por cliente, zona, router o plan. El total cuadra con el saldo del auxiliar CxC. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "corte",
+            "in": "query",
+            "required": false,
+            "description": "Día de referencia de la antigüedad (hoy por defecto)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "agrupar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cliente",
+                "zona",
+                "router",
+                "plan"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteCarteraVencida"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/cierres-caja": {
+      "get": {
+        "operationId": "reportesCierresCaja",
+        "summary": "Cierres de caja: esperado, contado y diferencia por turno",
+        "description": "Turnos cerrados en el rango (por defecto el mes en curso). Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hasta",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja",
+                "pasarela",
+                "deposito",
+                "transferencia",
+                "ach",
+                "remesa",
+                "agente",
+                "debito"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteCierresCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/cobranza-diaria": {
+      "get": {
+        "operationId": "reportesCobranzaDiaria",
+        "summary": "Cobranza por día, método y caja",
+        "description": "Por defecto el mes en curso. Los anulados van aparte. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hasta",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja",
+                "pasarela",
+                "deposito",
+                "transferencia",
+                "ach",
+                "remesa",
+                "agente",
+                "debito"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteCobranzaDiaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/egresos": {
+      "get": {
+        "operationId": "reportesEgresos",
+        "summary": "Egresos por categoría y mes",
+        "description": "Egresos vigentes (sin anular) por mes contable. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "categoria",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "energia",
+                "transito",
+                "nomina",
+                "vehiculos",
+                "alquileres",
+                "otros"
+              ]
+            }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja",
+                "banco",
+                "cuenta_bancaria"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteEgresos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/facturado-vs-cobrado": {
+      "get": {
+        "operationId": "reportesFacturadoCobrado",
+        "summary": "Facturado vs cobrado por periodo de factura",
+        "description": "Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "servicio",
+                "mora"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteFacturadoCobrado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/ingresos": {
+      "get": {
+        "operationId": "reportesIngresos",
+        "summary": "Ingresos (pagos vigentes) por periodo y método",
+        "description": "Por mes (o día con agrupar=dia) de Guatemala. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "caja",
+                "pasarela",
+                "deposito",
+                "transferencia",
+                "ach",
+                "remesa",
+                "agente",
+                "debito"
+              ]
+            }
+          },
+          {
+            "name": "agrupar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mes",
+                "dia"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteIngresos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/iva": {
+      "get": {
+        "operationId": "reportesIva",
+        "summary": "IVA del periodo (débito fiscal) por mes contable",
+        "description": "Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteIva"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/promesas": {
+      "get": {
+        "operationId": "reportesPromesas",
+        "summary": "Promesas: creadas, cumplidas, incumplidas y tasa de cumplimiento",
+        "description": "Por mes de creación y canal, con su estado actual. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "zona_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "portal",
+                "ia",
+                "operador",
+                "supervisor"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportePromesas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/roles": {
       "get": {
         "operationId": "rolesListar",
@@ -9671,6 +12830,9 @@
                         "cuentas_bancarias.ver",
                         "documentos.editar",
                         "documentos.ver",
+                        "egresos.anular",
+                        "egresos.registrar",
+                        "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
                         "facturas.anular",
@@ -9679,6 +12841,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.cerrar_periodo",
+                        "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
@@ -9700,9 +12864,11 @@
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
+                        "reportes.ver",
                         "roles.crear",
                         "roles.editar",
                         "roles.ver",
+                        "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
                         "routers.ver",
@@ -9852,6 +13018,9 @@
                         "cuentas_bancarias.ver",
                         "documentos.editar",
                         "documentos.ver",
+                        "egresos.anular",
+                        "egresos.registrar",
+                        "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
                         "facturas.anular",
@@ -9860,6 +13029,8 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.cerrar_periodo",
+                        "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
@@ -9881,9 +13052,11 @@
                         "promesas.ver",
                         "redes.crear",
                         "redes.ver",
+                        "reportes.ver",
                         "roles.crear",
                         "roles.editar",
                         "roles.ver",
+                        "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
                         "routers.ver",
@@ -10155,12 +13328,31 @@
                       "api"
                     ]
                   },
-                  "modo_velocidad": {
+                  "control_velocidad": {
                     "type": "string",
                     "enum": [
                       "simple",
-                      "pcq"
-                    ]
+                      "arbol_pcq"
+                    ],
+                    "description": "simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad"
+                  },
+                  "capacidad_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
+                  },
+                  "capacidad_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
                   },
                   "activo": {
                     "type": "boolean"
@@ -10366,12 +13558,23 @@
                       "api"
                     ]
                   },
-                  "modo_velocidad": {
-                    "type": "string",
-                    "enum": [
-                      "simple",
-                      "pcq"
-                    ]
+                  "capacidad_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
+                  },
+                  "capacidad_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
                   },
                   "activo": {
                     "type": "boolean"
@@ -10448,6 +13651,130 @@
           }
         },
         "x-permiso": "routers.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/cambiar-control-velocidad": {
+      "post": {
+        "operationId": "routersCambiarControlVelocidad",
+        "summary": "Cambiar el control de velocidad del router (simple o arbol_pcq)",
+        "description": "Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "control_velocidad": {
+                    "type": "string",
+                    "enum": [
+                      "simple",
+                      "arbol_pcq"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "control_velocidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Router con el control nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Router"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
         "x-implementado": true
       }
     },
@@ -10964,6 +14291,19 @@
             }
           },
           {
+            "name": "tipo_conexion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pppoe",
+                "ip_estatica",
+                "dhcp_fija"
+              ]
+            }
+          },
+          {
             "name": "zona_id",
             "in": "query",
             "required": false,
@@ -11048,7 +14388,7 @@
       },
       "post": {
         "operationId": "serviciosCrear",
-        "summary": "Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp)",
+        "summary": "Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)",
         "tags": [
           "servicios"
         ],
@@ -11089,6 +14429,19 @@
                     "type": "integer",
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Por defecto pppoe"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
                   "plantilla_facturacion_id": {
                     "type": [
                       "integer",
@@ -11100,13 +14453,13 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
                     "maxLength": 64,
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -11505,10 +14858,29 @@
                     ],
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
+                  "user_ppp": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._@-]{3,64}$",
+                    "description": "Solo al cambiar a pppoe; se genera si no viene"
+                  },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
-                    "maxLength": 64
+                    "maxLength": 64,
+                    "description": "Solo pppoe; al cambiar a pppoe se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -13260,6 +16632,9 @@
                             "cuentas_bancarias.ver",
                             "documentos.editar",
                             "documentos.ver",
+                            "egresos.anular",
+                            "egresos.registrar",
+                            "egresos.ver",
                             "empresa.editar",
                             "empresa.ver",
                             "facturas.anular",
@@ -13268,6 +16643,8 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "libro.cerrar_periodo",
+                            "libro.reabrir_periodo",
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
@@ -13289,9 +16666,11 @@
                             "promesas.ver",
                             "redes.crear",
                             "redes.ver",
+                            "reportes.ver",
                             "roles.crear",
                             "roles.editar",
                             "roles.ver",
+                            "routers.cambiar_control_velocidad",
                             "routers.crear",
                             "routers.editar",
                             "routers.ver",
@@ -14187,6 +17566,12 @@
         "type": "http",
         "scheme": "bearer",
         "description": "INTERNAL_TOKEN compartido con los servicios aaa y coa"
+      },
+      "portal": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "argos_portal",
+        "description": "Sesión del portal del cliente (cookie httpOnly que deja el acceso por código)"
       }
     },
     "schemas": {
@@ -14199,6 +17584,7 @@
           "pass_ppp",
           "estado",
           "router_id",
+          "control_velocidad",
           "plan",
           "ipv4",
           "ipv6"
@@ -14227,6 +17613,14 @@
             "type": "integer",
             "minimum": 1
           },
+          "control_velocidad": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ],
+            "description": "network.routers.control_velocidad del router del servicio"
+          },
           "plan": {
             "type": "object",
             "required": [
@@ -14236,7 +17630,10 @@
               "subida_limitada_kbps",
               "bajada_limitada_kbps",
               "rate_limit_override",
-              "profile_ppp"
+              "profile_ppp",
+              "rate_limit",
+              "rate_limit_limitado",
+              "reuso"
             ],
             "properties": {
               "id": {
@@ -14266,6 +17663,20 @@
                   "string",
                   "null"
                 ]
+              },
+              "rate_limit": {
+                "type": "string",
+                "description": "Mikrotik-Rate-Limit completo en estado activo: \"rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx\" (o rate_limit_override)"
+              },
+              "rate_limit_limitado": {
+                "type": "string",
+                "description": "Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)"
+              },
+              "reuso": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64,
+                "description": "Reuso efectivo 1:N en el router"
               }
             }
           },
@@ -14658,6 +18069,13 @@
             ],
             "minimum": 1
           },
+          "cajero_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cajero asignado a la caja"
+          },
           "cuenta_id": {
             "type": "integer",
             "minimum": 1
@@ -14671,6 +18089,20 @@
               "null"
             ],
             "minimum": 1
+          },
+          "turno_abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que abrió el turno abierto"
+          },
+          "turno_abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -14778,6 +18210,18 @@
             "minimum": 1,
             "description": "Usuario que cerró el turno"
           },
+          "abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cerrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -14863,6 +18307,132 @@
           }
         }
       },
+      "CategoriaEgreso": {
+        "type": "object",
+        "required": [
+          "id",
+          "clave",
+          "nombre",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clave": {
+            "type": "string",
+            "enum": [
+              "energia",
+              "transito",
+              "nomina",
+              "vehiculos",
+              "alquileres",
+              "otros"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          }
+        }
+      },
+      "CierrePeriodo": {
+        "type": "object",
+        "required": [
+          "id",
+          "periodo",
+          "estado",
+          "cerrado_en",
+          "cerrado_por",
+          "cerrado_por_nombre",
+          "resumen",
+          "reabierto_en",
+          "reabierto_por",
+          "reabierto_por_nombre",
+          "motivo_reapertura"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "periodo": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}$",
+            "description": "YYYY-MM"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cerrado",
+              "reabierto"
+            ]
+          },
+          "cerrado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resumen": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "Al cerrar: desde, hasta, asientos, debe, haber y cuentas[] (codigo, nombre, debe, haber) del mes"
+          },
+          "reabierto_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reabierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "reabierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo_reapertura": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Cliente": {
         "type": "object",
         "required": [
@@ -14881,6 +18451,8 @@
           "campos_personalizados",
           "canal_preferido",
           "telegram_chat_id",
+          "responsable_pago_id",
+          "responsable_pago_nombre",
           "version",
           "created_at",
           "updated_at"
@@ -15000,6 +18572,172 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CobroPasarela": {
+        "type": "object",
+        "required": [
+          "id",
+          "proveedor",
+          "id_proveedor",
+          "cliente_id",
+          "cliente_nombre",
+          "servicio_id",
+          "monto",
+          "facturas",
+          "estado",
+          "url_pago",
+          "expira_en",
+          "canal",
+          "pago_id",
+          "monto_pagado",
+          "comision",
+          "pagado_en",
+          "conciliado_en",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "id_proveedor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id del cobro en el proveedor"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "pagado",
+              "fallido",
+              "expirado"
+            ]
+          },
+          "url_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Adonde se manda al cliente para pagar"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "canal": {
+            "type": "string"
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Pago registrado al llegar el webhook"
+          },
+          "monto_pagado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comision": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pagado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "conciliado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ColumnaReporte": {
+        "type": "object",
+        "required": [
+          "clave",
+          "titulo",
+          "tipo"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "texto",
+              "dinero",
+              "entero",
+              "fecha",
+              "porcentaje",
+              "id"
+            ]
           }
         }
       },
@@ -15185,6 +18923,126 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConciliacionPasarela": {
+        "type": "object",
+        "required": [
+          "id",
+          "proveedor",
+          "fecha",
+          "revisados",
+          "conciliados",
+          "cobros_conciliados",
+          "diferencias"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "revisados": {
+            "type": "integer"
+          },
+          "conciliados": {
+            "type": "integer"
+          },
+          "cobros_conciliados": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "diferencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tipo",
+                "cobro_id",
+                "pago_id",
+                "id_proveedor",
+                "nuestro",
+                "proveedor",
+                "detalle"
+              ],
+              "properties": {
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "pago_sin_registrar",
+                    "pago_sin_cobro_en_proveedor",
+                    "monto_distinto",
+                    "pago_anulado",
+                    "pago_sin_cobro",
+                    "error_consulta"
+                  ]
+                },
+                "cobro_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "pago_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "id_proveedor": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nuestro": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proveedor": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "ejecutado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -15561,6 +19419,211 @@
         "examples": [
           "150.00"
         ]
+      },
+      "Egreso": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "categoria",
+          "categoria_nombre",
+          "cuenta_codigo",
+          "proveedor",
+          "descripcion",
+          "comprobante",
+          "monto",
+          "metodo",
+          "caja_id",
+          "caja_nombre",
+          "turno_id",
+          "banco_id",
+          "banco_nombre",
+          "cuenta_bancaria_id",
+          "cuenta_bancaria_nombre",
+          "asiento_id",
+          "estado",
+          "registrado_por",
+          "registrado_por_nombre",
+          "anulado_en",
+          "anulado_por",
+          "motivo_anulacion",
+          "asiento_reverso_id",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "categoria": {
+            "type": "string",
+            "enum": [
+              "energia",
+              "transito",
+              "nomina",
+              "vehiculos",
+              "alquileres",
+              "otros"
+            ]
+          },
+          "categoria_nombre": {
+            "type": "string"
+          },
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "Cuenta de gasto del plan"
+          },
+          "proveedor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comprobante": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número o serie del documento del proveedor"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "caja",
+              "banco",
+              "cuenta_bancaria"
+            ]
+          },
+          "caja_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turno_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Turno de caja abierto cuando salió el efectivo"
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "banco_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_bancaria_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "registrado",
+              "anulado"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "anulado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_reverso_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "Empresa": {
         "type": "object",
@@ -16005,6 +20068,9 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
           },
           "servicio_id": {
             "type": [
@@ -16460,6 +20526,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cliente del auxiliar (CxC, anticipos)"
           }
         }
       },
@@ -16534,6 +20607,10 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string",
+            "description": "Nombre del pagador"
           },
           "metodo": {
             "type": "string",
@@ -16619,7 +20696,7 @@
             "items": {
               "$ref": "#/components/schemas/ServicioEvaluado"
             },
-            "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
+            "description": "Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte)"
           },
           "banco_origen_id": {
             "type": [
@@ -16733,6 +20810,44 @@
           "reuso": {
             "type": "integer"
           },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "CIR (limit-at) como % del MIR; null = 100 / reuso"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de bajada; null = sin ráfaga"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de subida; null = sin ráfaga"
+          },
+          "rafaga_umbral_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "burst-threshold como % del MIR"
+          },
+          "rafaga_segundos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "burst-time en segundos"
+          },
+          "prioridad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "1 (alta) a 8 (baja)"
+          },
           "dual_stack": {
             "type": "string",
             "enum": [
@@ -16823,7 +20938,46 @@
             "type": "integer"
           },
           "reuso": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Reuso efectivo en el router"
+          },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "CIR (limit-at) como % del MIR; null = 100 / reuso"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de bajada; null = sin ráfaga"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de subida; null = sin ráfaga"
+          },
+          "rafaga_umbral_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "burst-threshold como % del MIR"
+          },
+          "rafaga_segundos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "burst-time en segundos"
+          },
+          "prioridad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "1 (alta) a 8 (baja)"
           },
           "dual_stack": {
             "type": "string",
@@ -16876,11 +21030,11 @@
           },
           "rate_limit": {
             "type": "string",
-            "description": "rate-limit MikroTik subida/bajada: \"5000k/20000k\""
+            "description": "Mikrotik-Rate-Limit completo en estado activo: \"5M/20M 0/0 0/0 0/0 8 5M/20M\" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override"
           },
           "rate_limit_limitado": {
             "type": "string",
-            "description": "rate-limit en estado limitado"
+            "description": "Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)"
           },
           "profile_ppp": {
             "type": [
@@ -16985,6 +21139,55 @@
               "string",
               "null"
             ]
+          },
+          "reuso": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_umbral_pct": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_segundos": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "prioridad": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
           },
           "version": {
             "type": "integer",
@@ -17116,6 +21319,10 @@
           },
           "reglas_promesa": {
             "$ref": "#/components/schemas/ReglasPromesa"
+          },
+          "por_defecto": {
+            "type": "boolean",
+            "description": "Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)"
           },
           "version": {
             "type": "integer",
@@ -18075,6 +22282,9 @@
             "type": "integer",
             "minimum": 1
           },
+          "cliente_nombre": {
+            "type": "string"
+          },
           "vence_en": {
             "type": "string",
             "format": "date-time"
@@ -18301,6 +22511,56 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReglaSimulada": {
+        "type": "object",
+        "required": [
+          "regla",
+          "ok",
+          "aplica",
+          "valor",
+          "limite",
+          "origen",
+          "detalle"
+        ],
+        "properties": {
+          "regla": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "aplica": {
+            "type": "boolean",
+            "description": "false: la configuración no exige esta regla"
+          },
+          "valor": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Lo medido (días, monto, cantidad, %)"
+          },
+          "limite": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Límite aplicado (null = sin límite)"
+          },
+          "origen": {
+            "type": "string",
+            "description": "general o el canal cuyo límite reemplazó al general"
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Explicación para la pantalla"
           }
         }
       },
@@ -18549,6 +22809,1462 @@
           }
         }
       },
+      "ReporteAltasBajas": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "altas",
+                "bajas",
+                "suspensiones",
+                "limitaciones",
+                "reactivaciones",
+                "neto"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "altas": {
+                  "type": "integer"
+                },
+                "bajas": {
+                  "type": "integer"
+                },
+                "suspensiones": {
+                  "type": "integer"
+                },
+                "limitaciones": {
+                  "type": "integer"
+                },
+                "reactivaciones": {
+                  "type": "integer"
+                },
+                "neto": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "altas",
+              "bajas",
+              "suspensiones",
+              "limitaciones",
+              "reactivaciones",
+              "neto"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "altas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bajas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "suspensiones": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limitaciones": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "reactivaciones": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "neto": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteCarteraVencida": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "grupo_id",
+                "grupo",
+                "facturas",
+                "por_vencer",
+                "dias_0_30",
+                "dias_31_60",
+                "dias_61_90",
+                "dias_mas_90",
+                "vencido",
+                "total"
+              ],
+              "properties": {
+                "grupo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "grupo": {
+                  "type": "string"
+                },
+                "facturas": {
+                  "type": "integer"
+                },
+                "por_vencer": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_0_30": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_31_60": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_61_90": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_mas_90": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "vencido": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "total": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "grupo_id",
+              "grupo",
+              "facturas",
+              "por_vencer",
+              "dias_0_30",
+              "dias_31_60",
+              "dias_61_90",
+              "dias_mas_90",
+              "vencido",
+              "total"
+            ],
+            "properties": {
+              "grupo_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "grupo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "facturas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "por_vencer": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_0_30": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_31_60": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_61_90": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_mas_90": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vencido": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "total": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteCierresCaja": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "turno_id",
+                "caja_id",
+                "caja",
+                "abierto_en",
+                "cerrado_en",
+                "abierto_por",
+                "cerrado_por",
+                "fondo_inicial",
+                "cobrado",
+                "egresos",
+                "esperado",
+                "contado",
+                "diferencia",
+                "motivo"
+              ],
+              "properties": {
+                "turno_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "caja_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "caja": {
+                  "type": "string"
+                },
+                "abierto_en": {
+                  "type": "string"
+                },
+                "cerrado_en": {
+                  "type": "string"
+                },
+                "abierto_por": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cerrado_por": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fondo_inicial": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobrado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "egresos": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "esperado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "contado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "diferencia": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "turno_id",
+              "caja_id",
+              "caja",
+              "abierto_en",
+              "cerrado_en",
+              "abierto_por",
+              "cerrado_por",
+              "fondo_inicial",
+              "cobrado",
+              "egresos",
+              "esperado",
+              "contado",
+              "diferencia",
+              "motivo"
+            ],
+            "properties": {
+              "turno_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "caja_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "caja": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "abierto_en": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cerrado_en": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "abierto_por": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cerrado_por": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fondo_inicial": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cobrado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "egresos": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "esperado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "contado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "diferencia": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "motivo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteCobranzaDiaria": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fecha",
+                "metodo",
+                "caja_id",
+                "caja",
+                "pagos",
+                "monto",
+                "anulados",
+                "monto_anulado"
+              ],
+              "properties": {
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "metodo": {
+                  "type": "string"
+                },
+                "caja_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "caja": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pagos": {
+                  "type": "integer"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "anulados": {
+                  "type": "integer"
+                },
+                "monto_anulado": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "fecha",
+              "metodo",
+              "caja_id",
+              "caja",
+              "pagos",
+              "monto",
+              "anulados",
+              "monto_anulado"
+            ],
+            "properties": {
+              "fecha": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "metodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "caja_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "caja": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pagos": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "anulados": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto_anulado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteEgresos": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "categoria",
+                "categoria_nombre",
+                "cuenta_codigo",
+                "egresos",
+                "monto"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "categoria": {
+                  "type": "string"
+                },
+                "categoria_nombre": {
+                  "type": "string"
+                },
+                "cuenta_codigo": {
+                  "type": "string"
+                },
+                "egresos": {
+                  "type": "integer"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "categoria",
+              "categoria_nombre",
+              "cuenta_codigo",
+              "egresos",
+              "monto"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "categoria": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "categoria_nombre": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cuenta_codigo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "egresos": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteFacturadoCobrado": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "facturas",
+                "facturado",
+                "cobrado",
+                "pendiente",
+                "cobranza_pct"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "facturas": {
+                  "type": "integer"
+                },
+                "facturado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobrado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "pendiente": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobranza_pct": {
+                  "type": "number",
+                  "description": "Porcentaje 0–100 con 2 decimales"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "facturas",
+              "facturado",
+              "cobrado",
+              "pendiente",
+              "cobranza_pct"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "facturas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "facturado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cobrado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendiente": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cobranza_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteIngresos": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "metodo",
+                "pagos",
+                "monto",
+                "comision",
+                "neto"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "metodo": {
+                  "type": "string"
+                },
+                "pagos": {
+                  "type": "integer"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "comision": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "neto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "metodo",
+              "pagos",
+              "monto",
+              "comision",
+              "neto"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "metodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pagos": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "comision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "neto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteIva": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "facturas",
+                "base",
+                "iva_facturado",
+                "facturas_anuladas",
+                "base_anulada",
+                "iva_anulado",
+                "iva_neto",
+                "iva_libro"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "facturas": {
+                  "type": "integer"
+                },
+                "base": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva_facturado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "facturas_anuladas": {
+                  "type": "integer"
+                },
+                "base_anulada": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva_anulado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva_neto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva_libro": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "facturas",
+              "base",
+              "iva_facturado",
+              "facturas_anuladas",
+              "base_anulada",
+              "iva_anulado",
+              "iva_neto",
+              "iva_libro"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "facturas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "base": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva_facturado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "facturas_anuladas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "base_anulada": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva_anulado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva_neto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva_libro": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReportePromesas": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "canal",
+                "creadas",
+                "rechazadas",
+                "pendientes",
+                "activas",
+                "cumplidas",
+                "incumplidas",
+                "canceladas",
+                "monto_prometido",
+                "tasa_cumplimiento"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "canal": {
+                  "type": "string"
+                },
+                "creadas": {
+                  "type": "integer"
+                },
+                "rechazadas": {
+                  "type": "integer"
+                },
+                "pendientes": {
+                  "type": "integer"
+                },
+                "activas": {
+                  "type": "integer"
+                },
+                "cumplidas": {
+                  "type": "integer"
+                },
+                "incumplidas": {
+                  "type": "integer"
+                },
+                "canceladas": {
+                  "type": "integer"
+                },
+                "monto_prometido": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "tasa_cumplimiento": {
+                  "type": "number",
+                  "description": "Porcentaje 0–100 con 2 decimales"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "canal",
+              "creadas",
+              "rechazadas",
+              "pendientes",
+              "activas",
+              "cumplidas",
+              "incumplidas",
+              "canceladas",
+              "monto_prometido",
+              "tasa_cumplimiento"
+            ],
+            "properties": {
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "canal": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "creadas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "rechazadas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pendientes": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "activas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cumplidas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "incumplidas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "canceladas": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto_prometido": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tasa_cumplimiento": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ResolucionIp": {
         "type": "object",
         "required": [
@@ -18662,6 +24378,269 @@
           }
         }
       },
+      "ResultadoWebhookPasarela": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "id_evento",
+          "cobro_id",
+          "pago_id",
+          "estado"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean",
+            "description": "El evento ya se había procesado (no se registra otro pago)"
+          },
+          "id_evento": {
+            "type": "string"
+          },
+          "cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string"
+          },
+          "ignorado": {
+            "type": "string",
+            "description": "cobro_desconocido o cobro_ya_pagado"
+          }
+        }
+      },
+      "ResumenDashboard": {
+        "type": "object",
+        "required": [
+          "servicios",
+          "clientes",
+          "mes",
+          "cartera_vencida",
+          "hoy",
+          "promesas_activas",
+          "series",
+          "actualizado_en"
+        ],
+        "properties": {
+          "servicios": {
+            "type": "object",
+            "required": [
+              "activos",
+              "limitados",
+              "suspendidos",
+              "retirados"
+            ],
+            "properties": {
+              "activos": {
+                "type": "integer"
+              },
+              "limitados": {
+                "type": "integer"
+              },
+              "suspendidos": {
+                "type": "integer"
+              },
+              "retirados": {
+                "type": "integer"
+              }
+            }
+          },
+          "clientes": {
+            "type": "object",
+            "required": [
+              "activos",
+              "limitados",
+              "cortados"
+            ],
+            "properties": {
+              "activos": {
+                "type": "integer"
+              },
+              "limitados": {
+                "type": "integer"
+              },
+              "cortados": {
+                "type": "integer"
+              }
+            },
+            "description": "Clientes con al menos un servicio en ese estado"
+          },
+          "mes": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "facturado",
+              "cobrado",
+              "cobranza_pct"
+            ],
+            "properties": {
+              "periodo": {
+                "type": "string"
+              },
+              "facturado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "cobrado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "cobranza_pct": {
+                "type": "number",
+                "description": "Porcentaje 0–100 con 2 decimales"
+              }
+            }
+          },
+          "cartera_vencida": {
+            "type": "object",
+            "required": [
+              "monto",
+              "facturas",
+              "clientes",
+              "pendiente_total"
+            ],
+            "properties": {
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "facturas": {
+                "type": "integer"
+              },
+              "clientes": {
+                "type": "integer"
+              },
+              "pendiente_total": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          },
+          "hoy": {
+            "type": "object",
+            "required": [
+              "fecha",
+              "cobrado",
+              "pagos"
+            ],
+            "properties": {
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              },
+              "cobrado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "pagos": {
+                "type": "integer"
+              }
+            }
+          },
+          "promesas_activas": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "facturado",
+                "cobrado",
+                "facturas",
+                "pagos"
+              ],
+              "properties": {
+                "periodo": {
+                  "type": "string"
+                },
+                "facturado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobrado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "facturas": {
+                  "type": "integer"
+                },
+                "pagos": {
+                  "type": "integer"
+                }
+              }
+            },
+            "description": "Últimos 12 meses (YYYY-MM), el actual al final"
+          },
+          "actualizado_en": {
+            "type": "object",
+            "required": [
+              "resumen_mensual",
+              "resumen_cobros_diarios",
+              "resumen_servicios",
+              "resumen_cartera",
+              "resumen_promesas"
+            ],
+            "properties": {
+              "resumen_mensual": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "resumen_cobros_diarios": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "resumen_servicios": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "resumen_cartera": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "resumen_promesas": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            },
+            "description": "Último refresco de cada vista (por evento)"
+          }
+        }
+      },
       "Rol": {
         "type": "object",
         "required": [
@@ -18758,12 +24737,36 @@
               "api"
             ]
           },
+          "control_velocidad": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ],
+            "description": "simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)"
+          },
+          "capacidad_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Capacidad del enlace (techo del padre global); null = sin techo"
+          },
+          "capacidad_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Capacidad del enlace (techo del padre global); null = sin techo"
+          },
           "modo_velocidad": {
             "type": "string",
             "enum": [
               "simple",
               "pcq"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad"
           },
           "activo": {
             "type": "boolean"
@@ -18805,6 +24808,7 @@
           "prefijo_delegado_v6",
           "ipv6_modo",
           "ipv6_duid",
+          "excepciones",
           "version",
           "created_at",
           "updated_at"
@@ -18850,8 +24854,25 @@
               "null"
             ]
           },
+          "tipo_conexion": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS"
+          },
           "user_ppp": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null fuera de pppoe"
+          },
+          "amarre_ip_mac": {
+            "type": "boolean",
+            "description": "ARP estático IP-MAC en el router (solo sin PPPoE)"
           },
           "mac": {
             "type": [
@@ -19100,6 +25121,257 @@
           },
           "usuario": {
             "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "SimulacionPromesa": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "cliente_id",
+          "canal",
+          "vence_en",
+          "monto",
+          "evaluada_en",
+          "resultado",
+          "regla",
+          "motivo",
+          "resultado_creacion",
+          "reglas",
+          "validaciones",
+          "deuda",
+          "historial",
+          "siguiente_facturacion",
+          "limites",
+          "suspension_manual"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ]
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "evaluada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion"
+            ],
+            "description": "Lo que deciden las reglas (igual que al crear con estos datos)"
+          },
+          "regla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Primera regla que falla o requiere_aprobacion"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "resultado_creacion": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion",
+              "error"
+            ],
+            "description": "error: crear respondería 422/409 por alguna validación"
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaSimulada"
+            },
+            "description": "Todas las reglas, en el orden en que se evalúan"
+          },
+          "validaciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "campo",
+                "ok",
+                "regla",
+                "detalle"
+              ],
+              "properties": {
+                "campo": {
+                  "type": "string",
+                  "enum": [
+                    "monto",
+                    "vence_en",
+                    "servicio_id"
+                  ]
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "regla": {
+                  "type": "string"
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "deuda": {
+            "type": "object",
+            "required": [
+              "pendiente",
+              "vencida",
+              "pagado_pendientes",
+              "facturas_vencidas"
+            ],
+            "properties": {
+              "pendiente": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "vencida": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "pagado_pendientes": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "facturas_vencidas": {
+                "type": "integer"
+              }
+            }
+          },
+          "historial": {
+            "type": "object",
+            "required": [
+              "ventana",
+              "resueltas",
+              "cumplidas",
+              "cumplimiento_pct"
+            ],
+            "properties": {
+              "ventana": {
+                "type": "integer"
+              },
+              "resueltas": {
+                "type": "integer"
+              },
+              "cumplidas": {
+                "type": "integer"
+              },
+              "cumplimiento_pct": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "siguiente_facturacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "limites": {
+            "type": "object",
+            "required": [
+              "habilitadas",
+              "permitido",
+              "requiere_aprobacion",
+              "plazo_max_dias",
+              "fecha_maxima",
+              "siguiente_facturacion",
+              "deuda_pendiente",
+              "deuda_vencida",
+              "deuda_maxima",
+              "abono_requerido",
+              "abono_pagado",
+              "max_por_periodo",
+              "en_periodo"
+            ],
+            "properties": {
+              "habilitadas": {
+                "type": "boolean"
+              },
+              "permitido": {
+                "type": "boolean"
+              },
+              "requiere_aprobacion": {
+                "type": "boolean"
+              },
+              "plazo_max_dias": {
+                "type": "integer"
+              },
+              "fecha_maxima": {
+                "type": "string",
+                "format": "date",
+                "description": "Último día en que puede vencer"
+              },
+              "siguiente_facturacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "deuda_pendiente": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "deuda_vencida": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "deuda_maxima": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "abono_requerido": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "abono_pagado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "max_por_periodo": {
+                "type": "integer"
+              },
+              "en_periodo": {
+                "type": "integer"
+              }
+            }
+          },
+          "suspension_manual": {
+            "type": "boolean",
+            "description": "Suspendido a mano: la promesa no lo reactivaría"
           }
         }
       },

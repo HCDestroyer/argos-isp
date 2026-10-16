@@ -14,6 +14,7 @@ import type { Worker } from 'bullmq'
 import { Redis } from 'ioredis'
 import env from '#start/env'
 import { cifrar } from '#shared/cifrado'
+import { prefijoAaa } from '#core/aaa'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { crearWorkerAccounting } from '#network/sesiones/cola'
@@ -414,6 +415,8 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
             DB_DATABASE: env.get('DB_DATABASE'),
             AAA_PPP_KEY: env.get('AAA_PPP_KEY') ?? '',
             COA_NAS_PORT: String(puertoCoa),
+            // Donde la API publica aaa:user:* en pruebas: coa lee de ahí el rate-limit completo
+            AAA_REDIS_PREFIJO: prefijoAaa(),
             COA_TIMEOUT_MS: '1000',
             COA_REINTENTOS: '1',
             COA_ESPERA_MS: '100',
@@ -444,7 +447,7 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
             a.deepEqual(await radtest(activo.userPpp, activo.clave, metodo), {
                 tipo: 'Access-Accept',
                 atributos: {
-                    'Mikrotik-Rate-Limit': '5120k/20480k',
+                    'Mikrotik-Rate-Limit': '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k',
                     'Framed-IP-Address': activo.ipv4,
                     'Framed-IPv6-Prefix': activo.enlace,
                     'Delegated-IPv6-Prefix': activo.delegado,
@@ -454,7 +457,7 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
             a.deepEqual(await radtest(limitado.userPpp, limitado.clave, metodo), {
                 tipo: 'Access-Accept',
                 atributos: {
-                    'Mikrotik-Rate-Limit': '1024k/2048k',
+                    'Mikrotik-Rate-Limit': '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k',
                     'Framed-IP-Address': limitado.ipv4,
                     'Framed-IPv6-Prefix': limitado.enlace,
                     'Delegated-IPv6-Prefix': limitado.delegado,
@@ -612,7 +615,7 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
         a.isFalse(final.ok)
         a.equal(final.respuesta.codigo, 'CoA-NAK')
         a.equal(final.respuesta.atributos['Error-Cause'], 'Session-Context-Not-Found')
-        a.equal(final.comando.atributos['Mikrotik-Rate-Limit'], '1024k/2048k')
+        a.equal(final.comando.atributos['Mikrotik-Rate-Limit'], '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k')
         const fallido = await esperarHasta(() =>
             db
                 .from('audit.outbox')

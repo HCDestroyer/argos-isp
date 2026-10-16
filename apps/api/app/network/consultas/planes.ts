@@ -16,7 +16,15 @@ export interface PlanVista {
     subida_kbps: number
     bajada_limitada_kbps: number
     subida_limitada_kbps: number
+    /** N de 1:N (1 = dedicado) */
     reuso: number
+    /** CIR como % del MIR; null = `100 / reuso` (`contratos/velocidad.md`) */
+    garantizado_pct: number | null
+    rafaga_bajada_kbps: number | null
+    rafaga_subida_kbps: number | null
+    rafaga_umbral_pct: number
+    rafaga_segundos: number
+    prioridad: number
     dual_stack: 'ambos' | 'v4' | 'v6'
     tamano_prefijo_delegado: 64 | 56 | 48
     global: boolean
@@ -37,12 +45,20 @@ export interface PlanRouterVista {
     local_address: string | null
     no_crear_reglas: boolean
     rate_limit_override: string | null
+    /** excepciones de velocidad en este router: null = hereda del plan */
+    reuso: number | null
+    garantizado_pct: number | null
+    rafaga_bajada_kbps: number | null
+    rafaga_subida_kbps: number | null
+    rafaga_umbral_pct: number | null
+    rafaga_segundos: number | null
+    prioridad: number | null
     version: number
     created_at: string
     updated_at: string
 }
 
-export const COLUMNAS_PLAN = [
+const COLUMNAS_PLAN_SIMPLES = [
     'id',
     'nombre',
     'precio',
@@ -51,6 +67,11 @@ export const COLUMNAS_PLAN = [
     'bajada_limitada_kbps',
     'subida_limitada_kbps',
     'reuso',
+    'rafaga_bajada_kbps',
+    'rafaga_subida_kbps',
+    'rafaga_umbral_pct',
+    'rafaga_segundos',
+    'prioridad',
     'dual_stack',
     'tamano_prefijo_delegado',
     'global',
@@ -59,6 +80,15 @@ export const COLUMNAS_PLAN = [
     'created_at',
     'updated_at',
 ]
+
+/** Columnas de la vista del plan; `alias` para consultas con join (`p`). numeric → number. */
+export function columnasPlan(alias?: string) {
+    const prefijo = alias ? `${alias}.` : ''
+    return [
+        ...COLUMNAS_PLAN_SIMPLES.map((c) => `${prefijo}${c}`),
+        db.raw(`${prefijo}garantizado_pct::float8 AS garantizado_pct`),
+    ]
+}
 
 const COLUMNAS_PLAN_ROUTER = [
     'id',
@@ -71,10 +101,21 @@ const COLUMNAS_PLAN_ROUTER = [
     db.raw('host(local_address) AS local_address'),
     'no_crear_reglas',
     'rate_limit_override',
+    'reuso',
+    db.raw('garantizado_pct::float8 AS garantizado_pct'),
+    'rafaga_bajada_kbps',
+    'rafaga_subida_kbps',
+    'rafaga_umbral_pct',
+    'rafaga_segundos',
+    'prioridad',
     'version',
     'created_at',
     'updated_at',
 ]
+
+export function columnasPlanRouter() {
+    return COLUMNAS_PLAN_ROUTER
+}
 
 export interface FiltrosPlanes extends OpcionesPaginacion {
     activo?: boolean
@@ -83,7 +124,7 @@ export interface FiltrosPlanes extends OpcionesPaginacion {
 }
 
 export async function listarPlanes(filtros: FiltrosPlanes): Promise<Pagina<PlanVista>> {
-    const consulta = db.from('network.planes as p').select(COLUMNAS_PLAN.map((c) => `p.${c}`))
+    const consulta = db.from('network.planes as p').select(columnasPlan('p'))
     if (filtros.activo !== undefined) consulta.where('p.activo', filtros.activo)
     if (filtros.router_id) {
         const routerId = filtros.router_id
@@ -108,7 +149,7 @@ export async function verPlan(
     const fila = (await cliente
         .from('network.planes')
         .where('id', id)
-        .select(COLUMNAS_PLAN)
+        .select(columnasPlan())
         .first()) as PlanVista | null
     if (!fila) throw new NoEncontrado(`El plan ${id} no existe`)
     return fila

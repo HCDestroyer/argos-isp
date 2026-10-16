@@ -3,13 +3,14 @@ import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { verTurno, type TurnoVista } from '#ledger/cajas'
+import { egresosDelTurno } from '#ledger/egresos'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 
 /**
  * `cajas.cerrar` (`POST /cajas/:id/cerrar`): cierra el turno abierto de la caja.
  *
- * - `esperado = fondo_inicial + Σ pagos vigentes (no anulados) del turno`; `diferencia =
- *   contado − esperado`.
+ * - `esperado = fondo_inicial + Σ pagos vigentes (no anulados) del turno − Σ egresos en efectivo
+ *   vigentes del turno`; `diferencia = contado − esperado`.
  * - Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja` (origen = turno):
  *   faltante `Faltantes de caja / Caja`; sobrante `Caja / Sobrantes de caja`.
  * - Evento `caja.cerrada` con `cajero_id` = el cajero asignado a la caja o quien abrió el turno.
@@ -63,7 +64,8 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
             .whereNot('estado', 'anulado')
             .select(t.trx.raw('coalesce(sum(monto), 0)::text as total'))
             .first()) as { total: string }
-        const esperado = dec(turno.fondo_inicial).plus(cobrado.total)
+        const pagado = await egresosDelTurno(t.trx, turno.id)
+        const esperado = dec(turno.fondo_inicial).plus(cobrado.total).minus(pagado)
         const diferencia = contado.minus(esperado)
         const motivo = input.motivo?.trim() || null
         if (!diferencia.isZero() && !motivo) {

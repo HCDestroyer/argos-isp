@@ -4,10 +4,18 @@ import { cifrar } from '#shared/cifrado'
 import { actualizarConVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
-import { verServicio, type ModoIpv6, type ServicioVista } from '#core/consultas/servicios'
-import { exigirReferencia } from '#core/actions/crear_servicio'
-import { asignacionesVigentes, reconciliarAsignaciones, validarModoIpv6 } from '#core/asignaciones_servicio'
-import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { verServicio, type ModoIpv6, type ServicioVista, type TipoConexion } from '#core/consultas/servicios'
+import { exigirReferencia, exigirUserPppLibre } from '#core/actions/crear_servicio'
+import {
+    asignacionesVigentes,
+    generarPassPpp,
+    generarUserPpp,
+    modoIpv6PorRadius,
+    reconciliarAsignaciones,
+    validarModoIpv6,
+    validarTipoConexion,
+} from '#core/asignaciones_servicio'
+import { refrescarAaaAlConfirmar, type ObjetivoAaa } from '#core/aaa'
 import {
     CAMPOS_QUE_AFECTAN_CORTE,
     guardarExcepciones,
@@ -23,6 +31,10 @@ export interface EntradaEditarServicio {
     router_id?: number
     plan_id?: number
     plantilla_facturacion_id?: number | null
+    tipo_conexion?: TipoConexion
+    amarre_ip_mac?: boolean
+    /** solo al pasar a `pppoe` (si no viene se genera) */
+    user_ppp?: string
     pass_ppp?: string
     mac?: string | null
     direccion?: string | null
@@ -46,6 +58,13 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  * `servicio.config_cambiada` (con los campos afectados) y, si cambiaron IPs o prefijos,
  * `asignacion.cambiada`. El estado no se edita aquí: tiene sus acciones propias.
  *
+ * Cambiar `tipo_conexion` (`contratos/routeros.md`) es una edición más con diff y emite
+ * `servicio.config_cambiada` con `tipo_conexion`:
+ * - a `pppoe`: genera `user_ppp`/`pass_ppp` si no vienen;
+ * - desde `pppoe`: borra las credenciales y escribe la lápida en `aaa:user:<user_ppp viejo>`;
+ *   los modos IPv6 por RADIUS pasan a `ninguno` si no se pidió otro modo.
+ * Cambiar `mac` o `amarre_ip_mac` emite `servicio.config_cambiada` con ese campo (lease y ARP).
+ *
  * `excepciones` (tarea 11) se valida con `validarExcepcion` de A3 y se guarda en
  * `core.servicios_excepciones` con diff por campo (`excepcion_<campo>`). Si cambia una que afecta
  * el corte (`facturas_para_limitar`, `facturas_para_cortar`, `reglas_promesa`), se llama
@@ -61,6 +80,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             ipv4,
             prefijo_delegado_v6: prefijoEstatico,
             pass_ppp: passPpp,
+            user_ppp: userPppEntrada,
             excepciones: excepcionesEntrada,
             ...datos
         } = input
@@ -106,9 +126,31 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
 
         const excepciones = excepcionesEntrada ? await validarExcepciones(excepcionesEntrada) : {}
 
+        const tipo = datos.tipo_conexion ?? antes.tipo_conexion
+        const cambiaTipo = tipo !== antes.tipo_conexion
         let modo = datos.ipv6_modo ?? antes.ipv6_modo
         // Pasar a un plan solo IPv4 apaga IPv6 si no se pidió otro modo.
         if (datos.ipv6_modo === undefined && plan.dual_stack === 'v4') modo = 'ninguno'
+        // Dejar PPPoE apaga los modos que entrega RADIUS si no se pidió otro modo.
+        if (datos.ipv6_modo === undefined && tipo !== 'pppoe' && modoIpv6PorRadius(modo)) modo = 'ninguno'
+        // Volver a PPPoE sin amarre: el amarre IP-MAC es solo sin PPPoE.
+        const amarre = datos.amarre_ip_mac ?? (tipo === 'pppoe' ? false : antes.amarre_ip_mac)
+        if (userPppEntrada !== undefined && !(cambiaTipo && tipo === 'pppoe')) {
+            throw new ValidacionFallida([
+                {
+                    field: 'user_ppp',
+                    message: 'El user_ppp solo se indica al cambiar el servicio a pppoe',
+                    rule: 'tipo_conexion',
+                },
+            ])
+        }
+        validarTipoConexion(plan, {
+            tipo,
+            modo,
+            mac: datos.mac !== undefined ? datos.mac : antes.mac,
+            amarre,
+            pass_ppp: passPpp,
+        })
         validarModoIpv6(plan, modo, {
             ipv6_duid: datos.ipv6_duid !== undefined ? datos.ipv6_duid : antes.ipv6_duid,
             prefijo_delegado_v6: prefijoEstatico,
@@ -118,7 +160,23 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             Object.entries(datos).filter(([, valor]) => valor !== undefined),
         )
         columnas.ipv6_modo = modo
+        columnas.amarre_ip_mac = amarre
         if (passPpp !== undefined) columnas.pass_ppp = cifrar(passPpp)
+        if (cambiaTipo && tipo === 'pppoe') {
+            const cliente = (await t.trx
+                .from('core.clientes')
+                .where('id', antes.cliente_id)
+                .select('nombre')
+                .firstOrFail()) as { nombre: string }
+            const nuevoUser =
+                userPppEntrada ?? (await generarUserPpp(t.trx, antes.cliente_id, cliente.nombre))
+            await exigirUserPppLibre(t, nuevoUser)
+            columnas.user_ppp = nuevoUser
+            columnas.pass_ppp = cifrar(passPpp ?? generarPassPpp())
+        } else if (cambiaTipo && antes.tipo_conexion === 'pppoe') {
+            columnas.user_ppp = null
+            columnas.pass_ppp = null
+        }
         await actualizarConVersion(t.trx, 'core.servicios', id, version, columnas)
 
         const asignacionesAntes = await asignacionesVigentes(t.trx, id)
@@ -127,6 +185,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             routerId,
             plan,
             modo,
+            tipoConexion: tipo,
             ipv4,
             prefijoEstatico,
         })
@@ -138,7 +197,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             { tipo: 'servicio', id },
             paraAuditoriaServicio(antes),
             // la contraseña nunca se audita; solo que cambió
-            passPpp !== undefined
+            columnas.pass_ppp !== undefined
                 ? { ...paraAuditoriaServicio(despues), clave_ppp_cambiada: true }
                 : paraAuditoriaServicio(despues),
         )
@@ -146,6 +205,9 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         const campos: CampoConfig[] = []
         if (despues.plan_id !== antes.plan_id) campos.push('plan')
         if (despues.router_id !== antes.router_id) campos.push('router')
+        if (despues.tipo_conexion !== antes.tipo_conexion) campos.push('tipo_conexion')
+        if (despues.mac !== antes.mac) campos.push('mac')
+        if (despues.amarre_ip_mac !== antes.amarre_ip_mac) campos.push('amarre_ip_mac')
         if (asignaciones.ipv4 !== asignacionesAntes.ipv4) campos.push('ips')
         if (
             asignaciones.prefijo_enlace_v6 !== asignacionesAntes.prefijo_enlace_v6 ||
@@ -168,7 +230,12 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 fin: null,
             })
         }
-        refrescarAaaAlConfirmar(t, { servicioId: id })
+        const objetivos: ObjetivoAaa[] = [{ servicioId: id }]
+        // dejó de ser PPPoE: lápida (sin credenciales) en la clave vieja; aaa lo rechaza
+        if (antes.user_ppp && antes.user_ppp !== despues.user_ppp) {
+            objetivos.push({ lapida: { userPpp: antes.user_ppp, servicioId: id, version: despues.version } })
+        }
+        refrescarAaaAlConfirmar(t, ...objetivos)
 
         if (excepcionesCambiadas.some((campo) => CAMPOS_QUE_AFECTAN_CORTE.includes(campo as never))) {
             await new EvaluarEstadoServicio().execute({ servicio_id: id }, t.ctx, { trx: t.trx })

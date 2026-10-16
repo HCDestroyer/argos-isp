@@ -7,6 +7,8 @@ import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
+import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
+import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
@@ -19,6 +21,7 @@ import IncumplirPromesas from '#billing/actions/incumplir_promesas'
  * | `vencer` | 1 h | `VencerFacturas` (vencimiento y mora) |
  * | `corte` | 1 min | `EjecutarCorte` (las horas de corte que ya llegaron y no se procesaron) |
  * | `promesas` | 1 min | `IncumplirPromesas` (`incumplirPromesas`: las vencidas sin pagar → incumplida) |
+ * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
  *
  * Lock: el worker tiene concurrencia 1 y además cada job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia ya lo tiene, el disparo se
@@ -34,7 +37,11 @@ export const CRONS = {
     corte: 60_000,
     promesas: 60_000,
 } as const
-export type NombreCron = keyof typeof CRONS
+/** Crons a hora fija (patrón cron y zona horaria). */
+export const CRONS_DIARIOS = {
+    conciliar: { pattern: '30 6 * * *', tz: 'America/Guatemala' },
+} as const
+export type NombreCron = keyof typeof CRONS | keyof typeof CRONS_DIARIOS
 
 export interface OpcionesColaBilling {
     conexion?: RedisOptions
@@ -71,6 +78,13 @@ export async function programarCronsBilling(opciones: OpcionesColaBilling = {}):
                 opts: { removeOnComplete: { count: 100 }, removeOnFail: { count: 500 } },
             },
         )
+    }
+    for (const [nombre, repeticion] of Object.entries(CRONS_DIARIOS)) {
+        await cola.upsertJobScheduler(nombre, repeticion, {
+            name: nombre,
+            data: {},
+            opts: { removeOnComplete: { count: 100 }, removeOnFail: { count: 500 } },
+        })
     }
     return cola
 }
@@ -109,6 +123,10 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             return conLock(nombre, () => new EjecutarCorte().execute({ ahora }, ctx))
         case 'promesas':
             return conLock(nombre, () => new IncumplirPromesas().execute({ ahora }, ctx))
+        case 'conciliar':
+            // sin pasarela configurada (producción sin credenciales) no hay nada que conciliar
+            if (!proveedorConfigurado()) return { omitido: true }
+            return conLock(nombre, () => new ConciliarPasarela().execute({}, ctx))
         default:
             throw new Error(`Cron de billing desconocido: ${nombre}`)
     }

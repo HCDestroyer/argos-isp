@@ -3,6 +3,7 @@ import { descifrar } from './cifrado.ts'
 import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
 import { decidir, EVENTOS_COA, leerDesconexion, leerEvento, type Decision } from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
+import type { MetricasCoa } from './metricas.ts'
 
 /**
  * coa-dispatcher: por cada `servicio.estado_cambiado` / `servicio.config_cambiada` decide CoA o
@@ -43,6 +44,7 @@ export interface OpcionesDispatcher {
     /** espera base del backoff (ms): esperaMs, 2·esperaMs, 4·esperaMs… */
     esperaMs: number
     log: Log
+    metricas?: MetricasCoa
 }
 
 export interface ResultadoSesion {
@@ -82,7 +84,12 @@ export class Dispatcher {
         const decision = decidir(evento, servicio, this.#op.suspendido)
         if (decision.accion === 'nada') {
             log.info(
-                { evento_id: eventoId, servicio_id: evento.servicio_id, razon: decision.razon },
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    servicio_id: evento.servicio_id,
+                    razon: decision.razon,
+                },
                 'coa: nada que enviar',
             )
             return { decision, sesiones: [] }
@@ -90,7 +97,14 @@ export class Dispatcher {
 
         const sesiones = await almacen.sesionesActivas(evento.servicio_id)
         if (sesiones.length === 0) {
-            log.info({ evento_id: eventoId, servicio_id: evento.servicio_id }, 'coa: sin sesión activa')
+            log.info(
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    servicio_id: evento.servicio_id,
+                },
+                'coa: sin sesión activa',
+            )
         }
         const resultados: ResultadoSesion[] = []
         for (const sesion of sesiones) {
@@ -141,7 +155,12 @@ export class Dispatcher {
         if (!sesion) {
             const decision: Decision = { accion: 'nada', razon: 'la sesión ya terminó' }
             this.#op.log.info(
-                { evento_id: eventoId, sesion_id: evento.sesion_id, razon: decision.razon },
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    sesion_id: evento.sesion_id,
+                    razon: decision.razon,
+                },
                 'coa: nada que enviar',
             )
             return { decision, sesiones: [] }
@@ -209,9 +228,16 @@ export class Dispatcher {
                 fallar(error),
             )
             log.error(
-                { evento_id: eventoId, servicio_id: servicioId, nas: sesion.nas_ip, error },
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    servicio_id: servicioId,
+                    nas: sesion.nas_ip,
+                    error,
+                },
                 'coa.fallido',
             )
+            this.#op.metricas?.envio(tipo, 'sin_secret')
             return { sesion_id: sesion.id, tipo, resultado: 'sin_secret', intentos: 0 }
         }
 
@@ -246,8 +272,10 @@ export class Dispatcher {
             const descripcion = r.resultado === 'nak' ? describirNak(r) : r.resultado
             await almacen.registrar(fila, final && r.resultado !== 'ack' ? fallar(descripcion) : undefined)
 
+            this.#op.metricas?.envio(tipo, r.resultado, r.rttMs)
             const contexto = {
                 evento_id: eventoId,
+                request_id: entrada.requestId ?? null,
                 servicio_id: servicioId,
                 nas: sesion.nas_ip,
                 tipo,

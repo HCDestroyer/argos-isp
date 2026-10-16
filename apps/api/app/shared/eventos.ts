@@ -84,9 +84,38 @@ export interface CatalogoEventos {
         a: EstadoServicio
         motivo: string
     }
+    /**
+     * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
+     * recalcula el estado deseado del servicio y limpia lo del tipo anterior.
+     */
     'servicio.config_cambiada': {
         servicio_id: number
-        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router'>
+        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac'>
+    }
+    /**
+     * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
+     * reuso, garantizado, ráfaga o prioridad del plan (`router_id: null`, afecta todos los routers)
+     * o su excepción en un router (`router_id`), o el `rate_limit_override`. A2 recalcula los
+     * padres y perfiles PPP del plan; `aaa-cache` reescribe `aaa:user:*` de sus servicios.
+     */
+    'plan.velocidad_cambiada': {
+        plan_id: number
+        router_id: number | null
+        campos: string[]
+    }
+    /**
+     * Cambió el control de velocidad de un router (`routers.cambiar_control_velocidad`) o la
+     * capacidad del enlace (`routers.editar`). `de`/`a` iguales si solo cambió la capacidad. A2
+     * ejecuta el cambio en el router (padres, árbol, PCQ) por lotes.
+     */
+    'router.control_cambiado': {
+        router_id: number
+        de: 'simple' | 'arbol_pcq'
+        a: 'simple' | 'arbol_pcq'
+        capacidad_bajada_kbps: number | null
+        capacidad_subida_kbps: number | null
+        campos: Array<'control_velocidad' | 'capacidad'>
+        motivo: string | null
     }
     'asignacion.cambiada': {
         servicio_id: number
@@ -111,6 +140,18 @@ export interface CatalogoEventos {
     }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
     'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
+    /**
+     * El dispatcher de RouterOS (A2, `app/network/routeros`) agotó los reintentos contra la API
+     * REST del router. `servicio_id` null en una reconciliación del router completo. El
+     * reconciliador vuelve a aplicar el estado deseado cuando el router responde.
+     */
+    'routeros.fallido': {
+        servicio_id: number | null
+        router_id: number
+        /** Comando legible que falló (`queue/simple add`, `ip/firewall/address-list remove`…) o `reconciliar` */
+        operacion: string
+        error: string
+    }
     /** `aaa` no respondió su health check durante el umbral (60 s). `desde` = primer fallo. */
     'aaa.caido': { nodo: string; desde: string; ultimo_error?: string | null }
     /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
@@ -159,10 +200,13 @@ export const EVENTOS = [
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
     'asignacion.cambiada',
+    'plan.velocidad_cambiada',
+    'router.control_cambiado',
     'sesion.iniciada',
     'sesion.terminada',
     'sesion.desconexion_solicitada',
     'coa.fallido',
+    'routeros.fallido',
     'aaa.caido',
     'aaa.recuperado',
     'factura.emitida',

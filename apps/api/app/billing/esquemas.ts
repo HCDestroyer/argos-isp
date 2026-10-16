@@ -57,27 +57,35 @@ export const ReglasPromesa = definirEsquema(
 
 export const PlantillaFacturacion = definirEsquema(
     'PlantillaFacturacion',
-    objeto({
-        id,
-        nombre: texto,
-        ciclo: enumerado(['dia_fijo', 'aniversario']),
-        dia: nulable(entero),
-        prorrateo: booleano,
-        dias_gracia: entero,
-        facturas_para_limitar: entero,
-        facturas_para_cortar: entero,
-        mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
-        mora_valor: Dinero,
-        mora_recurrente: booleano,
-        hora_corte: {
-            type: 'string',
-            pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
-            description: 'HH:MM hora de Guatemala',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            ciclo: enumerado(['dia_fijo', 'aniversario']),
+            dia: nulable(entero),
+            prorrateo: booleano,
+            dias_gracia: entero,
+            facturas_para_limitar: entero,
+            facturas_para_cortar: entero,
+            mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
+            mora_valor: Dinero,
+            mora_recurrente: booleano,
+            hora_corte: {
+                type: 'string',
+                pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+                description: 'HH:MM hora de Guatemala',
+            },
+            certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
+            reglas_promesa: ReglasPromesa,
+            por_defecto: {
+                ...booleano,
+                description:
+                    'Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)',
+            },
+            ...auditable,
         },
-        certificar_al: enumerado(['emitir', 'pagar', 'nunca']),
-        reglas_promesa: ReglasPromesa,
-        ...auditable,
-    }),
+        ['por_defecto'],
+    ),
 )
 
 export const EstadoFactura = definirEsquema(
@@ -105,6 +113,7 @@ export const Factura = definirEsquema(
         {
             id,
             cliente_id: id,
+            cliente_nombre: texto,
             servicio_id: nulable(id),
             periodo: fecha,
             clave_unica: texto,
@@ -129,7 +138,7 @@ export const Factura = definirEsquema(
             motivo_anulacion: nulable(texto),
             ...auditable,
         },
-        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion'],
+        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion', 'cliente_nombre'],
     ),
 )
 
@@ -203,6 +212,7 @@ export const Pago = definirEsquema(
         {
             id,
             cliente_id: id,
+            cliente_nombre: { ...texto, description: 'Nombre del pagador' },
             metodo: enumerado([...METODOS_PAGO]),
             monto: Dinero,
             comision: Dinero,
@@ -217,7 +227,8 @@ export const Pago = definirEsquema(
             motivo_anulacion: nulable(texto),
             servicios: {
                 ...lista(ServicioEvaluado),
-                description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
+                description:
+                    'Solo al registrar o anular: cómo quedó cada servicio afectado (reactivación inmediata o nuevo corte)',
             },
             banco_origen_id: { ...nulable(id), description: 'Banco de origen (transferencia, ach)' },
             banco_origen_nombre: nulable(texto),
@@ -232,6 +243,7 @@ export const Pago = definirEsquema(
             ...auditable,
         },
         [
+            'cliente_nombre',
             'anulado_en',
             'motivo_anulacion',
             'servicios',
@@ -250,6 +262,7 @@ export const Promesa = definirEsquema(
             id,
             servicio_id: id,
             cliente_id: id,
+            cliente_nombre: texto,
             vence_en: instante,
             monto: Dinero,
             estado: enumerado([
@@ -274,7 +287,7 @@ export const Promesa = definirEsquema(
             },
             ...auditable,
         },
-        ['servicio'],
+        ['servicio', 'cliente_nombre'],
     ),
 )
 
@@ -371,3 +384,159 @@ export const ArchivoComprobante = {
         'Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo ' +
         '(el generador de OpenAPI declara application/json)',
 }
+
+export const CobroPasarela = definirEsquema(
+    'CobroPasarela',
+    objeto({
+        id,
+        proveedor: texto,
+        id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
+        cliente_id: id,
+        cliente_nombre: texto,
+        servicio_id: nulable(id),
+        monto: Dinero,
+        facturas: lista(id),
+        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+        url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
+        expira_en: nulable(instante),
+        canal: texto,
+        pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
+        monto_pagado: nulable(Dinero),
+        comision: Dinero,
+        pagado_en: nulable(instante),
+        conciliado_en: nulable(instante),
+        ...auditable,
+    }),
+)
+
+export const ResultadoWebhookPasarela = definirEsquema(
+    'ResultadoWebhookPasarela',
+    objeto(
+        {
+            recibido: booleano,
+            duplicado: {
+                ...booleano,
+                description: 'El evento ya se había procesado (no se registra otro pago)',
+            },
+            id_evento: texto,
+            cobro_id: nulable(id),
+            pago_id: nulable(id),
+            estado: texto,
+            ignorado: { ...texto, description: 'cobro_desconocido o cobro_ya_pagado' },
+        },
+        ['ignorado'],
+    ),
+)
+
+const DiferenciaConciliacion = objeto({
+    tipo: enumerado([
+        'pago_sin_registrar',
+        'pago_sin_cobro_en_proveedor',
+        'monto_distinto',
+        'pago_anulado',
+        'pago_sin_cobro',
+        'error_consulta',
+    ]),
+    cobro_id: nulable(id),
+    pago_id: nulable(id),
+    id_proveedor: nulable(texto),
+    nuestro: nulable(Dinero),
+    proveedor: nulable(Dinero),
+    detalle: texto,
+})
+
+export const ConciliacionPasarela = definirEsquema(
+    'ConciliacionPasarela',
+    objeto(
+        {
+            id,
+            proveedor: texto,
+            fecha,
+            revisados: entero,
+            conciliados: entero,
+            cobros_conciliados: lista(id),
+            diferencias: lista(DiferenciaConciliacion),
+            ejecutado_por: nulable(id),
+            created_at: instante,
+        },
+        ['ejecutado_por', 'created_at'],
+    ),
+)
+
+const valorRegla = { type: ['string', 'number', 'boolean', 'null'] }
+
+export const ReglaSimulada = definirEsquema(
+    'ReglaSimulada',
+    objeto({
+        regla: texto,
+        ok: booleano,
+        aplica: { ...booleano, description: 'false: la configuración no exige esta regla' },
+        valor: { ...valorRegla, description: 'Lo medido (días, monto, cantidad, %)' },
+        limite: { ...valorRegla, description: 'Límite aplicado (null = sin límite)' },
+        origen: { ...texto, description: 'general o el canal cuyo límite reemplazó al general' },
+        detalle: { ...texto, description: 'Explicación para la pantalla' },
+    }),
+)
+
+export const SimulacionPromesa = definirEsquema(
+    'SimulacionPromesa',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+        vence_en: instante,
+        monto: Dinero,
+        evaluada_en: instante,
+        resultado: {
+            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
+            description: 'Lo que deciden las reglas (igual que al crear con estos datos)',
+        },
+        regla: { ...nulable(texto), description: 'Primera regla que falla o requiere_aprobacion' },
+        motivo: texto,
+        resultado_creacion: {
+            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion', 'error']),
+            description: 'error: crear respondería 422/409 por alguna validación',
+        },
+        reglas: { ...lista(ReglaSimulada), description: 'Todas las reglas, en el orden en que se evalúan' },
+        validaciones: lista(
+            objeto({
+                campo: enumerado(['monto', 'vence_en', 'servicio_id']),
+                ok: booleano,
+                regla: texto,
+                detalle: texto,
+            }),
+        ),
+        deuda: objeto({
+            pendiente: Dinero,
+            vencida: Dinero,
+            pagado_pendientes: Dinero,
+            facturas_vencidas: entero,
+        }),
+        historial: objeto({
+            ventana: entero,
+            resueltas: entero,
+            cumplidas: entero,
+            cumplimiento_pct: nulable(entero),
+        }),
+        siguiente_facturacion: nulable(fecha),
+        limites: objeto({
+            habilitadas: booleano,
+            permitido: booleano,
+            requiere_aprobacion: booleano,
+            plazo_max_dias: entero,
+            fecha_maxima: { ...fecha, description: 'Último día en que puede vencer' },
+            siguiente_facturacion: nulable(fecha),
+            deuda_pendiente: Dinero,
+            deuda_vencida: Dinero,
+            deuda_maxima: nulable(Dinero),
+            abono_requerido: Dinero,
+            abono_pagado: Dinero,
+            max_por_periodo: entero,
+            en_periodo: entero,
+        }),
+        suspension_manual: {
+            ...booleano,
+            description: 'Suspendido a mano: la promesa no lo reactivaría',
+        },
+    }),
+)

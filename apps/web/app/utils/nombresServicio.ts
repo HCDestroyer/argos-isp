@@ -19,6 +19,14 @@ export function nombreRouter(servicio: ServicioConNombres): string {
     return servicio.router_nombre || `Router #${servicio.router_id}`
 }
 
+/**
+ * Nombre corto de un servicio para títulos y listas. Un servicio PPPoE se nombra por su usuario
+ * PPP; uno WISP sin PPPoE (`ip_estatica`, `dhcp_fija`) no tiene usuario y se nombra por su IPv4.
+ */
+export function etiquetaServicio(servicio: Pick<Schema<'Servicio'>, 'id' | 'user_ppp' | 'ipv4'>): string {
+    return servicio.user_ppp ?? servicio.ipv4 ?? `Servicio #${servicio.id}`
+}
+
 /** `null` si el cliente no tiene zona. */
 export function nombreZona(servicio: ServicioConNombres): string | null {
     return servicio.zona_nombre ?? null

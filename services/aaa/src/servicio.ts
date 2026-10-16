@@ -17,6 +17,13 @@ export interface PlanAaa {
     rate_limit_override: string | null
     /** `planes_routers.profile_ppp`: perfil PPP del router para este plan (→ `Mikrotik-Group`) o null. */
     profile_ppp: string | null
+    /**
+     * `Mikrotik-Rate-Limit` completo en activo y en limitado, calculado por A1 con la función única
+     * de velocidad (`apps/api/app/network/velocidad.ts`, `contratos/aaa.md`). null en registros de
+     * antes de la semana 2: `aaa` arma `subida/bajada` como antes.
+     */
+    rate_limit: string | null
+    rate_limit_limitado: string | null
 }
 
 export type Ipv4Aaa = { modo: 'estatico'; ip: string } | { modo: 'pool'; pool: string } | null
@@ -138,6 +145,8 @@ export function parsearRegistro(v: unknown): RegistroAaa {
             subida_limitada_kbps: entero(plan, 'subida_limitada_kbps', 'plan.'),
             bajada_limitada_kbps: entero(plan, 'bajada_limitada_kbps', 'plan.'),
             rate_limit_override: textoONulo(plan, 'rate_limit_override', 'plan.'),
+            rate_limit: textoONulo(plan, 'rate_limit', 'plan.'),
+            rate_limit_limitado: textoONulo(plan, 'rate_limit_limitado', 'plan.'),
             profile_ppp: textoONulo(plan, 'profile_ppp', 'plan.'),
         },
         ipv4: ipv4(v.ipv4),

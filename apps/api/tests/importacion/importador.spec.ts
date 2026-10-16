@@ -5,7 +5,9 @@ import { leerCsv, ErrorCsv } from '#importacion/csv'
 import { leerDirectorio } from '#importacion/fuente'
 import { importarMikrowisp } from '#importacion/importador'
 import { formatearReporte } from '#importacion/reporte'
+import type { EntidadExterna, IdsExternos } from '#importacion/ids_externos'
 import { descifrar } from '#shared/cifrado'
+import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
 
 /**
  * Pruebas con el ejemplo de `scripts/importacion/ejemplo/` (redes 198.19.0.0/16 y NAS en
@@ -14,6 +16,38 @@ import { descifrar } from '#shared/cifrado'
  */
 
 const EJEMPLO = fileURLToPath(new URL('../../../../scripts/importacion/ejemplo/', import.meta.url))
+
+/** ¿Ya está el modelo WISP de A1 (`core.servicios.tipo_conexion`)? Las pruebas se adaptan. */
+async function hayTipoConexion(): Promise<boolean> {
+    const r = (await db.rawQuery(
+        `SELECT count(*)::int AS n FROM information_schema.columns
+          WHERE table_schema = 'core' AND table_name = 'servicios' AND column_name = 'tipo_conexion'`,
+    )) as { rows: Array<{ n: number }> }
+    return r.rows[0]!.n === 1
+}
+
+/** ¿Ya está `core.ids_externos` de A1? */
+async function hayIdsExternos(): Promise<boolean> {
+    const r = (await db.rawQuery(`SELECT to_regclass('core.ids_externos') IS NOT NULL AS hay`)) as {
+        rows: Array<{ hay: boolean }>
+    }
+    return r.rows[0]!.hay
+}
+
+/** Ids externos en memoria (lo que hará `core.ids_externos` de A1). */
+class IdsEnMemoria implements IdsExternos {
+    readonly modo = 'tabla' as const
+    readonly mapa = new Map<string, number>()
+    async buscar(entidad: EntidadExterna, externoId: string) {
+        return this.mapa.get(`${entidad}:${externoId}`) ?? null
+    }
+    externo() {
+        return undefined // el doble guarda en memoria con registrar; las acciones no lo ven
+    }
+    async registrar(entidad: EntidadExterna, externoId: string, entidadId: number) {
+        this.mapa.set(`${entidad}:${externoId}`, entidadId)
+    }
+}
 
 test.group('importacion · CSV', () => {
     test('lee comillas, comas y saltos de línea dentro de campos, CRLF y BOM', ({ assert }) => {
@@ -44,14 +78,70 @@ test.group('importacion · formato de entrada', () => {
             ],
         )
         assert.lengthOf(fuente.clientes, 5)
-        assert.lengthOf(fuente.servicios, 10)
+        assert.lengthOf(fuente.servicios, 13)
+        assert.lengthOf(fuente.facturas, 6)
+        assert.lengthOf(fuente.saldos, 5)
 
         const s1001 = fuente.servicios.find((s) => s.id === '1001')!
         assert.equal(s1001.mac, 'AA:BB:CC:DD:EE:01')
         assert.equal(s1001.coordenadas, '14.6349,-90.5069')
         assert.equal(s1001.fecha_instalacion, '2024-03-15')
+        assert.equal(s1001.tipo_conexion, 'pppoe')
         assert.equal(fuente.servicios.find((s) => s.id === '1002')!.fecha_instalacion, '2024-04-15')
+        assert.equal(fuente.servicios.find((s) => s.id === '1002')!.tipo_conexion, 'pppoe')
         assert.equal(fuente.servicios.find((s) => s.id === '1008')!.estado, 'retirado')
+
+        // WISP sin PPPoE: sin credenciales; dhcp_fija con MAC normalizada; amarre opcional
+        assert.containSubset(
+            fuente.servicios.find((s) => s.id === '1012'),
+            {
+                tipo_conexion: 'ip_estatica',
+                user_ppp: null,
+                pass_ppp: null,
+                ip: '198.19.10.50',
+                amarre_ip_mac: false,
+            },
+        )
+        assert.containSubset(
+            fuente.servicios.find((s) => s.id === '1013'),
+            {
+                tipo_conexion: 'dhcp_fija',
+                mac: 'AA:BB:CC:00:10:13',
+                amarre_ip_mac: true,
+            },
+        )
+        assert.containSubset(
+            fuente.servicios.find((s) => s.id === '1014'),
+            {
+                tipo_conexion: 'dhcp_fija',
+                ip: null,
+                mac: 'AA:BB:CC:00:10:14',
+            },
+        )
+
+        // facturas: lo pendiente = total − pagado; periodo YYYY-MM o MM/YYYY → primer día
+        const facturas = Object.fromEntries(fuente.facturas.map((f) => [f.id, f]))
+        assert.containSubset(facturas['5002'], {
+            servicio_id: null,
+            periodo: '2026-10-01',
+            pendiente: '100.00',
+        })
+        assert.containSubset(facturas['5003'], {
+            periodo: '2026-10-01',
+            pendiente: '1250.50',
+            vence: '2026-10-15',
+        })
+        assert.equal(facturas['5005']!.pendiente, '0.00')
+        assert.deepEqual(
+            fuente.saldos.map((x) => [x.cliente_id, x.saldo]),
+            [
+                ['101', '300.00'],
+                ['102', '1250.50'],
+                ['103', '170.00'],
+                ['105', '-20.00'],
+                ['106', '75.00'],
+            ],
+        )
 
         const problemas = fuente.problemas.map((p) => `${p.archivo}:${p.id}:${p.aviso ? 'aviso' : 'omitida'}`)
         assert.sameMembers(problemas, [
@@ -60,15 +150,22 @@ test.group('importacion · formato de entrada', () => {
             'clientes.csv:106:omitida', // sin nombre
             'servicios.csv:1005:aviso', // fecha 2024-13-40
             'servicios.csv:1011:omitida', // IP 300.1.1.1
+            'servicios.csv:1015:omitida', // ip_estatica sin IP
+            'servicios.csv:1016:omitida', // dhcp_fija sin MAC
+            'facturas.csv:5007:omitida', // total "abc"
         ])
     })
 })
 
 test.group('importacion · Mikrowisp', () => {
-    test('en seco: reporte de diferencias y la base queda igual', async ({ assert }) => {
+    test('en seco: reporte de diferencias, suma de saldos contra el origen y la base queda igual', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const wisp = await hayTipoConexion()
         const antes = await contar()
         const fuente = await leerDirectorio(EJEMPLO)
-        const r = await importarMikrowisp(fuente, { dryRun: true, directorio: EJEMPLO })
+        const r = await importarMikrowisp(fuente, { dryRun: true, directorio: EJEMPLO, plantillaId })
 
         assert.equal(r.modo, 'en_seco')
         assert.deepEqual(r.errores, [])
@@ -78,20 +175,76 @@ test.group('importacion · Mikrowisp', () => {
             planes: { origen: 3, creados: 2, existentes: 0, omitidos: 1 },
             zonas: { origen: 2, creados: 2, existentes: 0, omitidos: 0 },
             clientes: { origen: 5, creados: 5, existentes: 0, omitidos: 0 },
-            implementaciones: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
-            servicios: { origen: 10, creados: 3, existentes: 0, omitidos: 7 },
+            // con WISP, 1012 (plan 2 en el router 1) agrega una implementación
+            implementaciones: wisp
+                ? { origen: 4, creados: 4, existentes: 0, omitidos: 0 }
+                : { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
+            servicios: wisp
+                ? { origen: 13, creados: 6, existentes: 0, omitidos: 7 }
+                : { origen: 13, creados: 3, existentes: 0, omitidos: 10 },
+            // 5001, 5002 (sin servicio_id: el único del cliente) y 5003; 5004 va al saldo,
+            // 5005 está pagada y 5006 es de un cliente que no existe
+            facturas: { origen: 6, creados: 3, existentes: 0, omitidos: 3 },
+            // 101: 300 − 250 de facturas = 50; 103: 170 (su factura no tiene servicio); 105: −20
+            saldos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
         })
+        assert.equal(r.ids_externos, (await hayIdsExternos()) ? 'tabla' : 'ninguno')
+
+        // Suma de saldos: lo que no cuadra son los clientes que no se pudieron importar
+        assert.deepEqual(r.saldos, {
+            clientes: 6,
+            suma_origen: '1874.50',
+            suma_importada: '1700.50',
+            diferencia: '-174.00',
+            cuadra: false,
+        })
+        assert.sameDeepMembers(r.diferencias.saldos_distintos, [
+            { cliente_mw: '106', nombre: null, origen: '75.00', importado: '0.00', diferencia: '-75.00' },
+            { cliente_mw: '999', nombre: null, origen: '99.00', importado: '0.00', diferencia: '-99.00' },
+        ])
+        assert.deepEqual(r.diferencias.facturas_a_saldo, [
+            {
+                factura_mw: '5004',
+                cliente_mw: '103',
+                pendiente: '150.00',
+                motivo: 'el servicio 1003 no se importó',
+            },
+        ])
+        assert.deepInclude(r.diferencias.referencias_faltantes, {
+            entidad: 'factura',
+            id_mw: '5006',
+            falta: 'cliente',
+            id_falta_mw: '999',
+        })
+        assert.deepInclude(r.diferencias.referencias_faltantes, {
+            entidad: 'saldo',
+            id_mw: '106',
+            falta: 'cliente',
+            id_falta_mw: '106',
+        })
+        if (wisp) {
+            assert.deepEqual(r.diferencias.tipos_conexion_pendientes, [])
+        } else {
+            assert.deepEqual(
+                r.diferencias.tipos_conexion_pendientes.map((x) => [x.servicio_mw, x.tipo_conexion]),
+                [
+                    ['1012', 'ip_estatica'],
+                    ['1013', 'dhcp_fija'],
+                    ['1014', 'dhcp_fija'],
+                ],
+            )
+        }
 
         const d = r.diferencias
         assert.deepEqual(d.ips_duplicadas, [
             { ip: '198.19.10.11', servicios_mw: ['1002', '1003'], importado_mw: '1002' },
         ])
         assert.deepEqual(d.ips_fuera_de_red, [{ servicio_mw: '1004', ip: '198.19.99.5', router_mw: '2' }])
-        assert.deepEqual(
+        assert.include(
             d.ips_nuevas.map((x) => x.servicio_mw),
-            ['1005'],
+            '1005',
         )
-        assert.match(d.ips_nuevas[0]!.ip!, /^198\.19\.20\.\d+$/)
+        assert.match(d.ips_nuevas.find((x) => x.servicio_mw === '1005')!.ip!, /^198\.19\.20\.\d+$/)
         assert.sameDeepMembers(
             d.planes_sin_equivalente.map((p) => [p.plan_mw, p.servicios]),
             [
@@ -130,18 +283,46 @@ test.group('importacion · Mikrowisp', () => {
         const texto = formatearReporte(r)
         assert.include(texto, 'EN SECO')
         assert.include(texto, '198.19.10.11: servicios 1002, 1003; se importa 1002')
+        assert.include(
+            texto,
+            'Saldos (6 clientes): origen Q 1874.50 · ArgosIsp Q 1700.50 · DIFERENCIA Q -174.00',
+        )
+        assert.include(texto, 'cliente 999: origen Q 99.00 · ArgosIsp Q 0.00 · diferencia Q -99.00')
 
         assert.deepEqual(await contar(), antes)
     })
 
+    test('en seco sin diferencias de saldo: cuadra', async ({ assert }) => {
+        const plantillaId = await crearPlantillaFila()
+        const fuente = await leerDirectorio(EJEMPLO)
+        // sin el cliente que no existe (106) ni la factura del cliente fantasma (999)
+        const limpia = {
+            ...fuente,
+            saldos: fuente.saldos.filter((x) => x.cliente_id !== '106'),
+            facturas: fuente.facturas.filter((f) => f.cliente_id !== '999'),
+        }
+        const r = await importarMikrowisp(limpia, { dryRun: true, plantillaId })
+        assert.deepEqual(r.saldos, {
+            clientes: 4,
+            suma_origen: '1700.50',
+            suma_importada: '1700.50',
+            diferencia: '0.00',
+            cuadra: true,
+        })
+        assert.deepEqual(r.diferencias.saldos_distintos, [])
+        assert.include(formatearReporte(r), '· CUADRA')
+    })
+
     test('real: crea por las acciones (auditoría y outbox) y es idempotente', async ({ assert }) => {
+        const plantillaId = await crearPlantillaFila()
+        const wisp = await hayTipoConexion()
         const trx = await db.transaction()
         try {
             const fuente = await leerDirectorio(EJEMPLO)
-            const primera = await importarMikrowisp(fuente, { dryRun: false, trx })
+            const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
             assert.equal(primera.modo, 'real')
             assert.deepEqual(primera.errores, [])
-            assert.equal(primera.resumen.servicios.creados, 3)
+            assert.equal(primera.resumen.servicios.creados, wisp ? 6 : 3)
 
             const servicio = await trx
                 .from('core.servicios as s')
@@ -152,14 +333,17 @@ test.group('importacion · Mikrowisp', () => {
                 .where('s.user_ppp', 'mw.ana.lopez')
                 .select(
                     's.id',
+                    's.cliente_id',
                     's.pass_ppp',
                     's.ipv6_modo',
+                    's.plantilla_facturacion_id',
                     'c.campos_personalizados',
                     trx.raw('host(a.ip) AS ip'),
                 )
                 .first()
             assert.equal(servicio.ip, '198.19.10.10')
             assert.equal(servicio.ipv6_modo, 'ninguno')
+            assert.equal(servicio.plantilla_facturacion_id, plantillaId)
             assert.equal(descifrar(servicio.pass_ppp), 'clave-ana-1')
             assert.equal(servicio.campos_personalizados.mikrowisp_id, '101')
 
@@ -171,36 +355,59 @@ test.group('importacion · Mikrowisp', () => {
             assert.equal(invalido.campos_personalizados.mikrowisp_nit, '12345678-0')
 
             // Todo pasó por acciones: auditoría y eventos con el request_id de la corrida.
-            const acciones = await trx
+            const acciones = (await trx
                 .from('audit.acciones')
                 .where('request_id', primera.request_id)
                 .groupBy('accion')
-                .select('accion', trx.raw('count(*)::int AS n'))
-            assert.sameDeepMembers(acciones, [
-                { accion: 'routers.crear', n: 2 },
-                { accion: 'redes.crear', n: 2 },
-                { accion: 'planes.crear', n: 2 },
-                { accion: 'zonas.crear', n: 2 },
-                { accion: 'clientes.crear', n: 5 },
-                { accion: 'planes.editar', n: 3 },
-                { accion: 'servicios.crear', n: 3 },
-            ])
+                .select('accion', trx.raw('count(*)::int AS n'))) as Array<{ accion: string; n: number }>
+            const porAccion = Object.fromEntries(acciones.map((a) => [a.accion, a.n]))
+            assert.containSubset(porAccion, {
+                'routers.crear': 2,
+                'redes.crear': 2,
+                'planes.crear': 2,
+                'zonas.crear': 2,
+                'clientes.crear': 5,
+                'planes.editar': wisp ? 4 : 3,
+                'servicios.crear': wisp ? 6 : 3,
+                'facturas.importar_pendiente': 3,
+                'facturas.registrar_saldo_inicial': 3,
+            })
             const eventos = await trx
                 .from('audit.outbox')
                 .where('request_id', primera.request_id)
                 .where('evento', 'servicio.creado')
                 .count('* as n')
-            assert.equal(Number(eventos[0]!.n), 3)
+            assert.equal(Number(eventos[0]!.n), wisp ? 6 : 3)
 
-            const segunda = await importarMikrowisp(fuente, { dryRun: false, trx })
+            // Facturas y saldos por las acciones de A3, con su clave externa
+            const factura = await trx
+                .from('billing.facturas')
+                .where('clave_externa', 'mikrowisp:factura:5002')
+                .firstOrFail()
+            assert.equal(factura.total, '100.00')
+            assert.equal(Number(factura.servicio_id), Number(servicio.id))
+            const saldoAna = await trx
+                .from('billing.saldos_iniciales')
+                .where('clave_externa', 'mikrowisp:saldo:101')
+                .firstOrFail()
+            assert.equal(saldoAna.monto, '50.00')
+            assert.equal(primera.saldos.suma_importada, '1700.50')
+
+            const segunda = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
             for (const [entidad, c] of Object.entries(segunda.resumen)) {
                 assert.equal(c.creados, 0, `${entidad} no debe crear nada la segunda vez`)
             }
             assert.deepInclude(segunda.resumen, {
                 clientes: { origen: 5, creados: 0, existentes: 5, omitidos: 0 },
-                servicios: { origen: 10, creados: 0, existentes: 3, omitidos: 7 },
+                servicios: wisp
+                    ? { origen: 13, creados: 0, existentes: 6, omitidos: 7 }
+                    : { origen: 13, creados: 0, existentes: 3, omitidos: 10 },
+                facturas: { origen: 6, creados: 0, existentes: 3, omitidos: 3 },
+                saldos: { origen: 3, creados: 0, existentes: 3, omitidos: 0 },
             })
             assert.deepEqual(segunda.errores, [])
+            // la suma no cambia al repetir
+            assert.deepEqual(segunda.saldos, primera.saldos)
             const sinAuditoria = await trx
                 .from('audit.acciones')
                 .where('request_id', segunda.request_id)
@@ -211,11 +418,145 @@ test.group('importacion · Mikrowisp', () => {
         }
     })
 
+    test('ids externos: reconoce lo ya importado aunque cambien nombre e IP del router en el origen', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const ids = new IdsEnMemoria()
+        const trx = await db.transaction()
+        try {
+            const fuente = await leerDirectorio(EJEMPLO)
+            const primera = await importarMikrowisp(fuente, {
+                dryRun: false,
+                trx,
+                plantillaId,
+                idsExternos: ids,
+            })
+            assert.equal(primera.ids_externos, 'tabla')
+            assert.isNumber(await ids.buscar('router', '1'))
+            assert.isNumber(await ids.buscar('cliente', '101'))
+            assert.isNumber(await ids.buscar('servicio', '1001'))
+
+            // En Mikrowisp renombraron el router 1 y le cambiaron la IP: por claves naturales sería otro
+            const cambiada = {
+                ...fuente,
+                routers: fuente.routers.map((x) =>
+                    x.id === '1' ? { ...x, nombre: 'MW Centro (renombrado)', nas_ip: '198.51.100.99' } : x,
+                ),
+            }
+            const segunda = await importarMikrowisp(cambiada, {
+                dryRun: false,
+                trx,
+                plantillaId,
+                idsExternos: ids,
+            })
+            assert.deepEqual(segunda.resumen.routers, { origen: 2, creados: 0, existentes: 2, omitidos: 0 })
+            assert.equal(segunda.resumen.servicios.creados, 0)
+        } finally {
+            await trx.rollback()
+        }
+    })
+
+    test('core.ids_externos (A1): las altas guardan el id de Mikrowisp y una segunda corrida lo usa', async ({
+        assert,
+    }) => {
+        if (!(await hayIdsExternos())) return // sin la tabla de A1, solo claves naturales (prueba anterior)
+        const plantillaId = await crearPlantillaFila()
+        const trx = await db.transaction()
+        try {
+            const fuente = await leerDirectorio(EJEMPLO)
+            // Otras pruebas (p. ej. las de A1) también dejan vínculos `mikrowisp` en la base
+            // compartida: se cuenta solo lo que agrega esta corrida.
+            const contarVinculos = async () => {
+                const filas = (await trx
+                    .from('core.ids_externos')
+                    .where('sistema', 'mikrowisp')
+                    .groupBy('entidad_tipo')
+                    .select('entidad_tipo', trx.raw('count(*)::int AS n'))) as Array<{
+                    entidad_tipo: string
+                    n: number
+                }>
+                return Object.fromEntries(filas.map((v) => [v.entidad_tipo, v.n])) as Record<string, number>
+            }
+            const antes = await contarVinculos()
+            const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            assert.equal(primera.ids_externos, 'tabla')
+            assert.deepEqual(primera.errores, [])
+            const despues = await contarVinculos()
+            const porTipo = Object.fromEntries(
+                Object.entries(despues).map(([tipo, n]) => [tipo, n - (antes[tipo] ?? 0)]),
+            )
+            assert.containSubset(porTipo, { router: 2, plan: 2, cliente: 5 })
+            assert.equal(porTipo.servicio, primera.resumen.servicios.creados)
+
+            const cambiada = {
+                ...fuente,
+                routers: fuente.routers.map((x) =>
+                    x.id === '1' ? { ...x, nombre: 'MW Centro (renombrado)', nas_ip: '198.51.100.99' } : x,
+                ),
+            }
+            const segunda = await importarMikrowisp(cambiada, { dryRun: false, trx, plantillaId })
+            assert.deepEqual(segunda.resumen.routers, { origen: 2, creados: 0, existentes: 2, omitidos: 0 })
+            assert.deepEqual(segunda.errores, [])
+        } finally {
+            await trx.rollback()
+        }
+    })
+
+    test('servicios sin PPPoE: sin credenciales (o pendientes mientras falte el modelo de A1)', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const wisp = await hayTipoConexion()
+        const trx = await db.transaction()
+        try {
+            const fuente = await leerDirectorio(EJEMPLO)
+            const r = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            assert.deepEqual(r.errores, [])
+            const porIp = async (valor: string) =>
+                (await trx
+                    .from('network.ipv4_asignaciones as a')
+                    .join('core.servicios as s', 's.id', 'a.servicio_id')
+                    .whereRaw('a.ip = ?::inet', [valor])
+                    .whereNull('a.fin')
+                    .select('s.*')
+                    .first()) as Record<string, unknown> | null
+            if (!wisp) {
+                assert.lengthOf(r.diferencias.tipos_conexion_pendientes, 3)
+                assert.isNull(await porIp('198.19.10.50'))
+                assert.include(r.pendiente.join(' '), 'tipo_conexion')
+                return
+            }
+            assert.containSubset(await porIp('198.19.10.50'), {
+                tipo_conexion: 'ip_estatica',
+                user_ppp: null,
+            })
+            assert.containSubset(await porIp('198.19.10.51'), {
+                tipo_conexion: 'dhcp_fija',
+                amarre_ip_mac: true,
+                user_ppp: null,
+            })
+            const dhcp = (await trx
+                .from('core.servicios')
+                .whereRaw(`mac = 'AA:BB:CC:00:10:14'::macaddr`)
+                .first()) as Record<string, unknown>
+            assert.equal(dhcp.tipo_conexion, 'dhcp_fija')
+            const otra = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            assert.equal(otra.resumen.servicios.creados, 0)
+        } finally {
+            await trx.rollback()
+        }
+    })
+
     test('--solo-planes-existentes no crea planes y deja sus servicios sin equivalente', async ({
         assert,
     }) => {
         const fuente = await leerDirectorio(EJEMPLO)
-        const r = await importarMikrowisp(fuente, { dryRun: true, soloPlanesExistentes: true })
+        const r = await importarMikrowisp(fuente, {
+            dryRun: true,
+            soloPlanesExistentes: true,
+            plantillaId: null,
+        })
         assert.equal(r.resumen.planes.creados, 0)
         assert.equal(r.resumen.servicios.creados, 0)
         assert.sameMembers(
@@ -231,6 +572,9 @@ async function contar() {
                (SELECT count(*) FROM core.servicios)::int AS servicios,
                (SELECT count(*) FROM network.routers)::int AS routers,
                (SELECT count(*) FROM network.planes)::int AS planes,
+               (SELECT count(*) FROM billing.facturas)::int AS facturas,
+               (SELECT count(*) FROM billing.saldos_iniciales)::int AS saldos,
+               (SELECT count(*) FROM ledger.asientos)::int AS asientos,
                (SELECT count(*) FROM audit.outbox)::int AS outbox`)) as {
         rows: Array<Record<string, number>>
     }

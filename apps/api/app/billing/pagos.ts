@@ -15,6 +15,8 @@ export type EstadoPago = 'registrado' | 'pendiente_verificacion' | 'anulado'
 export interface PagoVista {
     id: number
     cliente_id: number
+    /** nombre del pagador */
+    cliente_nombre: string
     metodo: MetodoPago
     monto: string
     comision: string
@@ -40,6 +42,7 @@ export interface PagoVista {
 const COLUMNAS = [
     'p.id',
     'p.cliente_id',
+    db.raw('(select cl.nombre from core.clientes cl where cl.id = p.cliente_id) as cliente_nombre'),
     'p.metodo',
     'p.monto',
     'p.comision',
@@ -125,6 +128,8 @@ export interface FiltrosPagos extends OpcionesPaginacion {
     cuenta_bancaria_id?: number
     metodo?: MetodoPago
     estado?: EstadoPago
+    /** pagos aplicados a esta factura */
+    factura_id?: number
     desde?: Date
     hasta?: Date
 }
@@ -148,6 +153,14 @@ export async function listarPagos(filtros: FiltrosPagos, alcance?: Alcance) {
         .if(filtros.estado, (q) => q.where('p.estado', filtros.estado!))
         .if(filtros.desde, (q) => q.where('p.created_at', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('p.created_at', '<=', filtros.hasta!))
+        .if(filtros.factura_id, (q) =>
+            q.whereExists((s) =>
+                s
+                    .from('billing.pagos_aplicaciones as pa')
+                    .whereRaw('pa.pago_id = p.id')
+                    .where('pa.factura_id', filtros.factura_id!),
+            ),
+        )
     filtrarPorAlcance(consulta, alcance, dimensionesPago)
     const pagina = await paginar<Omit<PagoVista, 'aplicaciones'>>(consulta, filtros, { columna: 'p.id' })
     return { data: await conAplicaciones(db.connection(), pagina.data), nextCursor: pagina.nextCursor }

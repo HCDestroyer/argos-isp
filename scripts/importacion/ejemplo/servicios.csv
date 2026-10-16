@@ -1,12 +1,17 @@
-id,cliente_id,router_id,plan_id,user_ppp,pass_ppp,ip,mac,direccion,coordenadas,fecha_instalacion,estado
-1001,101,1,1,mw.ana.lopez,clave-ana-1,198.19.10.10,aa-bb-cc-dd-ee-01,"3a calle 4-50, zona 1","14.6349, -90.5069",2024-03-15 10:00:00,activo
-1002,102,1,2,mw.bodega.sol,clave-bodega-2,198.19.10.11,,,,15/04/2024,suspendido
-1003,103,1,1,mw.carlos.perez,clave-carlos-3,198.19.10.11,,,,0000-00-00,activo
-1004,104,2,1,mw.distribuidora,clave-dist-4,198.19.99.5,,,,,activo
-1005,105,2,2,mw.eva.morales,clave-eva-5,,,,,2024-13-40,Activo
-1006,101,2,3,mw.ana.empresa,clave-ana-6,198.19.20.10,,,,,activo
-1007,103,1,9,mw.carlos.extra,clave-carlos-7,198.19.10.20,,,,,activo
-1008,102,1,1,mw.bodega.vieja,clave-bodega-8,198.19.10.30,,,,,cancelado
-1009,105,2,1,MW.ANA.LOPEZ,clave-eva-9,198.19.20.11,,,,,activo
-1010,999,1,1,mw.fantasma,clave-fantasma,198.19.10.40,,,,,activo
-1011,101,1,1,mw.ana.ip.mala,clave-ana-11,300.1.1.1,,,,,activo
+id,cliente_id,router_id,plan_id,tipo_conexion,user_ppp,pass_ppp,ip,mac,amarre_ip_mac,direccion,coordenadas,fecha_instalacion,estado
+1001,101,1,1,pppoe,mw.ana.lopez,clave-ana-1,198.19.10.10,aa-bb-cc-dd-ee-01,,"3a calle 4-50, zona 1","14.6349, -90.5069",2024-03-15 10:00:00,activo
+1002,102,1,2,,mw.bodega.sol,clave-bodega-2,198.19.10.11,,,,,15/04/2024,suspendido
+1003,103,1,1,,mw.carlos.perez,clave-carlos-3,198.19.10.11,,,,,0000-00-00,activo
+1004,104,2,1,,mw.distribuidora,clave-dist-4,198.19.99.5,,,,,,activo
+1005,105,2,2,,mw.eva.morales,clave-eva-5,,,,,,2024-13-40,Activo
+1006,101,2,3,,mw.ana.empresa,clave-ana-6,198.19.20.10,,,,,,activo
+1007,103,1,9,,mw.carlos.extra,clave-carlos-7,198.19.10.20,,,,,,activo
+1008,102,1,1,,mw.bodega.vieja,clave-bodega-8,198.19.10.30,,,,,,cancelado
+1009,105,2,1,,MW.ANA.LOPEZ,clave-eva-9,198.19.20.11,,,,,,activo
+1010,999,1,1,,mw.fantasma,clave-fantasma,198.19.10.40,,,,,,activo
+1011,101,1,1,,mw.ana.ip.mala,clave-ana-11,300.1.1.1,,,,,,activo
+1012,103,1,2,ip_estatica,,,198.19.10.50,,no,Antena sector norte,,2025-01-10,activo
+1013,104,1,1,dhcp_fija,,,198.19.10.51,AA:BB:CC:00:10:13,si,,,2025-02-01,activo
+1014,105,2,1,DHCP,,,,aa-bb-cc-00-10-14,,,,,activo
+1015,101,1,1,ip_estatica,,,,,,,,,activo
+1016,102,2,1,dhcp_fija,,,198.19.20.30,,,,,,activo

@@ -15,7 +15,8 @@
         "contracts:build": "pnpm --filter @argosisp/api openapi:generate && pnpm --filter @argosisp/contracts build",
         "verificar:permisos": "node scripts/verificar-permisos.mjs",
         "demo:datos": "node scripts/demo/datos.mjs",
-        "importar": "pnpm --filter @argosisp/api importar"
+        "importar": "pnpm --filter @argosisp/api importar",
+        "aaa:carga": "AAA_CARGA=1 pnpm --filter @argosisp/api exec node ace test --files tests/network/carga_radius.spec.ts"
     },
     "devDependencies": {
         "prettier": "^3.6.2",

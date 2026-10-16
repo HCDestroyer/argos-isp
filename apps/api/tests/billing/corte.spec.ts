@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
-import { CRONS, conLock, ejecutarCron, programarCronsBilling } from '#billing/jobs'
+import { CRONS, CRONS_DIARIOS, conLock, ejecutarCron, programarCronsBilling } from '#billing/jobs'
 import { crearPlantillaFila, escenario, estadoServicio, generar } from '#tests/billing/ayudas_billing'
 
 /**
@@ -88,7 +88,9 @@ test.group('billing · jobs', () => {
         await assert.rejects(() => ejecutarCron('desconocido'), /desconocido/)
     })
 
-    test('programa los tres job schedulers en Redis (idempotente)', async ({ assert }) => {
+    test('programa los job schedulers en Redis, también el diario de conciliación (idempotente)', async ({
+        assert,
+    }) => {
         const prefijo = `${process.env.COLAS_PREFIJO ?? 'a3test'}-jobs-${process.pid}`
         const cola = await programarCronsBilling({ prefijo })
         await programarCronsBilling({ prefijo }).then((otra) => otra.close())
@@ -96,12 +98,17 @@ test.group('billing · jobs', () => {
             const programados = await cola.getJobSchedulers()
             assert.sameMembers(
                 programados.map((p) => p.key),
-                Object.keys(CRONS),
+                [...Object.keys(CRONS), ...Object.keys(CRONS_DIARIOS)],
             )
             const corteJob = programados.find((p) => p.key === 'corte')
             assert.equal(Number(corteJob!.every), CRONS.corte)
+            const conciliar = programados.find((p) => p.key === 'conciliar')
+            assert.equal(conciliar!.pattern, CRONS_DIARIOS.conciliar.pattern)
+            assert.equal(conciliar!.tz, 'America/Guatemala')
         } finally {
-            for (const nombre of Object.keys(CRONS)) await cola.removeJobScheduler(nombre)
+            for (const nombre of [...Object.keys(CRONS), ...Object.keys(CRONS_DIARIOS)]) {
+                await cola.removeJobScheduler(nombre)
+            }
             await cola.obliterate({ force: true })
             await cola.close()
         }

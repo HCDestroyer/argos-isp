@@ -9,6 +9,7 @@ import * as v from '#network/validators'
 import { exigirAlcance } from '#core/acl'
 import CrearRouter from '#network/actions/crear_router'
 import EditarRouter from '#network/actions/editar_router'
+import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
 import { listarRedesIpv4, listarRouters, verRouter } from '#network/consultas/routers'
 import {
@@ -31,6 +32,11 @@ import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementaci
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
 import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
+import { registrarSeccionMetricas } from '#monitoreo/metricas'
+import { leerMetricasRouterOS } from '#network/routeros/metricas'
+
+// A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
+registrarSeccionMetricas('routeros', leerMetricasRouterOS)
 
 const routers: Ruta[] = [
     definirRuta({
@@ -81,6 +87,27 @@ const routers: Ruta[] = [
         handler: (ctx, { cuerpo, params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
             return new EditarRouter().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/cambiar-control-velocidad',
+        operacion: 'routersCambiarControlVelocidad',
+        resumen: 'Cambiar el control de velocidad del router (simple o arbol_pcq)',
+        descripcion:
+            'Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) ' +
+            'es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.',
+        etiqueta: 'routers',
+        permiso: 'routers.cambiar_control_velocidad',
+        cuerpo: v.cambiarControlVelocidadValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Router con el control nuevo', esquema: Router },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return new CambiarControlVelocidad().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({

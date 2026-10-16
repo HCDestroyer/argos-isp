@@ -51,7 +51,7 @@ const itemsPeriodo = computed<SelectItem[]>(() => {
 
 const itemsServicio = computed<SelectItem[]>(() => {
     const items: SelectItem[] = [{ label: 'Todos los servicios', value: TODOS }]
-    items.push(...serviciosCliente.value.map(s => ({ label: s.user_ppp, value: String(s.id) })))
+    items.push(...serviciosCliente.value.map(s => ({ label: etiquetaServicio(s), value: String(s.id) })))
     if (servicioId.value !== TODOS && !serviciosCliente.value.some(s => String(s.id) === servicioId.value)) {
         items.push({ label: `Servicio #${servicioId.value}`, value: servicioId.value })
     }

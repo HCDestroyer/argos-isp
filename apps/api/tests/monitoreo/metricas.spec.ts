@@ -4,7 +4,7 @@ import { contextoSistema } from '#shared/contexto'
 import { redis } from '#shared/redis'
 import { nombreStream } from '#shared/eventos_bus'
 import { conexionRedis, prefijoColas } from '#notify/cola'
-import { fijarTokenMetricas } from '#monitoreo/metricas'
+import { fijarTokenMetricas, quitarSeccionMetricas, registrarSeccionMetricas } from '#monitoreo/metricas'
 import { Exposicion } from '#monitoreo/prometheus'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { unico } from '#tests/ayudas'
@@ -123,6 +123,40 @@ test.group('monitoreo · /metrics', (group) => {
             await job.remove()
             await cola.close()
             await redis().xgroup('DESTROY', stream, grupo)
+        }
+    })
+
+    test('sección registrada por otro módulo (colas simples por router de A2); si falla, solo marca error', async ({
+        client,
+        assert,
+    }) => {
+        registrarSeccionMetricas('routeros', async () => [
+            {
+                nombre: 'argosisp_routeros_colas_simples',
+                ayuda: 'Colas simples por router',
+                muestras: [
+                    { etiquetas: { router_id: '7', router: 'Torre Norte' }, valor: 1203 },
+                    { etiquetas: { router_id: '8', router: 'Torre Sur' }, valor: 40 },
+                ],
+            },
+        ])
+        try {
+            const r = await client.get('/metrics').header('authorization', `Bearer ${TOKEN}`)
+            r.assertStatus(200)
+            assert.equal(valor(r.text(), 'argosisp_routeros_colas_simples', { router_id: '7' }), 1203)
+            assert.equal(valor(r.text(), 'argosisp_routeros_colas_simples', { router: 'Torre Sur' }), 40)
+            assert.equal(valor(r.text(), 'argosisp_metricas_error', { seccion: 'routeros' }), 0)
+
+            registrarSeccionMetricas('routeros', async () => {
+                throw new Error('sin datos')
+            })
+            const fallo = await client.get('/metrics').header('authorization', `Bearer ${TOKEN}`)
+            fallo.assertStatus(200)
+            assert.isNull(valor(fallo.text(), 'argosisp_routeros_colas_simples'))
+            assert.equal(valor(fallo.text(), 'argosisp_metricas_error', { seccion: 'routeros' }), 1)
+            assert.isNotNull(valor(fallo.text(), 'argosisp_outbox_sin_publicar'))
+        } finally {
+            quitarSeccionMetricas('routeros')
         }
     })
 
