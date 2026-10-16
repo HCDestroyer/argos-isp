@@ -17,6 +17,11 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  *   ya vencieron. Una activa se revisa primero como cumplida (el evento del pago pudo no haber
  *   llegado); si no alcanzó → `incumplida`, `promesa.incumplida` y re-evaluación (corta). Una
  *   `pendiente_aprobacion` vencida sin aprobar → `cancelada` (sin evento).
+ * - `promesas.rechazar` (`RechazarPromesa`): un supervisor rechaza una `pendiente_aprobacion` →
+ *   `rechazada` con `motivo` (sin evento: el catálogo no tiene `promesa.rechazada`).
+ * - `promesas.cancelar` (`CancelarPromesa`): un supervisor cancela una `activa` o
+ *   `pendiente_aprobacion` → `cancelada` con `motivo`; si estaba activa se re-evalúa el servicio
+ *   (puede volver a limitarse o cortarse, respetando la hora de corte). Sin evento.
  *
  * Idempotentes: sobre una promesa ya cerrada no hacen nada.
  */
@@ -24,6 +29,8 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 export interface EntradaResolverPromesa {
     promesa_id: number
     ahora?: Date
+    /** rechazar y cancelar (operador): obligatorio */
+    motivo?: string
 }
 
 export interface ResultadoResolverPromesa {
@@ -48,6 +55,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
         t: Transaccion,
         promesa: FilaPromesa,
         ahora: Date,
+        input: EntradaResolverPromesa,
     ): Promise<{ estado: EstadoPromesa; detalle: Record<string, unknown> } | null>
 
     protected async handle(input: EntradaResolverPromesa, t: Transaccion): Promise<ResultadoResolverPromesa> {
@@ -73,7 +81,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
             estado: promesa.estado,
             cambiado: false,
         }
-        const decision = await this.decidir(t, promesa, ahora)
+        const decision = await this.decidir(t, promesa, ahora, input)
         if (!decision) return sinCambio
 
         await t.trx
@@ -98,13 +106,17 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
             { estado: decision.estado },
         )
 
-        if (decision.estado === 'cumplida' || decision.estado === 'incumplida') {
+        const cerrada = decision.estado === 'cumplida' || decision.estado === 'incumplida'
+        if (cerrada) {
             await t.emit(decision.estado === 'cumplida' ? 'promesa.cumplida' : 'promesa.incumplida', {
                 promesa_id: promesa.id,
                 servicio_id: promesa.servicio_id,
                 vence: new Date(promesa.vence_en).toISOString(),
                 monto: promesa.monto,
             })
+        }
+        // una promesa activa que se cancela deja de proteger al servicio: también se re-evalúa
+        if (cerrada || promesa.estado === 'activa') {
             await new EvaluarEstadoServicio().execute({ servicio_id: promesa.servicio_id, ahora }, t.ctx, {
                 trx: t.trx,
             })
