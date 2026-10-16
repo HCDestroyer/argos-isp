@@ -70,6 +70,15 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
             '\nLos siguientes fallos de este router en {{alerta.ventana_min}} min no se repiten aquí (quedan en audit.red).',
     },
     {
+        evento: 'alerta.routeros.fallido',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'ALERTA · El router {{alerta.router}} no aceptó cambios por la API REST\nOperación: {{alerta.operacion}}' +
+            '{{#alerta.servicio_id}}\nServicio: {{alerta.servicio_id}}{{/alerta.servicio_id}}\nError: {{alerta.error}}' +
+            '\nFalló tras 3 reintentos; el reconciliador corrige el router cuando vuelva a responder. Los siguientes fallos de este router en {{alerta.ventana_min}} min no se repiten aquí (quedan en audit.red).',
+    },
+    {
         evento: 'alerta.caja.diferencia',
         canal: 'telegram',
         asunto: null,
