@@ -76,56 +76,68 @@ Todo se ajusta en `src/guion.ts`, sin tocar las escenas:
 | 1 | Portada: el logo se traza y se enciende, «ArgosIsp · Gestión completa para tu ISP» | 5 |
 | 2 | Clientes con filtros; la cámara sigue el chip «Cortados» | 10 |
 | 3 | Ficha de servicio: IPv4/IPv6, suspender y reactivar | 10 |
-| 4 | Cobro rápido: facturas, familiar responsable, 5 métodos, recibo, «Servicio reactivado» | 14 |
+| 4 | Cobro rápido: facturas marcadas, las del dependiente, monto, 5 métodos, transferencia, recibo y «Servicio reactivado» | 14 |
 | 5 | Diagrama neón del ciclo Factura → … → CoA/Disconnect → Activo | 12 |
 | 6 | Montaje 3D: caja, promesas, facturas, libro, bitácora | 14 |
-| 7 | Portal en un teléfono: `/corte`, código, PDF, promesa aprobada | 10 |
+| 7 | Portal: página de corte en el teléfono, promesa aprobada, mi cuenta y el PDF del aviso | 10 |
 | 8 | Red y operación: RADIUS, MikroTik, Telegram, respaldos, monitoreo | 8 |
 | 9 | Cierre: el logo se traza, parpadea al encenderse y respira | 6 |
 
 Si cambias duraciones, corre `pnpm audio` para que la música vuelva a medir lo mismo que el video.
 
-## Reemplazar las capturas
+## Capturas
 
-Hoy `public/capturas/` tiene capturas **de relleno** (generadas por `CapturaRelleno.tsx`, llevan la marca
-«relleno» abajo a la derecha). Para usar las reales:
+`public/capturas/` tiene las capturas **reales** del panel y del portal (tema oscuro, 1280×800 px lógicos en
+escritorio y 390×844 en móvil). Sin marco de navegador: el marco lo pone el video.
 
-1. Exporta cada pantalla a **1280×800** px lógicos (escritorio) o **390×844** (móvil). Puede ser @2x
-   (2560×1600): se escala sola. Sin marco de navegador: el marco lo pone el video.
-2. Guárdalas con estos nombres en `public/capturas/`, sobrescribiendo las de relleno:
+| Archivo | Escena | Dispositivo |
+| --- | --- | --- |
+| `clientes-filtros.png` | Clientes | escritorio |
+| `servicio-ficha.png` | Servicio | escritorio |
+| `cobro-facturas.png`, `cobro-recibo.png` | Cobro rápido | escritorio |
+| `caja.png`, `promesas.png`, `facturas.png`, `libro.png`, `bitacora.png` | Montaje | escritorio |
+| `portal-corte-movil.png`, `portal-promesa.png` | Portal | móvil |
+| `portal-cuenta.png`, `portal-pdf.png` | Portal | escritorio |
 
-   | Archivo | Escena | Dispositivo |
-   | --- | --- | --- |
-   | `clientes-filtros.png` | Clientes | escritorio |
-   | `servicio-ficha.png` | Servicio (estado activo) | escritorio |
-   | `servicio-ficha-suspendido.png` | Servicio, la misma ficha tras «Suspender» | escritorio |
-   | `cobro-facturas.png` | Cobro (facturas marcadas y métodos) | escritorio |
-   | `cobro-recibo.png` | Cobro (recibo con «Servicio reactivado») | escritorio |
-   | `caja.png`, `promesas.png`, `facturas.png`, `libro.png`, `bitacora.png` | Montaje | escritorio |
-   | `portal-corte-movil.png`, `portal-cuenta.png`, `portal-pdf.png` | Portal | móvil |
+No hay captura de la ficha en estado suspendido: el badge «Suspendido» y el botón «Reactivar» de la escena 3
+los dibuja el video encima de `servicio-ficha.png`, con los colores del panel (`EstadoSuspendido` en
+`src/escenas/Servicio.tsx`). Si algún día hay captura real, se puede volver a una segunda capa.
 
-3. Mide los puntos de interés (dónde caen el cursor, el halo y las etiquetas) y escríbelos en
-   `public/capturas/puntos.json`:
+### Puntos de interés (`puntos.json`)
 
-   ```json
-   [
-       { "archivo": "clientes-filtros.png", "x": 452, "y": 214, "etiqueta": "chipCortados" },
-       { "archivo": "servicio-ficha.png", "x": 1120, "y": 120, "etiqueta": "Activo", "ancho": 120, "alto": 34 }
-   ]
-   ```
+Dónde caen el cursor, el halo y las etiquetas se lee de `public/capturas/puntos.json`:
 
-   - `x`, `y`: **centro** del elemento, en px lógicos (1280×800), desde la esquina superior izquierda.
-   - `etiqueta`: la clave del punto en `guion.ts` (`chipCortados`) o su `texto` («Cortados · 37»; basta
-     el comienzo, sin importar mayúsculas ni tildes).
-   - `ancho`, `alto` (opcionales): tamaño del elemento, para el halo.
-   - `pnpm puntos:plantilla` escribe `out/puntos-plantilla.json` con **todos** los puntos y sus valores
-     actuales: cópialo, corrige lo que cambie y guárdalo como `public/capturas/puntos.json`.
-   - Los puntos que no casan con ninguna captura o clave se avisan en la consola del render y se ignoran.
-     Una lista vacía (`[]`) deja el guion tal cual.
+```json
+[
+    { "archivo": "clientes-filtros.png", "x": 397, "y": 102, "etiqueta": "Chip \"Cortados\": clientes con el servicio suspendido", "ancho": 96, "alto": 28 }
+]
+```
 
-4. Revisa con `pnpm stills` y luego `pnpm render`.
+- `x`, `y`: **centro** del elemento, en px lógicos, desde la esquina superior izquierda de la captura.
+- `etiqueta`: la clave del punto en `guion.ts` (`chipCortados`) o su `texto` (basta el comienzo, sin importar
+  mayúsculas ni tildes). Muchas etiquetas en pantalla son ese mismo `texto`.
+- `ancho`, `alto` (opcionales): tamaño del elemento, para el halo.
+- Los puntos que no casan con ninguna captura o clave se avisan en la consola del render y se ignoran.
 
-`pnpm capturas:relleno` nunca pisa una captura que ya existe (salvo con `--forzar`).
+`public/capturas/originales/` guarda los dos JSON tal como llegaron con las capturas (`puntos-panel.json`,
+`puntos-portal.json`). `puntos.json` los combina, con estas correcciones medidas sobre las imágenes:
+el badge «Activo» de la ficha (x 306 → 392), la barra de acciones (760 → 600), el bloque de red
+(1110,385 → 1004,360), el grupo del dependiente en Cobrar (409,350 → 556,358), los datos de la
+transferencia (y 454 → 488), el badge «Servicio reactivado» (411 → 403), la lista de clientes, los cobros de
+caja, la fila de la bitácora, el cuadre del libro y los puntos del PDF y de la cuenta del portal, que quedaban
+a un lado del elemento. También se agregaron `ancho` y `alto` a todos.
+
+`pnpm puntos:plantilla` escribe `out/puntos-plantilla.json` con todos los puntos del guion y sus valores
+actuales, para volver a medir si cambian las capturas.
+
+### Reemplazar las capturas
+
+1. Exporta la pantalla al mismo tamaño lógico (puede ser @2x; se escala sola) y guárdala con el mismo nombre.
+2. Vuelve a medir sus puntos en `puntos.json`.
+3. Revisa con `pnpm stills` (un still por momento clave de cada escena) y luego `pnpm render`.
+
+`pnpm capturas:relleno` genera capturas de relleno solo para los archivos que falten (nunca pisa una
+existente salvo con `--forzar`).
 
 ## Reemplazar la música
 

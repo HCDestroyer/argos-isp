@@ -82,7 +82,7 @@ export function Cobro({ escena }: PropsEscena) {
                             {P.monto.texto}
                         </EtiquetaNeon>
                         <Halo punto={P.metodo} frame={frame} desde={m('metodo')} hasta={m('transferencia')} margen={4} color={COLOR.magenta} />
-                        <EtiquetaNeon punto={P.metodo} frame={frame} desde={m('metodo') + 6} hasta={m('transferencia') - 4} lado="izquierda" distancia={30} tamano={15} color={COLOR.magenta}>
+                        <EtiquetaNeon punto={P.metodo} frame={frame} desde={m('metodo') + 6} hasta={m('transferencia') - 4} lado="abajo" distancia={22} tamano={15} color={COLOR.magenta}>
                             {texto('etiquetaMetodos')}
                         </EtiquetaNeon>
                         <Halo punto={P.transferencia} frame={frame} desde={m('transferencia')} hasta={m('clicRegistrar')} margen={4} />

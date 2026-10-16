@@ -1,6 +1,6 @@
 import { AbsoluteFill } from 'remotion'
 import { Escena3D, Objeto3D } from '../camara/Escena3D'
-import { EtiquetaNeon, Halo } from '../camara/Seguimiento'
+import { EtiquetaNeon, Halo, type Lado } from '../camara/Seguimiento'
 import { type Clave, type Colocacion, PERSPECTIVA, enfocar, encuadrar, orbita } from '../camara/camara'
 import { Panel } from '../componentes/Paneles'
 import { TituloSeccion } from '../componentes/Textos'
@@ -9,9 +9,9 @@ import { CAPTURAS, type IdCaptura, type PuntoInteres } from '../guion'
 import { type PropsEscena, camaraDeEscena, colocar, useEscena } from './comun'
 
 /** Paneles del montaje, en orden, con su punto de interés y la clave de su texto. */
-const PANELES: { id: IdCaptura; punto: PuntoInteres; texto: string; color: string }[] = [
+const PANELES: { id: IdCaptura; punto: PuntoInteres; texto: string; color: string; lado?: Lado }[] = [
     { id: 'caja', punto: CAPTURAS.caja.puntos.esperado, texto: 'caja', color: COLOR.cian },
-    { id: 'promesas', punto: CAPTURAS.promesas.puntos.aprobada, texto: 'promesas', color: COLOR.violeta },
+    { id: 'promesas', punto: CAPTURAS.promesas.puntos.aprobada, texto: 'promesas', color: COLOR.violeta, lado: 'izquierda' },
     { id: 'facturas', punto: CAPTURAS.facturas.puntos.recargo, texto: 'facturas', color: COLOR.magenta },
     { id: 'libro', punto: CAPTURAS.libro.puntos.cuadre, texto: 'libro', color: COLOR.cian },
     { id: 'bitacora', punto: CAPTURAS.bitacora.puntos.fila, texto: 'bitacora', color: COLOR.violeta },
@@ -63,7 +63,7 @@ export function Montaje({ escena }: PropsEscena) {
                                     frame={frame}
                                     desde={desde + 8}
                                     hasta={hasta}
-                                    lado={p.punto.y > 500 ? 'arriba' : 'abajo'}
+                                    lado={p.lado ?? (p.punto.y > 500 ? 'arriba' : 'abajo')}
                                     distancia={44}
                                     color={p.color}
                                     tamano={20}

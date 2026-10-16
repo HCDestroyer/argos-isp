@@ -71,7 +71,7 @@ export function Portal({ escena }: PropsEscena) {
                             {id === 'portalCorte' ? (
                                 <>
                                     <Halo punto={C.monto} frame={frame} desde={m('monto')} hasta={m('vueloPromesa')} margen={6} />
-                                    <EtiquetaNeon punto={C.monto} frame={frame} desde={m('monto') + 6} hasta={m('tocarPromesa') - 6} lado="arriba" distancia={70} tamano={17}>
+                                    <EtiquetaNeon punto={C.monto} frame={frame} desde={m('monto') + 6} hasta={m('tocarPromesa') - 6} lado="izquierda" distancia={40} tamano={17}>
                                         {texto('etiquetaMonto')}
                                     </EtiquetaNeon>
                                     <Halo punto={C.promesa} frame={frame} desde={m('tocarPromesa')} hasta={m('vueloPromesa') + 10} color={COLOR.magenta} />
@@ -84,7 +84,7 @@ export function Portal({ escena }: PropsEscena) {
                             {id === 'portalPromesa' ? (
                                 <>
                                     <Halo punto={A.aprobada} frame={frame} desde={m('aprobada')} hasta={m('vueloCuenta') + 10} semilla="aprobada" />
-                                    <EtiquetaNeon punto={A.aprobada} frame={frame} desde={m('aprobada') + 8} hasta={m('vueloCuenta') + 10} lado="abajo" distancia={210} tamano={17}>
+                                    <EtiquetaNeon punto={A.aprobada} frame={frame} desde={m('aprobada') + 8} hasta={m('vueloCuenta') + 10} lado="derecha" distancia={40} tamano={17}>
                                         {texto('etiquetaAprobada')}
                                     </EtiquetaNeon>
                                 </>
