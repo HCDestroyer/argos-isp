@@ -10,7 +10,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * `ConsumidorBilling`; `factura.*`, `pago.*`, `promesa.*` y `servicio.estado_cambiado` →
  * refrescar los resúmenes del dashboard, `ConsumidorResumenes`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte` o `promesas`) y termina:
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas` o `conciliar`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -23,7 +23,9 @@ export default class BillingWorker extends BaseCommand {
         staysAlive: true,
     }
 
-    @flags.string({ description: 'Ejecuta un solo cron (generar, vencer, corte, promesas) y termina' })
+    @flags.string({
+        description: 'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar) y termina',
+    })
     declare unaVez?: string
 
     @flags.boolean({ description: 'No consume el grupo billing del bus de eventos' })

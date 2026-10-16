@@ -1045,6 +1045,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pasarela/cobros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cobros en línea */
+        get: operations["pasarelaListarCobros"];
+        put?: never;
+        /**
+         * Crear cobro en línea ("Pagar en línea"): devuelve la url de pago del proveedor
+         * @description No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.
+         */
+        post: operations["pasarelaCrearCobro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/cobros/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver cobro en línea (estado y pago) */
+        get: operations["pasarelaVerCobro"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/conciliaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Corridas de la conciliación con sus diferencias */
+        get: operations["pasarelaConciliaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/conciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conciliar los cobros en línea de un día contra el proveedor
+         * @description Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.
+         */
+        post: operations["pasarelaConciliar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/falsa/{cobro}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Laboratorio: página de pago de la pasarela falsa
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón "Pagar (simulado)".
+         */
+        get: operations["pasarelaFalsaPagina"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/falsa/{cobro}/pagar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.
+         */
+        post: operations["pasarelaFalsaPagar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pasarela/webhook/{proveedor}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook del proveedor de pago (firmado con HMAC)
+         * @description Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.
+         */
+        post: operations["pasarelaWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/permisos": {
         parameters: {
             query?: never;
@@ -2433,6 +2568,38 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        CobroPasarela: {
+            id: number;
+            proveedor: string;
+            /** @description Id del cobro en el proveedor */
+            id_proveedor: string | null;
+            cliente_id: number;
+            cliente_nombre: string;
+            servicio_id: number | null;
+            monto: components["schemas"]["Dinero"];
+            facturas: number[];
+            /** @enum {string} */
+            estado: "pendiente" | "pagado" | "fallido" | "expirado";
+            /** @description Adonde se manda al cliente para pagar */
+            url_pago: string | null;
+            /** Format: date-time */
+            expira_en: string | null;
+            canal: string;
+            /** @description Pago registrado al llegar el webhook */
+            pago_id: number | null;
+            monto_pagado: components["schemas"]["Dinero"] | null;
+            comision: components["schemas"]["Dinero"];
+            /** Format: date-time */
+            pagado_en: string | null;
+            /** Format: date-time */
+            conciliado_en: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ColumnaReporte: {
             clave: string;
             titulo: string;
@@ -2484,6 +2651,28 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ConciliacionPasarela: {
+            id: number;
+            proveedor: string;
+            /** Format: date */
+            fecha: string;
+            revisados: number;
+            conciliados: number;
+            cobros_conciliados: number[];
+            diferencias: {
+                /** @enum {string} */
+                tipo: "pago_sin_registrar" | "pago_sin_cobro_en_proveedor" | "monto_distinto" | "pago_anulado" | "pago_sin_cobro" | "error_consulta";
+                cobro_id: number | null;
+                pago_id: number | null;
+                id_proveedor: string | null;
+                nuestro: components["schemas"]["Dinero"] | null;
+                proveedor: components["schemas"]["Dinero"] | null;
+                detalle: string;
+            }[];
+            ejecutado_por?: number | null;
+            /** Format: date-time */
+            created_at?: string;
         };
         ConfiguracionEfectivaServicio: {
             servicio_id: number;
@@ -3695,6 +3884,17 @@ export interface components {
             moras: number;
             /** @description Facturas que no se pudieron procesar (ver log) */
             errores: number;
+        };
+        ResultadoWebhookPasarela: {
+            recibido: boolean;
+            /** @description El evento ya se había procesado (no se registra otro pago) */
+            duplicado: boolean;
+            id_evento: string;
+            cobro_id: number | null;
+            pago_id: number | null;
+            estado: string;
+            /** @description cobro_desconocido o cobro_ya_pagado */
+            ignorado?: string;
         };
         ResumenDashboard: {
             servicios: {
@@ -7915,6 +8115,426 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaListarCobros: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                estado?: "pendiente" | "pagado" | "fallido" | "expirado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de cobros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CobroPasarela"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaCrearCobro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente_id: number;
+                    /**
+                     * @description Por defecto lo pendiente de las facturas pedidas o de todo el cliente
+                     * @example 150.00
+                     */
+                    monto?: string | null;
+                    /** @description Facturas a pagar (primero) */
+                    facturas?: number[];
+                    servicio_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.registrar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaVerCobro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cobro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobroPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaConciliaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                fecha?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de conciliaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConciliacionPasarela"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaConciliar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date
+                     * @description Día (Guatemala) a conciliar; por defecto ayer
+                     */
+                    fecha?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConciliacionPasarela"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.generar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaPagina: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página HTML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaPagar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado?: "pagado" | "fallido";
+                    /**
+                     * @description Simular un pago por otro monto
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /** @description false simula un webhook perdido */
+                    notificar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado del webhook */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoWebhookPasarela"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proveedor: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook procesado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoWebhookPasarela"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

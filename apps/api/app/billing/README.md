@@ -94,7 +94,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 ## Cron de corte y worker (tarea 7)
 
-`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto) y `promesas` (cada minuto, `incumplirPromesas`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
+`node ace billing:worker` (`commands/billing_worker.ts`, lógica en `jobs.ts`): cola BullMQ `billing-cron` con job schedulers `generar` (cada hora), `vencer` (cada hora), `corte` (cada minuto), `promesas` (cada minuto, `incumplirPromesas`) y `conciliar` (06:30 Guatemala, `ConciliarPasarela`). También consume el grupo `billing` del bus (`--sin-eventos` lo apaga). Concurrencia 1 y advisory lock de Postgres por cron (`conLock`): si otra instancia lo tiene, el disparo se omite. `--una-vez generar|vencer|corte|promesas` corre un cron y termina.
 
 `cortes.ts`: `horasDeCorte(hasta, cliente?)` (pública, solo lectura) da las horas de corte distintas (HH:MM de Guatemala) de los servicios vigentes que ya llegaron; es la misma consulta que usa el corte y la que vigila A6 (`VigilarCrons`).
 
@@ -144,6 +144,21 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Referencia única: 409 `referencia_duplicada` si ya es un pago (mismo método y cuenta) o si otro comprobante pendiente la tiene (índice parcial `comprobantes_referencia_pendiente`). Uno rechazado la libera.
 - Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
 - Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
+
+## Pasarela en línea (semana 2, `pasarelas/`)
+
+Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). El adaptador real se agrega al registro de `pasarela.ts` cuando el PM entregue credenciales; nada más cambia.
+
+| Acción                      | Archivo                                | Quién la llama                                                                                              |
+| --------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pasarela.crear_cobro`      | `actions/crear_cobro_pasarela.ts`      | `POST /pasarela/cobros` (`pagos.registrar`); el portal (A5) directo                                         |
+| `pasarela.procesar_webhook` | `actions/procesar_webhook_pasarela.ts` | `POST /pasarela/webhook/:proveedor` (público, firmado)                                                      |
+| `pasarela.conciliar`        | `actions/conciliar_pasarela.ts`        | cron `conciliar` (06:30 Guatemala, día anterior, con lock); `POST /pasarela/conciliar` (`facturas.generar`) |
+
+- Cobro: `monto` por defecto = lo pendiente de las `facturas` pedidas o de todo el cliente (422 `sin_deuda`). Devuelve `url_pago`. No mueve dinero.
+- Webhook: el adaptador verifica HMAC-SHA256 y la ventana de ±5 min (401 `firma_invalida`); solo el proveedor configurado. Idempotente por id del evento (`billing.pasarela_eventos`, `ON CONFLICT DO NOTHING`): repetido o simultáneo responde `duplicado: true` sin otro pago; además `referencia` = id del cobro en el proveedor (única por método). Pagado → `RegistrarPago` anidada con `metodo: pasarela`, `comision` y las facturas del cobro: asiento `1.1.02.01 Banco principal (neto) + 5.1.02 Comisiones / CxC`, `pago.registrado` y reactivación en la misma transacción.
+- Conciliación: compara cobros y pagos `pasarela` del día con `consultar` y guarda la corrida (`billing.pasarela_conciliaciones`) con diferencias `pago_sin_registrar`, `pago_sin_cobro_en_proveedor`, `monto_distinto`, `pago_anulado`, `pago_sin_cobro`, `error_consulta`. Solo reporta; los que cuadran quedan con `conciliado_en`.
+- Pasarela falsa (`pasarelas/falsa.ts`, laboratorio y pruebas): guarda su lado en `billing.pasarela_falsa`, comisión simulada 3.5 %, firma `X-Pasarela-Firma: t=<unix>,v1=<hex>` sobre `"<t>.<cuerpo>"` con `PASARELA_FALSA_SECRETO`. `GET /pasarela/falsa/:cobro` (página con "Pagar (simulado)") y `POST /pasarela/falsa/:cobro/pagar { estado?, monto?, notificar? }` procesan el webhook firmado por el mismo camino que uno real (`notificar: false` simula un webhook perdido). Ambas responden 404 si la falsa no es la configurada.
 
 ## Promesas de pago (tarea 10)
 
@@ -222,30 +237,37 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 
 ## Endpoints
 
-| Método   | Ruta                                            | Permiso                    |
-| -------- | ----------------------------------------------- | -------------------------- |
-| GET      | `/api/v1/plantillas-facturacion`                | `plantillas.ver`           |
-| POST     | `/api/v1/plantillas-facturacion`                | `plantillas.crear`         |
-| GET      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.ver`           |
-| PUT      | `/api/v1/plantillas-facturacion/:id`            | `plantillas.editar`        |
-| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`      | `facturas.ver`             |
-| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte` | `facturas.generar`         |
-| POST     | `/api/v1/facturas/:id/anular`                   | `facturas.anular`          |
-| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`            | `pagos.ver`                |
-| POST     | `/api/v1/pagos`                                 | `pagos.registrar`          |
-| POST     | `/api/v1/pagos/:id/anular`                      | `pagos.anular`             |
-| GET      | `/api/v1/promesas`                              | `promesas.ver`             |
-| POST     | `/api/v1/promesas`                              | `promesas.crear`           |
-| POST     | `/api/v1/promesas/:id/aprobar`                  | `promesas.aprobar`         |
-| POST     | `/api/v1/promesas/:id/rechazar`                 | `promesas.rechazar`        |
-| POST     | `/api/v1/promesas/:id/cancelar`                 | `promesas.cancelar`        |
-| GET      | `/api/v1/bancos`                                | sesión (sin permiso)       |
-| GET      | `/api/v1/cuentas-bancarias`, `/:id`             | `cuentas_bancarias.ver`    |
-| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`               | `cuentas_bancarias.editar` |
-| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`  | `comprobantes.ver`         |
-| POST     | `/api/v1/comprobantes/:id/aprobar`              | `comprobantes.aprobar`     |
-| POST     | `/api/v1/comprobantes/:id/rechazar`             | `comprobantes.rechazar`    |
-| GET      | `/api/v1/clientes/:id/estado-cuenta`            | `clientes.estado_cuenta`   |
+| Método   | Ruta                                              | Permiso                    |
+| -------- | ------------------------------------------------- | -------------------------- |
+| GET      | `/api/v1/plantillas-facturacion`                  | `plantillas.ver`           |
+| POST     | `/api/v1/plantillas-facturacion`                  | `plantillas.crear`         |
+| GET      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.ver`           |
+| PUT      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.editar`        |
+| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`        | `facturas.ver`             |
+| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
+| POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
+| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
+| POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |
+| POST     | `/api/v1/pagos/:id/anular`                        | `pagos.anular`             |
+| GET      | `/api/v1/promesas`                                | `promesas.ver`             |
+| POST     | `/api/v1/promesas`                                | `promesas.crear`           |
+| POST     | `/api/v1/promesas/:id/aprobar`                    | `promesas.aprobar`         |
+| POST     | `/api/v1/promesas/:id/rechazar`                   | `promesas.rechazar`        |
+| POST     | `/api/v1/promesas/:id/cancelar`                   | `promesas.cancelar`        |
+| GET      | `/api/v1/bancos`                                  | sesión (sin permiso)       |
+| GET      | `/api/v1/cuentas-bancarias`, `/:id`               | `cuentas_bancarias.ver`    |
+| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`                 | `cuentas_bancarias.editar` |
+| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`    | `comprobantes.ver`         |
+| POST     | `/api/v1/comprobantes/:id/aprobar`                | `comprobantes.aprobar`     |
+| POST     | `/api/v1/comprobantes/:id/rechazar`               | `comprobantes.rechazar`    |
+| GET      | `/api/v1/clientes/:id/estado-cuenta`              | `clientes.estado_cuenta`   |
+| POST     | `/api/v1/pasarela/cobros`                         | `pagos.registrar`          |
+| GET      | `/api/v1/pasarela/cobros`, `/:id`                 | `pagos.ver`                |
+| POST     | `/api/v1/pasarela/webhook/:proveedor`             | público (firma HMAC)       |
+| POST     | `/api/v1/pasarela/conciliar`                      | `facturas.generar`         |
+| GET      | `/api/v1/pasarela/conciliaciones`                 | `pagos.ver`                |
+| GET/POST | `/api/v1/pasarela/falsa/:cobro[/pagar]`           | público, solo laboratorio  |
+| GET      | `/api/v1/reportes/*`, `/api/v1/dashboard/resumen` | `reportes.ver`             |
 
 ## Eventos
 

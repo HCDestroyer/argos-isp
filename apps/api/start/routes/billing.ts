@@ -24,7 +24,7 @@ import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
-import { Prohibido } from '#shared/errores'
+import { NoEncontrado, Prohibido } from '#shared/errores'
 import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
@@ -44,6 +44,16 @@ import {
 } from '#billing/comprobantes'
 import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
 import type { Reporte } from '#billing/reportes/definicion'
+import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
+import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
+import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
+import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import {
+    dimensionesDeCobroPasarela,
+    listarCobrosPasarela,
+    listarConciliaciones,
+    verCobroPasarela,
+} from '#billing/pasarelas/cobros'
 import { TIPOS_CONTENIDO, exportar } from '#billing/reportes/exportar'
 import { resumenDashboard } from '#billing/reportes/resumenes'
 import {
@@ -70,6 +80,9 @@ import {
     ResumenDashboard,
 } from '#billing/reportes/esquemas'
 import {
+    CobroPasarela,
+    ConciliacionPasarela,
+    ResultadoWebhookPasarela,
     ArchivoComprobante,
     Comprobante,
     EstadoCuenta,
@@ -668,6 +681,190 @@ const reportes: Ruta[] = [
     }),
 ]
 
+/*
+|--------------------------------------------------------------------------
+| Pasarela de pago en línea
+|--------------------------------------------------------------------------
+*/
+
+function cabecerasPlanas(ctx: HttpContext): Record<string, string | undefined> {
+    return Object.fromEntries(
+        Object.entries(ctx.request.headers()).map(([clave, valor]) => [
+            clave.toLowerCase(),
+            Array.isArray(valor) ? valor[0] : valor,
+        ]),
+    )
+}
+
+/** La pasarela falsa solo existe si es la configurada (nunca en producción sin pedirla). */
+async function pasarelaFalsa() {
+    if (proveedorConfigurado() !== 'falsa') throw new NoEncontrado('La pasarela falsa no está activa')
+    const { PasarelaFalsa } = await import('#billing/pasarelas/falsa')
+    return new PasarelaFalsa()
+}
+
+function escaparHtml(texto: string): string {
+    return texto.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+}
+
+const pasarelaRutas: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/cobros',
+        operacion: 'pasarelaCrearCobro',
+        resumen: 'Crear cobro en línea ("Pagar en línea"): devuelve la url de pago del proveedor',
+        etiqueta: 'pagos',
+        permiso: 'pagos.registrar',
+        cuerpo: v.crearCobroPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.',
+        respuesta: { status: 201, descripcion: 'Cobro creado', esquema: CobroPasarela },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAlcance(ctx.alcance, await dimensionesDeCliente(cuerpo.cliente_id))
+            return new CrearCobroPasarela().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarela/cobros',
+        operacion: 'pasarelaListarCobros',
+        resumen: 'Cobros en línea',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        query: v.listarCobrosPasarelaValidator,
+        respuesta: { status: 200, descripcion: 'Página de cobros', esquema: pagina(CobroPasarela) },
+        handler: (_ctx, { query }) => listarCobrosPasarela(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarela/cobros/:id',
+        operacion: 'pasarelaVerCobro',
+        resumen: 'Ver cobro en línea (estado y pago)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        respuesta: { status: 200, descripcion: 'Cobro', esquema: CobroPasarela },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeCobroPasarela(id))
+            return verCobroPasarela(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/webhook/:proveedor',
+        operacion: 'pasarelaWebhook',
+        resumen: 'Webhook del proveedor de pago (firmado con HMAC)',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { proveedor: { type: 'string' } },
+        descripcion:
+            'Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.',
+        respuesta: { status: 200, descripcion: 'Webhook procesado', esquema: ResultadoWebhookPasarela },
+        handler: (ctx, { params }) =>
+            new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: String(params.proveedor),
+                    cuerpo: ctx.request.raw() ?? '',
+                    cabeceras: cabecerasPlanas(ctx),
+                },
+                ctx.contextoAccion('webhook'),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/conciliar',
+        operacion: 'pasarelaConciliar',
+        resumen: 'Conciliar los cobros en línea de un día contra el proveedor',
+        etiqueta: 'pagos',
+        permiso: 'facturas.generar',
+        cuerpo: v.conciliarPasarelaValidator,
+        idempotente: true,
+        descripcion:
+            'Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.',
+        respuesta: { status: 200, descripcion: 'Conciliación', esquema: ConciliacionPasarela },
+        handler: (ctx, { cuerpo }) => new ConciliarPasarela().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarela/conciliaciones',
+        operacion: 'pasarelaConciliaciones',
+        resumen: 'Corridas de la conciliación con sus diferencias',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        query: v.listarConciliacionesValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de conciliaciones',
+            esquema: pagina(ConciliacionPasarela),
+        },
+        handler: (_ctx, { query }) => listarConciliaciones(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pasarela/falsa/:cobro',
+        operacion: 'pasarelaFalsaPagina',
+        resumen: 'Laboratorio: página de pago de la pasarela falsa',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { cobro: { type: 'string' } },
+        descripcion: 'Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón "Pagar (simulado)".',
+        respuesta: { status: 200, descripcion: 'Página HTML', esquema: { type: 'string' } },
+        handler: async (ctx, { params }) => {
+            const falsa = await pasarelaFalsa()
+            const cobro = await falsa.consultar(String(params.cobro))
+            const id = escaparHtml(cobro.id_proveedor)
+            ctx.response.header('Content-Type', 'text/html; charset=utf-8')
+            ctx.response.send(
+                `<!doctype html><html lang="es"><meta charset="utf-8"><title>Pasarela de prueba</title>` +
+                    `<body style="font-family:sans-serif;max-width:28rem;margin:3rem auto">` +
+                    `<h1>Pasarela de prueba</h1><p>Cobro <code>${id}</code>: Q${escaparHtml(cobro.monto)} · ${escaparHtml(cobro.estado)}</p>` +
+                    `<form method="post" action="${id}/pagar"><input type="hidden" name="estado" value="pagado">` +
+                    `<button type="submit">Pagar (simulado)</button></form>` +
+                    `<form method="post" action="${id}/pagar"><input type="hidden" name="estado" value="fallido">` +
+                    `<button type="submit">Rechazar tarjeta (simulado)</button></form></body></html>`,
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/falsa/:cobro/pagar',
+        operacion: 'pasarelaFalsaPagar',
+        resumen: 'Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { cobro: { type: 'string' } },
+        cuerpo: v.simularPagoFalsaValidator,
+        descripcion:
+            'Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.',
+        respuesta: { status: 200, descripcion: 'Resultado del webhook', esquema: ResultadoWebhookPasarela },
+        handler: async (ctx, { cuerpo, params }) => {
+            const falsa = await pasarelaFalsa()
+            const webhook = await falsa.simularPago(String(params.cobro), {
+                estado: cuerpo.estado,
+                monto: cuerpo.monto,
+            })
+            if (cuerpo.notificar === false) {
+                return {
+                    recibido: true,
+                    duplicado: false,
+                    id_evento: '',
+                    cobro_id: null,
+                    pago_id: null,
+                    estado: 'sin_notificar',
+                }
+            }
+            return new ProcesarWebhookPasarela().execute(
+                { proveedor: 'falsa', cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
+                ctx.contextoAccion('webhook'),
+            )
+        },
+    }),
+]
+
 const bancos: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -745,6 +942,7 @@ const estadoCuenta: Ruta[] = [
 
 export default [
     ...reportes,
+    ...pasarelaRutas,
     ...plantillas,
     ...facturas,
     ...pagos,

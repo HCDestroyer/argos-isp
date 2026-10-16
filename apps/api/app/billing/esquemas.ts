@@ -384,3 +384,81 @@ export const ArchivoComprobante = {
         'Foto (image/jpeg, image/png, image/webp) o PDF. La respuesta real lleva el Content-Type del archivo ' +
         '(el generador de OpenAPI declara application/json)',
 }
+
+export const CobroPasarela = definirEsquema(
+    'CobroPasarela',
+    objeto({
+        id,
+        proveedor: texto,
+        id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
+        cliente_id: id,
+        cliente_nombre: texto,
+        servicio_id: nulable(id),
+        monto: Dinero,
+        facturas: lista(id),
+        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+        url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
+        expira_en: nulable(instante),
+        canal: texto,
+        pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
+        monto_pagado: nulable(Dinero),
+        comision: Dinero,
+        pagado_en: nulable(instante),
+        conciliado_en: nulable(instante),
+        ...auditable,
+    }),
+)
+
+export const ResultadoWebhookPasarela = definirEsquema(
+    'ResultadoWebhookPasarela',
+    objeto(
+        {
+            recibido: booleano,
+            duplicado: {
+                ...booleano,
+                description: 'El evento ya se había procesado (no se registra otro pago)',
+            },
+            id_evento: texto,
+            cobro_id: nulable(id),
+            pago_id: nulable(id),
+            estado: texto,
+            ignorado: { ...texto, description: 'cobro_desconocido o cobro_ya_pagado' },
+        },
+        ['ignorado'],
+    ),
+)
+
+const DiferenciaConciliacion = objeto({
+    tipo: enumerado([
+        'pago_sin_registrar',
+        'pago_sin_cobro_en_proveedor',
+        'monto_distinto',
+        'pago_anulado',
+        'pago_sin_cobro',
+        'error_consulta',
+    ]),
+    cobro_id: nulable(id),
+    pago_id: nulable(id),
+    id_proveedor: nulable(texto),
+    nuestro: nulable(Dinero),
+    proveedor: nulable(Dinero),
+    detalle: texto,
+})
+
+export const ConciliacionPasarela = definirEsquema(
+    'ConciliacionPasarela',
+    objeto(
+        {
+            id,
+            proveedor: texto,
+            fecha,
+            revisados: entero,
+            conciliados: entero,
+            cobros_conciliados: lista(id),
+            diferencias: lista(DiferenciaConciliacion),
+            ejecutado_por: nulable(id),
+            created_at: instante,
+        },
+        ['ejecutado_por', 'created_at'],
+    ),
+)

@@ -7112,6 +7112,706 @@
         "x-implementado": true
       }
     },
+    "/api/v1/pasarela/cobros": {
+      "get": {
+        "operationId": "pasarelaListarCobros",
+        "summary": "Cobros en línea",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "pagado",
+                "fallido",
+                "expirado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de cobros",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CobroPasarela"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "pasarelaCrearCobro",
+        "summary": "Crear cobro en línea (\"Pagar en línea\"): devuelve la url de pago del proveedor",
+        "description": "No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "monto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Por defecto lo pendiente de las facturas pedidas o de todo el cliente",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Facturas a pagar (primero)"
+                  },
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "cliente_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cobro creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/cobros/{id}": {
+      "get": {
+        "operationId": "pasarelaVerCobro",
+        "summary": "Ver cobro en línea (estado y pago)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cobro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobroPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/conciliaciones": {
+      "get": {
+        "operationId": "pasarelaConciliaciones",
+        "summary": "Corridas de la conciliación con sus diferencias",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de conciliaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConciliacionPasarela"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/conciliar": {
+      "post": {
+        "operationId": "pasarelaConciliar",
+        "summary": "Conciliar los cobros en línea de un día contra el proveedor",
+        "description": "Lo mismo que el cron diario (06:30 Guatemala, día anterior). Solo reporta diferencias: no registra ni anula pagos.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Día (Guatemala) a conciliar; por defecto ayer"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conciliación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConciliacionPasarela"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.generar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/falsa/{cobro}": {
+      "get": {
+        "operationId": "pasarelaFalsaPagina",
+        "summary": "Laboratorio: página de pago de la pasarela falsa",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). HTML con el botón \"Pagar (simulado)\".",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página HTML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/falsa/{cobro}/pagar": {
+      "post": {
+        "operationId": "pasarelaFalsaPagar",
+        "summary": "Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "pagado",
+                      "fallido"
+                    ]
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Simular un pago por otro monto",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "notificar": {
+                    "description": "false simula un webhook perdido",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado del webhook",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookPasarela"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pasarela/webhook/{proveedor}": {
+      "post": {
+        "operationId": "pasarelaWebhook",
+        "summary": "Webhook del proveedor de pago (firmado con HMAC)",
+        "description": "Sin login: la autenticidad la da la firma HMAC del proveedor con ventana de 5 minutos (401 firma_invalida). Idempotente por id del evento: un webhook repetido responde duplicado=true y no registra otro pago. Con pago: registra el pago pasarela (Bancos neto + Comisión / CxC) y reactiva el servicio.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "proveedor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook procesado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookPasarela"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/permisos": {
       "get": {
         "operationId": "permisosListar",
@@ -17211,6 +17911,145 @@
           }
         }
       },
+      "CobroPasarela": {
+        "type": "object",
+        "required": [
+          "id",
+          "proveedor",
+          "id_proveedor",
+          "cliente_id",
+          "cliente_nombre",
+          "servicio_id",
+          "monto",
+          "facturas",
+          "estado",
+          "url_pago",
+          "expira_en",
+          "canal",
+          "pago_id",
+          "monto_pagado",
+          "comision",
+          "pagado_en",
+          "conciliado_en",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "id_proveedor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id del cobro en el proveedor"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "pagado",
+              "fallido",
+              "expirado"
+            ]
+          },
+          "url_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Adonde se manda al cliente para pagar"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "canal": {
+            "type": "string"
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Pago registrado al llegar el webhook"
+          },
+          "monto_pagado": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comision": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pagado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "conciliado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ColumnaReporte": {
         "type": "object",
         "required": [
@@ -17420,6 +18259,126 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConciliacionPasarela": {
+        "type": "object",
+        "required": [
+          "id",
+          "proveedor",
+          "fecha",
+          "revisados",
+          "conciliados",
+          "cobros_conciliados",
+          "diferencias"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "revisados": {
+            "type": "integer"
+          },
+          "conciliados": {
+            "type": "integer"
+          },
+          "cobros_conciliados": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "diferencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tipo",
+                "cobro_id",
+                "pago_id",
+                "id_proveedor",
+                "nuestro",
+                "proveedor",
+                "detalle"
+              ],
+              "properties": {
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "pago_sin_registrar",
+                    "pago_sin_cobro_en_proveedor",
+                    "monto_distinto",
+                    "pago_anulado",
+                    "pago_sin_cobro",
+                    "error_consulta"
+                  ]
+                },
+                "cobro_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "pago_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "id_proveedor": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nuestro": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proveedor": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "ejecutado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -22519,6 +23478,50 @@
           "errores": {
             "type": "integer",
             "description": "Facturas que no se pudieron procesar (ver log)"
+          }
+        }
+      },
+      "ResultadoWebhookPasarela": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "id_evento",
+          "cobro_id",
+          "pago_id",
+          "estado"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean",
+            "description": "El evento ya se había procesado (no se registra otro pago)"
+          },
+          "id_evento": {
+            "type": "string"
+          },
+          "cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string"
+          },
+          "ignorado": {
+            "type": "string",
+            "description": "cobro_desconocido o cobro_ya_pagado"
           }
         }
       },

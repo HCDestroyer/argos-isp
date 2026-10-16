@@ -371,3 +371,46 @@ export const reporteEgresosValidator = vine.compile(
         metodo: vine.enum(['caja', 'banco', 'cuenta_bancaria'] as const).optional(),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Pasarela en línea
+|--------------------------------------------------------------------------
+*/
+
+export const crearCobroPasarelaValidator = vine.compile(
+    vine.object({
+        cliente_id: idEntidad(),
+        monto: dinero().nullable().optional().meta({
+            description: 'Por defecto lo pendiente de las facturas pedidas o de todo el cliente',
+        }),
+        facturas: vine.array(idEntidad()).optional().meta({ description: 'Facturas a pagar (primero)' }),
+        servicio_id: idEntidad().nullable().optional(),
+    }),
+)
+
+export const listarCobrosPasarelaValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        estado: vine.enum(['pendiente', 'pagado', 'fallido', 'expirado'] as const).optional(),
+    }),
+)
+
+export const conciliarPasarelaValidator = vine.compile(
+    vine.object({
+        fecha: fechaIso().optional().meta({ description: 'Día (Guatemala) a conciliar; por defecto ayer' }),
+    }),
+)
+
+export const listarConciliacionesValidator = vine.compile(
+    vine.object({ ...reglasPaginacion, fecha: fechaIso().optional() }),
+)
+
+export const simularPagoFalsaValidator = vine.compile(
+    vine.object({
+        estado: vine.enum(['pagado', 'fallido'] as const).optional(),
+        monto: dinero().optional().meta({ description: 'Simular un pago por otro monto' }),
+        notificar: vine.boolean().optional().meta({ description: 'false simula un webhook perdido' }),
+    }),
+)
