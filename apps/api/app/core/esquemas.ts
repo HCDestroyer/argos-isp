@@ -177,59 +177,44 @@ export const ExcepcionesServicio = definirEsquema('ExcepcionesServicio', {
 
 export const Servicio = definirEsquema(
     'Servicio',
-    objeto(
-        {
-            id,
-            cliente_id: id,
-            router_id: id,
-            plan_id: id,
-            plantilla_facturacion_id: nulable(id),
-            estado: EstadoServicio,
-            promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
-            suspension_manual: {
-                type: 'boolean',
-                description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
-            },
-            suspension_manual_motivo: nulable(texto),
-            tipo_conexion: {
-                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
-                description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
-            },
-            user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
-            amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
-            mac: nulable(texto),
-            direccion: nulable(texto),
-            coordenadas: nulable(texto),
-            fecha_instalacion: nulable(fecha),
-            costo_override: nulable(Dinero),
-            excluir_firewall: booleano,
-            ipv4: nulable(texto),
-            prefijo_enlace_v6: nulable(texto),
-            prefijo_delegado_v6: nulable(texto),
-            ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-            ipv6_duid: nulable(texto),
-            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper pruebas del panel
-            cliente_nombre: texto,
-            plan_nombre: texto,
-            router_nombre: texto,
-            zona_nombre: nulable(texto),
-            // día 4; obligatorio desde la semana 2 (las fixtures del panel ya lo traen)
-            excepciones: ExcepcionesServicio,
-            ...auditable,
+    objeto({
+        id,
+        cliente_id: id,
+        router_id: id,
+        plan_id: id,
+        plantilla_facturacion_id: nulable(id),
+        estado: EstadoServicio,
+        promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
+        suspension_manual: {
+            type: 'boolean',
+            description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
         },
-        [
-            // siguen opcionales: `apps/web/tests/nuxt/listaServicios.test.ts` arma servicios sin nombres
-            'cliente_nombre',
-            'plan_nombre',
-            'router_nombre',
-            'zona_nombre',
-            'suspension_manual',
-            'suspension_manual_motivo',
-            // aditivos (semana 2): la API siempre los envía
-            'tipo_conexion',
-            'amarre_ip_mac',
-        ],
-    ),
+        suspension_manual_motivo: nulable(texto),
+        tipo_conexion: {
+            ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+            description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
+        },
+        user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
+        amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
+        mac: nulable(texto),
+        direccion: nulable(texto),
+        coordenadas: nulable(texto),
+        fecha_instalacion: nulable(fecha),
+        costo_override: nulable(Dinero),
+        excluir_firewall: booleano,
+        ipv4: nulable(texto),
+        prefijo_enlace_v6: nulable(texto),
+        prefijo_delegado_v6: nulable(texto),
+        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
+        ipv6_duid: nulable(texto),
+        // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
+        cliente_nombre: texto,
+        plan_nombre: texto,
+        router_nombre: texto,
+        zona_nombre: nulable(texto),
+        excepciones: ExcepcionesServicio,
+        ...auditable,
+    }),
 )
 
 /** Plantilla de facturación con las excepciones del servicio aplicadas (`aplicarExcepciones`). */
@@ -276,57 +261,49 @@ export const CredencialesPpp = definirEsquema(
 
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
-    objeto(
-        {
-            id,
-            actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
-            actor_id: nulable(id),
-            // aditivo (día 3): la API siempre lo envía; opcional en el esquema para no romper fixtures
-            actor_nombre: {
-                type: ['string', 'null'],
-                description: 'Nombre del usuario (null para el sistema)',
-            },
-            canal: texto,
-            accion: texto,
-            entidad_tipo: nulable(texto),
-            entidad_id: nulable(id),
-            entrada: {},
-            resultado: enumerado(['ok', 'error']),
-            error: nulable(texto),
-            request_id: nulable(texto),
-            created_at: instante,
+    objeto({
+        id,
+        actor_tipo: enumerado(['usuario', 'token', 'agente', 'sistema']),
+        actor_id: nulable(id),
+        actor_nombre: {
+            type: ['string', 'null'],
+            description: 'Nombre del usuario (null para el sistema)',
         },
-        ['actor_nombre'],
-    ),
+        canal: texto,
+        accion: texto,
+        entidad_tipo: nulable(texto),
+        entidad_id: nulable(id),
+        entrada: {},
+        resultado: enumerado(['ok', 'error']),
+        error: nulable(texto),
+        request_id: nulable(texto),
+        created_at: instante,
+    }),
 )
 
 export const CambioAuditoria = definirEsquema(
     'CambioAuditoria',
-    objeto(
-        {
-            id,
-            entidad_tipo: texto,
-            entidad_id: id,
-            campo: {
-                type: 'string',
-                description:
-                    'Nombre del campo en snake_case (`ipv4`, `prefijo_enlace_v6`). Filas anteriores al día 4 ' +
-                    'pueden traer `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6`',
-            },
-            antes: {},
-            despues: {},
-            actor_tipo: nulable(enumerado(['usuario', 'token', 'agente', 'sistema'])),
-            actor_id: nulable(id),
-            // aditivo (día 4): la API siempre lo envía; opcional en el esquema para no romper fixtures
-            actor_nombre: {
-                type: ['string', 'null'],
-                description: 'Nombre del usuario (null para el sistema)',
-            },
-            request_id: nulable(texto),
-            created_at: instante,
+    objeto({
+        id,
+        entidad_tipo: texto,
+        entidad_id: id,
+        campo: {
+            type: 'string',
+            description:
+                'Nombre del campo en snake_case (`ipv4`, `prefijo_enlace_v6`). Filas anteriores al día 4 ' +
+                'pueden traer `ipv_4`, `prefijo_enlace_v_6`, `prefijo_delegado_v_6`',
         },
-        ['actor_nombre'],
-    ),
+        antes: {},
+        despues: {},
+        actor_tipo: nulable(enumerado(['usuario', 'token', 'agente', 'sistema'])),
+        actor_id: nulable(id),
+        actor_nombre: {
+            type: ['string', 'null'],
+            description: 'Nombre del usuario (null para el sistema)',
+        },
+        request_id: nulable(texto),
+        created_at: instante,
+    }),
 )
 
 export const ResolucionIp = definirEsquema(

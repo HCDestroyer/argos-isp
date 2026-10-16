@@ -2611,7 +2611,7 @@ export interface components {
             actor_tipo: "usuario" | "token" | "agente" | "sistema";
             actor_id: number | null;
             /** @description Nombre del usuario (null para el sistema) */
-            actor_nombre?: string | null;
+            actor_nombre: string | null;
             canal: string;
             accion: string;
             entidad_tipo: string | null;
@@ -2714,7 +2714,7 @@ export interface components {
             actor_tipo: "usuario" | "token" | "agente" | "sistema" | null;
             actor_id: number | null;
             /** @description Nombre del usuario (null para el sistema) */
-            actor_nombre?: string | null;
+            actor_nombre: string | null;
             request_id: string | null;
             /** Format: date-time */
             created_at: string;
@@ -3325,17 +3325,17 @@ export interface components {
             subida_limitada_kbps: number;
             reuso: number;
             /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description burst-limit de bajada; null = sin ráfaga */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description burst-limit de subida; null = sin ráfaga */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description burst-threshold como % del MIR */
-            rafaga_umbral_pct?: number;
+            rafaga_umbral_pct: number;
             /** @description burst-time en segundos */
-            rafaga_segundos?: number;
+            rafaga_segundos: number;
             /** @description 1 (alta) a 8 (baja) */
-            prioridad?: number;
+            prioridad: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3360,17 +3360,17 @@ export interface components {
             /** @description Reuso efectivo en el router */
             reuso: number;
             /** @description CIR (limit-at) como % del MIR; null = 100 / reuso */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description burst-limit de bajada; null = sin ráfaga */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description burst-limit de subida; null = sin ráfaga */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description burst-threshold como % del MIR */
-            rafaga_umbral_pct?: number;
+            rafaga_umbral_pct: number;
             /** @description burst-time en segundos */
-            rafaga_segundos?: number;
+            rafaga_segundos: number;
             /** @description 1 (alta) a 8 (baja) */
-            prioridad?: number;
+            prioridad: number;
             /** @enum {string} */
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
@@ -3408,19 +3408,19 @@ export interface components {
             no_crear_reglas: boolean;
             rate_limit_override: string | null;
             /** @description null = hereda del plan */
-            reuso?: number | null;
+            reuso: number | null;
             /** @description null = hereda del plan */
-            garantizado_pct?: number | null;
+            garantizado_pct: number | null;
             /** @description null = hereda del plan */
-            rafaga_bajada_kbps?: number | null;
+            rafaga_bajada_kbps: number | null;
             /** @description null = hereda del plan */
-            rafaga_subida_kbps?: number | null;
+            rafaga_subida_kbps: number | null;
             /** @description null = hereda del plan */
-            rafaga_umbral_pct?: number | null;
+            rafaga_umbral_pct: number | null;
             /** @description null = hereda del plan */
-            rafaga_segundos?: number | null;
+            rafaga_segundos: number | null;
             /** @description null = hereda del plan */
-            prioridad?: number | null;
+            prioridad: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -4288,21 +4288,21 @@ export interface components {
              * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
              * @enum {string}
              */
-            control_velocidad?: "simple" | "arbol_pcq";
+            control_velocidad: "simple" | "arbol_pcq";
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
-            capacidad_bajada_kbps?: number | null;
+            capacidad_bajada_kbps: number | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
-            capacidad_subida_kbps?: number | null;
+            capacidad_subida_kbps: number | null;
             /** @description https://host:puerto de la API REST; null = https://<host> */
-            api_url?: string | null;
+            api_url: string | null;
             /** @description Verificar el certificado TLS del router */
-            api_tls_verificar?: boolean;
+            api_tls_verificar: boolean;
             /** @description CA en PEM para routers con certificado propio */
-            api_ca?: string | null;
+            api_ca: string | null;
             /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
-            dhcp_servidor?: string | null;
+            dhcp_servidor: string | null;
             /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES */
-            interfaz_clientes?: string | null;
+            interfaz_clientes: string | null;
             /**
              * @deprecated
              * @description Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad
@@ -4327,17 +4327,17 @@ export interface components {
             /** @description Bandera: hay una promesa de pago activa */
             promesa_activa: boolean;
             /** @description Suspendido a mano por un operador: el corte y los pagos no lo reactivan */
-            suspension_manual?: boolean;
-            suspension_manual_motivo?: string | null;
+            suspension_manual: boolean;
+            suspension_manual_motivo: string | null;
             /**
              * @description pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS
              * @enum {string}
              */
-            tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
             /** @description null fuera de pppoe */
             user_ppp: string | null;
             /** @description ARP estático IP-MAC en el router (solo sin PPPoE) */
-            amarre_ip_mac?: boolean;
+            amarre_ip_mac: boolean;
             mac: string | null;
             direccion: string | null;
             coordenadas: string | null;
@@ -4351,10 +4351,10 @@ export interface components {
             /** @enum {string} */
             ipv6_modo: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
             ipv6_duid: string | null;
-            cliente_nombre?: string;
-            plan_nombre?: string;
-            router_nombre?: string;
-            zona_nombre?: string | null;
+            cliente_nombre: string;
+            plan_nombre: string;
+            router_nombre: string;
+            zona_nombre: string | null;
             excepciones: components["schemas"]["ExcepcionesServicio"];
             /** @description Control optimista: envíala al editar */
             version: number;
