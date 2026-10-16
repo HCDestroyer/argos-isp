@@ -1,7 +1,7 @@
 import { createServer as crearHttp, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { createServer as crearHttps } from 'node:https'
 import type { AddressInfo } from 'node:net'
-import { RUTAS, type ObjetoRouterOS, type RutaRouterOS } from './cliente.ts'
+import { RUTAS, type ObjetoRouterOS, type RutaRouterOS } from '#network/routeros/cliente'
 
 /**
  * RouterOS falso para pruebas: servidor HTTP(S) en memoria que imita la API REST de RouterOS 7 en

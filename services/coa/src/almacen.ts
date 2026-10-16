@@ -27,8 +27,7 @@ export interface SesionPorId extends SesionActiva {
 }
 
 export interface FilaRed {
-    /** `routeros`: escrituras del cliente REST (`src/routeros`), que usa `registrar` como `Bitacora` */
-    tipo: TipoPaquete | 'routeros'
+    tipo: TipoPaquete
     router_id: number | null
     servicio_id: number | null
     comando: Record<string, unknown>

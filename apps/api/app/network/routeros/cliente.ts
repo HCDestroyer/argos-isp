@@ -6,8 +6,8 @@ import {
     RouterOSInalcanzable,
     RouterOSRespuesta,
     RouterOSSolicitud,
-} from './errores.ts'
-import { diferencias } from './normalizar.ts'
+} from '#network/routeros/errores'
+import { diferencias } from '#network/routeros/normalizar'
 
 /**
  * Cliente de la API REST de RouterOS 7 (`/rest/...`), reutilizable por `coa` y por A6.
@@ -253,8 +253,9 @@ export class ClienteRouterOS {
         this.#validarRuta(ruta)
         const consulta = new URLSearchParams(filtro).toString()
         const r = await this.#http('GET', `${ruta.slice(1)}${consulta ? `?${consulta}` : ''}`)
-        if (!Array.isArray(r.cuerpo))
+        if (!Array.isArray(r.cuerpo)) {
             throw new RouterOSRespuesta(`GET ${ruta}: se esperaba una lista`, r.status)
+        }
         return r.cuerpo as ObjetoRouterOS[]
     }
 

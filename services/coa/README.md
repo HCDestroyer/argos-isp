@@ -41,23 +41,9 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 - Sin ACK al final (NAK, reintentos agotados, router sin secret) → `coa.fallido` en `audit.outbox` en la misma transacción que la última fila de `audit.red`.
 - Idempotente por `id` del evento: si una sesión ya tiene una fila final para ese evento no se vuelve a enviar (un evento duplicado no desconecta dos veces).
 
-## Cliente RouterOS (`src/routeros`, `@argosisp/coa/routeros`)
+## RouterOS (servicios sin PPPoE)
 
-Decisión (semana 2, tarea 1): el cliente de la API REST de RouterOS 7 vive en `services/coa`, que pasa a ser el **dispatcher de red** (RADIUS CoA/Disconnect y API REST). Se publica como subruta del paquete (`exports` en `package.json`) para que A6 lo use sin copiarlo: `import { clienteDeRouter } from '@argosisp/coa/routeros'` y, en pruebas, `import { RouterOSFalso } from '@argosisp/coa/routeros/falso'`. Sin dependencias: solo `node:http`/`node:https`. No es un paquete aparte para no tocar el Dockerfile ni `pnpm deploy`.
-
-| Pieza           | Qué hace                                                                                                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cliente.ts`    | `ClienteRouterOS`: `listar`, `buscar(ruta, comment)`, `asegurar(ruta, comment, props, ctx)`, `borrar(ruta, comment, ctx)`, `crear`, `actualizar`, `borrarPorId`, `probar` (`/system/resource`)                                  |
-| `router.ts`     | `clienteDeRouter(fila de network.routers, { clave, bitacora })`: descifra `api_password` (`v1`, `AAA_PPP_KEY`), arma `https://<host>` (o `api_url`) y la política TLS del router                                                |
-| `errores.ts`    | `RouterOSInalcanzable` (red, timeout, TLS, 5xx; `codigo` de Node), `RouterOSCredenciales` (401/403), `RouterOSSolicitud` (400/404 con el `detail` de RouterOS), `RouterOSRespuesta` (no JSON). `tipo` y `reintentable` en todos |
-| `normalizar.ts` | Compara lo deseado con lo que guarda el router (`5120k` = `5120000`, `yes` = `true`, MAC sin distinguir mayúsculas, `16s` = `16`), así un objeto correcto no se reescribe                                                       |
-| `falso.ts`      | RouterOS falso en memoria (HTTP o HTTPS) con las mismas rutas, normalizaciones y errores; `caer()`/`levantar()`, `fallar(n, status, { despues })`, `retrasoMs`, `borrarAMano`                                                   |
-
-- **Menús administrados:** `/queue/simple`, `/queue/tree`, `/queue/type`, `/ip/firewall/address-list`, `/ip/firewall/mangle`, `/ip/dhcp-server/lease`, `/ip/arp`, `/ppp/profile`. Otro menú se rechaza antes de salir.
-- **Idempotencia por `comment`** (`argosisp:servicio:<id>`, `argosisp:plan:<id>`…): `asegurar` busca con `GET ?comment=`, crea si falta, hace `PATCH` solo de lo que difiere y borra duplicados; `borrar` elimina todo lo del comment (un 404 cuenta como borrado).
-- **Reintentos:** 3 tras el primero, backoff 0,5 s · 1 s · 2 s, solo ante `inalcanzable` (no ante TLS inválido). Cada reintento de `asegurar` repite la búsqueda: un `PUT` que llegó pero perdió la respuesta no crea duplicado. `crear` suelto no se reintenta.
-- **TLS:** verifica el certificado por defecto (`ROUTEROS_TLS_VERIFICAR`, por defecto `true`); por router, `api_tls_verificar` y `api_ca` (PEM) cuando A1 los agregue al modelo.
-- **`audit.red`:** cada escritura y cada intento, `tipo = 'routeros'`; `comando = {metodo, ruta, id, propiedades, antes, host, intento, evento_id, request_id, motivo}`, `respuesta = {status, objeto | error, tipo_error, detalle, rtt_ms}`, `ok`. La contraseña nunca se registra. Las lecturas no se auditan. En `coa`, `AlmacenPg` es la `Bitacora`.
+El cliente REST de RouterOS 7 y el dispatcher de servicios WISP (`ip_estatica`, `dhcp_fija`) viven en `apps/api/app/network/routeros` (semana 2): necesitan la función de velocidad compartida (`#network/velocidad`), las acciones de dominio y el outbox (`routeros.fallido`), que están en la API. `coa` sigue siendo solo RADIUS (CoA/Disconnect). Ver `apps/api/app/network/routeros/README.md`.
 
 ## Comandos
 

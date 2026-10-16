@@ -4,10 +4,6 @@
   "private": true,
   "description": "coa-dispatcher: envía CoA/Disconnect al NAS a partir de eventos de servicio",
   "type": "module",
-  "exports": {
-    "./routeros": "./src/routeros/index.ts",
-    "./routeros/falso": "./src/routeros/falso.ts"
-  },
   "engines": {
     "node": ">=22.18"
   },

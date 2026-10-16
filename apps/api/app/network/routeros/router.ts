@@ -1,5 +1,5 @@
-import { descifrar } from '../cifrado.ts'
-import { ClienteRouterOS, type Bitacora, type ConexionRouterOS } from './cliente.ts'
+import { descifrar } from '#shared/cifrado'
+import { ClienteRouterOS, type Bitacora, type ConexionRouterOS } from '#network/routeros/cliente'
 
 /**
  * Datos de `network.routers` que hacen falta para hablar con su API REST. `api_password` va cifrada
