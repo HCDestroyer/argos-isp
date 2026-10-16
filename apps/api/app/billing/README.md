@@ -143,6 +143,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Archivo: JPG, PNG, WebP o PDF de hasta 5 MB, con el tipo decidido por los primeros bytes (sin dependencias). Se guarda en `COMPROBANTES_DIR` (por defecto `apps/api/storage/comprobantes`, ruta `AAAA/MM/<uuid>.<ext>`), nunca en la base; la auditoría guarda nombre y tamaño, no el contenido. 422 `archivo` con `rule` `tipo`, `tamano` o `required`.
 - Referencia única: 409 `referencia_duplicada` si ya es un pago (mismo método y cuenta) o si otro comprobante pendiente la tiene (índice parcial `comprobantes_referencia_pendiente`). Uno rechazado la libera.
 - Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
+- Cola (`GET /comprobantes`): filtros `estado`, `cliente_id`, `metodo`, `cuenta_bancaria_id`, `desde`/`hasta` (fecha de depósito, inclusive) y `resumen { total, monto, pendientes, monto_pendiente }` con los mismos filtros y alcance (`pendientes` ignora `estado`: el contador del menú sale de `?limit=1`). Cada comprobante trae `verificado_por_nombre`.
 - Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
 
 ## Pasarela en línea (semana 2, `pasarelas/`)

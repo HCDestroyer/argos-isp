@@ -317,7 +317,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Cola de comprobantes de depósito (portal y panel) */
+        /**
+         * Cola de comprobantes de depósito (portal y panel)
+         * @description Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.
+         */
         get: operations["comprobantesListar"];
         put?: never;
         post?: never;
@@ -2870,6 +2873,8 @@ export interface components {
             registrado_por: number | null;
             /** @description Quién lo aprobó o rechazó */
             verificado_por: number | null;
+            /** @description Nombre de quien lo aprobó o rechazó */
+            verificado_por_nombre?: string | null;
             /** Format: date-time */
             verificado_en: string | null;
             /** @description Solo al aprobar: el pago registrado (aplicaciones y servicios) */
@@ -3288,6 +3293,11 @@ export interface components {
             cargo: components["schemas"]["Dinero"];
             abono: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
+        };
+        PaginaComprobantes: {
+            data: components["schemas"]["Comprobante"][];
+            nextCursor: string | null;
+            resumen: components["schemas"]["ResumenComprobantes"];
         };
         Pago: {
             id: number;
@@ -4221,6 +4231,16 @@ export interface components {
             estado: string;
             /** @description cobro_desconocido o cobro_ya_pagado */
             ignorado?: string;
+        };
+        ResumenComprobantes: {
+            /** @description Comprobantes que cumplen todos los filtros (todas las páginas) */
+            total: number;
+            /** @description Suma de sus montos */
+            monto: components["schemas"]["Dinero"];
+            /** @description Pendientes con los demás filtros, sin importar estado (contador del menú) */
+            pendientes: number;
+            /** @description Suma de los montos pendientes */
+            monto_pendiente: components["schemas"]["Dinero"];
         };
         ResumenDashboard: {
             servicios: {
@@ -5793,6 +5813,13 @@ export interface operations {
                 limit?: number;
                 estado?: "pendiente" | "aprobado" | "rechazado";
                 cliente_id?: number;
+                metodo?: "deposito" | "transferencia" | "ach" | "remesa";
+                /** @description Cuenta bancaria propia de destino */
+                cuenta_bancaria_id?: number;
+                /** @description Fecha de depósito desde (inclusive) */
+                desde?: string;
+                /** @description Fecha de depósito hasta (inclusive) */
+                hasta?: string;
             };
             header?: never;
             path?: never;
@@ -5806,10 +5833,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Comprobante"][];
-                        nextCursor: string | null;
-                    };
+                    "application/json": components["schemas"]["PaginaComprobantes"];
                 };
             };
             /** @description No autenticado */

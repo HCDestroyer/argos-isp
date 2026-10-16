@@ -256,6 +256,10 @@ export const listarComprobantesValidator = vine.compile(
         ...reglasPaginacion,
         estado: vine.enum(['pendiente', 'aprobado', 'rechazado'] as const).optional(),
         cliente_id: idEntidad().optional(),
+        metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const).optional(),
+        cuenta_bancaria_id: idEntidad().optional().meta({ description: 'Cuenta bancaria propia de destino' }),
+        desde: fechaIso().optional().meta({ description: 'Fecha de depósito desde (inclusive)' }),
+        hasta: fechaIso().optional().meta({ description: 'Fecha de depósito hasta (inclusive)' }),
     }),
 )
 

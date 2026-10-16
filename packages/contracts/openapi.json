@@ -2299,6 +2299,7 @@
       "get": {
         "operationId": "comprobantesListar",
         "summary": "Cola de comprobantes de depósito (portal y panel)",
+        "description": "Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.",
         "tags": [
           "pagos"
         ],
@@ -2350,6 +2351,52 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "deposito",
+                "transferencia",
+                "ach",
+                "remesa"
+              ]
+            }
+          },
+          {
+            "name": "cuenta_bancaria_id",
+            "in": "query",
+            "required": false,
+            "description": "Cuenta bancaria propia de destino",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de depósito desde (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de depósito hasta (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
           }
         ],
         "responses": {
@@ -2358,25 +2405,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "data",
-                    "nextCursor"
-                  ],
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Comprobante"
-                      }
-                    },
-                    "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
+                  "$ref": "#/components/schemas/PaginaComprobantes"
                 }
               }
             }
@@ -19252,6 +19281,13 @@
             "minimum": 1,
             "description": "Quién lo aprobó o rechazó"
           },
+          "verificado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien lo aprobó o rechazó"
+          },
           "verificado_en": {
             "type": [
               "string",
@@ -20932,6 +20968,31 @@
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "PaginaComprobantes": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor",
+          "resumen"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comprobante"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resumen": {
+            "$ref": "#/components/schemas/ResumenComprobantes"
           }
         }
       },
@@ -24862,6 +24923,33 @@
           "ignorado": {
             "type": "string",
             "description": "cobro_desconocido o cobro_ya_pagado"
+          }
+        }
+      },
+      "ResumenComprobantes": {
+        "type": "object",
+        "required": [
+          "total",
+          "monto",
+          "pendientes",
+          "monto_pendiente"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Comprobantes que cumplen todos los filtros (todas las páginas)"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de sus montos"
+          },
+          "pendientes": {
+            "type": "integer",
+            "description": "Pendientes con los demás filtros, sin importar estado (contador del menú)"
+          },
+          "monto_pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de los montos pendientes"
           }
         }
       },

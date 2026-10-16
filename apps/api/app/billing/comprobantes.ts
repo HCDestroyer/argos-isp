@@ -44,6 +44,7 @@ export interface ComprobanteVista {
     pago_id: number | null
     registrado_por: number | null
     verificado_por: number | null
+    verificado_por_nombre: string | null
     verificado_en: Date | null
     version: number
     created_at: Date
@@ -57,6 +58,7 @@ function consulta(cliente: QueryClientContract) {
         .join('billing.cuentas_bancarias as cb', 'cb.id', 'k.cuenta_bancaria_id')
         .join('billing.bancos as bd', 'bd.id', 'cb.banco_id')
         .leftJoin('billing.bancos as bo', 'bo.id', 'k.banco_origen_id')
+        .leftJoin('core.usuarios as uv', 'uv.id', 'k.verificado_por')
         .select(
             'k.id',
             'k.cliente_id',
@@ -80,6 +82,7 @@ function consulta(cliente: QueryClientContract) {
             'k.pago_id',
             'k.registrado_por',
             'k.verificado_por',
+            'uv.nombre as verificado_por_nombre',
             'k.verificado_en',
             'k.version',
             'k.created_at',
@@ -99,6 +102,12 @@ export async function verComprobante(
 export interface FiltrosComprobantes extends OpcionesPaginacion {
     estado?: EstadoComprobante
     cliente_id?: number
+    metodo?: MetodoComprobante
+    cuenta_bancaria_id?: number
+    /** Fecha de depósito desde (YYYY-MM-DD, inclusive) */
+    desde?: string
+    /** Fecha de depósito hasta (YYYY-MM-DD, inclusive) */
+    hasta?: string
 }
 
 /** Alcance: zona del cliente o router de alguno de sus servicios (igual que el cliente). */
@@ -113,12 +122,68 @@ const dimensionesComprobante: FiltrosDimension = {
         ),
 }
 
+type ConsultaComprobantes = ReturnType<typeof consulta>
+
+/** Filtros comunes a la lista y al resumen, menos `estado` (el resumen cuenta pendientes aparte). */
+function aplicarFiltros<Q extends ConsultaComprobantes>(
+    q: Q,
+    filtros: Omit<FiltrosComprobantes, 'estado'>,
+    alcance?: Alcance,
+): Q {
+    q.if(filtros.cliente_id, (w) => w.where('k.cliente_id', filtros.cliente_id!))
+        .if(filtros.metodo, (w) => w.where('k.metodo', filtros.metodo!))
+        .if(filtros.cuenta_bancaria_id, (w) => w.where('k.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
+        .if(filtros.desde, (w) => w.where('k.fecha_deposito', '>=', filtros.desde!))
+        .if(filtros.hasta, (w) => w.where('k.fecha_deposito', '<=', filtros.hasta!))
+    filtrarPorAlcance(q, alcance, dimensionesComprobante)
+    return q
+}
+
 export async function listarComprobantes(filtros: FiltrosComprobantes, alcance?: Alcance) {
-    const lista = consulta(db.connection())
-        .if(filtros.estado, (q) => q.where('k.estado', filtros.estado!))
-        .if(filtros.cliente_id, (q) => q.where('k.cliente_id', filtros.cliente_id!))
-    filtrarPorAlcance(lista, alcance, dimensionesComprobante)
+    const lista = aplicarFiltros(consulta(db.connection()), filtros, alcance).if(filtros.estado, (q) =>
+        q.where('k.estado', filtros.estado!),
+    )
     return paginar<ComprobanteVista>(lista, filtros, { columna: 'k.id' })
+}
+
+export interface ResumenComprobantes {
+    /** Comprobantes que cumplen todos los filtros (todas las páginas) */
+    total: number
+    /** Suma de sus montos */
+    monto: string
+    /** Pendientes que cumplen los demás filtros, sin importar `estado` (contador del menú) */
+    pendientes: number
+    /** Suma de los montos pendientes */
+    monto_pendiente: string
+}
+
+/**
+ * Totales de la cola con los mismos filtros y alcance que la lista. `pendientes` ignora el
+ * filtro `estado`, para que el contador del menú salga de cualquier página de la cola.
+ */
+export async function resumenComprobantes(
+    filtros: FiltrosComprobantes,
+    alcance?: Alcance,
+): Promise<ResumenComprobantes> {
+    const base = aplicarFiltros(consulta(db.connection()), filtros, alcance)
+    const fila = (await db
+        .from(base.as('k'))
+        .select(
+            db.raw(`count(*) FILTER (WHERE ?::text IS NULL OR k.estado = ?::text)::int AS total`, [
+                filtros.estado ?? null,
+                filtros.estado ?? null,
+            ]),
+            db.raw(
+                `coalesce(sum(k.monto) FILTER (WHERE ?::text IS NULL OR k.estado = ?::text), 0)::numeric(14, 2)::text AS monto`,
+                [filtros.estado ?? null, filtros.estado ?? null],
+            ),
+            db.raw(`count(*) FILTER (WHERE k.estado = 'pendiente')::int AS pendientes`),
+            db.raw(
+                `coalesce(sum(k.monto) FILTER (WHERE k.estado = 'pendiente'), 0)::numeric(14, 2)::text AS monto_pendiente`,
+            ),
+        )
+        .first()) as ResumenComprobantes
+    return fila
 }
 
 /** Dimensiones de alcance de un comprobante: las de su cliente. */

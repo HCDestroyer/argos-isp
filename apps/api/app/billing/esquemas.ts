@@ -368,12 +368,35 @@ export const Comprobante = definirEsquema(
             pago_id: { ...nulable(id), description: 'Pago creado al aprobarlo' },
             registrado_por: nulable(id),
             verificado_por: { ...nulable(id), description: 'Quién lo aprobó o rechazó' },
+            verificado_por_nombre: { ...nulable(texto), description: 'Nombre de quien lo aprobó o rechazó' },
             verificado_en: nulable(instante),
             pago: { ...Pago, description: 'Solo al aprobar: el pago registrado (aplicaciones y servicios)' },
             ...auditable,
         },
-        ['pago'],
+        ['pago', 'verificado_por_nombre'],
     ),
+)
+
+export const ResumenComprobantes = definirEsquema(
+    'ResumenComprobantes',
+    objeto({
+        total: { ...entero, description: 'Comprobantes que cumplen todos los filtros (todas las páginas)' },
+        monto: { ...Dinero, description: 'Suma de sus montos' },
+        pendientes: {
+            ...entero,
+            description: 'Pendientes con los demás filtros, sin importar estado (contador del menú)',
+        },
+        monto_pendiente: { ...Dinero, description: 'Suma de los montos pendientes' },
+    }),
+)
+
+export const PaginaComprobantes = definirEsquema(
+    'PaginaComprobantes',
+    objeto({
+        data: lista(Comprobante),
+        nextCursor: { type: ['string', 'null'] },
+        resumen: ResumenComprobantes,
+    }),
 )
 
 /** Respuesta binaria: la foto o el PDF del comprobante. */

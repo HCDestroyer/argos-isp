@@ -41,6 +41,7 @@ import {
     archivoDeComprobante,
     dimensionesDeComprobante,
     listarComprobantes,
+    resumenComprobantes,
     verComprobante,
 } from '#billing/comprobantes'
 import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
@@ -87,6 +88,7 @@ import {
     ResultadoWebhookPasarela,
     ArchivoComprobante,
     Comprobante,
+    PaginaComprobantes,
     EstadoCuenta,
     Banco,
     CuentaBancaria,
@@ -443,8 +445,13 @@ const comprobantes: Ruta[] = [
         etiqueta: 'pagos',
         permiso: 'comprobantes.ver',
         query: v.listarComprobantesValidator,
-        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(Comprobante) },
-        handler: (ctx, { query }) => listarComprobantes(query, ctx.alcance),
+        descripcion:
+            'Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.',
+        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: PaginaComprobantes },
+        handler: async (ctx, { query }) => ({
+            ...(await listarComprobantes(query, ctx.alcance)),
+            resumen: await resumenComprobantes(query, ctx.alcance),
+        }),
     }),
     definirRuta({
         metodo: 'get',
