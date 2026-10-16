@@ -177,9 +177,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Solo node para scripts/demo/datos.mjs (sin dependencias); sin caché de pnpm, que no se instala aquí
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
+          package-manager-cache: false
 
       - name: infra/backups/ensayo.sh --demo
         run: infra/backups/ensayo.sh --demo --construir
