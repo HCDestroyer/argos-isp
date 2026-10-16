@@ -93,23 +93,51 @@ export const Zona = definirEsquema('Zona', objeto({ id, nombre: texto, ...audita
 
 export const Cliente = definirEsquema(
     'Cliente',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            tipo: enumerado(['persona', 'empresa']),
+            nit_cui: nulable(texto),
+            nombre_fiscal: nulable(texto),
+            direccion_fiscal: nulable(texto),
+            email: nulable(texto),
+            telefono: nulable(texto),
+            movil: nulable(texto),
+            direccion: nulable(texto),
+            coordenadas: nulable(texto),
+            zona_id: nulable(id),
+            campos_personalizados: jsonLibre,
+            canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
+            telegram_chat_id: nulable(texto),
+            responsable_pago_id: {
+                ...nulable(id),
+                description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
+            },
+            responsable_pago_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del responsable de pago (solo lectura)',
+            },
+            ...auditable,
+        },
+        ['responsable_pago_id', 'responsable_pago_nombre'],
+    ),
+)
+
+/** Fila de `GET /clientes/:id/dependientes`. */
+export const DependientePago = definirEsquema(
+    'DependientePago',
     objeto({
         id,
         nombre: texto,
-        tipo: enumerado(['persona', 'empresa']),
         nit_cui: nulable(texto),
-        nombre_fiscal: nulable(texto),
-        direccion_fiscal: nulable(texto),
-        email: nulable(texto),
-        telefono: nulable(texto),
-        movil: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        zona_id: nulable(id),
-        campos_personalizados: jsonLibre,
-        canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
-        telegram_chat_id: nulable(texto),
-        ...auditable,
+        servicios: { type: 'integer', minimum: 0, description: 'Servicios no retirados' },
+        estado_servicio: {
+            ...nulable(enumerado(['activo', 'limitado', 'suspendido', 'retirado'])),
+            description:
+                'Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); ' +
+                'retirado si todos lo están; null sin servicios',
+        },
     }),
 )
 
