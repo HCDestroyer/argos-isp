@@ -21682,6 +21682,8 @@
           "monto_maximo",
           "monto_sugerido",
           "abono_inicial",
+          "deuda_maxima",
+          "pago_previo",
           "requiere_aprobacion"
         ],
         "properties": {
@@ -21796,6 +21798,41 @@
               }
             },
             "description": "La plantilla exige abonar este porcentaje de la deuda antes de prometer"
+          },
+          "deuda_maxima": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "maximo",
+              "vencida",
+              "faltante"
+            ],
+            "properties": {
+              "maximo": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "vencida": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "faltante": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Lo que hay que pagar para quedar dentro del máximo"
+              }
+            },
+            "description": "La plantilla no admite promesas con más deuda vencida que `maximo`"
+          },
+          "pago_previo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada"
           },
           "requiere_aprobacion": {
             "type": "boolean",

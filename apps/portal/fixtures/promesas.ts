@@ -24,7 +24,19 @@ export function condicionesFixture(): Schema<'PortalCondicionesPromesa'> {
         monto_maximo: '525.00',
         monto_sugerido: '350.00',
         abono_inicial: null,
+        deuda_maxima: null,
+        pago_previo: null,
         requiere_aprobacion: false,
+    }
+}
+
+/** La plantilla pide abonar el 50 % y admite hasta Q300.00 vencidos: hay que pagar Q262.50 antes. */
+export function condicionesConPagoPrevioFixture(): Schema<'PortalCondicionesPromesa'> {
+    return {
+        ...condicionesFixture(),
+        abono_inicial: { porcentaje: 50, requerido: '262.50', abonado: '0.00', faltante: '262.50' },
+        deuda_maxima: { maximo: '300.00', vencida: '350.00', faltante: '50.00' },
+        pago_previo: '262.50',
     }
 }
 

@@ -5,8 +5,8 @@ import { Conflicto, NoEncontrado, Problema, ReglaNegocio } from '#shared/errores
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
-import { datosEvaluacion, type ResultadoEvaluacion } from '#billing/promesas'
-import { sumarDias } from '#billing/periodos'
+import type { ResultadoEvaluacion } from '#billing/promesas'
+import { limitesPromesa, type LimitesPromesa } from '#billing/simulador_promesas'
 import type { ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
 import { resolverServicio, type EstadoServicio } from '#portal/consultas'
 import { exigirSesionPortal } from '#portal/acceso/sesion'
@@ -16,10 +16,9 @@ import { exigirSesionPortal } from '#portal/acceso/sesion'
  * siempre de `CrearPromesaPago` (A3) con canal `portal`. Aquí solo vive:
  *
  * - `servicioDeLaPeticion`: qué servicio pide la promesa (IP de origen o sesión del portal).
- * - `condicionesPromesa`: los límites que se muestran **antes** de enviar (plazo máximo, fecha
- *   máxima, monto máximo, abono inicial), leídos de las reglas de la plantilla con las consultas
- *   de solo lectura de A3. Es solo presentación: si no coincide, manda la evaluación de A3.
- *   Pedido a A3 en `.claude/integration/a5.md` una consulta oficial de límites para no duplicarlos.
+ * - `condicionesPromesa`: los límites que se muestran **antes** de enviar (plazo y fecha máximos,
+ *   monto máximo, abono inicial, deuda máxima, cupo), de `limitesPromesa()` de A3: la misma
+ *   evaluación que `CrearPromesaPago`, sin reglas copiadas aquí.
  * - `promesaParaCliente`: la respuesta sin datos internos, con el motivo en palabras del cliente
  *   (nunca el código de la regla).
  */
@@ -81,6 +80,8 @@ export interface CondicionesPromesa {
     monto_maximo: string | null
     monto_sugerido: string | null
     abono_inicial: { porcentaje: number; requerido: string; abonado: string; faltante: string } | null
+    deuda_maxima: { maximo: string; vencida: string; faltante: string } | null
+    pago_previo: string | null
     requiere_aprobacion: boolean
 }
 
@@ -94,6 +95,8 @@ const NO_DISPONIBLE = (motivo: string, extra: Partial<CondicionesPromesa> = {}):
     monto_maximo: null,
     monto_sugerido: null,
     abono_inicial: null,
+    deuda_maxima: null,
+    pago_previo: null,
     requiere_aprobacion: false,
     ...extra,
 })
@@ -101,9 +104,17 @@ const NO_DISPONIBLE = (motivo: string, extra: Partial<CondicionesPromesa> = {}):
 const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
 
 /**
- * Límites que aplican a una promesa del canal `portal` para el servicio, hoy. Solo lectura.
- * No adelanta reglas que dependen del historial (cupo del periodo, cumplimiento, bloqueo tras
- * incumplida): esas las dice el resultado de `CrearPromesaPago`.
+ * Límites que aplican a una promesa del canal `portal` para el servicio, hoy. Solo lectura y sin
+ * reglas propias: salen de `limitesPromesa()` de A3 (la misma evaluación que `CrearPromesaPago`).
+ * Aquí solo se traducen al cliente:
+ *
+ * - plazo y fecha máxima (con `no_exceder_siguiente_facturacion`), monto máximo = deuda pendiente;
+ * - `abono_inicial` y `deuda_maxima`, y `pago_previo`: lo que debe pagar antes de que la promesa
+ *   pueda aprobarse (el mayor de los dos faltantes). El portal no deja enviar mientras sea > 0;
+ * - cupo del periodo agotado o canal cerrado: no disponible, con el motivo.
+ *
+ * Las reglas de historial (cumplimiento, bloqueo tras incumplida, antigüedad) no se adelantan:
+ * las dice el resultado de `CrearPromesaPago`.
  */
 export async function condicionesPromesa(
     servicioId: number,
@@ -113,10 +124,6 @@ export async function condicionesPromesa(
     const servicio = await leerServicio(cliente, servicioId)
     if (servicio.estado === 'retirado') {
         return NO_DISPONIBLE('Tu servicio está dado de baja.')
-    }
-    const config = await configuracionDeServicio(cliente, servicio)
-    if (!config) {
-        return NO_DISPONIBLE(`No podemos registrar promesas para tu servicio desde aquí. ${CONTACTANOS}`)
     }
 
     const abierta = (await cliente
@@ -135,54 +142,71 @@ export async function condicionesPromesa(
         )
     }
 
-    const reglas = config.reglas_promesa
-    const canal = reglas.canales.portal
-    if (!reglas.habilitadas || !canal.permitido) {
-        return NO_DISPONIBLE(`Las promesas de pago no están disponibles desde esta página. ${CONTACTANOS}`)
+    let limites: LimitesPromesa
+    try {
+        limites = await limitesPromesa(servicioId, 'portal', ahora, cliente)
+    } catch (error) {
+        if (error instanceof Problema && error.code === 'E_SIN_PLANTILLA') {
+            return NO_DISPONIBLE(`No podemos registrar promesas para tu servicio desde aquí. ${CONTACTANOS}`)
+        }
+        throw error
     }
 
-    const datos = await datosEvaluacion(cliente, servicio, config, {
-        canal: 'portal',
-        vence_en: ahora,
-        ahora,
-    })
-    if (datos.deuda.pendiente.lte(0)) {
+    if (!limites.habilitadas || !limites.permitido) {
+        return NO_DISPONIBLE(`Las promesas de pago no están disponibles desde esta página. ${CONTACTANOS}`)
+    }
+    const pendiente = dec(limites.deuda_pendiente)
+    if (pendiente.lte(0)) {
         return NO_DISPONIBLE('No tienes saldo pendiente: no necesitas una promesa de pago.')
+    }
+    if (limites.en_periodo >= limites.max_por_periodo) {
+        return NO_DISPONIBLE(`Ya usaste las promesas de pago disponibles para este periodo. ${CONTACTANOS}`)
     }
 
     const hoy = hoyGuatemala(ahora)
-    const plazo = canal.plazo_max_dias ?? reglas.plazo_max_dias
-    let fechaMaxima = sumarDias(hoy, plazo)
-    if (reglas.no_exceder_siguiente_facturacion && datos.siguiente_facturacion) {
-        const antesDeFacturar = sumarDias(datos.siguiente_facturacion, -1)
-        if (antesDeFacturar < fechaMaxima) fechaMaxima = antesDeFacturar
-    }
-    if (fechaMaxima < hoy) fechaMaxima = hoy
+    const fechaMaxima = limites.fecha_maxima < hoy ? hoy : limites.fecha_maxima
 
-    let abono: CondicionesPromesa['abono_inicial'] = null
-    if (reglas.abono_inicial_pct > 0) {
-        const requerido = datos.deuda.total_pendientes.times(reglas.abono_inicial_pct).div(100)
-        const faltante = requerido.minus(datos.deuda.pagado_pendientes)
-        abono = {
-            porcentaje: reglas.abono_inicial_pct,
-            requerido: aTexto(requerido),
-            abonado: aTexto(datos.deuda.pagado_pendientes),
-            faltante: aTexto(faltante.gt(0) ? faltante : CERO),
+    const config = await configuracionDeServicio(cliente, servicio)
+    const porcentaje = config?.reglas_promesa.abono_inicial_pct ?? 0
+    const requerido = dec(limites.abono_requerido)
+    const abonado = dec(limites.abono_pagado)
+    const faltaAbono = requerido.minus(abonado)
+    const abono: CondicionesPromesa['abono_inicial'] =
+        porcentaje > 0
+            ? {
+                  porcentaje,
+                  requerido: aTexto(requerido),
+                  abonado: aTexto(abonado),
+                  faltante: aTexto(faltaAbono.gt(0) ? faltaAbono : CERO),
+              }
+            : null
+
+    const vencida = dec(limites.deuda_vencida)
+    let deudaMaxima: CondicionesPromesa['deuda_maxima'] = null
+    if (limites.deuda_maxima !== null) {
+        const exceso = vencida.minus(dec(limites.deuda_maxima))
+        deudaMaxima = {
+            maximo: aTexto(dec(limites.deuda_maxima)),
+            vencida: aTexto(vencida),
+            faltante: aTexto(exceso.gt(0) ? exceso : CERO),
         }
     }
+    const faltantes = [abono?.faltante, deudaMaxima?.faltante].filter((f): f is string => f !== undefined)
+    const previo = faltantes.map(dec).reduce((mayor, f) => (f.gt(mayor) ? f : mayor), CERO)
 
-    const sugerido = datos.deuda.vencida.gt(0) ? datos.deuda.vencida : datos.deuda.pendiente
     return {
         disponible: true,
         motivo: null,
         promesa_abierta: null,
         fecha_minima: hoy,
         fecha_maxima: fechaMaxima,
-        plazo_max_dias: plazo,
-        monto_maximo: aTexto(datos.deuda.pendiente),
-        monto_sugerido: aTexto(sugerido),
+        plazo_max_dias: limites.plazo_max_dias,
+        monto_maximo: aTexto(pendiente),
+        monto_sugerido: aTexto(vencida.gt(0) ? vencida : pendiente),
         abono_inicial: abono,
-        requiere_aprobacion: canal.requiere_aprobacion,
+        deuda_maxima: deudaMaxima,
+        pago_previo: previo.gt(0) ? aTexto(previo) : null,
+        requiere_aprobacion: limites.requiere_aprobacion,
     }
 }
 

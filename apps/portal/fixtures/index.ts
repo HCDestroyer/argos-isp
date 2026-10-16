@@ -24,6 +24,7 @@ import { EMPRESA_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import {
+    condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
     condicionesFixture,
     promesaSolicitadaFixture,
@@ -47,8 +48,8 @@ let consultasEstado = 0
  * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
  * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
  */
-type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa'
-const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa']
+type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa' | 'con_pago_previo'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa', 'con_pago_previo']
 const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
 
 export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {
@@ -254,7 +255,9 @@ export const rutasFixture: RutasFixture = {
             status: 200,
             cuerpo: escenarioPromesa() === 'con_promesa' || promesa.aprobada
                 ? condicionesConPromesaFixture()
-                : condicionesFixture(),
+                : escenarioPromesa() === 'con_pago_previo'
+                    ? condicionesConPagoPrevioFixture()
+                    : condicionesFixture(),
         }
     },
     'POST /api/v1/portal/promesas': ({ cuerpo }) => {
@@ -282,7 +285,7 @@ export const rutasFixture: RutasFixture = {
         }
         return {
             status: 201,
-            cuerpo: promesaSolicitadaFixture(escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
+            cuerpo: promesaSolicitadaFixture(escenario === 'con_pago_previo' ? 'rechazada' : escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
         }
     },
     'POST /api/v1/portal/pagos/iniciar': ({ cuerpo }) => {

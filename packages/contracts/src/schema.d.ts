@@ -3505,6 +3505,15 @@ export interface components {
                 abonado: components["schemas"]["Dinero"];
                 faltante: components["schemas"]["Dinero"];
             } | null;
+            /** @description La plantilla no admite promesas con más deuda vencida que `maximo` */
+            deuda_maxima: {
+                maximo: components["schemas"]["Dinero"];
+                vencida: components["schemas"]["Dinero"];
+                /** @description Lo que hay que pagar para quedar dentro del máximo */
+                faltante: components["schemas"]["Dinero"];
+            } | null;
+            /** @description Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada */
+            pago_previo: components["schemas"]["Dinero"] | null;
             /** @description La promesa quedará pendiente de aprobación */
             requiere_aprobacion: boolean;
         };

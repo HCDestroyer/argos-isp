@@ -259,6 +259,24 @@ export const PortalCondicionesPromesa = definirEsquema(
             ),
             description: 'La plantilla exige abonar este porcentaje de la deuda antes de prometer',
         },
+        deuda_maxima: {
+            ...nulable(
+                objeto({
+                    maximo: Dinero,
+                    vencida: Dinero,
+                    faltante: {
+                        ...Dinero,
+                        description: 'Lo que hay que pagar para quedar dentro del máximo',
+                    },
+                }),
+            ),
+            description: 'La plantilla no admite promesas con más deuda vencida que `maximo`',
+        },
+        pago_previo: {
+            ...nulable(Dinero),
+            description:
+                'Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada',
+        },
         requiere_aprobacion: { ...booleano, description: 'La promesa quedará pendiente de aprobación' },
     }),
 )
