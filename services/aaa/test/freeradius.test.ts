@@ -182,6 +182,7 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
                 'Mikrotik-Rate-Limit': '1024k/2048k',
                 'Framed-Pool': 'argos-v4-pppoe',
                 'Framed-IPv6-Pool': 'argos-v6-enlace',
+                'Delegated-IPv6-Prefix-Pool': 'argos-v6-pd',
                 'Mikrotik-Delegated-IPv6-Pool': 'argos-v6-pd',
                 'Acct-Interim-Interval': '300',
             })

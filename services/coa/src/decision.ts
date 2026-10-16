@@ -46,6 +46,13 @@ export interface ServicioActual {
     bajada_limitada_kbps: number
     /** `planes_routers.rate_limit_override` del router del servicio */
     rate_limit_override: string | null
+    /**
+     * Cadenas completas de `Mikrotik-Rate-Limit` que calcula A1 (`apps/api/app/network/velocidad.ts`)
+     * y publica en `aaa:user:<user_ppp>`: las mismas que entrega `aaa` al conectar. Si faltan, se
+     * arma `subida/bajada` como antes.
+     */
+    rate_limit?: string | null
+    rate_limit_limitado?: string | null
 }
 
 export type AtributosCoa = Record<string, string>
@@ -69,8 +76,19 @@ function rateLimit(subida: number, bajada: number): string {
 export function rateLimitDe(servicio: ServicioActual): string | null {
     switch (servicio.estado) {
         case 'activo':
-            return servicio.rate_limit_override ?? rateLimit(servicio.subida_kbps, servicio.bajada_kbps)
+            return (
+                servicio.rate_limit ??
+                servicio.rate_limit_override ??
+                rateLimit(servicio.subida_kbps, servicio.bajada_kbps)
+            )
         case 'limitado':
+            if (
+                servicio.rate_limit_limitado &&
+                servicio.subida_limitada_kbps > 0 &&
+                servicio.bajada_limitada_kbps > 0
+            ) {
+                return servicio.rate_limit_limitado
+            }
             return servicio.subida_limitada_kbps > 0 && servicio.bajada_limitada_kbps > 0
                 ? rateLimit(servicio.subida_limitada_kbps, servicio.bajada_limitada_kbps)
                 : rateLimit(servicio.subida_kbps, servicio.bajada_kbps)

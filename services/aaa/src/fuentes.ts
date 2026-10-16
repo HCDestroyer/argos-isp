@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises'
+import { Agent as AgenteHttp, request as solicitudHttp } from 'node:http'
+import { Agent as AgenteHttps, request as solicitudHttps } from 'node:https'
 import type { Redis } from 'ioredis'
 import { cifrar } from './cifrado.ts'
 import { parsearRegistro, type RegistroAaa } from './servicio.ts'
@@ -18,43 +20,105 @@ export interface FuenteRespaldo {
 
 export class ErrorFuente extends Error {}
 
-/** `GET <API_INTERNAL_URL>internal/aaa/servicio?user_ppp=` con `Authorization: Bearer`; la base termina en `/api/v1/`. */
+/**
+ * `GET <API_INTERNAL_URL>internal/aaa/servicio?user_ppp=` con `Authorization: Bearer`; la base termina en `/api/v1/`.
+ *
+ * Conexiones keep-alive y acotadas (`conexiones`, por defecto 16): en una reconexión masiva con
+ * Redis vacío llegan cientos de consultas a la vez; abrir un socket por consulta (como hacía `fetch`)
+ * saturaba la API con handshakes y la hacía pasar del timeout (prueba de carga, semana 2). Las que
+ * esperan socket cuentan dentro del mismo `timeoutMs`.
+ */
 export class FuenteApi implements FuenteRespaldo {
     readonly nombre = 'api' as const
-    private readonly url: string
+    private readonly base: string
     private readonly token: string
     private readonly timeoutMs: number
+    private readonly agente: AgenteHttp | AgenteHttps
 
-    constructor(opciones: { url: string; token: string; timeoutMs: number }) {
-        this.url = opciones.url
+    constructor(opciones: { url: string; token: string; timeoutMs: number; conexiones?: number }) {
+        // Ruta relativa: la base incluye el prefijo de la API (`…/api/v1/`). Con una ruta absoluta
+        // `new URL` descartaba `/api/v1` y cada consulta daba 404 (= usuario inexistente → Reject).
+        this.base = opciones.url.endsWith('/') ? opciones.url : `${opciones.url}/`
         this.token = opciones.token
         this.timeoutMs = opciones.timeoutMs
+        const conexiones = {
+            keepAlive: true,
+            maxSockets: opciones.conexiones ?? 16,
+            maxFreeSockets: opciones.conexiones ?? 16,
+        }
+        this.agente = this.base.startsWith('https:')
+            ? new AgenteHttps(conexiones)
+            : new AgenteHttp(conexiones)
     }
 
     async obtener(userPpp: string): Promise<RegistroAaa | null> {
-        // Ruta relativa: la base incluye el prefijo de la API (`…/api/v1/`). Con una ruta absoluta
-        // `new URL` descartaba `/api/v1` y cada consulta daba 404 (= usuario inexistente → Reject).
-        const base = this.url.endsWith('/') ? this.url : `${this.url}/`
-        const url = new URL('internal/aaa/servicio', base)
+        const url = new URL('internal/aaa/servicio', this.base)
         url.searchParams.set('user_ppp', userPpp)
-        let res: Response
+        const { status, cuerpo } = await this.get(url)
+        if (status === 404) return null
+        if (status !== 200) throw new ErrorFuente(`API interna respondió ${status}`)
+        let datos: unknown
         try {
-            res = await fetch(url, {
-                headers: { authorization: `Bearer ${this.token}`, accept: 'application/json' },
-                signal: AbortSignal.timeout(this.timeoutMs),
+            datos = JSON.parse(cuerpo)
+        } catch {
+            throw new ErrorFuente('API interna respondió JSON inválido')
+        }
+        return parsearRegistro(datos)
+    }
+
+    /**
+     * Abre las conexiones keep-alive (y calienta la ruta de la API) al arrancar, con consultas de un
+     * usuario que no existe: así la primera ráfaga de autorizaciones no paga los handshakes.
+     */
+    async calentar(): Promise<void> {
+        const url = new URL('internal/aaa/servicio', this.base)
+        url.searchParams.set('user_ppp', '__argosisp_calentamiento__')
+        const conexiones = this.agente.maxSockets
+        await Promise.allSettled(
+            Array.from({ length: Number.isFinite(conexiones) ? conexiones : 4 }, () => this.get(url)),
+        )
+    }
+
+    cerrar(): void {
+        this.agente.destroy()
+    }
+
+    private get(url: URL): Promise<{ status: number; cuerpo: string }> {
+        const solicitar = url.protocol === 'https:' ? solicitudHttps : solicitudHttp
+        return new Promise((resolver, rechazar) => {
+            const req = solicitar(
+                url,
+                {
+                    agent: this.agente,
+                    headers: { authorization: `Bearer ${this.token}`, accept: 'application/json' },
+                },
+                (res) => {
+                    const partes: Buffer[] = []
+                    res.on('data', (c: Buffer) => partes.push(c))
+                    res.on('end', () => {
+                        clearTimeout(reloj)
+                        resolver({
+                            status: res.statusCode ?? 0,
+                            cuerpo: Buffer.concat(partes).toString('utf8'),
+                        })
+                    })
+                    res.on('error', (e) => {
+                        clearTimeout(reloj)
+                        rechazar(new ErrorFuente(`API interna no responde: ${e.name}`))
+                    })
+                },
+            )
+            // Un solo plazo para todo (esperar socket + respuesta), como el AbortSignal.timeout anterior.
+            const reloj = setTimeout(
+                () => req.destroy(Object.assign(new Error('timeout'), { name: 'TimeoutError' })),
+                this.timeoutMs,
+            )
+            req.on('error', (e) => {
+                clearTimeout(reloj)
+                rechazar(new ErrorFuente(`API interna no responde: ${e.name}`))
             })
-        } catch (e) {
-            throw new ErrorFuente(`API interna no responde: ${(e as Error).name}`)
-        }
-        if (res.status === 404) {
-            await res.body?.cancel()
-            return null
-        }
-        if (res.status !== 200) {
-            await res.body?.cancel()
-            throw new ErrorFuente(`API interna respondió ${res.status}`)
-        }
-        return parsearRegistro(await res.json())
+            req.end()
+        })
     }
 }
 

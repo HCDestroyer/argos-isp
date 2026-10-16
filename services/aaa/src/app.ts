@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
 import { ErrorAccounting, normalizarAccounting, type ColaAccounting } from './accounting.ts'
 import { descifrar } from './cifrado.ts'
@@ -5,6 +6,7 @@ import type { ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
 import { leerAtributos } from './radius.ts'
 import { esLapida } from './servicio.ts'
+import { MetricasAaa, scrapeAutorizado, type ResultadoAutorizacion } from './metricas.ts'
 
 /**
  * Servicio aaa: endpoints que llama FreeRADIUS (`freeradius/mods-enabled/rest`, `body = 'json'`).
@@ -28,6 +30,18 @@ export interface DependenciasApp {
     cola?: ColaAccounting
     /** Tiempo máximo para encolar (rlm_rest espera 2 s en accounting). */
     encolarTimeoutMs?: number
+    /** Contadores de `/metrics` (uno por proceso) */
+    metricas?: MetricasAaa
+    /** `METRICS_TOKEN`: si está, `/metrics` exige `Authorization: Bearer <token>` */
+    metricasToken?: string
+}
+
+/** Código HTTP de `/aaa/authorize` → resultado de la métrica (mismo mapeo que hace rlm_rest). */
+function resultadoAutorizacion(status: number): ResultadoAutorizacion {
+    if (status === 200) return 'accept'
+    if (status === 401) return 'reject'
+    if (status === 404) return 'notfound'
+    return 'error'
 }
 
 class TiempoAgotado extends Error {}
@@ -57,6 +71,30 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
         },
         // Una línea propia por autorización en lugar de dos por petición.
         logController: new LogController({ disableRequestLogging: true }),
+        // `request_id` en cada línea: el de `X-Request-Id` si viene (pruebas, otro proxy) o uno nuevo.
+        requestIdHeader: 'x-request-id',
+        requestIdLogLabel: 'request_id',
+        genReqId: () => randomUUID(),
+    })
+    const metricas = deps.metricas ?? new MetricasAaa()
+
+    app.addHook('onRequest', async (req, reply) => {
+        reply.header('x-request-id', req.id)
+    })
+
+    app.addHook('onResponse', async (req, reply) => {
+        if (req.routeOptions.url === '/aaa/authorize') {
+            metricas.autorizacion(resultadoAutorizacion(reply.statusCode), reply.elapsedTime / 1000)
+        }
+    })
+
+    app.get('/metrics', async (req, reply) => {
+        if (!scrapeAutorizado(deps.metricasToken, req.headers.authorization)) {
+            return problema(reply, 401, 'Token de métricas inválido')
+        }
+        return reply
+            .type('text/plain; version=0.0.4; charset=utf-8')
+            .send(metricas.exponer({ redisArriba: deps.redisListo ? deps.redisListo() : false }))
     })
 
     app.get('/health', async () => ({
@@ -132,9 +170,18 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
     })
 
     app.post('/aaa/post-auth', async (req, reply) => {
-        // No bloqueante (sites-enabled/default). Solo registra; el Accept/Reject ya lo decidió authorize.
+        // Solo en Access-Reject (sites-enabled/default), no bloqueante: registra el rechazo. Un Accept
+        // no pasa por aquí (la línea `authorize` ya lo registra).
         const atributos = leerAtributos(req.body)
-        req.log.debug({ usuario: atributos.get('User-Name') }, 'post-auth')
+        req.log.info(
+            {
+                usuario: atributos.get('User-Name'),
+                nas: atributos.get('NAS-IP-Address') ?? atributos.get('NAS-IPv6-Address'),
+                resultado: 'rechazado',
+                causa: atributos.get('Module-Failure-Message') ?? null,
+            },
+            'post-auth',
+        )
         return reply.code(204).send()
     })
 
@@ -157,6 +204,7 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
                 },
                 'accounting descartado',
             )
+            metricas.accounting(atributos.get('Acct-Status-Type') ?? 'desconocido', 'descartado')
             return reply.code(204).send()
         }
         if (!deps.cola) return problema(reply, 503, 'Cola de accounting no configurada')
@@ -172,6 +220,7 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
                 },
                 'accounting: no se pudo encolar',
             )
+            metricas.accounting(registro.tipo, 'error')
             return problema(reply, 503, 'Cola de accounting no disponible')
         }
         req.log.info(
@@ -184,6 +233,7 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
             },
             'accounting',
         )
+        metricas.accounting(registro.tipo, 'encolado')
         return reply.code(204).send()
     })
 

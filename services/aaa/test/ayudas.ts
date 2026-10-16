@@ -45,6 +45,8 @@ export function servicio(
             bajada_limitada_kbps: 2048,
             rate_limit_override: null,
             profile_ppp: null,
+            rate_limit: null,
+            rate_limit_limitado: null,
         },
         ipv4: { modo: 'estatico', ip: '10.10.1.10' },
         ipv6: {

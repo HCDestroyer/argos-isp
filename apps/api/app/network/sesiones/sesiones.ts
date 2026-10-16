@@ -15,7 +15,8 @@ import type { RegistroAccounting } from '#network/sesiones/registro'
  * - Prefijo delegado: RouterOS 7.24.5 no manda `Delegated-IPv6-Prefix` en accounting. En modo
  *   `radius_servicio` el prefijo es el que `aaa` entregó, así que se toma de la asignación vigente
  *   (`network.ipv6_asignaciones`); lo mismo con el /64 si el NAS no lo reporta. En `radius_pool`
- *   solo vale lo que reporte el NAS (pendiente de la semana 2).
+ *   vale lo que reporte el NAS y, si no reporta el /56, lo completa `CompletarPrefijoDelegado`
+ *   leyéndolo del router (`actions/completar_prefijo_delegado.ts`).
  */
 
 export interface FilaSesion {
@@ -256,4 +257,6 @@ export interface ResultadoAccounting {
     /** qué pasó con la fila */
     efecto: 'abierta' | 'actualizada' | 'cerrada' | 'creada_cerrada' | 'ignorada'
     eventos: Array<'sesion.iniciada' | 'sesion.terminada'>
+    /** El paquete trajo un prefijo IPv6 que la sesión no tenía (modo `radius_pool`) */
+    prefijoNuevo?: boolean
 }

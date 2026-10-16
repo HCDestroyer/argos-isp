@@ -6,7 +6,7 @@
 #  Flujo PPPoE (MikroTik → FreeRADIUS → aaa):
 #    authorize   → POST /aaa/authorize   (devuelve control:Cleartext-Password + atributos reply:)
 #    authenticate→ PAP o CHAP local contra Cleartext-Password
-#    post-auth   → POST /aaa/post-auth   (no bloqueante: un fallo aquí no rechaza al cliente)
+#    post-auth   → POST /aaa/post-auth   solo en Access-Reject (registro; no bloqueante)
 #    accounting  → POST /aaa/accounting  (Start / Interim-Update / Stop)
 #
 server default {
@@ -66,13 +66,10 @@ accounting {
 }
 
 post-auth {
-	#  Notificación no bloqueante: fail/notfound/invalid no convierten un Accept en Reject.
-	rest {
-		fail = 1
-		notfound = 1
-		invalid = 1
-		reject = 1
-	}
+	#  El Accept no llama a aaa: authorize ya dejó su línea de log y una segunda petición HTTP por
+	#  autorización doblaba la carga en una reconexión masiva (prueba de carga, semana 2). Solo el
+	#  Reject avisa a aaa (por qué falló: clave errónea, retirado…), y ahí la latencia no importa
+	#  (reject_delay = 1 s). Notificación no bloqueante: fail/notfound/invalid no cambian el resultado.
 	ok
 
 	Post-Auth-Type REJECT {
