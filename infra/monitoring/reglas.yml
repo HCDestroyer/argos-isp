@@ -48,3 +48,16 @@ groups:
         expr: time() - argosisp_cron_ultima_ejecucion_timestamp_seconds{cron=~"notificaciones.recordatorios|notificaciones.vigilar_crons"} > 900
         annotations:
           summary: '{{ $labels.cron }} no corre hace más de 15 min (¿worker de notify detenido?)'
+
+      # contratos/velocidad.md: más de ~1000 colas simples en un router es alerta; pasar a arbol_pcq.
+      # La métrica la expone A2 (sección `routeros` de /metrics, .claude/integration/a6.md).
+      - alert: RouterDemasiadasColasSimples
+        expr: argosisp_routeros_colas_simples > 1000
+        for: 15m
+        annotations:
+          summary: 'Router {{ $labels.router }} con {{ $value }} colas simples: pasarlo a arbol_pcq (contratos/velocidad.md)'
+
+      - alert: RouterColasSinLeer
+        expr: time() - argosisp_routeros_colas_leidas_timestamp_seconds > 3600
+        annotations:
+          summary: 'Hace más de 1 h que no se cuentan las colas del router {{ $labels.router }} (¿reconciliador detenido o router sin API?)'

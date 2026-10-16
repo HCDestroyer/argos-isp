@@ -1,6 +1,6 @@
 # importacion · importador desde Mikrowisp (A6)
 
-Lleva los datos de un Mikrowisp a ArgosIsp: routers, redes IPv4, planes (y su implementación en cada router), zonas, clientes y servicios PPPoE. Todo se crea **por las acciones de dominio de A1** (`CrearRouter`, `CrearRedIpv4`, `CrearPlan`, `ImplementarPlan`, `CrearZona`, `CrearCliente`, `CrearServicio`), así que queda auditoría y salen los eventos del outbox. Nunca hay `INSERT` directo; las lecturas para decidir (si ya existe, si la IP está libre) sí van directo a la base.
+Lleva los datos de un Mikrowisp a ArgosIsp: routers, redes IPv4, planes (y su implementación en cada router), zonas, clientes, servicios (PPPoE y WISP sin PPPoE), facturas pendientes y saldos. Todo se crea **por las acciones de dominio** de A1 (`CrearRouter`, `CrearRedIpv4`, `CrearPlan`, `ImplementarPlan`, `CrearZona`, `CrearCliente`, `CrearServicio`) y de A3 (`ImportarFacturaPendiente`, `RegistrarSaldoInicial`), así que queda auditoría y salen los eventos del outbox. Nunca hay `INSERT` directo; las lecturas para decidir (si ya existe, si la IP está libre) sí van directo a la base.
 
 ```sh
 pnpm importar --dry-run scripts/importacion/ejemplo                     # en seco, reporte en pantalla
@@ -16,6 +16,7 @@ Opciones de `node ace importar:mikrowisp <directorio>`:
 | `--reporte=<archivo>`      | Guarda el reporte completo en JSON (rutas relativas a donde se llamó)                                                                                                   |
 | `--ipv6=ninguno\|plan`     | `ninguno` (por defecto): los servicios entran solo con IPv4, porque Mikrowisp no maneja IPv6. `plan`: modo IPv6 por defecto del plan (requiere pools IPv6 en el router) |
 | `--solo-planes-existentes` | No crea planes: mapea por nombre (o `equivale_a`) a planes que ya existen y deja el resto sin equivalente                                                               |
+| `--plantilla=<id>`         | Plantilla de facturación de los servicios nuevos. Sin ella, la única que exista (`plantillaPorDefecto` de A1); con varias, los servicios entran sin plantilla y sus facturas pendientes no se importan (queda en errores) |
 
 ## Formato de entrada
 
@@ -27,8 +28,11 @@ Un directorio con un CSV por entidad: UTF-8 (con o sin BOM), separador coma, enc
 | `redes.csv` (opcional) | **`router_id`**, **`cidr`** (`198.19.10.0/24`), `gateway`, `tipo` (`estatico` por defecto, o `pool`)                                                                                                                                      |
 | `planes.csv`           | **`id`**, **`nombre`**, **`precio`** (`150.00`, `Q 1,250.50`), **`bajada`**, **`subida`**, `bajada_limitada`, `subida_limitada`, `perfil_ppp`, `pool_ipv4`, `equivale_a`                                                                  |
 | `clientes.csv`         | **`id`**, **`nombre`**, `tipo` (`persona` o `empresa`), `nit` (NIT, CUI o `CF`), `nombre_fiscal`, `direccion_fiscal`, `email`, `telefono`, `movil`, `direccion`, `coordenadas` (`lat,lng`), `zona` (nombre)                               |
-| `servicios.csv`        | **`id`**, **`cliente_id`**, **`router_id`**, **`plan_id`**, **`user_ppp`**, `pass_ppp`, `ip`, `mac`, `direccion`, `coordenadas`, `fecha_instalacion` (`2024-03-15`, `2024-03-15 10:00:00` o `15/03/2024`; `0000-00-00` = vacía), `estado` |
+| `servicios.csv`        | **`id`**, **`cliente_id`**, **`router_id`**, **`plan_id`**, `tipo_conexion` (`pppoe` por defecto, `ip_estatica`, `dhcp_fija`), `user_ppp` (**obligatorio en `pppoe`**), `pass_ppp`, `ip` (**obligatoria en `ip_estatica`**), `mac` (**obligatoria en `dhcp_fija`**), `amarre_ip_mac` (`si`/`no`), `direccion`, `coordenadas`, `fecha_instalacion` (`2024-03-15`, `2024-03-15 10:00:00` o `15/03/2024`; `0000-00-00` = vacía), `estado` |
+| `facturas.csv` (opcional) | **`id`**, **`cliente_id`**, `servicio_id`, **`periodo`** (`2026-08`, `08/2026` o `2026-08-01`), **`total`**, `pagado` (lo pendiente = total − pagado), `vence`, `concepto` |
+| `saldos.csv` (opcional) | **`cliente_id`**, **`saldo`** (saldo del cliente en Mikrowisp al exportar: `150.00` debe, `-20.00` a favor) |
 
+- **`tipo_conexion`** (`contratos/routeros.md`): `pppoe`/`ppp`; `ip_estatica`/`estatica`/`static`; `dhcp_fija`/`dhcp`/`lease`. Sin PPPoE no hay `user_ppp` ni `pass_ppp` (se ignoran si vienen). Una fila `ip_estatica` sin IP o `dhcp_fija` sin MAC válida se omite (importarla le daría al cliente otra IP o un lease sin amarre).
 - **Velocidades** en kbps (`10000`) o con unidad (`512k`, `10M`, `1.5M`, `1G`). Sin `bajada_limitada`/`subida_limitada` (Mikrowisp no las tiene) se usa 512 kbps o la velocidad normal si es menor.
 - **Estados**: `activo` (activo, habilitado), `suspendido` (suspendido, cortado, moroso, bloqueado), `retirado` (retirado, cancelado, baja, eliminado). Sin columna: activo.
 - **`equivale_a`**: nombre de un plan de ArgosIsp al que se mapea el de Mikrowisp en lugar de crear uno nuevo.
@@ -44,9 +48,21 @@ Un directorio con un CSV por entidad: UTF-8 (con o sin BOM), separador coma, enc
 | Implementación | existe (plan, router)                                                 | `ImplementarPlan` con `perfil_ppp` y `pool_ipv4`, una por cada par que usan los servicios                      |
 | Zona           | existe por nombre                                                     | `CrearZona`                                                                                                    |
 | Cliente        | `campos_personalizados.mikrowisp_id` = id de Mikrowisp                | `CrearCliente` con `mikrowisp_id` en `campos_personalizados`                                                   |
-| Servicio       | existe el `user_ppp` (sin distinguir mayúsculas) con el mismo cliente | `CrearServicio` con user y clave PPP del origen (la acción cifra la clave), IP fija, MAC, fecha de instalación |
+| Servicio PPPoE | existe el `user_ppp` (sin distinguir mayúsculas) con el mismo cliente | `CrearServicio` con user y clave PPP del origen (la acción cifra la clave), IP fija, MAC, fecha de instalación y la plantilla |
+| Servicio WISP  | su IP vigente es de un servicio del mismo cliente (sin IP: su MAC)    | `CrearServicio` con `tipo_conexion`, `amarre_ip_mac`, IP y MAC, sin credenciales. Necesita el modelo de A1 (`core.servicios.tipo_conexion`); sin él, queda en `tipos_conexion_pendientes` |
+| Factura        | existe una factura con `clave_externa = mikrowisp:factura:<id>`        | `ImportarFacturaPendiente` (A3) con lo pendiente, el periodo y el vencimiento, en el servicio de la factura o, si no trae, en el único servicio importado del cliente |
+| Saldo inicial  | existe uno con `clave_externa = mikrowisp:saldo:<cliente>`             | `RegistrarSaldoInicial` (A3) por la diferencia entre el saldo del origen y lo que entró como factura |
 
-Por eso es **idempotente**: una segunda corrida no crea nada y reporta todo como `existentes`.
+Por eso es **idempotente**: una segunda corrida no crea nada, no deja auditoría y reporta todo como `existentes`.
+
+**Ids externos.** Antes de las claves naturales, el importador busca en `core.ids_externos (sistema, entidad_tipo, externo_id, entidad_id)` de A1 (`ids_externos.ts`) y, al crear, pasa `externo: { sistema: 'mikrowisp', id }` a `CrearRouter`, `CrearPlan`, `CrearCliente` y `CrearServicio`, que guardan el vínculo en su transacción: así reconoce un router renombrado o con otra IP en Mikrowisp. Si la tabla no existe todavía, usa solo las claves naturales y el reporte lo dice (`ids_externos: ninguno`). Las zonas van por nombre. Nunca hay `INSERT` directo.
+
+## Saldos: suma contra el origen
+
+- **Saldo del origen por cliente**: el de `saldos.csv`; si el cliente no está ahí, la suma de sus facturas pendientes.
+- **Lo que entra**: cada factura pendiente con servicio (`ImportarFacturaPendiente`) y, por la diferencia, un saldo inicial (`RegistrarSaldoInicial`: positivo = factura de apertura, negativo = anticipo). Una factura sin servicio en ArgosIsp entra así dentro del saldo inicial (`facturas_a_saldo`).
+- **Comparación**: al final de la corrida (en seco, antes de revertir) se lee el saldo de cada cliente en ArgosIsp = CxC (`saldoCliente`) − anticipos (`saldoAnticipos`) y se compara con el del origen. El reporte trae `saldos { clientes, suma_origen, suma_importada, diferencia, cuadra }` y `saldos_distintos` cliente por cliente. Lo que no cuadra es lo que no se pudo importar (un cliente inválido, una factura de un cliente que no existe, una acción que falló).
+- Las facturas importadas no cambian el estado del servicio: el corte se aplica en la siguiente evaluación (A3).
 
 ## Reporte de diferencias
 
@@ -66,6 +82,10 @@ Por entidad: `origen`, `creados`, `existentes`, `omitidos`. Además:
 | Retirados en Mikrowisp                  | No se importan                                                                                                                           |
 | Referencias faltantes                   | Servicio cuyo cliente, router o plan no está o no se pudo importar: se omite                                                             |
 | Formato                                 | Fila omitida (falta un dato obligatorio, IP o red mal escrita) o campo descartado con aviso (correo, coordenadas, MAC o fecha inválidos) |
+| Servicios sin PPPoE pendientes          | `ip_estatica` / `dhcp_fija` mientras ArgosIsp no tenga `tipo_conexion` (modelo de A1): no se importan                                    |
+| Facturas a saldo                        | Factura sin servicio en ArgosIsp (no se importó o el cliente tiene varios y la factura no dice cuál): su monto va al saldo inicial       |
+| Facturas pagadas                        | Pendiente 0 (total = pagado): se omiten                                                                                                  |
+| Saldos distintos                        | Cliente cuyo saldo en ArgosIsp no es el del origen, con la diferencia                                                                    |
 | Errores                                 | Lo que rechazó una acción de dominio, con su mensaje                                                                                     |
 
 ## Transacción y auditoría
@@ -76,12 +96,14 @@ Por entidad: `origen`, `creados`, `existentes`, `omitidos`. Además:
 
 ## Pendiente
 
-- Facturas pendientes y saldos por cliente, con la suma de saldos contra la del origen: cuando A3 tenga sus acciones (día 4).
-- Aplicar el estado suspendido de Mikrowisp: con las facturas, por `evaluarEstadoServicio`.
+- Aplicar el estado suspendido de Mikrowisp: con las facturas, por `evaluarEstadoServicio` en la siguiente evaluación.
+- `core.ids_externos` (A1): se usa en cuanto esté en `main`; antes, solo claves naturales.
+- Servicios sin PPPoE: se importan en cuanto `core.servicios.tipo_conexion` (A1) esté en `main`.
+- Las consultas de exportación contra la base real de Mikrowisp (falta la copia del PM).
 
 ## Eventos
 
-No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.cambiada` por servicio.
+No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.cambiada` por servicio. Las acciones de facturas y saldos de A3 no emiten eventos (no notifican: es carga histórica).
 
 ## Archivos
 
@@ -89,6 +111,7 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | -------------------------------------- | ------------------------------------------------------------------------------ |
 | `csv.ts`                               | Lector de CSV (RFC 4180)                                                       |
 | `fuente.ts`                            | Lee el directorio, valida y normaliza cada fila                                |
+| `ids_externos.ts`                      | Interfaz `IdsExternos` y lectura de `core.ids_externos` cuando exista          |
 | `importador.ts`                        | `importarMikrowisp(fuente, opciones)`: orquesta las acciones y arma el reporte |
 | `reporte.ts`                           | Tipos del reporte y versión en texto                                           |
 | `commands/importar_mikrowisp.ts`       | Comando `node ace importar:mikrowisp` (`pnpm importar` desde la raíz)          |

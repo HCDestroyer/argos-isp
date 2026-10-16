@@ -4,8 +4,8 @@
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Métricas de la API (`GET /metrics`, Bearer `METRICS_TOKEN`) | `apps/api/app/monitoreo/README.md`                                                                                                |
 | Prometheus                                                  | servicio `prometheus` del compose, perfil `monitoreo`; configuración en `prometheus.yml`                                          |
-| Reglas de alerta                                            | `reglas.yml` (API sin métricas, colas atascadas o con fallos, grupos de eventos atrasados, outbox sin publicar, crons sin correr) |
-| Alertas de negocio al equipo por Telegram                   | `apps/api/app/notify` (aaa caído y recuperado, CoA fallido, caja con diferencia, crons de billing atrasados)                      |
+| Reglas de alerta                                            | `reglas.yml` (API sin métricas, colas atascadas o con fallos, grupos de eventos atrasados, outbox sin publicar, crons sin correr, routers con más de ~1000 colas simples); pruebas en `reglas.test.yml` (CI) |
+| Alertas de negocio al equipo por Telegram                   | `apps/api/app/notify` (aaa caído y recuperado, CoA fallido, RouterOS fallido, caja con diferencia, crons de billing atrasados)    |
 | Health checks                                               | `healthcheck` de cada servicio en `infra/docker-compose.yml`                                                                      |
 | Logs                                                        | JSON a stdout en api (pino), aaa (pino de Fastify) y coa (`docker compose logs -f <servicio>`)                                    |
 
@@ -16,6 +16,22 @@ COMPOSE_PROFILES=monitoreo docker compose -f infra/docker-compose.yml up -d
 ```
 
 Prometheus no expande variables en su configuración: el `entrypoint` del servicio escribe `METRICS_TOKEN` en `/tmp/metrics_token`, que `prometheus.yml` lee con `credentials_file`. Las reglas no tienen Alertmanager todavía: se ven en `/alerts` de Prometheus. Las alertas que el equipo debe recibir en el teléfono ya salen por Telegram desde notify.
+
+## RouterOS y colas (semana 2)
+
+- **`routeros.fallido`** (`contratos/routeros.md`, lo emite el dispatcher de A2 tras 3 reintentos) → alerta por Telegram al equipo: incidente `routeros:<router_id>`, una alerta por router y los fallos siguientes de ese router en 30 min se suman en silencio (quedan en `audit.red`). Plantilla `alerta.routeros.fallido` con el nombre y host del router, la operación, el servicio y el error.
+- **Colas simples por router** (`contratos/velocidad.md`: más de ~1000 es alerta). Métricas que expone A2 en la sección `routeros` de `/metrics` con `registrarSeccionMetricas` (`apps/api/app/monitoreo/metricas.ts`):
+
+| Métrica | Etiquetas | Qué es |
+| --- | --- | --- |
+| `argosisp_routeros_colas_simples` | `router_id`, `router` | colas simples del router en la última lectura (todas, también las dinámicas de PPPoE) |
+| `argosisp_routeros_colas_leidas_timestamp_seconds` | `router_id`, `router` | cuándo se contaron (epoch) |
+
+  El conteo lo hace el reconciliador (u otro job con lock) y lo guarda; `/metrics` solo lo lee (no llama al router en cada scrape). Reglas: `RouterDemasiadasColasSimples` (`> 1000` durante 15 min) y `RouterColasSinLeer` (lectura de más de 1 h). Probarlas:
+
+```sh
+docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+```
 
 ## Health checks del compose
 

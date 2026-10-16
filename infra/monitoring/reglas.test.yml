@@ -1,0 +1,44 @@
+# Pruebas de las reglas de RouterOS (promtool test rules). Correr con:
+#   docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool \
+#     prom/prometheus:v3.5.0 test rules /m/reglas.test.yml
+rule_files:
+  - reglas.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'argosisp_routeros_colas_simples{router_id="7",router="Torre Norte"}'
+        values: '1203x30'
+      - series: 'argosisp_routeros_colas_simples{router_id="8",router="Torre Sur"}'
+        values: '40x30'
+      - series: 'argosisp_routeros_colas_leidas_timestamp_seconds{router_id="8",router="Torre Sur"}'
+        values: '0x120'
+    alert_rule_test:
+      # 1203 colas durante 15 min: alerta solo para Torre Norte
+      - eval_time: 10m
+        alertname: RouterDemasiadasColasSimples
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: RouterDemasiadasColasSimples
+        exp_alerts:
+          - exp_labels:
+              alertname: RouterDemasiadasColasSimples
+              router_id: '7'
+              router: Torre Norte
+            exp_annotations:
+              summary: 'Router Torre Norte con 1203 colas simples: pasarlo a arbol_pcq (contratos/velocidad.md)'
+      # la última lectura fue en t=0: a los 61 min ya está vieja
+      - eval_time: 59m
+        alertname: RouterColasSinLeer
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: RouterColasSinLeer
+        exp_alerts:
+          - exp_labels:
+              alertname: RouterColasSinLeer
+              router_id: '8'
+              router: Torre Sur
+            exp_annotations:
+              summary: 'Hace más de 1 h que no se cuentan las colas del router Torre Sur (¿reconciliador detenido o router sin API?)'

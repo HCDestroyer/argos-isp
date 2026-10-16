@@ -13,6 +13,9 @@ import { leerCsv, type FilaCsv } from '#importacion/csv'
 
 export type EstadoOrigen = 'activo' | 'suspendido' | 'retirado'
 
+/** `contratos/routeros.md`: PPPoE por RADIUS, o WISP sin PPPoE (IP estática o DHCP por MAC). */
+export type TipoConexionOrigen = 'pppoe' | 'ip_estatica' | 'dhcp_fija'
+
 export interface RouterOrigen {
     id: string
     nombre: string
@@ -65,14 +68,40 @@ export interface ServicioOrigen {
     cliente_id: string
     router_id: string
     plan_id: string
-    user_ppp: string
+    tipo_conexion: TipoConexionOrigen
+    /** obligatorio en `pppoe`; null en `ip_estatica` y `dhcp_fija` */
+    user_ppp: string | null
     pass_ppp: string | null
     ip: string | null
+    /** obligatoria en `dhcp_fija` */
     mac: string | null
+    /** amarre IP-MAC (ARP estático) para servicios sin PPPoE */
+    amarre_ip_mac: boolean
     direccion: string | null
     coordenadas: string | null
     fecha_instalacion: string | null
     estado: EstadoOrigen
+}
+
+/** Factura pendiente en Mikrowisp (lo que el cliente aún debe de ella). */
+export interface FacturaOrigen {
+    id: string
+    cliente_id: string
+    /** servicio de Mikrowisp; si falta y el cliente tiene un solo servicio, se usa ese */
+    servicio_id: string | null
+    /** primer día del periodo (YYYY-MM-DD) */
+    periodo: string
+    /** lo pendiente (total − pagado), IVA incluido, con 2 decimales */
+    pendiente: string
+    vence: string | null
+    concepto: string | null
+}
+
+/** Saldo del cliente en Mikrowisp al exportar: positivo = debe, negativo = a favor. */
+export interface SaldoOrigen {
+    linea: number
+    cliente_id: string
+    saldo: string
 }
 
 /** Problema de formato de una fila: la fila se omite o el campo se descarta (`aviso`). */
@@ -91,6 +120,8 @@ export interface FuenteMikrowisp {
     planes: PlanOrigen[]
     clientes: ClienteOrigen[]
     servicios: ServicioOrigen[]
+    facturas: FacturaOrigen[]
+    saldos: SaldoOrigen[]
     problemas: ProblemaFila[]
 }
 
@@ -100,6 +131,8 @@ export const ARCHIVOS = {
     planes: 'planes.csv',
     clientes: 'clientes.csv',
     servicios: 'servicios.csv',
+    facturas: 'facturas.csv',
+    saldos: 'saldos.csv',
 } as const
 
 /** Velocidad limitada por defecto (kbps) cuando el plan no la trae: Mikrowisp no la tiene. */
@@ -107,7 +140,10 @@ export const LIMITADA_KBPS = 512
 
 class FilaInvalida extends Error {}
 
-/** Lee y valida el directorio exportado. `redes.csv` es opcional; los demás son obligatorios. */
+/**
+ * Lee y valida el directorio exportado. `redes.csv`, `facturas.csv` y `saldos.csv` son opcionales;
+ * los demás son obligatorios.
+ */
 export async function leerDirectorio(directorio: string): Promise<FuenteMikrowisp> {
     const problemas: ProblemaFila[] = []
     const leer = async (archivo: string, obligatorio = true): Promise<FilaCsv[]> => {
@@ -192,22 +228,53 @@ export async function leerDirectorio(directorio: string): Promise<FuenteMikrowis
         zona: f.opcional('zona'),
     }))
 
-    const servicios = procesar(ARCHIVOS.servicios, await leer(ARCHIVOS.servicios), (f) => ({
-        id: f.requerido('id'),
+    const servicios = procesar(ARCHIVOS.servicios, await leer(ARCHIVOS.servicios), (f) => {
+        const tipo = f.tipoConexion('tipo_conexion')
+        const ip = f.ipv4('ip', false)
+        // En dhcp_fija la MAC amarra el lease: sin ella (o mal escrita) el servicio no se importa.
+        const mac = tipo === 'dhcp_fija' ? f.macRequerida('mac') : f.mac('mac')
+        // En ip_estatica la IP está configurada a mano en la antena: importarlo sin IP le daría otra.
+        if (tipo === 'ip_estatica' && !ip) throw new FilaInvalida('Falta ip (obligatoria en ip_estatica)')
+        return {
+            id: f.requerido('id'),
+            cliente_id: f.requerido('cliente_id'),
+            router_id: f.requerido('router_id'),
+            plan_id: f.requerido('plan_id'),
+            tipo_conexion: tipo,
+            user_ppp: tipo === 'pppoe' ? f.requerido('user_ppp') : null,
+            pass_ppp: tipo === 'pppoe' ? f.opcional('pass_ppp') : null,
+            ip,
+            mac,
+            amarre_ip_mac: tipo === 'pppoe' ? false : f.booleano('amarre_ip_mac'),
+            direccion: f.opcional('direccion'),
+            coordenadas: f.coordenadas('coordenadas'),
+            fecha_instalacion: f.fecha('fecha_instalacion'),
+            estado: f.estado('estado'),
+        }
+    })
+
+    const facturas = procesar(ARCHIVOS.facturas, await leer(ARCHIVOS.facturas, false), (f) => {
+        const total = f.dinero('total')
+        const pagado = f.opcional('pagado') ? f.dinero('pagado') : '0.00'
+        const pendiente = new Decimal(total).minus(pagado)
+        return {
+            id: f.requerido('id'),
+            cliente_id: f.requerido('cliente_id'),
+            servicio_id: f.opcional('servicio_id'),
+            periodo: f.periodo('periodo'),
+            pendiente: pendiente.toFixed(2),
+            vence: f.fecha('vence'),
+            concepto: f.opcional('concepto'),
+        }
+    })
+
+    const saldos = procesar(ARCHIVOS.saldos, await leer(ARCHIVOS.saldos, false), (f) => ({
+        linea: f.linea,
         cliente_id: f.requerido('cliente_id'),
-        router_id: f.requerido('router_id'),
-        plan_id: f.requerido('plan_id'),
-        user_ppp: f.requerido('user_ppp'),
-        pass_ppp: f.opcional('pass_ppp'),
-        ip: f.ipv4('ip', false),
-        mac: f.mac('mac'),
-        direccion: f.opcional('direccion'),
-        coordenadas: f.coordenadas('coordenadas'),
-        fecha_instalacion: f.fecha('fecha_instalacion'),
-        estado: f.estado('estado'),
+        saldo: f.dinero('saldo', true),
     }))
 
-    return { routers, redes, planes, clientes, servicios, problemas }
+    return { routers, redes, planes, clientes, servicios, facturas, saldos, problemas }
 }
 
 /** Acceso tipado a los campos de una fila, con los avisos de formato. */
@@ -285,18 +352,67 @@ class Campos {
         return kbps
     }
 
-    dinero(columna: string): string {
-        const valor = this.requerido(columna).replace(/^Q\s*/i, '').replace(/,/g, '')
+    /** `150.00`, `Q 1,250.50`, `-20` (solo con `conSigno`) → `"150.00"`. Más de 2 decimales: fila omitida. */
+    dinero(columna: string, conSigno = false): string {
+        const crudo = this.requerido(columna)
+        const negativo = /^-\s*/.test(crudo)
+        const valor = crudo.replace(/^-\s*/, '').replace(/^Q\s*/i, '').replace(/,/g, '')
         let monto: Decimal
         try {
             monto = new Decimal(valor)
         } catch {
-            throw new FilaInvalida(`${columna} "${valor}" no es un monto`)
+            throw new FilaInvalida(`${columna} "${crudo}" no es un monto`)
         }
-        if (monto.isNegative() || !monto.isFinite()) {
-            throw new FilaInvalida(`${columna} "${valor}" no es válido`)
+        if (monto.isNegative() || !monto.isFinite() || (negativo && !conSigno)) {
+            throw new FilaInvalida(`${columna} "${crudo}" no es válido`)
         }
-        return monto.toFixed(2)
+        if (monto.decimalPlaces() > 2) {
+            throw new FilaInvalida(`${columna} "${crudo}" tiene más de 2 decimales`)
+        }
+        return (negativo ? monto.negated() : monto).toFixed(2)
+    }
+
+    /** `2026-08`, `2026-08-01` o `08/2026` → `2026-08-01`; `2026-08-15` se respeta (corte día 15). */
+    periodo(columna: string): string {
+        const valor = this.requerido(columna)
+        const mes = /^(\d{4})-(\d{2})$/.exec(valor) ?? /^(\d{2})\/(\d{4})$/.exec(valor)
+        if (mes) {
+            const [anio, m] = valor.includes('/') ? [mes[2]!, mes[1]!] : [mes[1]!, mes[2]!]
+            if (Number(m) >= 1 && Number(m) <= 12) return `${anio}-${m}-01`
+        }
+        const fecha = this.fecha(columna)
+        if (!fecha) throw new FilaInvalida(`${columna} "${valor}" no es un periodo (2026-08 o 2026-08-01)`)
+        return fecha
+    }
+
+    /** `pppoe` (por defecto), `ip_estatica` / `estatica` / `static`, `dhcp_fija` / `dhcp`. */
+    tipoConexion(columna: string): TipoConexionOrigen {
+        const valor = (this.opcional(columna) ?? 'pppoe').toLowerCase().replace(/[\s-]+/g, '_')
+        if (['pppoe', 'ppp'].includes(valor)) return 'pppoe'
+        if (['ip_estatica', 'estatica', 'static', 'ip_static', 'ip_fija'].includes(valor)) {
+            return 'ip_estatica'
+        }
+        if (['dhcp_fija', 'dhcp', 'dhcp_estatico', 'dhcp_static', 'lease'].includes(valor)) return 'dhcp_fija'
+        throw new FilaInvalida(`${columna} "${valor}" debe ser pppoe, ip_estatica o dhcp_fija`)
+    }
+
+    /** `si`, `sí`, `1`, `true`, `x` → true; vacío, `no`, `0`, `false` → false. */
+    booleano(columna: string): boolean {
+        const valor = this.opcional(columna)?.toLowerCase()
+        if (!valor || ['no', '0', 'false', 'n'].includes(valor)) return false
+        if (['si', 'sí', '1', 'true', 's', 'x', 'yes'].includes(valor)) return true
+        this.descartar(columna, valor, 'no es sí/no')
+        return false
+    }
+
+    macRequerida(columna: string): string {
+        const valor = this.opcional(columna)
+        if (valor === null) throw new FilaInvalida(`Falta ${columna} (obligatoria en dhcp_fija)`)
+        const limpio = valor.toUpperCase().replace(/-/g, ':')
+        if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(limpio)) {
+            throw new FilaInvalida(`${columna} "${valor}" no es una MAC (obligatoria en dhcp_fija)`)
+        }
+        return limpio
     }
 
     email(columna: string): string | null {
