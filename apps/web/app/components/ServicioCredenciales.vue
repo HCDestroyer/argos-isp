@@ -71,7 +71,7 @@ watch(() => props.servicio.id, () => {
                     variant="ghost"
                     size="xs"
                     aria-label="Copiar usuario"
-                    @click="copiar(servicio.user_ppp, 'Usuario')"
+                    @click="copiar(servicio.user_ppp ?? '', 'Usuario')"
                 />
             </dd>
         </div>

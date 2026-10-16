@@ -1,7 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import type { ContextoAccion } from '#shared/contexto'
+import type { Actor, ContextoAccion } from '#shared/contexto'
 import { MASCARA, enmascarar, esCampoSensible } from '#shared/enmascarar'
 import { nombreCampo } from '#shared/nombres_campo'
 import { insertarEvento } from '#shared/outbox'
@@ -64,7 +64,8 @@ export abstract class DomainAction<Entrada, Salida> {
             transacciones.set(trx, t)
             const salida = await this.handle(input, t)
             if (this.auditarExito(salida)) {
-                await registrarAccion(trx, ctx, this.nombre, entrada, t.entidadActual, null)
+                // t.ctx: la acción pudo identificar al actor (login)
+                await registrarAccion(trx, t.ctx, this.nombre, entrada, t.entidadActual, null)
             }
             // Las acciones anidadas dejan la verificación a la transacción externa.
             if (!anidada) await verificarRestriccionesDiferidas(trx)
@@ -153,11 +154,27 @@ const CAMPOS_IGNORADOS = new Set(['created_at', 'updated_at', 'version'])
 export class Transaccion {
     #entidad?: EntidadRef
     #ganchos: GanchoConfirmacion[] = []
+    #ctx: ContextoAccion
 
     constructor(
         readonly trx: TransactionClientContract,
-        readonly ctx: ContextoAccion,
-    ) {}
+        ctx: ContextoAccion,
+    ) {
+        this.#ctx = ctx
+    }
+
+    get ctx(): ContextoAccion {
+        return this.#ctx
+    }
+
+    /**
+     * Fija el actor de la acción cuando se conoce dentro de ella: `auth.login` llega anónima y
+     * queda auditada (acción, cambios y eventos posteriores) con el usuario que inició sesión. Solo
+     * para acciones que autentican; las demás usan el actor del contexto.
+     */
+    identificarActor(actor: Actor) {
+        this.#ctx = { ...this.#ctx, actor }
+    }
 
     get entidadActual(): EntidadRef | undefined {
         return this.#entidad

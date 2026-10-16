@@ -20,9 +20,15 @@ export type MetodoHttp = 'get' | 'post' | 'put' | 'delete'
 /**
  * - `sesion`: Bearer de login (o token de API, A1) + permiso del ACL.
  * - `interno`: Bearer con `INTERNAL_TOKEN` (servicios aaa y coa).
+ * - `portal`: cookie de sesión del portal del cliente (`argos_portal`). El router no monta
+ *   middleware: el handler la exige con `exigirSesionPortal` (A5); el OpenAPI declara el esquema
+ *   `portal` y su 401.
  * - `publico`: sin autenticación (login, portal por IP).
  */
-export type Seguridad = 'sesion' | 'interno' | 'publico'
+export type Seguridad = 'sesion' | 'interno' | 'portal' | 'publico'
+
+/** Nombre de la cookie de sesión del portal (esquema de seguridad `portal` del OpenAPI). */
+export const COOKIE_PORTAL = 'argos_portal'
 
 type ValidadorVine = VineValidator<SchemaTypes, any>
 type Salida<V> = V extends VineValidator<infer S, any> ? Infer<S> : undefined
@@ -36,8 +42,25 @@ export interface EntradaHandler<C, Q> {
 export interface RespuestaRuta {
     status: 200 | 201 | 202 | 204
     descripcion: string
-    /** schema JSON de la respuesta exitosa; omitir con 204 */
+    /** schema JSON de la respuesta exitosa; omitir con 204 o con `contenido` binario */
     esquema?: EsquemaJson
+    /**
+     * Tipo de contenido de la respuesta. Por defecto `application/json`. Un tipo binario
+     * (`application/pdf`, `text/csv`, `image/png`…) se declara con `{ type: string, format: binary }`
+     * y no lleva `esquema`.
+     */
+    contenido?: string
+}
+
+/**
+ * Cuerpo `multipart/form-data`: los campos de texto los valida el validador VineJS de `cuerpo`
+ * (y salen en el OpenAPI); los archivos se leen en el handler con `ctx.request.file(nombre)`.
+ */
+export interface CuerpoMultipart {
+    /** campo → descripción del archivo (se declara `format: binary`) */
+    archivos: Record<string, string>
+    /** archivos que pueden faltar (por defecto todos son obligatorios) */
+    archivosOpcionales?: string[]
 }
 
 export interface DefinicionRuta<
@@ -58,6 +81,8 @@ export interface DefinicionRuta<
     /** permiso del ACL; obligatorio con `seguridad: 'sesion'` salvo `null` explícito (p. ej. `/me`) */
     permiso: Permiso | null
     cuerpo?: VC
+    /** el cuerpo llega como `multipart/form-data` (con archivos) en vez de JSON */
+    multipart?: CuerpoMultipart
     query?: VQ
     /** schemas de parámetros de ruta; por defecto `:id` y `:xxxId` son enteros positivos */
     parametros?: Record<string, EsquemaJson>
@@ -93,6 +118,7 @@ export function parametrosDeRuta(ruta: string): string[] {
 
 /** Ejecuta validación y handler (o 501) para una ruta montada. */
 export async function despachar(ruta: Ruta, ctx: HttpContext) {
+    // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined
     const query = ruta.query ? await ruta.query.validate(ctx.request.qs()) : undefined
     if (!ruta.handler) throw new NoImplementado(ruta.operacion)

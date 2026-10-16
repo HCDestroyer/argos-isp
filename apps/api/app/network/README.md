@@ -30,20 +30,36 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 ## Planes
 
 - `global = true`: disponible en todos los routers; si no, solo donde tenga fila en `planes_routers`. Inactivos no se ofrecen.
-- `obtenerImplementacionPlan(plan_id, router_id)` (`actions/obtener_implementacion_plan.ts`, interfaz pública, solo lectura): plantilla del plan + excepciones del router (`profile_ppp`, pools, `local_address`, `rate_limit_override`). `rate_limit` = override o `<subida>k/<bajada>k`; `rate_limit_limitado` = `<subida_limitada>k/<bajada_limitada>k`. 422 `plan_no_disponible` si el plan no aplica al router.
+- `obtenerImplementacionPlan(plan_id, router_id)` (`actions/obtener_implementacion_plan.ts`, interfaz pública, solo lectura): plantilla del plan + excepciones del router (`profile_ppp`, pools, `local_address`, `rate_limit_override`). `rate_limit` y `rate_limit_limitado` = `Mikrotik-Rate-Limit` completo de `rateLimitServicio` (ver "Velocidad"). Los campos de velocidad del resultado ya traen las excepciones del router aplicadas. 422 `plan_no_disponible` si el plan no aplica al router.
 - Velocidades limitadas obligatorias y > 0 (las usa `aaa` al limitar).
 
-| Acción                                            | Permiso                           | Eventos |
-| ------------------------------------------------- | --------------------------------- | ------- |
-| `CrearRouter`, `EditarRouter`                     | `routers.crear`, `routers.editar` | —       |
-| `CrearRedIpv4`                                    | `redes.crear`                     | —       |
-| `CrearPlan`, `EditarPlan`                         | `planes.crear`, `planes.editar`   | —       |
-| `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar`                   | —       |
-| `CrearBloqueIpv6`, `CrearPoolIpv6`                | `ipv6.crear`                      | —       |
+| Acción                                            | Permiso                           | Eventos         |
+| ------------------------------------------------- | --------------------------------- | --------------- |
+| `CrearRouter`, `EditarRouter`                     | `routers.crear`, `routers.editar` | ver "Velocidad" |
+| `CrearRedIpv4`                                    | `redes.crear`                     | —               |
+| `CrearPlan`, `EditarPlan`                         | `planes.crear`, `planes.editar`   | ver "Velocidad" |
+| `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar`                   | —               |
+| `CrearBloqueIpv6`, `CrearPoolIpv6`                | `ipv6.crear`                      | —               |
 
 Lecturas en `consultas/routers.ts` y `consultas/planes.ts`.
 
-Eventos: los módulos de red no emiten por su cuenta; los cambios de asignación de un servicio salen de las acciones de `core` (`servicio.config_cambiada`, `asignacion.cambiada`). `EditarPlan` e `ImplementarPlan` reescriben `aaa:user:*` de los servicios afectados. No consume eventos.
+Eventos: salvo los de velocidad (sección "Velocidad"), los cambios de asignación de un servicio salen de las acciones de `core` (`servicio.config_cambiada`, `asignacion.cambiada`). `EditarPlan` e `ImplementarPlan` reescriben `aaa:user:*` de los servicios afectados. No consume eventos.
+
+## Velocidad (`velocidad.ts`, semana 2)
+
+Contrato: `.claude/integration/contratos/velocidad.md`. Única fuente del rate-limit para PPPoE y WISP.
+
+- Plan: `reuso` (1..64), `garantizado_pct` (null = `100 / reuso`), `rafaga_bajada_kbps` / `rafaga_subida_kbps` (null = sin ráfaga), `rafaga_umbral_pct` (75), `rafaga_segundos` (16), `prioridad` (8). `planes_routers` los puede sobrescribir (null hereda).
+- Router: `control_velocidad` (`simple` | `arbol_pcq`, reemplaza `modo_velocidad`, que sigue en la vista derivado y obsoleto), `capacidad_bajada_kbps`, `capacidad_subida_kbps`.
+- `rateLimitServicio(planEfectivo, estado)` → `rx/tx ráfaga umbral tiempo prioridad limit-at`; `limitesPadrePlan(plan, activos)` → `max_limit` y `limit_at` del padre; `validarVelocidad` → 422 por campo (CIR ≤ MIR / reuso, umbral < MIR < ráfaga, rangos).
+- Cambio de comportamiento: un plan sin campos nuevos conserva su velocidad, pero `rate_limit` pasa de `5000k/20000k` a la cadena completa `5M/20M 0/0 0/0 0/0 8 5M/20M` (el `limit-at` sale del reuso; con reuso 1 es el MIR).
+
+| Acción                                                                           | Permiso                                          | Eventos                                             |
+| -------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------- |
+| `EditarPlan` (campos de velocidad)                                               | `planes.editar`                                  | `plan.velocidad_cambiada` (`router_id: null`)       |
+| `ImplementarPlan` (excepción de velocidad, `rate_limit_override`, `profile_ppp`) | `planes.editar`                                  | `plan.velocidad_cambiada` (`router_id`)             |
+| `CambiarControlVelocidad` (`POST /routers/:id/cambiar-control-velocidad`)        | `routers.cambiar_control_velocidad` (solo admin) | `router.control_cambiado`                           |
+| `EditarRouter` (capacidad)                                                       | `routers.editar`                                 | `router.control_cambiado` (`campos: ['capacidad']`) |
 
 ## Resolver una IP (`consultas/ip.ts`, tarea 13)
 

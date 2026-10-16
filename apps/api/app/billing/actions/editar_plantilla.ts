@@ -3,6 +3,7 @@ import { ConflictoVersion } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import {
+    desmarcarPorDefecto,
     obtenerPlantilla,
     paraAuditoria,
     serializarPlantilla,
@@ -74,9 +75,11 @@ export default class EditarPlantilla extends DomainAction<EntradaEditarPlantilla
                     : normalizarReglasPromesa(reglas as ReglasPromesaParciales),
         })
 
+        if (input.por_defecto === true && !antes.por_defecto) await desmarcarPorDefecto(t, input.id)
         await actualizarConVersion(t.trx, 'billing.plantillas_facturacion', input.id, input.version, {
             ...campos,
             reglas_promesa: JSON.stringify(campos.reglas_promesa),
+            ...(input.por_defecto === undefined ? {} : { por_defecto: input.por_defecto }),
         })
 
         const despues = await obtenerPlantilla(input.id, t.trx)

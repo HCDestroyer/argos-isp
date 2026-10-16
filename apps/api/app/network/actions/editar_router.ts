@@ -10,7 +10,9 @@ export interface EntradaEditarRouter extends DatosRouter {
 
 /**
  * Edita un router (control optimista por `version`). Cambiar una credencial se audita como
- * campo cambiado con valor `***`, nunca en claro.
+ * campo cambiado con valor `***`, nunca en claro. Cambiar la capacidad del enlace emite
+ * `router.control_cambiado` con `campos: ['capacidad']` (A2 recalcula el padre global). El
+ * control de velocidad no se edita aquí: `CambiarControlVelocidad` (`routers.cambiar_control_velocidad`).
  */
 export default class EditarRouter extends DomainAction<EntradaEditarRouter, RouterVista> {
     readonly nombre = 'routers.editar'
@@ -28,6 +30,20 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         if (typeof datos.api_password === 'string' && a.api_password) a.api_password = 'anterior'
         if (typeof datos.radius_secret === 'string' && a.radius_secret) a.radius_secret = 'anterior'
         await t.registrarCambios({ tipo: 'router', id }, a, d)
+        if (
+            antes.capacidad_bajada_kbps !== despues.capacidad_bajada_kbps ||
+            antes.capacidad_subida_kbps !== despues.capacidad_subida_kbps
+        ) {
+            await t.emit('router.control_cambiado', {
+                router_id: id,
+                de: despues.control_velocidad,
+                a: despues.control_velocidad,
+                capacidad_bajada_kbps: despues.capacidad_bajada_kbps,
+                capacidad_subida_kbps: despues.capacidad_subida_kbps,
+                campos: ['capacidad'],
+                motivo: null,
+            })
+        }
         return despues
     }
 }

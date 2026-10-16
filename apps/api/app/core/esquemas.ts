@@ -120,7 +120,7 @@ export const Cliente = definirEsquema(
             },
             ...auditable,
         },
-        ['responsable_pago_id', 'responsable_pago_nombre'],
+        [],
     ),
 )
 
@@ -191,7 +191,12 @@ export const Servicio = definirEsquema(
                 description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
             },
             suspension_manual_motivo: nulable(texto),
-            user_ppp: texto,
+            tipo_conexion: {
+                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
+            },
+            user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
+            amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
             mac: nulable(texto),
             direccion: nulable(texto),
             coordenadas: nulable(texto),
@@ -203,23 +208,26 @@ export const Servicio = definirEsquema(
             prefijo_delegado_v6: nulable(texto),
             ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
             ipv6_duid: nulable(texto),
-            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper fixtures
+            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper pruebas del panel
             cliente_nombre: texto,
             plan_nombre: texto,
             router_nombre: texto,
             zona_nombre: nulable(texto),
-            // aditivo (día 4): la API siempre lo envía
+            // día 4; obligatorio desde la semana 2 (las fixtures del panel ya lo traen)
             excepciones: ExcepcionesServicio,
             ...auditable,
         },
         [
-            'excepciones',
+            // siguen opcionales: `apps/web/tests/nuxt/listaServicios.test.ts` arma servicios sin nombres
             'cliente_nombre',
             'plan_nombre',
             'router_nombre',
             'zona_nombre',
             'suspension_manual',
             'suspension_manual_motivo',
+            // aditivos (semana 2): la API siempre los envía
+            'tipo_conexion',
+            'amarre_ip_mac',
         ],
     ),
 )
@@ -343,6 +351,10 @@ export const AaaServicio = definirEsquema(
         pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
         estado: EstadoServicio,
         router_id: id,
+        control_velocidad: {
+            ...enumerado(['simple', 'arbol_pcq']),
+            description: 'network.routers.control_velocidad del router del servicio',
+        },
         plan: objeto({
             id,
             subida_kbps: entero,
@@ -351,6 +363,21 @@ export const AaaServicio = definirEsquema(
             bajada_limitada_kbps: entero,
             rate_limit_override: nulable(texto),
             profile_ppp: nulable(texto),
+            rate_limit: {
+                type: 'string',
+                description:
+                    'Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override)',
+            },
+            rate_limit_limitado: {
+                type: 'string',
+                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+            },
+            reuso: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 64,
+                description: 'Reuso efectivo 1:N en el router',
+            },
         }),
         ipv4: {
             anyOf: [

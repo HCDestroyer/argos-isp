@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import {
+    desmarcarPorDefecto,
     obtenerPlantilla,
     paraAuditoria,
     serializarPlantilla,
@@ -28,6 +29,8 @@ export interface EntradaCrearPlantilla {
     hora_corte?: string
     certificar_al?: 'emitir' | 'pagar' | 'nunca'
     reglas_promesa?: ReglasPromesaParciales
+    /** true: pasa a ser la plantilla por defecto (la anterior deja de serlo) */
+    por_defecto?: boolean
 }
 
 export const VALORES_POR_DEFECTO = {
@@ -67,6 +70,15 @@ export default class CrearPlantilla extends DomainAction<EntradaCrearPlantilla, 
             .table('billing.plantillas_facturacion')
             .insert({ ...campos, reglas_promesa: JSON.stringify(campos.reglas_promesa) })
             .returning('id')) as Array<{ id: number }>
+        t.fijarEntidad('plantilla_facturacion', fila!.id)
+        if (input.por_defecto) {
+            // a lo sumo una por defecto (índice único parcial): primero se desmarca la anterior
+            await desmarcarPorDefecto(t, fila!.id)
+            await t.trx
+                .from('billing.plantillas_facturacion')
+                .where('id', fila!.id)
+                .update({ por_defecto: true })
+        }
 
         const plantilla = await obtenerPlantilla(fila!.id, t.trx)
         await t.registrarCambios(
