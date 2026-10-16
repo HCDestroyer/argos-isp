@@ -94,6 +94,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
 - Excepciones, declaradas con `auditarExito()` en la acción (los errores se auditan siempre):
     - Telemetría de alta frecuencia que no es una acción de nadie: el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores.
     - Evaluaciones sin efecto: `servicios.evaluar_estado` solo deja fila cuando cambió el estado (decisión del PM, día 4). La acción que la llamó (pago, promesa, corte) queda auditada igual, y el corte deja su corrida en `registrar_corrida`.
+    - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
 - `audit.red`: cada CoA, Disconnect o comando a RouterOS con la respuesta del equipo.
@@ -141,7 +142,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | --- | --- | --- |
 | `servicio.creado` | núcleo | servicio_id, cliente_id, router_id, plan_id |
 | `servicio.estado_cambiado` | núcleo | servicio_id, de, a, motivo |
-| `servicio.config_cambiada` | núcleo | servicio_id, campos (plan, ips, prefijo_v6, router) |
+| `servicio.config_cambiada` | núcleo | servicio_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6 |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, servicio_id, cliente_id, total, vence |
@@ -152,6 +153,10 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sesion.desconexion_solicitada` | network | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, motivo |
 | `coa.fallido` | coa | servicio_id (o null), nas_ip, tipo (coa/disconnect), error |
 | `aaa.caido` / `aaa.recuperado` | network (vigía) | nodo, desde, hasta (recuperado), ultimo_error |
+| `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, cliente_id, pago_id, motivo |
+| `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
+| `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
+| `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 
