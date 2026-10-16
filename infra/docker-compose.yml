@@ -152,6 +152,46 @@ services:
       timeout: 3s
       retries: 5
 
+  # Respaldo diario de Postgres (infra/backups, infra/README.md "Respaldos"): pg_dump a BACKUP_HOST_DIR
+  # (un disco externo o NFS montado en el host), retención por días, cifrado con age y copia con rclone
+  # opcionales. Restaurar: docker compose run --rm backup restaurar.sh /backups/<archivo> ...
+  backup:
+    image: argosisp/backup:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/backups/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      PGHOST: postgres
+      PGPORT: '5432'
+      # Superusuario: lee todo y, al restaurar, crea la base y asigna dueños
+      PGUSER: argosisp
+      PGPASSWORD: ${DB_PASSWORD:-argosisp}
+      DB_OWNER_USER: ${DB_OWNER_USER:-argosisp_owner}
+      BACKUP_BASE: argosisp
+      BACKUP_HORA: ${BACKUP_HORA:-03:13}
+      BACKUP_RETENCION_DIAS: ${BACKUP_RETENCION_DIAS:-14}
+      BACKUP_AGE_RECIPIENTS: ${BACKUP_AGE_RECIPIENTS:-}
+      # Solo para restaurar un .age: clave privada montada (nunca en el servidor de producción a diario)
+      BACKUP_AGE_IDENTITY: ${BACKUP_AGE_IDENTITY:-/config/age.key}
+      BACKUP_RCLONE_DESTINO: ${BACKUP_RCLONE_DESTINO:-}
+      RCLONE_CONFIG: /config/rclone.conf
+    volumes:
+      - ${BACKUP_HOST_DIR:-./backups/datos}:/backups
+      # rclone.conf (y age.key al restaurar), solo lectura
+      - ${BACKUP_CONFIG_DIR:-./backups/config}:/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Sano mientras el último intento no haya fallado (BACKUP_DIR/.estado lo escribe programar.sh)
+      test: [CMD-SHELL, "! grep -q '^error' /backups/.estado 2>/dev/null"]
+      interval: 5m
+      timeout: 5s
+      retries: 1
+      start_period: 1m
+
   # Migraciones de apps/api (AdonisJS) antes de levantar la API. Misma imagen que api.
   migrate:
     image: argosisp/api:${IMAGE_TAG:-dev}

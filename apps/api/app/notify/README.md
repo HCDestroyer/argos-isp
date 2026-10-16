@@ -57,13 +57,13 @@ Variables extra: `recordatorio.orden`, `recordatorio.dias` y `factura.vence_rela
 
 Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. Cada problema es un **incidente** en `notify.incidentes` identificado por `clave`; mientras está abierto, repetir el evento solo suma `eventos`. Resultado: una alerta por incidente y, cuando aplica, un "RESUELTO" al cerrarse.
 
-| Origen | Clave del incidente | Alerta | Se cierra |
-| --- | --- | --- | --- |
-| `aaa.caido` (`{ nodo?, desde, ultimo_error }`) | `aaa:<nodo>` (`aaa` si no viene nodo) | al abrir | con `aaa.recuperado`, que avisa "resuelto" con la duración |
-| `coa.fallido` | `coa:<nas_ip>` | al abrir | tras 30 min sin fallos de ese router (en silencio); el siguiente fallo avisa de nuevo |
-| `caja.cerrada` con `diferencia ≠ 0` | `caja:<caja_id>` (puntual, nace cerrado) | siempre, faltante o sobrante | — |
-| Vigilancia: `facturas.generar`, `facturas.vencer_pendientes` | `cron:<accion>` | última corrida por cron con más de 60 min + tolerancia (o nunca) | cuando vuelve a correr, con "resuelto" |
-| Vigilancia: `servicios.corte` | `cron:servicios.corte:<fecha> <HH:MM>` | hora de corte de hoy que pasó hace más de la tolerancia sin aparecer en `resultado.horas` de una corrida | cuando una corrida la procesa |
+| Origen                                                       | Clave del incidente                      | Alerta                                                                                                   | Se cierra                                                                             |
+| ------------------------------------------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `aaa.caido` (`{ nodo?, desde, ultimo_error }`)               | `aaa:<nodo>` (`aaa` si no viene nodo)    | al abrir                                                                                                 | con `aaa.recuperado`, que avisa "resuelto" con la duración                            |
+| `coa.fallido`                                                | `coa:<nas_ip>`                           | al abrir                                                                                                 | tras 30 min sin fallos de ese router (en silencio); el siguiente fallo avisa de nuevo |
+| `caja.cerrada` con `diferencia ≠ 0`                          | `caja:<caja_id>` (puntual, nace cerrado) | siempre, faltante o sobrante                                                                             | —                                                                                     |
+| Vigilancia: `facturas.generar`, `facturas.vencer_pendientes` | `cron:<accion>`                          | última corrida por cron con más de 60 min + tolerancia (o nunca)                                         | cuando vuelve a correr, con "resuelto"                                                |
+| Vigilancia: `servicios.corte`                                | `cron:servicios.corte:<fecha> <HH:MM>`   | hora de corte de hoy que pasó hace más de la tolerancia sin aparecer en `resultado.horas` de una corrida | cuando una corrida la procesa                                                         |
 
 - **Acciones.** `RegistrarAlerta` (`notificaciones.alertar`) para los eventos; `VigilarCrons` (`notificaciones.vigilar_crons`) para los crons. Solo sistema.
 - **Idempotencia.** Cada evento procesado queda en `notify.alertas_eventos` (`outbox:<id>`): una reentrega no suma ni avisa. El envío tiene origen `alerta:<incidente>:abierto|cerrado` y la unicidad de `notify.envios` impide duplicarlo.

@@ -102,6 +102,24 @@ jobs:
       - name: Pruebas
         run: pnpm test
 
+      # Ciclo completo de infra/backups sobre la base que dejaron las pruebas: dump → base nueva →
+      # filas por tabla iguales al dump y a la base de origen → migraciones al día.
+      - name: Respaldo y restauración
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: argosisp
+          PGPASSWORD: argosisp
+          BACKUP_BASE: argosisp_test
+          BACKUP_DIR: ${{ runner.temp }}/respaldos
+          DB_OWNER_USER: argosisp
+        run: |
+          pg_dump --version
+          infra/backups/respaldar.sh
+          infra/backups/restaurar.sh "$(ls "$BACKUP_DIR"/argosisp_test-*.dump)" \
+            --base argosisp_restaurada --comparar-con argosisp_test \
+            --migrar 'cd apps/api && node ace migration:run --force'
+
       - name: Build
         run: pnpm build
 
