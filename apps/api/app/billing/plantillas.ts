@@ -1,5 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import type { Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import { normalizarReglasPromesa, type ReglasPromesa } from '#billing/reglas_promesa'
@@ -11,6 +12,8 @@ import type { PlantillaBase } from '#billing/excepciones'
 
 export interface Plantilla extends PlantillaBase {
     id: number
+    /** la plantilla que usa un servicio creado sin `plantilla_facturacion_id` (a lo sumo una) */
+    por_defecto: boolean
     version: number
     created_at: Date
     updated_at: Date
@@ -31,6 +34,7 @@ const COLUMNAS = (cliente: QueryClientContract) => [
     cliente.raw(`to_char(hora_corte, 'HH24:MI') as hora_corte`),
     'certificar_al',
     'reglas_promesa',
+    'por_defecto',
     'version',
     'created_at',
     'updated_at',
@@ -157,4 +161,51 @@ export function validarCoherencia(campos: CamposPlantilla): CamposPlantilla {
 
     if (errores.length > 0) throw new ValidacionFallida(errores)
     return salida
+}
+
+/*
+|--------------------------------------------------------------------------
+| Plantilla por defecto
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Id de la plantilla marcada `por_defecto`, o null si ninguna lo está. La usa A1
+ * (`app/core/plantilla_por_defecto.ts`) al crear un servicio sin `plantilla_facturacion_id`.
+ */
+export async function plantillaPorDefectoId(cliente: QueryClientContract = db.connection()) {
+    const fila = await cliente
+        .from('billing.plantillas_facturacion')
+        .where('por_defecto', true)
+        .select('id')
+        .first()
+    return fila ? Number(fila.id) : null
+}
+
+/**
+ * Quita la marca a la plantilla por defecto actual (si es otra que `exceptoId`) antes de marcar
+ * una nueva: sube su `version` y deja su diff en `audit.cambios`.
+ */
+export async function desmarcarPorDefecto(t: Transaccion, exceptoId: number | null = null) {
+    const filas = (await t.trx
+        .from('billing.plantillas_facturacion')
+        .where('por_defecto', true)
+        .if(exceptoId !== null, (q) => q.whereNot('id', exceptoId!))
+        .forUpdate()
+        .select('id')) as Array<{ id: number }>
+    for (const { id } of filas) {
+        await t.trx
+            .from('billing.plantillas_facturacion')
+            .where('id', id)
+            .update({
+                por_defecto: false,
+                version: t.trx.knexRawQuery('version + 1'),
+                updated_at: t.trx.knexRawQuery('now()'),
+            } as Record<string, unknown>)
+        await t.registrarCambios(
+            { tipo: 'plantilla_facturacion', id },
+            { por_defecto: true },
+            { por_defecto: false },
+        )
+    }
 }

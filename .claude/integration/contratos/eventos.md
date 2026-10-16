@@ -48,6 +48,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
 | `routeros` | A2 (`node ace routeros:worker`, `apps/api/app/network/routeros`) | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` (estado deseado del servicio sin PPPoE) y `plan.velocidad_cambiada` (reconcilia los routers del plan) |
 | `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
+| `billing` | A3 | `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar las vistas del dashboard, `ConsumidorResumenes`) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y `plan.velocidad_cambiada` (reescribe `aaa:user:<user_ppp>`) |
 

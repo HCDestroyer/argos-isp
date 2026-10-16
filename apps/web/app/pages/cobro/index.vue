@@ -167,7 +167,7 @@ const distribucion = computed(() => (resumen.value && montoValido.value && marca
 /** Sin facturas marcadas: cuánto quedaría debiendo, o el saldo a favor si paga de más. */
 const restante = computed(() => (resumen.value && montoValido.value && !marcadas.value.length ? resumen.value.pendiente.minus(new Decimal(estado.monto.trim())) : null))
 
-const nombresServicio = computed(() => new Map(serviciosPantalla.value.map(s => [s.id, s.user_ppp])))
+const nombresServicio = computed(() => new Map(serviciosPantalla.value.map(s => [s.id, etiquetaServicio(s)])))
 
 function marcar(facturaId: number, valor: boolean) {
     const elegidas = new Set(marcadas.value)

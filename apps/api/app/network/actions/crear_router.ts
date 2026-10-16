@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrarOpcional } from '#shared/cifrado'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import type { ControlVelocidad } from '#network/velocidad'
+import { vincularExterno, type IdExterno } from '#core/ids_externos'
 
 export interface DatosRouter {
     nombre?: string
@@ -19,6 +20,8 @@ export interface DatosRouter {
 export interface EntradaCrearRouter extends DatosRouter {
     /** en el alta; después solo con `CambiarControlVelocidad` */
     control_velocidad?: ControlVelocidad
+    /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
+    externo?: IdExterno
     nombre: string
     host: string
     nas_ip: string
@@ -55,13 +58,15 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
     readonly nombre = 'routers.crear'
 
     protected async handle(input: EntradaCrearRouter, t: Transaccion): Promise<RouterVista> {
+        const { externo, ...datos } = input
         const [fila] = (await t.trx
             .insertQuery()
             .table('network.routers')
-            .insert(columnasRouter(input))
+            .insert(columnasRouter(datos))
             .returning('id')) as Array<{ id: number }>
         const id = fila!.id
         t.fijarEntidad('router', id)
+        await vincularExterno(t.trx, 'router', id, externo)
         const router = await verRouter(id, t.trx)
         await t.registrarCambios({ tipo: 'router', id }, null, auditableRouter(router))
         return router

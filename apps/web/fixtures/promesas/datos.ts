@@ -18,7 +18,7 @@ export interface ResultadoEvaluacionFixture {
 }
 
 function servicioDe(clienteId: number): Schema<'Servicio'> {
-    const servicio = servicios.find(s => s.cliente_id === clienteId && !s.user_ppp.endsWith('-b'))
+    const servicio = servicios.find(s => s.cliente_id === clienteId && !s.user_ppp?.endsWith('-b'))
     if (!servicio) {
         throw new Error(`Fixture: el cliente ${clienteId} no tiene servicio`)
     }

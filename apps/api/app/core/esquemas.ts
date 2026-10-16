@@ -120,7 +120,7 @@ export const Cliente = definirEsquema(
             },
             ...auditable,
         },
-        ['responsable_pago_id', 'responsable_pago_nombre'],
+        [],
     ),
 )
 
@@ -208,17 +208,17 @@ export const Servicio = definirEsquema(
             prefijo_delegado_v6: nulable(texto),
             ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
             ipv6_duid: nulable(texto),
-            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper fixtures
+            // aditivos (día 3): la API siempre los envía; opcionales en el esquema para no romper pruebas del panel
             cliente_nombre: texto,
             plan_nombre: texto,
             router_nombre: texto,
             zona_nombre: nulable(texto),
-            // aditivo (día 4): la API siempre lo envía
+            // día 4; obligatorio desde la semana 2 (las fixtures del panel ya lo traen)
             excepciones: ExcepcionesServicio,
             ...auditable,
         },
         [
-            'excepciones',
+            // siguen opcionales: `apps/web/tests/nuxt/listaServicios.test.ts` arma servicios sin nombres
             'cliente_nombre',
             'plan_nombre',
             'router_nombre',

@@ -14,6 +14,7 @@ import {
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { registrarTramo } from '#network/historial'
 import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
+import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 
 export interface EntradaCrearServicio {
@@ -45,6 +46,8 @@ export interface EntradaCrearServicio {
     prefijo_delegado_v6?: string
     /** excepciones a la plantilla `{ campo: valor }` (campos de `app/billing/excepciones.ts`) */
     excepciones?: Record<string, unknown>
+    /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
+    externo?: IdExterno
 }
 
 /** Valida que existan las referencias del cuerpo (422 por campo, no 404). */
@@ -160,6 +163,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             .returning('id')) as Array<{ id: number }>
         const id = fila!.id
         t.fijarEntidad('servicio', id)
+        await vincularExterno(t.trx, 'servicio', id, input.externo)
 
         const asignaciones = await reconciliarAsignaciones(t.trx, {
             servicioId: id,

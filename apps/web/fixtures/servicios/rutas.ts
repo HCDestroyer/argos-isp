@@ -329,6 +329,10 @@ export const rutasServicios: RutasFixture = {
         if (!servicio) {
             return noEncontrado('el servicio')
         }
+        if (servicio.user_ppp === null) {
+            // Igual que la API: un servicio WISP sin PPPoE no tiene credenciales.
+            return { status: 422, cuerpo: { type: 'urn:argosisp:problema:sin_credenciales_ppp', title: 'Regla de negocio', status: 422, detail: 'El servicio no usa PPPoE' } }
+        }
         registrarAccion(solicitud, 'servicios.ver_credenciales', { tipo: 'servicio', id: servicio.id }, { id: servicio.id })
         const credenciales: Schema<'CredencialesPpp'> = {
             servicio_id: servicio.id,

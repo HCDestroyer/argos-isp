@@ -75,6 +75,17 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - `pass_ppp` nunca llega a `audit.*` ni en claro ni cifrada: el alta registra `pass_ppp: ***`, la edición solo `clave_ppp_cambiada: true` y `servicios.ver_credenciales` audita la entrada `{ id }`, no la respuesta.
 - `GET /bitacora/cambios` trae `actor_nombre` (como `/bitacora/acciones`).
 
+- `auth.login` (`IniciarSesion`): llega anónima y se audita con el usuario que entró (`t.identificarActor`); un login fallido queda como error con actor `sistema`.
+
+## Ids externos (`ids_externos.ts`, semana 2)
+
+- `core.ids_externos (sistema, entidad_tipo, externo_id, entidad_id)`, único por (sistema, tipo, id externo) y por (sistema, tipo, entidad). Tipos: `cliente`, `router`, `plan`, `servicio`.
+- Opción `externo: { sistema, id }` en `CrearCliente`, `CrearRouter`, `CrearPlan` y `CrearServicio` (solo por acción, no por HTTP): se vincula en la misma transacción; un id ya vinculado responde 409 `externo_duplicado` y no crea nada. `entidadPorExterno(tipo, { sistema, id })` para buscar antes de crear.
+
+## Log de acceso (`app/middleware/request_id_middleware.ts`)
+
+- Una línea `info` "petición" al terminar cada petición: `request_id`, `metodo`, `ruta` (patrón, null sin ruta), `status`, `duracion_ms`. El logger de la petición lleva `request_id`.
+
 ## Autorización RADIUS (`aaa.ts`, tarea 9)
 
 - Contrato con A2: `.claude/integration/contratos/aaa.md`. `GET /api/v1/internal/aaa/servicio?user_ppp=` (Bearer `INTERNAL_TOKEN`) arma el JSON desde Postgres: 404 si no existe; retirado → 200 con `estado: retirado`.
