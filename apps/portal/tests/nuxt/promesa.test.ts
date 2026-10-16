@@ -2,7 +2,7 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fijarPromesaFixture, fijarSesionFixture } from '~~/fixtures'
-import { condicionesFixture, diaFixture } from '~~/fixtures/promesas'
+import { condicionesConPagoPrevioFixture, condicionesFixture, diaFixture } from '~~/fixtures/promesas'
 import PaginaCorte from '~/pages/corte.vue'
 import PaginaCuenta from '~/pages/cuenta.vue'
 import SolicitarPromesa from '~/components/promesa/Solicitar.vue'
@@ -64,6 +64,22 @@ describe('esquema y textos de la promesa', () => {
         expect(mensajes({ vence_el: diaFixture(1), monto: '10.555' })[0]).toContain('hasta 2 decimales')
     })
 
+    it('con pago previo (abono o deuda máxima de limitesPromesa) el mismo esquema no deja enviar', () => {
+        const conPrevio = condicionesConPagoPrevioFixture()
+        const resultado = esquemaPromesa(conPrevio).safeParse({ vence_el: diaFixture(1), monto: '350.00' })
+        expect(resultado.success).toBe(false)
+        expect(resultado.error?.issues.map(i => i.message)).toContain('Primero paga Q 262.50; después solicita la promesa')
+        expect(resultado.error?.issues[0]?.path).toEqual(['monto'])
+        // pago_previo null o "0.00": nada que pagar antes
+        expect(esquemaPromesa({ ...conPrevio, pago_previo: '0.00' }).safeParse({ vence_el: diaFixture(1), monto: '350.00' }).success).toBe(true)
+
+        const explicacion = textoPagoPrevio(conPrevio)
+        expect(explicacion).not.toContain('abonar')
+        expect(explicacion).toContain('Paga en línea, en la oficina o por depósito')
+        expect(textoPagoPrevio({ deuda_maxima: null })).toBe('Paga en línea, en la oficina o por depósito y luego solicita la promesa.')
+        expect(explicacion).toContain('Tu saldo vencido (Q\u00A0350.00) pasa del máximo para una promesa (Q\u00A0300.00)')
+    })
+
     it('plazo legible e Idempotency-Key v4 nueva en cada llamada', () => {
         const [anio, mes, dia] = diaFixture(3).split('-')
         expect(textoPlazo(condiciones)).toBe(`hasta 3 días (a más tardar el ${dia}/${mes}/${anio})`)
@@ -86,6 +102,20 @@ describe('modal "Solicitar promesa de pago"', () => {
         expect(fecha.min).toBe(diaFixture(0))
         expect(fecha.max).toBe(diaFixture(3))
         expect(document.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('350.00')
+    })
+
+    it('con pago previo: muestra el límite y cuánto pagar antes, y no deja enviar', async () => {
+        fijarPromesaFixture('con_pago_previo')
+        const wrapper = await montarModal()
+        const limites = enDocumento('[data-testid="promesa-limites"]')!.textContent ?? ''
+        expect(limites).toContain('Fecha de pago: hasta 3 días')
+        expect(limites).toContain('abonar el 50% de tu deuda')
+        expect(limites).toContain('Saldo vencido máximo para prometer: Q\u00A0300.00')
+        expect(enDocumento('[data-testid="promesa-falta-abono"]')!.textContent).toContain('Antes de prometer debes pagar Q\u00A0262.50')
+        expect(enDocumento('[data-testid="promesa-enviar"]')!.hasAttribute('disabled')).toBe(true)
+        await enviarFormulario()
+        expect(wrapper.emitted('resultado')).toBeUndefined()
+        expect(texto()).toContain('Primero paga Q 262.50')
     })
 
     it('aprobada: emite el resultado y cierra', async () => {

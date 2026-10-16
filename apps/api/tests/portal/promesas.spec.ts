@@ -126,6 +126,8 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             monto_maximo: s.deuda,
             monto_sugerido: s.deuda,
             abono_inicial: null,
+            deuda_maxima: null,
+            pago_previo: null,
             requiere_aprobacion: false,
         })
         assert.equal(respuesta.header('cache-control'), 'no-store')
@@ -159,6 +161,50 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             abonado: '0.00',
             faltante: aTexto(dec(s.deuda).div(2)),
         })
+        // sin abonar, la promesa no se aprobaría: el portal no deja enviar
+        assert.equal(cuerpo.pago_previo, aTexto(dec(s.deuda).div(2)))
+    })
+
+    test('condiciones de limitesPromesa (A3): deuda máxima y pago previo, iguales a lo que decide crear', async ({
+        client,
+        assert,
+    }) => {
+        const s = await cortado({ deuda_maxima: '100.00' })
+        const leidas = await estado(
+            client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
+            200,
+        )
+        const cuerpo = leidas.body()
+        assert.isTrue(cuerpo.disponible)
+        const exceso = aTexto(dec(s.deuda).minus('100.00'))
+        assert.deepEqual(cuerpo.deuda_maxima, { maximo: '100.00', vencida: s.deuda, faltante: exceso })
+        assert.equal(cuerpo.pago_previo, exceso)
+
+        // lo que anunció el portal es lo que decide CrearPromesaPago
+        const promesa = await estado(
+            client
+                .post('/api/v1/portal/promesas')
+                .header('X-Forwarded-For', s.ip)
+                .json({ vence_el: cuerpo.fecha_maxima, monto: cuerpo.monto_sugerido }),
+            201,
+        )
+        assert.equal(promesa.body().resultado, 'rechazada')
+        assert.include(promesa.body().motivo, 'saldo vencido es mayor que el permitido')
+    })
+
+    test('condiciones: cupo del periodo agotado → no disponible con el motivo', async ({
+        client,
+        assert,
+    }) => {
+        const s = await cortado({ canales: { portal: { max_por_periodo: 0 } } })
+        const leidas = await estado(
+            client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
+            200,
+        )
+        const cuerpo = leidas.body()
+        assert.isFalse(cuerpo.disponible)
+        assert.include(cuerpo.motivo, 'Ya usaste las promesas de pago disponibles para este periodo')
+        assert.isNull(cuerpo.fecha_maxima)
     })
 
     test('por IP: aprobada reactiva el servicio y /portal/estado lo ve; auditoría como sistema/portal', async ({

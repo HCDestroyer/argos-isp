@@ -1527,6 +1527,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/pagos/en-linea/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de un pago en línea (página de retorno `/corte?pago=<id>`)
+         * @description Solo lectura: `pendiente` hasta que llegue el webhook, luego `pagado`, `fallido` o `expirado`. Responde solo si el cobro es del cliente de la sesión del portal o del servicio de la IP de origen; cualquier otro, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         */
+        get: operations["portalPagoEnLinea"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/pagos/iniciar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor
+         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a `/corte?pago=<id>`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         */
+        post: operations["portalIniciarPago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/promesas": {
         parameters: {
             query?: never;
@@ -2978,6 +3018,8 @@ export interface components {
             instrucciones_pago: string | null;
             /** @description Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
+            /** @description Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita) */
+            pago_en_linea: boolean;
         };
         EnvioNotificacion: {
             id: number;
@@ -3463,6 +3505,15 @@ export interface components {
                 abonado: components["schemas"]["Dinero"];
                 faltante: components["schemas"]["Dinero"];
             } | null;
+            /** @description La plantilla no admite promesas con más deuda vencida que `maximo` */
+            deuda_maxima: {
+                maximo: components["schemas"]["Dinero"];
+                vencida: components["schemas"]["Dinero"];
+                /** @description Lo que hay que pagar para quedar dentro del máximo */
+                faltante: components["schemas"]["Dinero"];
+            } | null;
+            /** @description Lo que el cliente debe pagar antes de que la promesa pueda aprobarse (el mayor faltante entre abono inicial y deuda máxima); null = nada */
+            pago_previo: components["schemas"]["Dinero"] | null;
             /** @description La promesa quedará pendiente de aprobación */
             requiere_aprobacion: boolean;
         };
@@ -3539,6 +3590,19 @@ export interface components {
                 factura_id: number;
                 monto: components["schemas"]["Dinero"];
             }[];
+        };
+        PortalPagoEnLinea: {
+            /** @description Cobro en línea; el retorno es `/corte?pago=<id>` */
+            id: number;
+            /** @enum {string} */
+            estado: "pendiente" | "pagado" | "fallido" | "expirado";
+            monto: components["schemas"]["Dinero"];
+            /** @description Página de pago del proveedor (solo mientras el cobro está pendiente) */
+            url_pago: string | null;
+            /** Format: date-time */
+            expira_en: string | null;
+            /** Format: date-time */
+            pagado_en: string | null;
         };
         PortalPromesa: {
             id: number;
@@ -10145,6 +10209,105 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPagoEnLinea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pago en línea */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPagoEnLinea"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalIniciarPago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
+                    servicio_id?: number;
+                    /** @description Facturas concretas del cliente (solo con la sesión del portal) */
+                    facturas?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Cobro creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPagoEnLinea"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

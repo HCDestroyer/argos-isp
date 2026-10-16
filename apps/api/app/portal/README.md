@@ -123,15 +123,15 @@ largas siguen en otra página.
 
 | Endpoint | Identifica | Qué hace |
 | --- | --- | --- |
-| `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante) y si requiere aprobación |
+| `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante), deuda máxima (máximo, vencida, faltante), `pago_previo` (lo que debe pagar antes de prometer) y si requiere aprobación. Cupo del periodo agotado: no disponible |
 | `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` y actor sistema. Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
 
 - **Sin lógica de promesas en el portal.** La decisión, la auditoría (`promesas.crear`, canal `portal`), el
   evento `promesa.creada` y la reactivación son de `CrearPromesaPago`. `promesas.ts` solo identifica el
-  servicio, traduce el resultado y lee los límites para mostrarlos antes de enviar (con
-  `leerServicio`, `configuracionDeServicio` y `datosEvaluacion` de A3, solo lectura). Las reglas que
-  dependen del historial (cupo del periodo, cumplimiento, bloqueo tras incumplida) no se adelantan: las
-  dice el resultado.
+  servicio, traduce el resultado y lee los límites para mostrarlos antes de enviar con
+  `limitesPromesa(servicio, 'portal')` de A3 (la misma evaluación que crear; solo el porcentaje del
+  abono sale de `configuracionDeServicio`). Las reglas de historial (cumplimiento, bloqueo tras
+  incumplida, antigüedad) no se adelantan: las dice el resultado.
 - Identificación: sin `servicio_id`, la IP de origen (422 `no_identificado` si no es de ningún servicio);
   con `servicio_id`, la sesión del portal (401 sin ella) y el servicio debe ser del cliente (404).
 - `motivo` sale de `resultado_evaluacion.regla` y su límite (`motivoParaCliente`): "La fecha de pago debe
@@ -177,6 +177,18 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 | `GET /api/v1/portal/telegram` (sesión) | `acceso/telegram.ts` (`estadoTelegram`, lectura) | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario |
 | `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
 | `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1; si el canal preferido era Telegram pasa a correo (`clientes.editar`). Idempotente |
+
+### Pago en línea desde el portal (semana 2)
+
+Contrato en `.claude/integration/contratos/pago-en-linea.md`. El cobro, el webhook firmado, el pago y la
+reactivación son de A3; el portal solo identifica al pagador, elige las facturas y lee el estado.
+
+| Ruta | Acción | Qué hace |
+| --- | --- | --- |
+| `POST /api/v1/portal/pagos/iniciar` (IP o sesión, límite por IP, `Idempotency-Key`) | `CrearCobroPasarela` de A3 (`pasarela.crear_cobro`, canal portal, actor sistema) | Sin `facturas`: las vencidas con saldo del servicio (o todo lo pendiente del servicio). Con `facturas` (sesión): deben ser del cliente (404). 201 `PortalPagoEnLinea` con `url_pago`; 422 `sin_deuda` / `no_identificado` / `facturas.<i>`; 503 `pasarela_no_configurada` en palabras del cliente |
+| `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP) | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3) | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente |
+
+`GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
 
 ### Auditoría una vez por ventana
 
@@ -241,7 +253,8 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos
-(`promesa.creada`, `comprobante.recibido`).
+(`promesa.creada`, `comprobante.recibido`; el webhook de la pasarela emite `pago.registrado` y
+`servicio.estado_cambiado`).
 
 ## Pruebas
 

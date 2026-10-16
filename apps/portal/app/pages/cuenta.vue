@@ -163,7 +163,8 @@ async function salir() {
                 </div>
                 <PagoEnLinea
                     v-if="new Decimal(cuenta.monto_adeudado).greaterThan(0)"
-                    id-ayuda="pagar-en-linea-pronto-cuenta"
+                    :servicio-id="servicioComprobante"
+                    id-ayuda="pagar-en-linea-ayuda-cuenta"
                     class="mt-3"
                 />
                 <UButton

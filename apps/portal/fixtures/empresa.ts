@@ -18,6 +18,7 @@ export const EMPRESA_FIXTURE: Schema<'EmpresaPublica'> = {
         { id: 3, banco: 'Banco Industrial', alias: 'Monetaria Red Altiplano', numero: '123-456789-0', moneda: 'GTQ' },
         { id: 5, banco: 'Banrural', alias: 'Ahorro Red Altiplano', numero: '3-033-12345-6', moneda: 'GTQ' },
     ],
+    pago_en_linea: true,
 }
 
 /** Empresa recién instalada: nada configurado todavía (sin cuentas ni contacto). */
@@ -32,4 +33,5 @@ export const EMPRESA_SIN_CONFIGURAR: Schema<'EmpresaPublica'> = {
     horario: null,
     instrucciones_pago: null,
     cuentas_deposito: [],
+    pago_en_linea: false,
 }

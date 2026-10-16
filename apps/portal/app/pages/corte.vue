@@ -6,13 +6,16 @@
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Día 4: solicitar promesa
  * de pago (tarea 4, `PromesaSolicitar`) y subir el comprobante de depósito (tarea 5,
- * `ComprobanteSubir`). El pago en línea llega en la semana 2 (mientras, ese botón se ve apagado).
+ * `ComprobanteSubir`). Semana 2: pagar en línea (`PagoEnLinea`); la pasarela devuelve al cliente a
+ * `/corte?pago=<id>`, donde se sigue el cobro (`GET /portal/pagos/en-linea/:id`) junto con el estado.
  *
  * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
  * 2 min; al ver `activo` muestra "Ya tienes servicio".
  */
 const { seguirNavegandoUrl } = useRuntimeConfig().public
+const route = useRoute()
+const router = useRouter()
 const { data: corte, status, refresh } = useCorte()
 // Contacto, instrucciones y cuentas de depósito: configuración del panel (tarea 9).
 const { empresa, nombre: nombreEmpresa } = useEmpresa()
@@ -42,16 +45,63 @@ const puedePedirPromesa = computed(() => identificado.value
     && corte.value?.estado !== 'activo'
     && promesa.value === null)
 
-const { activo: servicioActivo, vigilando, agotado, vigilar } = useEstadoServicio()
+const { activo: servicioActivo, vigilando, agotado, vigilar, detener } = useEstadoServicio()
 /** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
 const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
-const reactivado = computed(() => servicioActivo.value && corte.value?.estado !== 'activo')
+
+/** Retorno de la pasarela: `/corte?pago=<id>`. */
+const pagoId = ref(idPagoDeLaRuta(route.query.pago))
+const seguimiento = useSeguimientoPago()
+const pago = computed(() => pagoId.value ? seguimiento.cobro.value : null)
+const pagoCerrado = computed(() => pago.value?.estado === 'fallido' || pago.value?.estado === 'expirado')
+/** Con un pago pendiente o confirmado no se ofrece pagar otra vez (evita cobros dobles). */
+const pagoEnCamino = computed(() => pagoId.value !== null
+    && seguimiento.problema.value === null
+    && !pagoCerrado.value)
+
+const reactivado = computed(() => (servicioActivo.value && corte.value?.estado !== 'activo')
+    // Volvió de la pasarela con el servicio ya reactivado por el webhook.
+    || (pago.value?.estado === 'pagado' && corte.value?.estado === 'activo'))
 
 /** Toda acción del cliente que pueda reactivar el servicio termina llamando a esta función. */
 function vigilarEstado() {
-    if (puedeVigilar.value) {
+    if (pagoId.value !== null) {
+        seguimiento.seguir(pagoId.value)
+    }
+    if (puedeVigilar.value && !pagoCerrado.value) {
         vigilar()
     }
+}
+
+// Rechazado o vencido: ya no hay reactivación que esperar por este pago.
+watch(pagoCerrado, (cerrado) => {
+    if (cerrado) {
+        detener()
+    }
+})
+
+// Al volver de la pasarela se sigue el pago en cuanto se identifica el servicio.
+watch(() => corte.value, (actual) => {
+    if (actual && pagoId.value !== null) {
+        vigilarEstado()
+    }
+}, { immediate: true })
+
+/** Estado en vivo: arriba de las acciones al volver de la pasarela (es lo que el cliente viene a ver). */
+const enVivo = computed(() => ({
+    vigilando: vigilando.value || seguimiento.siguiendo.value,
+    agotado: agotado.value || seguimiento.agotado.value,
+    pagoEnCurso: pagoId.value !== null,
+    pago: pago.value,
+    pagoNoEncontrado: seguimiento.problema.value !== null,
+}))
+
+function descartarPago() {
+    pagoId.value = null
+    seguimiento.detener()
+    const query = { ...route.query }
+    delete query.pago
+    void router.replace({ query })
 }
 
 function alCambiarVisibilidad() {
@@ -122,6 +172,7 @@ const hayDatosDeposito = computed(() => !empresa.value
             v-else-if="reactivado"
             :url="seguirNavegandoUrl"
             :promesa="promesa?.resultado === 'aprobada' ? promesa : null"
+            :pago="pago?.estado === 'pagado' ? pago : null"
         />
 
         <template v-else>
@@ -143,6 +194,13 @@ const hayDatosDeposito = computed(() => !empresa.value
             <CorteResumenDeuda
                 v-if="identificado"
                 :corte="corte"
+            />
+
+            <CorteEstadoEnVivo
+                v-if="pagoId !== null"
+                v-bind="enVivo"
+                @revisar="vigilarEstado"
+                @descartar-pago="descartarPago"
             />
 
             <UAlert
@@ -178,11 +236,13 @@ const hayDatosDeposito = computed(() => !empresa.value
                 v-if="!retirado"
                 class="flex flex-col gap-2"
             >
-                <PagoEnLinea />
+                <PagoEnLinea v-if="!pagoEnCamino" />
                 <UButton
                     v-if="hayDatosDeposito"
                     label="Ver datos de depósito"
                     icon="i-lucide-landmark"
+                    :color="empresa?.pago_en_linea ? 'neutral' : 'primary'"
+                    :variant="empresa?.pago_en_linea ? 'outline' : 'solid'"
                     size="xl"
                     block
                     @click="verDeposito = true"
@@ -211,9 +271,8 @@ const hayDatosDeposito = computed(() => !empresa.value
             </div>
 
             <CorteEstadoEnVivo
-                v-if="puedeVigilar"
-                :vigilando="vigilando"
-                :agotado="agotado"
+                v-if="puedeVigilar && pagoId === null"
+                v-bind="enVivo"
                 @revisar="vigilarEstado"
             />
 

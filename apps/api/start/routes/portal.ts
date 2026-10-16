@@ -21,6 +21,7 @@ import {
     PortalFactura,
     PortalFacturaDetalle,
     PortalPago,
+    PortalPagoEnLinea,
     PortalPromesa,
     PortalPromesaSolicitada,
     PortalSesion,
@@ -34,6 +35,7 @@ import {
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
+    iniciarPagoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
     solicitarCodigoValidator,
@@ -87,6 +89,15 @@ import {
     errorComprobanteParaCliente,
     titularDeLaPeticion,
 } from '#portal/comprobantes'
+import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
+import {
+    cobroDeLaPeticion,
+    cobroParaCliente,
+    errorPagoParaCliente,
+    facturasAPagar,
+    pagadorDeLaPeticion,
+    pagoEnLineaDisponible,
+} from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
 
@@ -550,6 +561,69 @@ const promesas: Ruta[] = [
     }),
 ]
 
+const SOBRE_EL_PAGO =
+    'Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado ' +
+    'de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.'
+
+const pagosEnLinea: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/pagos/iniciar',
+        operacion: 'portalIniciarPago',
+        resumen: 'Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor',
+        descripcion:
+            'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
+            '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
+            'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
+            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a ' +
+            `\`/corte?pago=<id>\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        idempotente: true,
+        permiso: null,
+        cuerpo: iniciarPagoValidator,
+        respuesta: { status: 201, descripcion: 'Cobro creado', esquema: PortalPagoEnLinea },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'pagos-iniciar')
+            const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
+            const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
+            try {
+                const cobro = await new CrearCobroPasarela().execute(
+                    { cliente_id: pagador.clienteId, servicio_id: pagador.servicioId, facturas },
+                    ctx.contextoAccion('portal'),
+                )
+                return cobroParaCliente(cobro)
+            } catch (error) {
+                throw errorPagoParaCliente(error)
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/pagos/en-linea/:id',
+        operacion: 'portalPagoEnLinea',
+        resumen: 'Estado de un pago en línea (página de retorno `/corte?pago=<id>`)',
+        descripcion:
+            'Solo lectura: `pendiente` hasta que llegue el webhook, luego `pagado`, `fallido` o `expirado`. ' +
+            'Responde solo si el cobro es del cliente de la sesión del portal o del servicio de la IP de origen; ' +
+            `cualquier otro, 404. ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Pago en línea', esquema: PortalPagoEnLinea },
+        handler: async (ctx, { params }) => {
+            const ip = await ipDelCliente(ctx, 'pagos-en-linea')
+            const id = Number(params.id)
+            if (!Number.isSafeInteger(id) || id < 1) {
+                throw new NoEncontrado('No encontramos ese pago en línea')
+            }
+            return cobroDeLaPeticion(ctx, ip, id)
+        },
+    }),
+]
+
 const empresa: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -565,7 +639,11 @@ const empresa: Ruta[] = [
         handler: async (ctx) => {
             await ipDelCliente(ctx, 'empresa')
             const datos = await leerEmpresa()
-            return { ...datos, cuentas_deposito: await fuenteCuentasDeposito().activas() }
+            return {
+                ...datos,
+                cuentas_deposito: await fuenteCuentasDeposito().activas(),
+                pago_en_linea: pagoEnLineaDisponible(),
+            }
         },
     }),
     definirRuta({
@@ -679,6 +757,7 @@ const portal: Ruta[] = [
     ...telegram,
     ...promesas,
     ...comprobantes,
+    ...pagosEnLinea,
     ...documentos,
     ...empresa,
 ]

@@ -134,3 +134,20 @@ export const subirComprobanteValidator = vine.compile(
         servicio_id: servicioDeLaSesion(),
     }),
 )
+
+/**
+ * `POST /portal/pagos/iniciar` (semana 2, pago en línea). Sin `servicio_id` ni `facturas` cobra lo
+ * vencido del servicio de la IP de origen (o lo pendiente, si nada está vencido). `servicio_id` y
+ * `facturas` exigen la sesión del portal.
+ */
+export const iniciarPagoValidator = vine.compile(
+    vine.object({
+        servicio_id: servicioDeLaSesion(),
+        facturas: vine
+            .array(idEntidad())
+            .minLength(1)
+            .maxLength(50)
+            .optional()
+            .meta({ description: 'Facturas concretas del cliente (solo con la sesión del portal)' }),
+    }),
+)
