@@ -6,17 +6,19 @@ import { contextoSistema } from '#shared/contexto'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
+import IncumplirPromesas from '#billing/actions/incumplir_promesas'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
  *
- * Cola `billing-cron` con tres job schedulers (`upsertJobScheduler`, idempotente al arrancar):
+ * Cola `billing-cron` con cuatro job schedulers (`upsertJobScheduler`, idempotente al arrancar):
  *
  * | Job | Cada | Acción |
  * | --- | --- | --- |
  * | `generar` | 1 h | `GenerarFacturas` (todo lo pendiente hasta hoy) |
  * | `vencer` | 1 h | `VencerFacturas` (vencimiento y mora) |
  * | `corte` | 1 min | `EjecutarCorte` (las horas de corte que ya llegaron y no se procesaron) |
+ * | `promesas` | 1 min | `IncumplirPromesas` (`incumplirPromesas`: las vencidas sin pagar → incumplida) |
  *
  * Lock: el worker tiene concurrencia 1 y además cada job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia ya lo tiene, el disparo se
@@ -30,6 +32,7 @@ export const CRONS = {
     generar: 60 * 60_000,
     vencer: 60 * 60_000,
     corte: 60_000,
+    promesas: 60_000,
 } as const
 export type NombreCron = keyof typeof CRONS
 
@@ -52,7 +55,7 @@ function prefijo(opciones: OpcionesColaBilling) {
     return opciones.prefijo ?? env.get('COLAS_PREFIJO') ?? 'argosisp'
 }
 
-/** Registra (o actualiza) los tres job schedulers. Devuelve la cola para cerrarla al salir. */
+/** Registra (o actualiza) los job schedulers. Devuelve la cola para cerrarla al salir. */
 export async function programarCronsBilling(opciones: OpcionesColaBilling = {}): Promise<Queue> {
     const cola = new Queue(NOMBRE_COLA_BILLING, {
         connection: opciones.conexion ?? conexionRedisBilling(),
@@ -104,6 +107,8 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             return conLock(nombre, () => new VencerFacturas().execute({}, ctx))
         case 'corte':
             return conLock(nombre, () => new EjecutarCorte().execute({ ahora }, ctx))
+        case 'promesas':
+            return conLock(nombre, () => new IncumplirPromesas().execute({ ahora }, ctx))
         default:
             throw new Error(`Cron de billing desconocido: ${nombre}`)
     }

@@ -14,6 +14,7 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
+import { METODOS_PAGO } from '#shared/eventos'
 
 /**
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
@@ -124,9 +125,11 @@ export const Factura = definirEsquema(
             },
             factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
+            anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
+            motivo_anulacion: nulable(texto),
             ...auditable,
         },
-        ['tipo', 'factura_origen_id', 'vencida_en'],
+        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion'],
     ),
 )
 
@@ -167,7 +170,21 @@ export const ResultadoCorte = definirEsquema(
     }),
 )
 
-export const AplicacionPago = definirEsquema('AplicacionPago', objeto({ factura_id: id, monto: Dinero }))
+export const AplicacionPago = definirEsquema(
+    'AplicacionPago',
+    objeto(
+        {
+            factura_id: id,
+            monto: Dinero,
+            cliente_id: {
+                ...id,
+                description: 'Dueño de la factura (pago de terceros: puede no ser el pagador)',
+            },
+            cliente_nombre: texto,
+        },
+        ['cliente_id', 'cliente_nombre'],
+    ),
+)
 
 export const ServicioEvaluado = definirEsquema(
     'ServicioEvaluado',
@@ -186,7 +203,7 @@ export const Pago = definirEsquema(
         {
             id,
             cliente_id: id,
-            metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+            metodo: enumerado([...METODOS_PAGO]),
             monto: Dinero,
             comision: Dinero,
             referencia: nulable(texto),
@@ -202,33 +219,63 @@ export const Pago = definirEsquema(
                 ...lista(ServicioEvaluado),
                 description: 'Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)',
             },
+            banco_origen_id: { ...nulable(id), description: 'Banco de origen (transferencia, ach)' },
+            banco_origen_nombre: nulable(texto),
+            cuenta_bancaria_id: {
+                ...nulable(id),
+                description: 'Cuenta bancaria propia de destino (deposito, transferencia, ach, remesa)',
+            },
+            cuenta_bancaria_nombre: {
+                ...nulable(texto),
+                description: 'Banco y alias de la cuenta de destino',
+            },
             ...auditable,
         },
-        ['anulado_en', 'motivo_anulacion', 'servicios'],
+        [
+            'anulado_en',
+            'motivo_anulacion',
+            'servicios',
+            'banco_origen_id',
+            'banco_origen_nombre',
+            'cuenta_bancaria_id',
+            'cuenta_bancaria_nombre',
+        ],
     ),
 )
 
 export const Promesa = definirEsquema(
     'Promesa',
-    objeto({
-        id,
-        servicio_id: id,
-        cliente_id: id,
-        vence_en: instante,
-        monto: Dinero,
-        estado: enumerado([
-            'activa',
-            'cumplida',
-            'incumplida',
-            'cancelada',
-            'pendiente_aprobacion',
-            'rechazada',
-        ]),
-        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
-        aprobada_por: nulable(id),
-        resultado_evaluacion: nulable(jsonLibre),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            servicio_id: id,
+            cliente_id: id,
+            vence_en: instante,
+            monto: Dinero,
+            estado: enumerado([
+                'activa',
+                'cumplida',
+                'incumplida',
+                'cancelada',
+                'pendiente_aprobacion',
+                'rechazada',
+            ]),
+            canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+            aprobada_por: nulable(id),
+            resultado_evaluacion: {
+                ...nulable(jsonLibre),
+                description:
+                    'resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar',
+            },
+            servicio: {
+                ...ServicioEvaluado,
+                description:
+                    'Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación)',
+            },
+            ...auditable,
+        },
+        ['servicio'],
+    ),
 )
 
 export const MovimientoEstadoCuenta = definirEsquema(
@@ -262,4 +309,22 @@ export const EstadoCuenta = definirEsquema(
         },
         ['saldo_a_favor'],
     ),
+)
+
+export const Banco = definirEsquema('Banco', objeto({ id, nombre: texto, activo: booleano }))
+
+export const CuentaBancaria = definirEsquema(
+    'CuentaBancaria',
+    objeto({
+        id,
+        banco_id: id,
+        banco_nombre: texto,
+        numero: texto,
+        alias: texto,
+        moneda: enumerado(['GTQ', 'USD']),
+        activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
+        cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
+        cuenta_codigo: texto,
+        ...auditable,
+    }),
 )

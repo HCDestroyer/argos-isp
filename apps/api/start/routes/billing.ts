@@ -14,14 +14,28 @@ import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
+import AnularFactura from '#billing/actions/anular_factura'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { cajaDelCajero } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
+import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
-import { exigirAlcance } from '#core/acl'
+import { alcanceDePermiso, exigirAlcance } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Prohibido } from '#shared/errores'
+import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas } from '#billing/promesas'
+import type { CanalPromesa } from '#billing/reglas_promesa'
+import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
+import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
+import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
+import AprobarPromesa from '#billing/actions/aprobar_promesa'
 import {
     EstadoCuenta,
+    Banco,
+    CuentaBancaria,
     Factura,
     FacturaDetalle,
     Pago,
@@ -150,7 +164,17 @@ const facturas: Ruta[] = [
         permiso: 'facturas.anular',
         cuerpo: v.anularFacturaValidator,
         idempotente: true,
+        descripcion:
+            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.',
         respuesta: { status: 200, descripcion: 'Factura anulada', esquema: Factura },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            return new AnularFactura().execute(
+                { factura_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
     }),
 ]
 
@@ -191,8 +215,13 @@ const pagos: Ruta[] = [
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Pago registrado', esquema: Pago },
         handler: async (ctx, { cuerpo }) => {
-            // Efectivo sin caja: la principal (los turnos de caja llegan con la tarea 9).
-            const cajaId = cuerpo.metodo === 'caja' ? (cuerpo.caja_id ?? (await cajaPrincipalId())) : null
+            // Efectivo sin caja: la del turno abierto del cajero (dentro de su alcance) o la principal.
+            const cajaId =
+                cuerpo.metodo === 'caja'
+                    ? (cuerpo.caja_id ??
+                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance)) ??
+                      (await cajaPrincipalId()))
+                    : null
             const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
                 throw new ValidacionFallida([
                     {
@@ -203,6 +232,11 @@ const pagos: Ruta[] = [
                 ])
             })
             exigirAlcance(ctx.alcance, { ...dimensiones, ...(cajaId ? { caja: [cajaId] } : {}) })
+            // pago de terceros: cada factura pedida también debe estar en su alcance
+            for (const facturaId of new Set(cuerpo.facturas ?? [])) {
+                const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
+                if (deFactura) exigirAlcance(ctx.alcance, deFactura)
+            }
             return new RegistrarPago().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
         },
     }),
@@ -234,6 +268,7 @@ const promesas: Ruta[] = [
         permiso: 'promesas.ver',
         query: v.listarPromesasValidator,
         respuesta: { status: 200, descripcion: 'Página de promesas', esquema: pagina(Promesa) },
+        handler: (ctx, { query }) => listarPromesas(query, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -244,7 +279,17 @@ const promesas: Ruta[] = [
         permiso: 'promesas.crear',
         cuerpo: v.crearPromesaValidator,
         idempotente: true,
+        descripcion:
+            'Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(cuerpo.servicio_id))
+            const canal = await canalPromesa(ctx, cuerpo.canal)
+            return new CrearPromesaPago().execute(
+                { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, monto: cuerpo.monto, canal },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -256,6 +301,87 @@ const promesas: Ruta[] = [
         cuerpo: v.aprobarPromesaValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Promesa aprobada', esquema: Promesa },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            return new AprobarPromesa().execute({ promesa_id: id, nota: cuerpo.nota }, ctx.contextoAccion())
+        },
+    }),
+]
+
+/**
+ * Canal de la promesa: el pedido, o `portal`/`ia` según el canal de la petición (`X-Canal`), o
+ * `operador`. `supervisor` (límites más amplios) solo con el permiso `promesas.aprobar`.
+ */
+async function canalPromesa(ctx: HttpContext, pedido?: CanalPromesa): Promise<CanalPromesa> {
+    const canalPeticion = ctx.contextoAccion().canal
+    const canal: CanalPromesa =
+        pedido ?? (canalPeticion === 'portal' || canalPeticion === 'ia' ? canalPeticion : 'operador')
+    if (canal === 'supervisor') {
+        const usuario = ctx.auth.user
+        const permiso = usuario
+            ? await alcanceDePermiso(usuario.id, 'promesas.aprobar', alcancesDelToken(ctx))
+            : null
+        if (!permiso) throw new Prohibido('El canal supervisor requiere el permiso promesas.aprobar')
+    }
+    return canal
+}
+
+const bancos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bancos',
+        operacion: 'bancosListar',
+        resumen: 'Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH)',
+        etiqueta: 'pagos',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
+        handler: () => listarBancos(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cuentas-bancarias',
+        operacion: 'cuentasBancariasListar',
+        resumen: 'Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas)',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.ver',
+        query: v.listarCuentasBancariasValidator,
+        respuesta: { status: 200, descripcion: 'Cuentas bancarias', esquema: lista(CuentaBancaria) },
+        handler: (_ctx, { query }) => listarCuentasBancarias(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cuentas-bancarias/:id',
+        operacion: 'cuentasBancariasVer',
+        resumen: 'Ver cuenta bancaria propia',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.ver',
+        respuesta: { status: 200, descripcion: 'Cuenta bancaria', esquema: CuentaBancaria },
+        handler: (_ctx, { params }) => verCuentaBancaria(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/cuentas-bancarias',
+        operacion: 'cuentasBancariasCrear',
+        resumen: 'Crear cuenta bancaria propia (crea su subcuenta de Bancos en el libro)',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.editar',
+        cuerpo: v.crearCuentaBancariaValidator,
+        respuesta: { status: 201, descripcion: 'Cuenta bancaria creada', esquema: CuentaBancaria },
+        handler: (ctx, { cuerpo }) => new CrearCuentaBancaria().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/cuentas-bancarias/:id',
+        operacion: 'cuentasBancariasEditar',
+        resumen: 'Editar cuenta bancaria propia',
+        etiqueta: 'pagos',
+        permiso: 'cuentas_bancarias.editar',
+        cuerpo: v.editarCuentaBancariaValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Cuenta bancaria actualizada', esquema: CuentaBancaria },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarCuentaBancaria().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
 ]
 
@@ -276,4 +402,4 @@ const estadoCuenta: Ruta[] = [
     }),
 ]
 
-export default [...plantillas, ...facturas, ...pagos, ...promesas, ...estadoCuenta]
+export default [...plantillas, ...facturas, ...pagos, ...promesas, ...bancos, ...estadoCuenta]

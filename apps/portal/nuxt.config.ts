@@ -48,17 +48,9 @@ export default defineNuxtConfig({
             // NUXT_PUBLIC_USE_FIXTURES=true responde desde apps/portal/fixtures sin backend.
             useFixtures: false,
             empresa: {
-                // NUXT_PUBLIC_EMPRESA_NOMBRE, NUXT_PUBLIC_EMPRESA_TELEFONO
+                // NUXT_PUBLIC_EMPRESA_NOMBRE: solo mientras carga GET /portal/empresa. Contacto,
+                // instrucciones de pago y cuentas de depósito se configuran en el panel (tarea 9).
                 nombre: 'ArgosIsp',
-                telefono: '',
-                // NUXT_PUBLIC_EMPRESA_CORREO
-                correo: '',
-            },
-            // NUXT_PUBLIC_DEPOSITO_CUENTAS='[{"banco":"…","tipo":"Monetaria","numero":"…","titular":"…"}]'
-            // NUXT_PUBLIC_DEPOSITO_INSTRUCCIONES. Se mueve a configuración del panel en la tarea 9.
-            deposito: {
-                cuentas: [] as { banco: string, tipo: string, numero: string, titular: string }[],
-                instrucciones: '',
             },
         },
     },

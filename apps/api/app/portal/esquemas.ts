@@ -1,4 +1,17 @@
-import { Dinero, booleano, definirEsquema, entero, nulable, objeto, texto } from '#shared/openapi/esquemas'
+import {
+    Dinero,
+    booleano,
+    definirEsquema,
+    entero,
+    enumerado,
+    fecha,
+    id,
+    instante,
+    lista,
+    nulable,
+    objeto,
+    texto,
+} from '#shared/openapi/esquemas'
 import { EstadoServicio } from '#core/esquemas'
 
 /**
@@ -46,5 +59,232 @@ export const EstadoPortal = definirEsquema(
             ...nulable(Dinero),
             description: 'Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)',
         },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Acceso por código y portal autenticado (tarea 7)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalSolicitudCodigo = definirEsquema(
+    'PortalSolicitudCodigo',
+    objeto({
+        solicitud: {
+            ...texto,
+            format: 'uuid',
+            description: 'Se envía con el código a POST /portal/verificar',
+        },
+        expira_en: { ...instante, description: 'Hasta cuándo vale el código' },
+        destino: {
+            ...nulable(texto),
+            description:
+                'Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; ' +
+                'por identificador siempre null, exista o no el cliente',
+        },
+    }),
+)
+
+export const PortalSesion = definirEsquema(
+    'PortalSesion',
+    objeto({
+        cliente: objeto({ nombre_parcial: nulable(texto) }),
+        expira_en: { ...instante, description: 'Vence por inactividad; cada consulta la extiende' },
+    }),
+)
+
+export const PortalContacto = definirEsquema(
+    'PortalContacto',
+    objeto({
+        nombre: texto,
+        nit_cui: nulable(texto),
+        email: nulable(texto),
+        telefono: nulable(texto),
+        movil: nulable(texto),
+        canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
+        telegram_vinculado: booleano,
+        version: { ...entero, minimum: 1, description: 'Envíala al editar (409 si cambió)' },
+    }),
+)
+
+export const PortalServicio = definirEsquema(
+    'PortalServicio',
+    objeto({
+        id,
+        estado: EstadoServicio,
+        plan: nulable(texto),
+        direccion: nulable(texto),
+        promesa_activa: booleano,
+        monto_adeudado: Dinero,
+    }),
+)
+
+export const PortalCuenta = definirEsquema(
+    'PortalCuenta',
+    objeto({
+        cliente: PortalContacto,
+        servicios: lista(PortalServicio),
+        monto_adeudado: { ...Dinero, description: 'Saldo pendiente de todos los servicios' },
+    }),
+)
+
+export const PortalFactura = definirEsquema(
+    'PortalFactura',
+    objeto({
+        id,
+        numero: { ...texto, description: 'Serie-número FEL si está certificada; si no, número del aviso' },
+        documento: {
+            ...enumerado(['aviso_cobro', 'factura']),
+            description: 'factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto',
+        },
+        tipo: enumerado(['servicio', 'mora']),
+        servicio_id: nulable(id),
+        periodo: fecha,
+        emitida_en: instante,
+        vence_en: fecha,
+        estado: enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+        subtotal: Dinero,
+        iva: Dinero,
+        total: Dinero,
+        pagado: Dinero,
+        saldo: { ...Dinero, description: 'total - pagado (0.00 si está anulada)' },
+        fel_uuid: nulable(texto),
+        fel_serie: nulable(texto),
+        fel_numero: nulable(texto),
+    }),
+)
+
+export const PortalFacturaLinea = definirEsquema(
+    'PortalFacturaLinea',
+    objeto({
+        concepto: texto,
+        cantidad: { ...texto, description: 'Decimal con hasta 3 decimales' },
+        precio_unitario: Dinero,
+        iva: Dinero,
+        total: Dinero,
+    }),
+)
+
+export const PortalFacturaDetalle = definirEsquema('PortalFacturaDetalle', {
+    allOf: [PortalFactura, objeto({ lineas: lista(PortalFacturaLinea) })],
+})
+
+export const PortalPago = definirEsquema(
+    'PortalPago',
+    objeto({
+        id,
+        metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+        monto: Dinero,
+        referencia: nulable(texto),
+        estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
+        created_at: instante,
+        aplicaciones: lista(objeto({ factura_id: id, monto: Dinero })),
+    }),
+)
+
+export const PortalPromesa = definirEsquema(
+    'PortalPromesa',
+    objeto({
+        id,
+        servicio_id: id,
+        vence_en: instante,
+        monto: Dinero,
+        estado: enumerado([
+            'activa',
+            'cumplida',
+            'incumplida',
+            'cancelada',
+            'pendiente_aprobacion',
+            'rechazada',
+        ]),
+        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+        created_at: instante,
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Configuración de empresa (tarea 9)
+|--------------------------------------------------------------------------
+*/
+
+const camposEmpresa = {
+    nombre: texto,
+    nit: nulable(texto),
+    direccion: nulable(texto),
+    telefono: nulable(texto),
+    telefono_alterno: nulable(texto),
+    whatsapp: { ...nulable(texto), description: 'Número de WhatsApp tal como se marca (p. ej. "5555-1234")' },
+    correo: nulable(texto),
+    horario: { ...nulable(texto), description: 'Texto libre: "Lunes a viernes de 8:00 a 17:00"' },
+    instrucciones_pago: { ...nulable(texto), description: 'Texto que acompaña los datos de depósito' },
+}
+
+export const Empresa = definirEsquema(
+    'Empresa',
+    objeto({
+        ...camposEmpresa,
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 = valores por defecto (nunca se guardó). Envíala al editar (409 si cambió)',
+        },
+    }),
+)
+
+export const CuentaDeposito = definirEsquema(
+    'CuentaDeposito',
+    objeto({
+        banco: texto,
+        alias: { ...texto, description: 'Nombre visible de la cuenta (p. ej. "Monetaria ArgosIsp")' },
+        numero: texto,
+        moneda: enumerado(['GTQ', 'USD']),
+    }),
+)
+
+export const EmpresaPublica = definirEsquema(
+    'EmpresaPublica',
+    objeto({
+        ...camposEmpresa,
+        cuentas_deposito: {
+            ...lista(CuentaDeposito),
+            description:
+                'Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran',
+        },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Documentos (tarea 8)
+|--------------------------------------------------------------------------
+*/
+
+/** Respuesta binaria: el cuerpo es el PDF (`Content-Type: application/pdf`). */
+export const ArchivoPdf = {
+    type: 'string',
+    format: 'binary',
+    description:
+        'PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` ' +
+        '(el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)',
+}
+
+export const VariableDocumento = definirEsquema(
+    'VariableDocumento',
+    objeto({ nombre: texto, descripcion: texto }),
+)
+
+export const PlantillaDocumento = definirEsquema(
+    'PlantillaDocumento',
+    objeto({
+        tipo: enumerado(['aviso_cobro']),
+        html: { ...texto, description: 'HTML con variables Mustache (`{{factura.total}}`)' },
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar',
+        },
+        variables: lista(VariableDocumento),
     }),
 )

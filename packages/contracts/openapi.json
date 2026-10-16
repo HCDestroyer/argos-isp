@@ -27,6 +27,12 @@
       "name": "clientes"
     },
     {
+      "name": "documentos"
+    },
+    {
+      "name": "empresa"
+    },
+    {
       "name": "facturacion"
     },
     {
@@ -140,6 +146,46 @@
         "responses": {
           "204": {
             "description": "Sesión cerrada"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos": {
+      "get": {
+        "operationId": "bancosListar",
+        "summary": "Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos activos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Banco"
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "No autenticado",
@@ -537,20 +583,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/abrir": {
@@ -671,26 +707,17 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.abrir",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/cerrar": {
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
+        "description": "esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -814,20 +841,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.cerrar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/cajas/{id}/turnos": {
@@ -942,20 +959,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "cajas.ver",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/clientes": {
@@ -1063,6 +1070,16 @@
             "description": "true: con alguna promesa de pago activa; false: sin ninguna",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "responsable_pago_id",
+            "in": "query",
+            "required": false,
+            "description": "Dependientes de este responsable de pago",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         ],
@@ -1616,6 +1633,125 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/dependientes": {
+      "get": {
+        "operationId": "clientesDependientes",
+        "summary": "Clientes de los que es responsable de pago",
+        "description": "Dependientes con su número de servicios no retirados y el estado resumido. El cobro (A4) muestra sus facturas debajo del pagador.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de dependientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DependientePago"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/desvincular-telegram": {
       "post": {
         "operationId": "clientesDesvincularTelegram",
@@ -1785,6 +1921,252 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/quitar-responsable-pago": {
+      "post": {
+        "operationId": "clientesQuitarResponsablePago",
+        "summary": "Quitar el responsable de pago del cliente",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente sin responsable de pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.quitar_responsable_pago",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.quitar_responsable_pago",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/responsable-pago": {
+      "post": {
+        "operationId": "clientesAsignarResponsablePago",
+        "summary": "Asignar el responsable de pago del cliente",
+        "description": "Fija el cliente que paga por este. Un solo nivel: el responsable no puede tener responsable y un cliente con dependientes no puede tenerlo. 422 si es él mismo, si el responsable no existe o si se formaría un ciclo o un segundo nivel. Solo sugiere en el cobro: cualquiera puede pagar cualquier factura.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "responsable_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Cliente que paga por este"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "responsable_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente con su responsable de pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.asignar_responsable_pago",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.asignar_responsable_pago",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/vincular-telegram": {
       "post": {
         "operationId": "clientesVincularTelegram",
@@ -1904,6 +2286,945 @@
           }
         },
         "x-permiso": "clientes.vincular_telegram",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cuentas-bancarias": {
+      "get": {
+        "operationId": "cuentasBancariasListar",
+        "summary": "Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activa",
+            "in": "query",
+            "required": false,
+            "description": "Solo activas (true) o inactivas",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuentas bancarias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CuentaBancaria"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cuentasBancariasCrear",
+        "summary": "Crear cuenta bancaria propia (crea su subcuenta de Bancos en el libro)",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "banco_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Banco (GET /bancos)"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "enum": [
+                      "GTQ",
+                      "USD"
+                    ]
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "banco_id",
+                  "numero",
+                  "alias"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta bancaria creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cuentas-bancarias/{id}": {
+      "get": {
+        "operationId": "cuentasBancariasVer",
+        "summary": "Ver cuenta bancaria propia",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta bancaria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "cuentasBancariasEditar",
+        "summary": "Editar cuenta bancaria propia",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "banco_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Banco (GET /bancos)"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "moneda": {
+                    "type": "string",
+                    "enum": [
+                      "GTQ",
+                      "USD"
+                    ]
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuenta bancaria actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBancaria"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cuentas_bancarias.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cuentas_bancarias.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/aviso-cobro/{facturaId}": {
+      "get": {
+        "operationId": "documentosAvisoCobroPdf",
+        "summary": "PDF del aviso de cobro de una factura (panel)",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "facturaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/plantillas/{tipo}": {
+      "get": {
+        "operationId": "documentosPlantillaVer",
+        "summary": "Plantilla HTML vigente de un documento y sus variables (editor del panel)",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "documentosPlantillaEditar",
+        "summary": "Guarda la plantilla HTML de un documento",
+        "description": "Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si es la de fábrica); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "html",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/documentos/plantillas/{tipo}/vista-previa": {
+      "post": {
+        "operationId": "documentosPlantillaVistaPrevia",
+        "summary": "PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)",
+        "description": "422 si la plantilla no es válida. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000
+                  }
+                },
+                "required": [
+                  "html"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresa": {
+      "get": {
+        "operationId": "empresaVer",
+        "summary": "Configuración de la empresa (panel)",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Empresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresa.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresa.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "empresaEditar",
+        "summary": "Edita la configuración de la empresa",
+        "description": "Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "nit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20
+                  },
+                  "direccion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "telefono_alterno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "whatsapp": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "correo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "email",
+                    "maxLength": 200
+                  },
+                  "horario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "instrucciones_pago": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Empresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresa.editar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresa.editar",
         "x-implementado": true
       }
     },
@@ -2122,6 +3443,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.",
         "tags": [
           "facturacion"
         ],
@@ -2233,20 +3555,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "facturas.anular",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/facturas/corte": {
@@ -3783,6 +5095,15 @@
             }
           },
           {
+            "name": "cuenta_bancaria_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
             "name": "metodo",
             "in": "query",
             "required": false,
@@ -3792,6 +5113,9 @@
                 "caja",
                 "pasarela",
                 "deposito",
+                "transferencia",
+                "ach",
+                "remesa",
                 "agente",
                 "debito"
               ]
@@ -3933,6 +5257,9 @@
                       "caja",
                       "pasarela",
                       "deposito",
+                      "transferencia",
+                      "ach",
+                      "remesa",
                       "agente",
                       "debito"
                     ]
@@ -3950,7 +5277,8 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 100
+                    "maxLength": 100,
+                    "description": "Boleta, número de transferencia/ACH o código de remesa (obligatoria con deposito, transferencia, ach y remesa). Única por método y cuenta bancaria"
                   },
                   "caja_id": {
                     "type": [
@@ -3958,7 +5286,23 @@
                       "null"
                     ],
                     "minimum": 1,
-                    "description": "Obligatoria con metodo caja"
+                    "description": "Caja del efectivo; sin ella, la del turno abierto del cajero o la principal"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta bancaria propia de destino (GET /cuentas-bancarias). Obligatoria con deposito, transferencia, ach y remesa"
+                  },
+                  "banco_origen_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco de origen (GET /bancos). Obligatorio con transferencia y ach"
                   },
                   "nota": {
                     "type": [
@@ -5927,6 +7271,225 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/codigo": {
+      "post": {
+        "operationId": "portalSolicitarCodigo",
+        "summary": "Pide un código de acceso al portal (correo o Telegram registrado del cliente)",
+        "description": "Con `identificador` (NIT/CUI o usuario PPPoE) o `por_ip: true` (desde /corte). El código (6 dígitos, `PORTAL_CODIGO_VIGENCIA_S`) va SIEMPRE al destino registrado del cliente. Por identificador responde igual exista o no el cliente; por IP responde 422 `no_identificado` o `sin_destino`. Máximo `PORTAL_CODIGO_MAX_HORA` códigos por cliente por hora; 503 si el canal no acepta el mensaje. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "identificador": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 64,
+                    "description": "NIT/CUI o usuario PPPoE. Omitir con `por_ip: true`"
+                  },
+                  "por_ip": {
+                    "description": "Identificar por la IP de origen (página de corte)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Código enviado (o solicitud ciega)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSolicitudCodigo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/contacto": {
+      "put": {
+        "operationId": "portalEditarContacto",
+        "summary": "El cliente edita su correo, teléfonos y canal preferido",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.",
+        "tags": [
+          "portal"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "email",
+                    "maxLength": 200
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "movil": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "canal_preferido": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram",
+                      "whatsapp"
+                    ]
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contacto actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContacto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/cuenta": {
+      "get": {
+        "operationId": "portalCuenta",
+        "summary": "Datos de contacto, servicios y saldo del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta del cliente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCuenta"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/empresa": {
+      "get": {
+        "operationId": "portalEmpresa",
+        "summary": "Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)",
+        "description": "Sin login: es información pública de la empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaPublica"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/estado": {
       "get": {
         "operationId": "portalEstado",
@@ -5960,6 +7523,318 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/facturas": {
+      "get": {
+        "operationId": "portalFacturas",
+        "summary": "Facturas (avisos de cobro) del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de facturas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalFactura"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/facturas/{id}": {
+      "get": {
+        "operationId": "portalFactura",
+        "summary": "Detalle de una factura del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Factura con líneas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalFacturaDetalle"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/facturas/{id}/pdf": {
+      "get": {
+        "operationId": "portalFacturaPdf",
+        "summary": "PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404. Responde application/pdf.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/pagos": {
+      "get": {
+        "operationId": "portalPagos",
+        "summary": "Pagos del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de pagos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPago"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/promesas": {
+      "get": {
+        "operationId": "portalPromesas",
+        "summary": "Promesas de pago del cliente de la sesión (solo lectura)",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de promesas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPromesa"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
@@ -5975,6 +7850,92 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/QuienSoy"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/salir": {
+      "post": {
+        "operationId": "portalSalir",
+        "summary": "Cierra la sesión del portal",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "204": {
+            "description": "Sesión cerrada"
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/verificar": {
+      "post": {
+        "operationId": "portalVerificarCodigo",
+        "summary": "Verifica el código y abre la sesión del portal (cookie httpOnly)",
+        "description": "Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "solicitud": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Devuelta por POST /portal/codigo"
+                  },
+                  "codigo": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$",
+                    "description": "Código de 6 dígitos"
+                  }
+                },
+                "required": [
+                  "solicitud",
+                  "codigo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión abierta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSesion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -6120,24 +8081,15 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.ver",
-        "x-implementado": false
+        "x-implementado": true
       },
       "post": {
         "operationId": "promesasCrear",
         "summary": "Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)",
+        "description": "Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
         "tags": [
           "promesas"
         ],
@@ -6252,20 +8204,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.crear",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/promesas/{id}/aprobar": {
@@ -6383,20 +8325,10 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "No implementado todavía",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "x-permiso": "promesas.aprobar",
-        "x-implementado": false
+        "x-implementado": true
       }
     },
     "/api/v1/roles": {
@@ -6487,12 +8419,20 @@
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.ver",
+                        "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
+                        "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cuentas_bancarias.editar",
+                        "cuentas_bancarias.ver",
+                        "documentos.editar",
+                        "documentos.ver",
+                        "empresa.editar",
+                        "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -6655,12 +8595,20 @@
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.ver",
+                        "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
                         "clientes.editar",
                         "clientes.estado_cuenta",
+                        "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cuentas_bancarias.editar",
+                        "cuentas_bancarias.ver",
+                        "documentos.editar",
+                        "documentos.ver",
+                        "empresa.editar",
+                        "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.ver",
@@ -9964,12 +11912,20 @@
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.ver",
+                            "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
                             "clientes.editar",
                             "clientes.estado_cuenta",
+                            "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "cuentas_bancarias.editar",
+                            "cuentas_bancarias.ver",
+                            "documentos.editar",
+                            "documentos.ver",
+                            "empresa.editar",
+                            "empresa.ver",
                             "facturas.anular",
                             "facturas.generar",
                             "facturas.ver",
@@ -11198,6 +13154,14 @@
           },
           "monto": {
             "$ref": "#/components/schemas/Dinero"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Dueño de la factura (pago de terceros: puede no ser el pagador)"
+          },
+          "cliente_nombre": {
+            "type": "string"
           }
         }
       },
@@ -11305,6 +13269,26 @@
               "null"
             ],
             "minimum": 1
+          }
+        }
+      },
+      "Banco": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "activo"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
           }
         }
       },
@@ -11439,6 +13423,22 @@
               "string",
               "null"
             ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que abrió el turno"
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que cerró el turno"
           },
           "version": {
             "type": "integer",
@@ -11626,6 +13626,21 @@
               "string",
               "null"
             ]
+          },
+          "responsable_pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cliente que paga por este (responsable de pago); null si paga él mismo"
+          },
+          "responsable_pago_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del responsable de pago (solo lectura)"
           },
           "version": {
             "type": "integer",
@@ -11861,6 +13876,145 @@
           }
         }
       },
+      "CuentaBancaria": {
+        "type": "object",
+        "required": [
+          "id",
+          "banco_id",
+          "banco_nombre",
+          "numero",
+          "alias",
+          "moneda",
+          "activa",
+          "cuenta_id",
+          "cuenta_codigo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "banco_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "banco_nombre": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ",
+              "USD"
+            ]
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Una cuenta inactiva no recibe pagos nuevos"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta de 1.1.02 Bancos en el libro"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CuentaDeposito": {
+        "type": "object",
+        "required": [
+          "banco",
+          "alias",
+          "numero",
+          "moneda"
+        ],
+        "properties": {
+          "banco": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string",
+            "description": "Nombre visible de la cuenta (p. ej. \"Monetaria ArgosIsp\")"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ",
+              "USD"
+            ]
+          }
+        }
+      },
+      "DependientePago": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "nit_cui",
+          "servicios",
+          "estado_servicio"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "nit_cui": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicios": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Servicios no retirados"
+          },
+          "estado_servicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ],
+            "description": "Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios"
+          }
+        }
+      },
       "Dinero": {
         "type": "string",
         "pattern": "^-?\\d{1,12}\\.\\d{2}$",
@@ -11868,6 +14022,160 @@
         "examples": [
           "150.00"
         ]
+      },
+      "Empresa": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "nit",
+          "direccion",
+          "telefono",
+          "telefono_alterno",
+          "whatsapp",
+          "correo",
+          "horario",
+          "instrucciones_pago",
+          "version"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono_alterno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de WhatsApp tal como se marca (p. ej. \"5555-1234\")"
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto libre: \"Lunes a viernes de 8:00 a 17:00\""
+          },
+          "instrucciones_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto que acompaña los datos de depósito"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = valores por defecto (nunca se guardó). Envíala al editar (409 si cambió)"
+          }
+        }
+      },
+      "EmpresaPublica": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "nit",
+          "direccion",
+          "telefono",
+          "telefono_alterno",
+          "whatsapp",
+          "correo",
+          "horario",
+          "instrucciones_pago",
+          "cuentas_deposito"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono_alterno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de WhatsApp tal como se marca (p. ej. \"5555-1234\")"
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto libre: \"Lunes a viernes de 8:00 a 17:00\""
+          },
+          "instrucciones_pago": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto que acompaña los datos de depósito"
+          },
+          "cuentas_deposito": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CuentaDeposito"
+            },
+            "description": "Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran"
+          }
+        }
       },
       "EnvioNotificacion": {
         "type": "object",
@@ -12243,6 +14551,20 @@
             ],
             "format": "date-time",
             "description": "Cuándo se marcó vencida"
+          },
+          "anulada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se anuló"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -12680,6 +15002,9 @@
               "caja",
               "pasarela",
               "deposito",
+              "transferencia",
+              "ach",
+              "remesa",
               "agente",
               "debito"
             ]
@@ -12756,6 +15081,35 @@
               "$ref": "#/components/schemas/ServicioEvaluado"
             },
             "description": "Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata)"
+          },
+          "banco_origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Banco de origen (transferencia, ach)"
+          },
+          "banco_origen_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cuenta bancaria propia de destino (deposito, transferencia, ach, remesa)"
+          },
+          "cuenta_bancaria_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Banco y alias de la cuenta de destino"
           },
           "version": {
             "type": "integer",
@@ -13108,6 +15462,38 @@
           }
         }
       },
+      "PlantillaDocumento": {
+        "type": "object",
+        "required": [
+          "tipo",
+          "html",
+          "version",
+          "variables"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro"
+            ]
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML con variables Mustache (`{{factura.total}}`)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableDocumento"
+            }
+          }
+        }
+      },
       "PlantillaFacturacion": {
         "type": "object",
         "required": [
@@ -13265,6 +15651,460 @@
           }
         }
       },
+      "PortalContacto": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "nit_cui",
+          "email",
+          "telefono",
+          "movil",
+          "canal_preferido",
+          "telegram_vinculado",
+          "version"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "nit_cui": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "movil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canal_preferido": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "telegram_vinculado": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Envíala al editar (409 si cambió)"
+          }
+        }
+      },
+      "PortalCuenta": {
+        "type": "object",
+        "required": [
+          "cliente",
+          "servicios",
+          "monto_adeudado"
+        ],
+        "properties": {
+          "cliente": {
+            "$ref": "#/components/schemas/PortalContacto"
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalServicio"
+            }
+          },
+          "monto_adeudado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo pendiente de todos los servicios"
+          }
+        }
+      },
+      "PortalFactura": {
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "documento",
+          "tipo",
+          "servicio_id",
+          "periodo",
+          "emitida_en",
+          "vence_en",
+          "estado",
+          "subtotal",
+          "iva",
+          "total",
+          "pagado",
+          "saldo",
+          "fel_uuid",
+          "fel_serie",
+          "fel_numero"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string",
+            "description": "Serie-número FEL si está certificada; si no, número del aviso"
+          },
+          "documento": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro",
+              "factura"
+            ],
+            "description": "factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora"
+            ]
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "emitida_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "emitida",
+              "parcial",
+              "pagada",
+              "vencida",
+              "anulada"
+            ]
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pagado": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "total - pagado (0.00 si está anulada)"
+          },
+          "fel_uuid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fel_serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fel_numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PortalFacturaDetalle": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PortalFactura"
+          },
+          {
+            "type": "object",
+            "required": [
+              "lineas"
+            ],
+            "properties": {
+              "lineas": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PortalFacturaLinea"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PortalFacturaLinea": {
+        "type": "object",
+        "required": [
+          "concepto",
+          "cantidad",
+          "precio_unitario",
+          "iva",
+          "total"
+        ],
+        "properties": {
+          "concepto": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "string",
+            "description": "Decimal con hasta 3 decimales"
+          },
+          "precio_unitario": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "PortalPago": {
+        "type": "object",
+        "required": [
+          "id",
+          "metodo",
+          "monto",
+          "referencia",
+          "estado",
+          "created_at",
+          "aplicaciones"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "caja",
+              "pasarela",
+              "deposito",
+              "agente",
+              "debito"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "registrado",
+              "pendiente_verificacion",
+              "anulado"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "aplicaciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "monto"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PortalPromesa": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "vence_en",
+          "monto",
+          "estado",
+          "canal",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activa",
+              "cumplida",
+              "incumplida",
+              "cancelada",
+              "pendiente_aprobacion",
+              "rechazada"
+            ]
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PortalServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "plan",
+          "direccion",
+          "promesa_activa",
+          "monto_adeudado"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoServicio"
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "promesa_activa": {
+            "type": "boolean"
+          },
+          "monto_adeudado": {
+            "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "PortalSesion": {
+        "type": "object",
+        "required": [
+          "cliente",
+          "expira_en"
+        ],
+        "properties": {
+          "cliente": {
+            "type": "object",
+            "required": [
+              "nombre_parcial"
+            ],
+            "properties": {
+              "nombre_parcial": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Vence por inactividad; cada consulta la extiende"
+          }
+        }
+      },
+      "PortalSolicitudCodigo": {
+        "type": "object",
+        "required": [
+          "solicitud",
+          "expira_en",
+          "destino"
+        ],
+        "properties": {
+          "solicitud": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Se envía con el código a POST /portal/verificar"
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Hasta cuándo vale el código"
+          },
+          "destino": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Destino enmascarado (\"m***a@e***.com\", \"tu Telegram vinculado\"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente"
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "required": [
@@ -13376,7 +16216,12 @@
               "object",
               "null"
             ],
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar"
+          },
+          "servicio": {
+            "$ref": "#/components/schemas/ServicioEvaluado",
+            "description": "Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación)"
           },
           "version": {
             "type": "integer",
@@ -14558,6 +17403,21 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "VariableDocumento": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "descripcion"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
           }
         }
       },

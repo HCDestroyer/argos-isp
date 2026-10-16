@@ -48,7 +48,12 @@ export class ConsumidorNotify implements ConsumidorEventos {
         await this.cola.encolar(resultado.encolar)
         if (resultado.envios.length > 0) {
             logger.debug(
-                { outboxId: evento.id, evento: evento.evento, envios: resultado.envios.map((e) => e.id) },
+                {
+                    outboxId: evento.id,
+                    evento: evento.evento,
+                    envios: resultado.envios.map((e) => e.id),
+                    requestId: evento.requestId ?? null,
+                },
                 'Notificación programada',
             )
         }

@@ -111,16 +111,21 @@ export const Caja = definirEsquema(
 
 export const CajaTurno = definirEsquema(
     'CajaTurno',
-    objeto({
-        id,
-        caja_id: id,
-        abierto_en: instante,
-        fondo_inicial: Dinero,
-        cerrado_en: nulable(instante),
-        esperado: nulable(Dinero),
-        contado: nulable(Dinero),
-        diferencia: nulable(Dinero),
-        motivo: nulable(texto),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            caja_id: id,
+            abierto_en: instante,
+            fondo_inicial: Dinero,
+            cerrado_en: nulable(instante),
+            esperado: nulable(Dinero),
+            contado: nulable(Dinero),
+            diferencia: nulable(Dinero),
+            motivo: nulable(texto),
+            abierto_por: { ...nulable(id), description: 'Usuario que abrió el turno' },
+            cerrado_por: { ...nulable(id), description: 'Usuario que cerró el turno' },
+            ...auditable,
+        },
+        ['abierto_por', 'cerrado_por'],
+    ),
 )

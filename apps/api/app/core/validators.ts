@@ -100,8 +100,25 @@ export const listarClientesValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: con alguna promesa de pago activa; false: sin ninguna' }),
+        responsable_pago_id: idEntidad()
+            .optional()
+            .meta({ description: 'Dependientes de este responsable de pago' }),
     }),
 )
+
+/** `POST /clientes/:id/responsable-pago`. */
+export const asignarResponsablePagoValidator = vine.compile(
+    vine.object({
+        responsable_id: idEntidad().meta({ description: 'Cliente que paga por este' }),
+        motivo: motivo().optional(),
+    }),
+)
+
+/** `POST /clientes/:id/quitar-responsable-pago`. */
+export const quitarResponsablePagoValidator = vine.compile(vine.object({ motivo: motivo().optional() }))
+
+/** `GET /clientes/:id/dependientes`. */
+export const listarDependientesValidator = vine.compile(vine.object({ ...reglasPaginacion }))
 
 /** `POST /clientes/:id/vincular-telegram` (el bot de A6 llama la acción directamente). */
 export const vincularTelegramValidator = vine.compile(

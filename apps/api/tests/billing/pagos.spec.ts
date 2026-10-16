@@ -15,6 +15,7 @@ import {
     facturasDe,
     generar,
     lineasAsiento,
+    cuentaBancariaPrueba,
 } from '#tests/billing/ayudas_billing'
 
 const RUTA = '/api/v1/pagos'
@@ -53,7 +54,7 @@ test.group('billing · registrarPago', () => {
         const pago = await pagar(clienteId, '100')
         await afirmarLibroCuadrado(assert)
         const [septiembre] = await facturasDe(servicioId)
-        assert.deepEqual(pago.aplicaciones, [{ factura_id: septiembre!.id, monto: '100.00' }])
+        assert.containSubset(pago.aplicaciones, [{ factura_id: septiembre!.id, monto: '100.00' }])
         assert.containSubset(pago, { monto: '100.00', metodo: 'caja', estado: 'registrado' })
         assert.isNotNull(pago.caja_id)
         assert.deepEqual(
@@ -79,6 +80,7 @@ test.group('billing · registrarPago', () => {
             monto: '100.00',
             metodo: 'caja',
             facturas: [septiembre!.id],
+            clientes: [clienteId],
         })
         assert.equal(await saldoTexto(clienteId), '200.00')
     })
@@ -126,11 +128,17 @@ test.group('billing · registrarPago', () => {
     test('facturas preferidas primero; depósito va a Bancos; validaciones', async ({ assert }) => {
         const { servicioId, clienteId } = await cortado()
         const [septiembre, octubre] = await facturasDe(servicioId)
-        const pago = await pagar(clienteId, '150', { metodo: 'deposito', facturas: [octubre!.id] })
-        assert.deepEqual(pago.aplicaciones, [{ factura_id: octubre!.id, monto: '150.00' }])
+        const cuenta = await cuentaBancariaPrueba()
+        const pago = await pagar(clienteId, '150', {
+            metodo: 'deposito',
+            facturas: [octubre!.id],
+            cuenta_bancaria_id: cuenta.id,
+            referencia: unico('boleta'),
+        })
+        assert.containSubset(pago.aplicaciones, [{ factura_id: octubre!.id, monto: '150.00' }])
         assert.isNull(pago.caja_id)
         const [banco] = await asientoDe('pago', pago.id)
-        assert.equal(banco!.codigo, '1.1.02.01')
+        assert.equal(banco!.codigo, cuenta.cuenta_codigo)
         // una vencida: con cortar = 2 y limitar = 1 queda limitado
         assert.deepEqual(
             pago.servicios.map((s) => s.estado),

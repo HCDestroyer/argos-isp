@@ -80,7 +80,30 @@ test.group('billing · evaluarEstadoServicio', () => {
             .where('entidad_id', servicioId)
             .count('* as total')
             .firstOrFail()
-        assert.equal(Number(accion.total), 4)
+        // solo las dos evaluaciones que cambiaron el estado quedan en audit.acciones
+        assert.equal(Number(accion.total), 2)
+    })
+
+    test('auditoría: una evaluación sin cambio no deja fila; un error sí', async ({ assert }) => {
+        const { servicioId } = await conVencidas(0)
+        const sinCambio = await evaluar(servicioId)
+        assert.containSubset(sinCambio, { estado: 'activo', cambiado: false })
+        const filas = await db
+            .from('audit.acciones')
+            .where('accion', 'servicios.evaluar_estado')
+            .where('entidad_id', servicioId)
+        assert.lengthOf(filas, 0)
+
+        const inexistente = 999_999_999
+        await assert.rejects(() => evaluar(inexistente), /no existe/)
+        const error = await db
+            .from('audit.acciones')
+            .where('accion', 'servicios.evaluar_estado')
+            .where('entidad_id', inexistente)
+            .orderBy('id', 'desc')
+            .firstOrFail()
+        assert.equal(error.resultado, 'error')
+        assert.include(error.error, 'no existe')
     })
 
     test('promesa activa reactiva de inmediato, aunque no sea la hora de corte', async ({ assert }) => {

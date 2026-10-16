@@ -29,6 +29,7 @@ export const COLUMNAS_CLIENTE = [
     'campos_personalizados',
     'canal_preferido',
     'telegram_chat_id',
+    'responsable_pago_id',
     'version',
     'created_at',
     'updated_at',
@@ -37,6 +38,17 @@ export const COLUMNAS_CLIENTE = [
 export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & {
     id: number
     version: number
+    responsable_pago_id: number | null
+    /** nombre del responsable de pago (lectura; no es columna) */
+    responsable_pago_nombre: string | null
+}
+
+/** Nombre del responsable de pago de `core.clientes as c` (subconsulta escalar). */
+const NOMBRE_RESPONSABLE =
+    '(SELECT r.nombre FROM core.clientes r WHERE r.id = c.responsable_pago_id) AS responsable_pago_nombre'
+
+function columnasVista(cliente: QueryClientContract) {
+    return [...COLUMNAS_CLIENTE.map((col) => `c.${col}`), cliente.raw(NOMBRE_RESPONSABLE)]
 }
 
 export interface FiltrosClientes extends OpcionesPaginacion {
@@ -50,6 +62,8 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     con_deuda_vencida?: boolean
     /** alguna `billing.promesas` en estado `activa` (true) o ninguna (false) */
     con_promesa_activa?: boolean
+    /** dependientes de este responsable de pago */
+    responsable_pago_id?: number
 }
 
 /** Cómo se filtra `core.clientes as c` por alcance. */
@@ -154,8 +168,9 @@ export async function buscarClientes(
     filtros: FiltrosClientes,
     alcance?: Alcance,
 ): Promise<Pagina<ClienteVista>> {
-    const consulta = db.from('core.clientes as c').select(COLUMNAS_CLIENTE.map((col) => `c.${col}`))
+    const consulta = db.from('core.clientes as c').select(columnasVista(db.connection()))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
+    if (filtros.responsable_pago_id) consulta.where('c.responsable_pago_id', filtros.responsable_pago_id)
     if (filtros.q) aplicarBusqueda(consulta, filtros.q)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)
@@ -167,12 +182,56 @@ export async function verCliente(
     cliente: QueryClientContract = db.connection(),
 ): Promise<ClienteVista> {
     const fila = (await cliente
-        .from('core.clientes')
-        .where('id', id)
-        .select([...COLUMNAS_CLIENTE])
+        .from('core.clientes as c')
+        .where('c.id', id)
+        .select(columnasVista(cliente))
         .first()) as ClienteVista | null
     if (!fila) throw new NoEncontrado(`El cliente ${id} no existe`)
     return fila
+}
+
+/** Fila de `GET /clientes/:id/dependientes`. */
+export interface DependienteVista {
+    id: number
+    nombre: string
+    nit_cui: string | null
+    /** servicios no retirados */
+    servicios: number
+    /**
+     * Estado resumido de sus servicios: el más grave entre los no retirados
+     * (`suspendido` > `limitado` > `activo`); `retirado` si todos lo están; null sin servicios.
+     */
+    estado_servicio: EstadoServicio | null
+}
+
+const RESUMEN_SERVICIOS = `
+    (SELECT count(*) FILTER (WHERE s.estado <> 'retirado')::int
+       FROM core.servicios s WHERE s.cliente_id = c.id) AS servicios,
+    (SELECT CASE
+                WHEN bool_or(s.estado = 'suspendido') THEN 'suspendido'
+                WHEN bool_or(s.estado = 'limitado') THEN 'limitado'
+                WHEN bool_or(s.estado = 'activo') THEN 'activo'
+                WHEN count(*) > 0 THEN 'retirado'
+            END
+       FROM core.servicios s WHERE s.cliente_id = c.id) AS estado_servicio`
+
+/**
+ * Clientes de los que `responsableId` es responsable de pago (A4 los muestra debajo del pagador
+ * en el cobro). 404 si el responsable no existe. Paginado por cursor sobre `c.id`.
+ */
+export async function listarDependientes(
+    responsableId: number,
+    opciones: OpcionesPaginacion,
+    alcance?: Alcance,
+): Promise<Pagina<DependienteVista>> {
+    const existe = await db.from('core.clientes').where('id', responsableId).select('id').first()
+    if (!existe) throw new NoEncontrado(`El cliente ${responsableId} no existe`)
+    const consulta = db
+        .from('core.clientes as c')
+        .where('c.responsable_pago_id', responsableId)
+        .select('c.id', 'c.nombre', 'c.nit_cui', db.raw(RESUMEN_SERVICIOS))
+    filtrarPorAlcance(consulta, alcance, dimensionesCliente)
+    return paginar<DependienteVista>(consulta, opciones, { columna: 'c.id', direccion: 'asc' })
 }
 
 /** Dimensiones de alcance de un cliente: su zona y los routers de sus servicios. */

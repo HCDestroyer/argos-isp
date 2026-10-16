@@ -1,11 +1,22 @@
 import { test } from '@japa/runner'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
+import { afirmarLibroCuadrado, cajeroDe, nuevaCaja, saldoTexto } from '#tests/ledger/ayudas_libro'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
-import { escenario, estadoServicio, eventosDe, facturasDe, generar } from '#tests/billing/ayudas_billing'
+import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import IncumplirPromesas from '#billing/actions/incumplir_promesas'
+import {
+    cuentaBancariaPrueba,
+    escenario,
+    estadoServicio,
+    eventosDe,
+    facturasDe,
+    generar,
+    lineasAsiento,
+    servicioCortado,
+} from '#tests/billing/ayudas_billing'
 
 /**
- * Tarea 12 (parcial): ciclo completo emitir → vencer → limitar → cortar → pagar → reactivar, con
+ * Tarea 12: ciclo completo emitir → vencer → limitar → cortar → pagar → reactivar, con
  * el SELECT de control del libro (Debe = Haber, ningún asiento descuadrado) después de cada paso.
  * Criterio del brief: `facturas_para_cortar = 2`: primera vencida → limitado; segunda →
  * suspendido; pagar una → sigue limitado; pagar las dos → activo.
@@ -82,6 +93,7 @@ test.group('billing · ciclo completo', () => {
         })
         await paso('limitado', '150.00')
 
+        const cuenta = await cuentaBancariaPrueba()
         // 6. pagar la otra → activo
         const segunda = await estado(
             client
@@ -92,6 +104,7 @@ test.group('billing · ciclo completo', () => {
                     metodo: 'deposito',
                     monto: '150.00',
                     referencia: unico('boleta'),
+                    cuenta_bancaria_id: cuenta.id,
                 }),
             201,
         )
@@ -119,5 +132,111 @@ test.group('billing · ciclo completo', () => {
         assert.lengthOf(await eventosDe('factura.emitida', 'servicio_id', servicioId), 2)
         assert.lengthOf(await eventosDe('factura.vencida', 'servicio_id', servicioId), 2)
         assert.lengthOf(await eventosDe('pago.registrado', 'cliente_id', clienteId), 2)
+    })
+})
+
+test.group('billing · ciclo con promesas, anulaciones y caja', () => {
+    test('promesa incumplida → corta; pago parcial y total en el turno; anular pago y factura; cerrar caja con diferencia', async ({
+        client,
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await servicioCortado()
+        const cajaId = await nuevaCaja()
+        const { token: cajero } = await cajeroDe(cajaId)
+        const { token: contador } = await usuarioConRoles(['contabilidad'])
+        const paso = async (estadoEsperado: string, saldo: string) => {
+            await afirmarLibroCuadrado(assert)
+            assert.equal(await estadoServicio(servicioId), estadoEsperado)
+            assert.equal(await saldoTexto(clienteId), saldo)
+        }
+        const cobrar = (monto: string) =>
+            estado(
+                client
+                    .post('/api/v1/pagos')
+                    .bearerToken(cajero)
+                    .header('Idempotency-Key', unico('cobro'))
+                    .json({ cliente_id: clienteId, metodo: 'caja', monto }),
+                201,
+            )
+        await paso('suspendido', '300.00')
+
+        // 1. turno de caja
+        await estado(
+            client
+                .post(`/api/v1/cajas/${cajaId}/abrir`)
+                .bearerToken(cajero)
+                .json({ fondo_inicial: '100.00' }),
+            201,
+        )
+
+        // 2. promesa aprobada → activo; vence sin pagar → incumplida → suspendido
+        const promesa = await new CrearPromesaPago().execute(
+            {
+                servicio_id: servicioId,
+                vence_en: new Date('2026-10-12T18:00:00-06:00'),
+                monto: '300.00',
+                canal: 'operador',
+                ahora: new Date('2026-10-08T10:00:00-06:00'),
+            },
+            contextoPrueba(),
+        )
+        assert.equal(promesa.estado, 'activa')
+        await paso('activo', '300.00')
+        const cron = await new IncumplirPromesas().execute(
+            { servicio_id: servicioId, ahora: new Date('2026-10-12T18:00:00-06:00') },
+            contextoPrueba(),
+        )
+        assert.equal(cron.incumplidas, 1)
+        await paso('suspendido', '300.00')
+
+        // 3. pago parcial en el turno: sigue cortado; pago del resto: activo
+        const parcial = await cobrar('100.00')
+        assert.equal(parcial.body().caja_id, cajaId)
+        await paso('suspendido', '200.00')
+        const total = await cobrar('200.00')
+        assert.equal(total.body().servicios[0].estado, 'activo')
+        await paso('activo', '0.00')
+
+        // 4. anular el pago total → vuelve a cortar
+        await estado(
+            client
+                .post(`/api/v1/pagos/${total.body().id}/anular`)
+                .bearerToken(contador)
+                .json({ motivo: 'billete falso' }),
+            200,
+        )
+        await paso('suspendido', '200.00')
+
+        // 5. anular la factura de octubre → queda una vencida → limitado
+        const [, octubre] = await facturasDe(servicioId)
+        await estado(
+            client
+                .post(`/api/v1/facturas/${octubre!.id}/anular`)
+                .bearerToken(contador)
+                .json({ motivo: 'servicio sin instalar en octubre' }),
+            200,
+        )
+        await paso('limitado', '50.00')
+
+        // 6. pagar lo que queda → activo
+        await cobrar('50.00')
+        await paso('activo', '0.00')
+
+        // 7. cerrar caja: esperado = 100 fondo + 100 + 50 (el pago anulado no cuenta)
+        const sinMotivo = await estado(
+            client.post(`/api/v1/cajas/${cajaId}/cerrar`).bearerToken(cajero).json({ contado: '245.00' }),
+            422,
+        )
+        assert.equal(sinMotivo.body().errors[0].field, 'motivo')
+        const cierre = await estado(
+            client
+                .post(`/api/v1/cajas/${cajaId}/cerrar`)
+                .bearerToken(cajero)
+                .json({ contado: '245.00', motivo: 'faltan Q5 de vuelto' }),
+            200,
+        )
+        assert.containSubset(cierre.body(), { esperado: '250.00', contado: '245.00', diferencia: '-5.00' })
+        assert.lengthOf(await lineasAsiento('cierre_caja', cierre.body().id), 2)
+        await paso('activo', '0.00')
     })
 })

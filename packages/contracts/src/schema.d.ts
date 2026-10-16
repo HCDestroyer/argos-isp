@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bancos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH) */
+        get: operations["bancosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bitacora/acciones": {
         parameters: {
             query?: never;
@@ -115,7 +132,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cerrar turno de caja (esperado vs contado) */
+        /**
+         * Cerrar turno de caja (esperado vs contado)
+         * @description esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.
+         */
         post: operations["cajasCerrar"];
         delete?: never;
         options?: never;
@@ -179,6 +199,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{id}/dependientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clientes de los que es responsable de pago
+         * @description Dependientes con su número de servicios no retirados y el estado resumido. El cobro (A4) muestra sus facturas debajo del pagador.
+         */
+        get: operations["clientesDependientes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{id}/desvincular-telegram": {
         parameters: {
             query?: never;
@@ -213,6 +253,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{id}/quitar-responsable-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quitar el responsable de pago del cliente */
+        post: operations["clientesQuitarResponsablePago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{id}/responsable-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asignar el responsable de pago del cliente
+         * @description Fija el cliente que paga por este. Un solo nivel: el responsable no puede tener responsable y un cliente con dependientes no puede tenerlo. 422 si es él mismo, si el responsable no existe o si se formaría un ciclo o un segundo nivel. Solo sugiere en el cobro: cualquiera puede pagar cualquier factura.
+         */
+        post: operations["clientesAsignarResponsablePago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{id}/vincular-telegram": {
         parameters: {
             query?: never;
@@ -227,6 +304,124 @@ export interface paths {
          * @description Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.
          */
         post: operations["clientesVincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cuentas-bancarias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas) */
+        get: operations["cuentasBancariasListar"];
+        put?: never;
+        /** Crear cuenta bancaria propia (crea su subcuenta de Bancos en el libro) */
+        post: operations["cuentasBancariasCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cuentas-bancarias/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver cuenta bancaria propia */
+        get: operations["cuentasBancariasVer"];
+        /** Editar cuenta bancaria propia */
+        put: operations["cuentasBancariasEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documentos/aviso-cobro/{facturaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF del aviso de cobro de una factura (panel)
+         * @description Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.
+         */
+        get: operations["documentosAvisoCobroPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documentos/plantillas/{tipo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plantilla HTML vigente de un documento y sus variables (editor del panel) */
+        get: operations["documentosPlantillaVer"];
+        /**
+         * Guarda la plantilla HTML de un documento
+         * @description Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.
+         */
+        put: operations["documentosPlantillaEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documentos/plantillas/{tipo}/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PDF de prueba de una plantilla con datos de ejemplo (no guarda nada)
+         * @description 422 si la plantilla no es válida. Responde application/pdf.
+         */
+        post: operations["documentosPlantillaVistaPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empresa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configuración de la empresa (panel) */
+        get: operations["empresaVer"];
+        /**
+         * Edita la configuración de la empresa
+         * @description Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).
+         */
+        put: operations["empresaEditar"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -276,7 +471,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anular factura (asiento de reverso) */
+        /**
+         * Anular factura (asiento de reverso)
+         * @description Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.
+         */
         post: operations["facturasAnular"];
         delete?: never;
         options?: never;
@@ -724,6 +922,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/codigo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pide un código de acceso al portal (correo o Telegram registrado del cliente)
+         * @description Con `identificador` (NIT/CUI o usuario PPPoE) o `por_ip: true` (desde /corte). El código (6 dígitos, `PORTAL_CODIGO_VIGENCIA_S`) va SIEMPRE al destino registrado del cliente. Por identificador responde igual exista o no el cliente; por IP responde 422 `no_identificado` o `sin_destino`. Máximo `PORTAL_CODIGO_MAX_HORA` códigos por cliente por hora; 503 si el canal no acepta el mensaje. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalSolicitarCodigo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/contacto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * El cliente edita su correo, teléfonos y canal preferido
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.
+         */
+        put: operations["portalEditarContacto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/cuenta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos de contacto, servicios y saldo del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalCuenta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/empresa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)
+         * @description Sin login: es información pública de la empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalEmpresa"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/estado": {
         parameters: {
             query?: never;
@@ -736,6 +1014,106 @@ export interface paths {
          * @description Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalEstado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Facturas (avisos de cobro) del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalFacturas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de una factura del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404.
+         */
+        get: operations["portalFactura"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Una factura de otro cliente responde 404. Responde application/pdf.
+         */
+        get: operations["portalFacturaPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/pagos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pagos del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalPagos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/promesas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Promesas de pago del cliente de la sesión (solo lectura)
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        get: operations["portalPromesas"];
         put?: never;
         post?: never;
         delete?: never;
@@ -764,6 +1142,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/salir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierra la sesión del portal
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión.
+         */
+        post: operations["portalSalir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verifica el código y abre la sesión del portal (cookie httpOnly)
+         * @description Pone la cookie httpOnly `argos_portal` (SameSite=Lax, ruta /api/v1/portal). El token nunca va en el cuerpo. Código incorrecto, vencido, usado o sin intentos (`PORTAL_CODIGO_INTENTOS`): 422 `codigo_invalido`. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalVerificarCodigo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/promesas": {
         parameters: {
             query?: never;
@@ -774,7 +1192,10 @@ export interface paths {
         /** Listar promesas de pago */
         get: operations["promesasListar"];
         put?: never;
-        /** Crear promesa de pago (aprobada, rechazada o pendiente de aprobación) */
+        /**
+         * Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)
+         * @description Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
+         */
         post: operations["promesasCrear"];
         delete?: never;
         options?: never;
@@ -1326,6 +1747,9 @@ export interface components {
         AplicacionPago: {
             factura_id: number;
             monto: components["schemas"]["Dinero"];
+            /** @description Dueño de la factura (pago de terceros: puede no ser el pagador) */
+            cliente_id?: number;
+            cliente_nombre?: string;
         };
         Asiento: {
             id: number;
@@ -1348,6 +1772,11 @@ export interface components {
             /** @enum {string|null} */
             alcance_tipo: "router" | "zona" | "caja" | null;
             alcance_id: number | null;
+        };
+        Banco: {
+            id: number;
+            nombre: string;
+            activo: boolean;
         };
         Caja: {
             id: number;
@@ -1375,6 +1804,10 @@ export interface components {
             contado: components["schemas"]["Dinero"] | null;
             diferencia: components["schemas"]["Dinero"] | null;
             motivo: string | null;
+            /** @description Usuario que abrió el turno */
+            abierto_por?: number | null;
+            /** @description Usuario que cerró el turno */
+            cerrado_por?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1416,6 +1849,10 @@ export interface components {
             /** @enum {string} */
             canal_preferido: "correo" | "telegram" | "whatsapp";
             telegram_chat_id: string | null;
+            /** @description Cliente que paga por este (responsable de pago); null si paga él mismo */
+            responsable_pago_id?: number | null;
+            /** @description Nombre del responsable de pago (solo lectura) */
+            responsable_pago_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1477,11 +1914,83 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        CuentaBancaria: {
+            id: number;
+            banco_id: number;
+            banco_nombre: string;
+            numero: string;
+            alias: string;
+            /** @enum {string} */
+            moneda: "GTQ" | "USD";
+            /** @description Una cuenta inactiva no recibe pagos nuevos */
+            activa: boolean;
+            /** @description Subcuenta de 1.1.02 Bancos en el libro */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CuentaDeposito: {
+            banco: string;
+            /** @description Nombre visible de la cuenta (p. ej. "Monetaria ArgosIsp") */
+            alias: string;
+            numero: string;
+            /** @enum {string} */
+            moneda: "GTQ" | "USD";
+        };
+        DependientePago: {
+            id: number;
+            nombre: string;
+            nit_cui: string | null;
+            /** @description Servicios no retirados */
+            servicios: number;
+            /**
+             * @description Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios
+             * @enum {string|null}
+             */
+            estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
+        };
         /**
          * @description Monto en quetzales con 2 decimales, como string
          * @example 150.00
          */
         Dinero: string;
+        Empresa: {
+            nombre: string;
+            nit: string | null;
+            direccion: string | null;
+            telefono: string | null;
+            telefono_alterno: string | null;
+            /** @description Número de WhatsApp tal como se marca (p. ej. "5555-1234") */
+            whatsapp: string | null;
+            correo: string | null;
+            /** @description Texto libre: "Lunes a viernes de 8:00 a 17:00" */
+            horario: string | null;
+            /** @description Texto que acompaña los datos de depósito */
+            instrucciones_pago: string | null;
+            /** @description 0 = valores por defecto (nunca se guardó). Envíala al editar (409 si cambió) */
+            version: number;
+        };
+        EmpresaPublica: {
+            nombre: string;
+            nit: string | null;
+            direccion: string | null;
+            telefono: string | null;
+            telefono_alterno: string | null;
+            /** @description Número de WhatsApp tal como se marca (p. ej. "5555-1234") */
+            whatsapp: string | null;
+            correo: string | null;
+            /** @description Texto libre: "Lunes a viernes de 8:00 a 17:00" */
+            horario: string | null;
+            /** @description Texto que acompaña los datos de depósito */
+            instrucciones_pago: string | null;
+            /** @description Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran */
+            cuentas_deposito: components["schemas"]["CuentaDeposito"][];
+        };
         EnvioNotificacion: {
             id: number;
             cliente_id: number | null;
@@ -1579,6 +2088,12 @@ export interface components {
              * @description Cuándo se marcó vencida
              */
             vencida_en?: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo se anuló
+             */
+            anulada_en?: string | null;
+            motivo_anulacion?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1687,7 +2202,7 @@ export interface components {
             id: number;
             cliente_id: number;
             /** @enum {string} */
-            metodo: "caja" | "pasarela" | "deposito" | "agente" | "debito";
+            metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
             monto: components["schemas"]["Dinero"];
             comision: components["schemas"]["Dinero"];
             referencia: string | null;
@@ -1706,6 +2221,13 @@ export interface components {
             motivo_anulacion?: string | null;
             /** @description Solo al registrar: cómo quedó cada servicio afectado (reactivación inmediata) */
             servicios?: components["schemas"]["ServicioEvaluado"][];
+            /** @description Banco de origen (transferencia, ach) */
+            banco_origen_id?: number | null;
+            banco_origen_nombre?: string | null;
+            /** @description Cuenta bancaria propia de destino (deposito, transferencia, ach, remesa) */
+            cuenta_bancaria_id?: number | null;
+            /** @description Banco y alias de la cuenta de destino */
+            cuenta_bancaria_nombre?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -1792,6 +2314,15 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PlantillaDocumento: {
+            /** @enum {string} */
+            tipo: "aviso_cobro";
+            /** @description HTML con variables Mustache (`{{factura.total}}`) */
+            html: string;
+            /** @description 0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar */
+            version: number;
+            variables: components["schemas"]["VariableDocumento"][];
+        };
         PlantillaFacturacion: {
             id: number;
             nombre: string;
@@ -1835,6 +2366,125 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PortalContacto: {
+            nombre: string;
+            nit_cui: string | null;
+            email: string | null;
+            telefono: string | null;
+            movil: string | null;
+            /** @enum {string} */
+            canal_preferido: "correo" | "telegram" | "whatsapp";
+            telegram_vinculado: boolean;
+            /** @description Envíala al editar (409 si cambió) */
+            version: number;
+        };
+        PortalCuenta: {
+            cliente: components["schemas"]["PortalContacto"];
+            servicios: components["schemas"]["PortalServicio"][];
+            /** @description Saldo pendiente de todos los servicios */
+            monto_adeudado: components["schemas"]["Dinero"];
+        };
+        PortalFactura: {
+            id: number;
+            /** @description Serie-número FEL si está certificada; si no, número del aviso */
+            numero: string;
+            /**
+             * @description factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto
+             * @enum {string}
+             */
+            documento: "aviso_cobro" | "factura";
+            /** @enum {string} */
+            tipo: "servicio" | "mora";
+            servicio_id: number | null;
+            /** Format: date */
+            periodo: string;
+            /** Format: date-time */
+            emitida_en: string;
+            /** Format: date */
+            vence_en: string;
+            /** @enum {string} */
+            estado: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+            subtotal: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+            pagado: components["schemas"]["Dinero"];
+            /** @description total - pagado (0.00 si está anulada) */
+            saldo: components["schemas"]["Dinero"];
+            fel_uuid: string | null;
+            fel_serie: string | null;
+            fel_numero: string | null;
+        };
+        PortalFacturaDetalle: components["schemas"]["PortalFactura"] & {
+            lineas: components["schemas"]["PortalFacturaLinea"][];
+        };
+        PortalFacturaLinea: {
+            concepto: string;
+            /** @description Decimal con hasta 3 decimales */
+            cantidad: string;
+            precio_unitario: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+        };
+        PortalPago: {
+            id: number;
+            /** @enum {string} */
+            metodo: "caja" | "pasarela" | "deposito" | "agente" | "debito";
+            monto: components["schemas"]["Dinero"];
+            referencia: string | null;
+            /** @enum {string} */
+            estado: "registrado" | "pendiente_verificacion" | "anulado";
+            /** Format: date-time */
+            created_at: string;
+            aplicaciones: {
+                factura_id: number;
+                monto: components["schemas"]["Dinero"];
+            }[];
+        };
+        PortalPromesa: {
+            id: number;
+            servicio_id: number;
+            /** Format: date-time */
+            vence_en: string;
+            monto: components["schemas"]["Dinero"];
+            /** @enum {string} */
+            estado: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            created_at: string;
+        };
+        PortalServicio: {
+            id: number;
+            estado: components["schemas"]["EstadoServicio"];
+            plan: string | null;
+            direccion: string | null;
+            promesa_activa: boolean;
+            monto_adeudado: components["schemas"]["Dinero"];
+        };
+        PortalSesion: {
+            cliente: {
+                nombre_parcial: string | null;
+            };
+            /**
+             * Format: date-time
+             * @description Vence por inactividad; cada consulta la extiende
+             */
+            expira_en: string;
+        };
+        PortalSolicitudCodigo: {
+            /**
+             * Format: uuid
+             * @description Se envía con el código a POST /portal/verificar
+             */
+            solicitud: string;
+            /**
+             * Format: date-time
+             * @description Hasta cuándo vale el código
+             */
+            expira_en: string;
+            /** @description Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente */
+            destino: string | null;
+        };
         Problem: {
             type: string;
             title: string;
@@ -1858,9 +2508,12 @@ export interface components {
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
             aprobada_por: number | null;
+            /** @description resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar */
             resultado_evaluacion: {
                 [key: string]: unknown;
             } | null;
+            /** @description Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación) */
+            servicio?: components["schemas"]["ServicioEvaluado"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -2152,6 +2805,10 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        VariableDocumento: {
+            nombre: string;
+            descripcion: string;
+        };
         Zona: {
             id: number;
             nombre: string;
@@ -2223,6 +2880,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosListar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bancos activos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Banco"][];
+                };
             };
             /** @description No autenticado */
             401: {
@@ -2396,15 +3082,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     cajasAbrir: {
@@ -2478,15 +3155,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2576,15 +3244,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     cajasTurnos: {
@@ -2651,15 +3310,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     clientesListar: {
@@ -2682,6 +3332,8 @@ export interface operations {
                 con_deuda_vencida?: boolean;
                 /** @description true: con alguna promesa de pago activa; false: sin ninguna */
                 con_promesa_activa?: boolean;
+                /** @description Dependientes de este responsable de pago */
+                responsable_pago_id?: number;
             };
             header?: never;
             path?: never;
@@ -2957,6 +3609,72 @@ export interface operations {
             };
         };
     };
+    clientesDependientes: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de dependientes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DependientePago"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     clientesDesvincularTelegram: {
         parameters: {
             query?: never;
@@ -3076,6 +3794,160 @@ export interface operations {
             };
         };
     };
+    clientesQuitarResponsablePago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Cliente sin responsable de pago */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.quitar_responsable_pago */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesAsignarResponsablePago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Cliente que paga por este */
+                    responsable_id: number;
+                    motivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Cliente con su responsable de pago */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.asignar_responsable_pago */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     clientesVincularTelegram: {
         parameters: {
             query?: never;
@@ -3134,6 +4006,593 @@ export interface operations {
                 };
             };
             /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cuentasBancariasListar: {
+        parameters: {
+            query?: {
+                /** @description Solo activas (true) o inactivas */
+                activa?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuentas bancarias */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuentaBancaria"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cuentas_bancarias.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cuentasBancariasCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Banco (GET /bancos) */
+                    banco_id: number;
+                    numero: string;
+                    alias: string;
+                    /** @enum {string} */
+                    moneda?: "GTQ" | "USD";
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Cuenta bancaria creada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuentaBancaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cuentas_bancarias.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cuentasBancariasVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuenta bancaria */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuentaBancaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cuentas_bancarias.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cuentasBancariasEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Banco (GET /bancos) */
+                    banco_id?: number;
+                    numero?: string;
+                    alias?: string;
+                    /** @enum {string} */
+                    moneda?: "GTQ" | "USD";
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Cuenta bancaria actualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuentaBancaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cuentas_bancarias.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    documentosAvisoCobroPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                facturaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    documentosPlantillaVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: "aviso_cobro";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plantilla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantillaDocumento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso documentos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    documentosPlantillaEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: "aviso_cobro";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    html: string;
+                    /** @description version leída (0 si es la de fábrica); si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Plantilla guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantillaDocumento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso documentos.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    documentosPlantillaVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: "aviso_cobro";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    html: string;
+                };
+            };
+        };
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso documentos.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    empresaVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Empresa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso empresa.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    empresaEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída (0 si nunca se guardó); si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    nit?: string | null;
+                    direccion?: string | null;
+                    telefono?: string | null;
+                    telefono_alterno?: string | null;
+                    whatsapp?: string | null;
+                    /** Format: email */
+                    correo?: string | null;
+                    horario?: string | null;
+                    instrucciones_pago?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Empresa guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Empresa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso empresa.editar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3328,15 +4787,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4248,7 +5698,8 @@ export interface operations {
                 limit?: number;
                 cliente_id?: number;
                 caja_id?: number;
-                metodo?: "caja" | "pasarela" | "deposito" | "agente" | "debito";
+                cuenta_bancaria_id?: number;
+                metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
                 estado?: "registrado" | "pendiente_verificacion" | "anulado";
                 desde?: string;
                 hasta?: string;
@@ -4315,15 +5766,20 @@ export interface operations {
                 "application/json": {
                     cliente_id: number;
                     /** @enum {string} */
-                    metodo: "caja" | "pasarela" | "deposito" | "agente" | "debito";
+                    metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
                     /**
                      * @description Monto con hasta 2 decimales, como string
                      * @example 150.00
                      */
                     monto: string;
+                    /** @description Boleta, número de transferencia/ACH o código de remesa (obligatoria con deposito, transferencia, ach y remesa). Única por método y cuenta bancaria */
                     referencia?: string | null;
-                    /** @description Obligatoria con metodo caja */
+                    /** @description Caja del efectivo; sin ella, la del turno abierto del cajero o la principal */
                     caja_id?: number | null;
+                    /** @description Cuenta bancaria propia de destino (GET /cuentas-bancarias). Obligatoria con deposito, transferencia, ach y remesa */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Banco de origen (GET /bancos). Obligatorio con transferencia y ach */
+                    banco_origen_id?: number | null;
                     nota?: string | null;
                     /** @description Facturas a las que aplicar; por defecto la más antigua primero */
                     facturas?: number[];
@@ -5321,6 +6777,153 @@ export interface operations {
             };
         };
     };
+    portalSolicitarCodigo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description NIT/CUI o usuario PPPoE. Omitir con `por_ip: true` */
+                    identificador?: string;
+                    /** @description Identificar por la IP de origen (página de corte) */
+                    por_ip?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Código enviado (o solicitud ciega) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSolicitudCodigo"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalEditarContacto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** Format: email */
+                    email?: string | null;
+                    telefono?: string | null;
+                    movil?: string | null;
+                    /** @enum {string} */
+                    canal_preferido?: "correo" | "telegram" | "whatsapp";
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalContacto"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCuenta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuenta del cliente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCuenta"];
+                };
+            };
+        };
+    };
+    portalEmpresa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpresaPublica"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalEstado: {
         parameters: {
             query?: never;
@@ -5350,6 +6953,179 @@ export interface operations {
             };
         };
     };
+    portalFacturas: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de facturas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalFactura"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalFactura: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Factura con líneas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalFacturaDetalle"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalFacturaPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPagos: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de pagos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPago"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPromesas: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de promesas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPromesa"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalQuienSoy: {
         parameters: {
             query?: never;
@@ -5366,6 +7142,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuienSoy"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSalir: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión cerrada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    portalVerificarCodigo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description Devuelta por POST /portal/codigo
+                     */
+                    solicitud: string;
+                    /** @description Código de 6 dígitos */
+                    codigo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSesion"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
@@ -5428,15 +7272,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5511,15 +7346,6 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description No implementado todavía */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5603,15 +7429,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No implementado todavía */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     rolesListar: {
@@ -5664,7 +7481,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -5722,7 +7539,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -7490,7 +9307,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.ver" | "clientes.vincular_telegram" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.crear" | "promesas.ver" | "redes.crear" | "redes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
