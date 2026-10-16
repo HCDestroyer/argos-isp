@@ -45,7 +45,8 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         secciones: [
             { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cartera vencida, ingresos, IVA, cobranza, cierres de caja y más, en CSV o Excel.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
-            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y egresos.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y cierre mensual.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
             { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
         ],
     },

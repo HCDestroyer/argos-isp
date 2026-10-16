@@ -118,7 +118,7 @@ export const egresos: { columnas: Columna[], filas: Schema<'ReporteEgresos'>['fi
         c('cuenta_codigo', 'Cuenta', 'texto'), c('egresos', 'Egresos', 'entero'), c('monto', 'Monto', 'dinero'),
     ],
     filas: [
-        { periodo: '2026-10', categoria: 'energia', categoria_nombre: 'Energía eléctrica', cuenta_codigo: '5.1.02', egresos: 2, monto: '1850.40' },
-        { periodo: '2026-10', categoria: 'transito', categoria_nombre: 'Tránsito de internet', cuenta_codigo: '5.1.01', egresos: 1, monto: '12500.00' },
+        { periodo: '2026-10', categoria: 'energia', categoria_nombre: 'Energía', cuenta_codigo: '5.2.01', egresos: 2, monto: '1850.40' },
+        { periodo: '2026-10', categoria: 'transito', categoria_nombre: 'Tránsito', cuenta_codigo: '5.2.02', egresos: 1, monto: '12500.00' },
     ],
 }

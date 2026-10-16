@@ -159,21 +159,6 @@ export const TIPOS_FACTURA_REPORTE: Record<TipoFacturaReporte, string> = {
     mora: 'Solo recargos por mora',
 }
 
-export const METODOS_EGRESO: Record<MetodoEgresoReporte, string> = {
-    caja: 'Efectivo de caja',
-    banco: 'Banco',
-    cuenta_bancaria: 'Cuenta bancaria propia',
-}
-
-export const CATEGORIAS_EGRESO: Record<CategoriaEgresoReporte, string> = {
-    energia: 'Energía',
-    transito: 'Tránsito de internet',
-    nomina: 'Nómina',
-    vehiculos: 'Vehículos',
-    alquileres: 'Alquileres',
-    otros: 'Otros',
-}
-
 /**
  * Consulta de cada reporte con solo los filtros que acepta (lo que no aplica queda fuera).
  * `undefined` no viaja en la URL.

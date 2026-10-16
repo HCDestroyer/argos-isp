@@ -10,6 +10,7 @@ useHead({ title: 'Libro · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const nombres = useNombresClientes()
+const { puede } = usePermisos()
 
 const TODOS = 'todos'
 const PERSONALIZADO = 'personalizado'
@@ -25,11 +26,12 @@ function idQuery(valor: unknown): number {
 }
 
 const pestanas: TabsItem[] = [
-    { label: 'Libro diario', value: 'diario', icon: 'i-lucide-book-open' },
-    { label: 'Libro mayor', value: 'mayor', icon: 'i-lucide-library' },
+    { label: 'Diario', value: 'diario', icon: 'i-lucide-book-open' },
+    { label: 'Mayor', value: 'mayor', icon: 'i-lucide-library' },
+    { label: 'Cierres', value: 'cierres', icon: 'i-lucide-lock' },
 ]
 
-const pestana = ref(textoQuery(route.query.tab) === 'mayor' ? 'mayor' : 'diario')
+const pestana = ref(['mayor', 'cierres'].includes(textoQuery(route.query.tab)) ? textoQuery(route.query.tab) : 'diario')
 const desde = ref(FECHA.test(textoQuery(route.query.desde)) ? textoQuery(route.query.desde) : '')
 const hasta = ref(FECHA.test(textoQuery(route.query.hasta)) ? textoQuery(route.query.hasta) : '')
 const origen = ref<OrigenAsiento | typeof TODOS>(textoQuery(route.query.origen) in ORIGENES_ASIENTO ? (textoQuery(route.query.origen) as OrigenAsiento) : TODOS)
@@ -134,8 +136,12 @@ const hayFiltros = computed(() => desde.value !== '' || hasta.value !== '' || or
 
 async function aplicarFiltros() {
     const query: Record<string, string> = {}
-    if (pestana.value === 'mayor') {
-        query.tab = 'mayor'
+    if (pestana.value !== 'diario') {
+        query.tab = pestana.value
+    }
+    if (pestana.value === 'cierres') {
+        await router.replace({ query })
+        return
     }
     if (desde.value) {
         query.desde = desde.value
@@ -211,7 +217,12 @@ onMounted(async () => {
                 class="w-full"
             />
 
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <LibroCierres v-if="pestana === 'cierres'" />
+
+            <div
+                v-if="pestana !== 'cierres'"
+                class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            >
                 <USelectMenu
                     v-if="pestana === 'mayor'"
                     v-model="cuentaId"
@@ -254,7 +265,10 @@ onMounted(async () => {
                 />
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div
+                v-if="pestana !== 'cierres'"
+                class="flex flex-col gap-3 sm:flex-row sm:items-center"
+            >
                 <ClienteSelector
                     v-if="pestana === 'mayor' && cuenta?.auxiliar_cliente"
                     v-model="clienteId"
@@ -338,7 +352,7 @@ onMounted(async () => {
                 </template>
             </template>
 
-            <template v-else>
+            <template v-else-if="pestana === 'mayor'">
                 <ProblemaAlerta
                     v-if="problemaCuentas"
                     :problema="problemaCuentas"
@@ -434,8 +448,15 @@ onMounted(async () => {
                 </template>
             </template>
 
-            <p class="text-xs text-muted">
-                Egresos: pendientes, la API todavía no tiene su endpoint.
+            <p
+                v-if="puede('egresos.ver') && pestana !== 'cierres'"
+                class="text-xs text-muted"
+            >
+                Los gastos se registran y anulan en
+                <ULink
+                    to="/egresos"
+                    class="underline"
+                >Egresos</ULink>; cada uno deja su asiento con origen "egreso".
             </p>
         </div>
     </PanelPagina>
