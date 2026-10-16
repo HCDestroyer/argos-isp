@@ -124,6 +124,38 @@ También se verificó: tras el primer login la clave queda en Redis sin TTL, y u
 
 Pendiente con el MikroTik del laboratorio (A6/PM): PPPoE real con estos atributos (el PM ya verificó en RouterOS 7.24.5 los mismos atributos con un `aaa` simulado, ver `infra/mikrotik/README.md`).
 
+## Pruebas de punta a punta con FreeRADIUS en Docker (tarea 10)
+
+`apps/api/tests/network/freeradius.spec.ts` monta todo el camino con procesos reales y Postgres real:
+
+```
+radtest / radclient (en el contenedor, como el MikroTik) → FreeRADIUS 3.2 (config de este repo)
+  → rlm_rest → services/aaa (proceso, Redis vacío) → GET /api/v1/internal/aaa/servicio (Postgres)
+  → accounting → BullMQ → worker de sesiones → network.sesiones + sesion.iniciada / sesion.terminada
+CambiarEstadoServicio / DesconectarSesion → audit.outbox → stream → services/coa (proceso)
+  → el mismo FreeRADIUS como NAS (listen type=coa, 3799) → CoA-ACK / CoA-NAK / Disconnect-ACK → audit.red
+```
+
+| Prueba     | Qué comprueba                                                                                                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| authorize  | PAP y CHAP: activo (plan, IPv4, /64, /56), limitado (velocidad reducida), suspendido (perfil de corte + IPs), retirado, inexistente y clave errónea → Reject; caché sin TTL |
+| accounting | Start, Interim-Update (gigawords) y Stop → fila abierta, contadores, cierre con causa, /56 de la asignación, eventos; el Interim de contadores no se audita                 |
+| CoA ACK    | suspender → CoA-ACK en < 5 s; el NAS devuelve en `Reply-Message` los atributos que decodificó (`256k/256k`, `suspendidos`, `argos-corte.in`); reactivar → Disconnect-ACK    |
+| CoA NAK    | limitar un `User-Name` `nak-*` → CoA-NAK con `Error-Cause = Session-Context-Not-Found`, sin reintento, `coa.fallido`                                                        |
+| Disconnect | `DesconectarSesion` → Disconnect-ACK con `razon = manual: …`; el Stop del NAS cierra la sesión                                                                              |
+
+Cómo correrla (Docker, Postgres y Redis locales; imagen `freeradius/freeradius-server` de `infra/docker-compose.yml`, se descarga si falta):
+
+```
+cd apps/api
+DB_DATABASE=argosisp_test_a2 PORT=3422 node ace test --files tests/network/freeradius.spec.ts
+```
+
+- Usa un prefijo de Redis propio (`a2fr-<aleatorio>`: claves de `aaa`, cola BullMQ y stream) y lo borra al terminar; el contenedor se llama igual y se elimina.
+- Publica el 3799 del contenedor en `127.0.0.6:<puerto libre>` (el `nas_ip` del router de la prueba); FreeRADIUS llega a `aaa` por `host.docker.internal`.
+- Sin Docker se omite (`AAA_PRUEBAS_DOCKER=0` también la omite). Tarda unos 15 s.
+- Las de `services/aaa` (`pnpm --filter @argosisp/aaa test`, `test/freeradius.test.ts`) y `services/coa` (`test/nas.test.ts`, firma contra `radclient`) siguen cubriendo cada servicio por separado.
+
 ## Dependencias
 
 | Paquete          | Motivo                                                                                                                                                     |

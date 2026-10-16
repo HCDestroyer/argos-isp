@@ -46,6 +46,7 @@ Desconectar no habla con el NAS: emite `sesion.desconexion_solicitada` (`sesion_
 ## Pruebas
 
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).
+- `tests/network/freeradius.spec.ts` (tarea 10): FreeRADIUS en Docker + `aaa` + `coa` como procesos: authorize de los cuatro estados, accounting completo, CoA ACK y NAK, Disconnect. Cómo correrla en `services/aaa/README.md`.
 - `tests/network/vigia_aaa.spec.ts`: caída a los 60 s, una sola alerta, recuperación, fallo corto sin alerta, dos vigías con lock y racha compartida, racha perdida sin duplicar, `sondeoHttp` contra un servidor real.
 - `tests/network/sesiones.spec.ts`: acciones de accounting (Postgres real) y worker (BullMQ real con prefijo propio).
 - `tests/network/coa.spec.ts` (tarea 6, de punta a punta): `CambiarEstadoServicio` → `audit.outbox` → XADD a un stream propio (lo que hará el relay de A1) → `services/coa` como proceso → NAS simulado por UDP (`services/coa/test/nas_simulado.ts`, también proceso) → `audit.red` y `coa.fallido`. La sesión la abre `IniciarSesion`. Cubre suspender (CoA, ACK en < 5 s, evento duplicado sin reenvío), reactivar (Disconnect), limitar y volver (CoA de velocidad), cambio de prefijo (Disconnect), desconexión manual (Disconnect), NAK y NAS que no responde.
