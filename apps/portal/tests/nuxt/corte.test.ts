@@ -31,7 +31,7 @@ describe('página /corte', () => {
         expect(vencidas).toContain('Q 350.00')
 
         expect(boton(wrapper, 'Pagar en línea')?.attributes('disabled')).toBeDefined()
-        expect(boton(wrapper, 'Subir comprobante')?.attributes('disabled')).toBeDefined()
+        expect(boton(wrapper, 'Subir comprobante')?.attributes('disabled')).toBeUndefined()
         expect(boton(wrapper, 'Solicitar promesa')?.attributes('disabled')).toBeUndefined()
         expect(boton(wrapper, 'Ver datos de depósito')?.attributes('disabled')).toBeUndefined()
         expect(texto).toContain('Llamar a soporte: 7765-4321')

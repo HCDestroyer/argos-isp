@@ -7785,6 +7785,42 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/bancos": {
+      "get": {
+        "operationId": "portalBancos",
+        "summary": "Bancos de origen para el comprobante (transferencia y ACH)",
+        "description": "Sin login: catálogo `billing.bancos` de A3, solo los activos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PortalBanco"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/codigo": {
       "post": {
         "operationId": "portalSolicitarCodigo",
@@ -7824,6 +7860,216 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalSolicitudCodigo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/comprobantes": {
+      "get": {
+        "operationId": "portalComprobantes",
+        "summary": "Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Incluye el motivo cuando se rechazó.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de comprobantes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalComprobante"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalSubirComprobante",
+        "summary": "El cliente sube el comprobante de un depósito, transferencia, ACH o remesa",
+        "description": "**`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "transferencia",
+                      "ach",
+                      "remesa"
+                    ]
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "id de una de `cuentas_deposito` (GET /portal/empresa)"
+                  },
+                  "banco_origen_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo con transferencia y ACH (catálogo GET /portal/bancos)"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha_deposito": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo con la sesión del portal; sin él se identifica por la IP de origen"
+                  }
+                },
+                "required": [
+                  "metodo",
+                  "cuenta_bancaria_id",
+                  "referencia",
+                  "monto",
+                  "fecha_deposito"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comprobante recibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalComprobante"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -15069,12 +15315,18 @@
       "CuentaDeposito": {
         "type": "object",
         "required": [
+          "id",
           "banco",
           "alias",
           "numero",
           "moneda"
         ],
         "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Se envía como `cuenta_bancaria_id` al subir un comprobante"
+          },
           "banco": {
             "type": "string"
           },
@@ -16773,6 +17025,125 @@
           }
         }
       },
+      "PortalBanco": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          }
+        }
+      },
+      "PortalComprobante": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "metodo",
+          "cuenta_destino",
+          "banco_origen",
+          "referencia",
+          "monto",
+          "fecha_deposito",
+          "archivo_tipo",
+          "archivo_nombre",
+          "estado",
+          "motivo_rechazo",
+          "created_at",
+          "verificado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "deposito",
+              "transferencia",
+              "ach",
+              "remesa"
+            ]
+          },
+          "cuenta_destino": {
+            "type": "string",
+            "description": "Banco y alias de la cuenta: \"Banrural · Monetaria\""
+          },
+          "banco_origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Banco desde el que transfirió (transferencia y ACH)"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fecha_deposito": {
+            "type": "string",
+            "format": "date"
+          },
+          "archivo_tipo": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "application/pdf"
+            ]
+          },
+          "archivo_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "aprobado",
+              "rechazado"
+            ]
+          },
+          "motivo_rechazo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué se rechazó (lo escribe quien lo revisó)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "verificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "PortalCondicionesPromesa": {
         "type": "object",
         "required": [
@@ -17168,6 +17539,9 @@
               "caja",
               "pasarela",
               "deposito",
+              "transferencia",
+              "ach",
+              "remesa",
               "agente",
               "debito"
             ]

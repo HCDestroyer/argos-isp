@@ -111,8 +111,9 @@ largas siguen en otra página.
 - La usan `/corte`, `/contacto`, el encabezado del portal, el mensaje del código de acceso y `{{empresa.*}}`
   de los documentos (`empresa.ts`).
 - **Cuentas para depósito**: no se guardan aquí. Su fuente única es `billing.cuentas_bancarias` (A3);
-  el portal las lee por el puerto `cuentas_deposito.ts` con `listarCuentasBancarias({ activa: true })` de
-  A3 (solo lectura; salen banco, alias, número y moneda, nada del libro). Sin cuentas activas, `[]` y
+  el portal las lee por el puerto `cuentas_deposito.ts` con `listarCuentasDeposito()` de A3 (solo
+  lectura; salen id, banco, alias, número y moneda, nada del libro; el `id` es el `cuenta_bancaria_id`
+  del comprobante). Sin cuentas activas, `[]` y
   `/corte` no muestra la sección (nunca inventadas).
 - **Las cuentas en USD no se muestran** (decisión de la tarea 9): los avisos y los pagos son en
   quetzales y un depósito a una cuenta en dólares lo convierte el banco a su tipo de cambio, así que lo
@@ -138,6 +139,29 @@ largas siguen en otra página.
 - La respuesta no lleva `cliente_id`, reglas, historial ni deuda detallada. El 409 `promesa_abierta` de A3
   (que nombra ids) se reescribe como "Ya tienes una promesa de pago en curso."
 - `Idempotency-Key` (middleware común) y límite por IP propio (`promesas`, `promesas-condiciones`).
+
+### Comprobante de depósito desde el portal (tarea 5)
+
+| Endpoint | Identifica | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/bancos` | público (límite por IP) | `PortalBanco[]`: bancos de origen activos (`listarBancos()` de A3), solo id y nombre |
+| `POST /api/v1/portal/comprobantes` | IP o sesión (`servicio_id` en el cuerpo) | **multipart**: `metodo` (`deposito`, `transferencia`, `ach`, `remesa`), `cuenta_bancaria_id` (de `cuentas_deposito`), `banco_origen_id` (solo transferencia y ACH), `referencia`, `monto`, `fecha_deposito` (YYYY-MM-DD, no futura), `nota?` y el archivo `archivo` (JPG, PNG, WebP o PDF, 5 MB). Llama `RegistrarComprobante` de A3 (`comprobantes.registrar`) con canal `portal` y actor sistema. 201 `PortalComprobante` (`estado: pendiente`) |
+| `GET /api/v1/portal/comprobantes` | sesión | Comprobantes del cliente de la sesión (`listarComprobantes({ cliente_id })` de A3), con estado y `motivo_rechazo` |
+
+- **Sin lógica de comprobantes en el portal.** Validación del archivo por contenido, unicidad de la
+  referencia, auditoría (el archivo solo con nombre y tamaño), evento `comprobante.recibido` y el
+  guardado en `COMPROBANTES_DIR` son de A3. No reactiva nada: eso pasa cuando el panel lo aprueba, y
+  `/corte` lo ve con el estado en vivo.
+- `comprobantes.ts` identifica al titular (como la promesa), lee el archivo del multipart (sin archivo
+  pasa contenido vacío y A3 responde 422 `archivo` `required` junto con los demás campos) y traduce los
+  errores: cada 422 por campo lleva el texto para el cliente (`mensajeCampo`), y el 409
+  `referencia_duplicada` de A3, que nombra el pago o comprobante que ya la tiene (quizá de otro
+  cliente), se reescribe sin ids.
+- La respuesta no lleva `cliente_id`, nombre, ruta del archivo ni quién lo revisó.
+- `Idempotency-Key` (la huella son los campos, no el archivo) y límite por IP propio (`comprobantes`,
+  `bancos`).
+- El OpenAPI declara el cuerpo como JSON con los campos (el generador aún no conoce multipart; pedido
+  en `.claude/integration/a5.md`); la descripción del endpoint dice que es `multipart/form-data`.
 
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
@@ -205,7 +229,8 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 
 ## Eventos
 
-No emite ni consume eventos todavía.
+No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos
+(`promesa.creada`, `comprobante.recibido`).
 
 ## Pruebas
 
@@ -220,6 +245,13 @@ datos, PDF del portal con datos, montos y fechas de Guatemala, factura ajena 404
 PDF del panel con y sin `facturas.ver`, plantilla editable (versión 0, diff, 409, el PDF usa la nueva),
 Mustache inválido y triple bigote (422), vista previa y 403 sin `documentos.editar`. Con
 `PDF_SALIDA=/ruta` deja los PDF para revisarlos.
+
+`tests/portal/comprobantes.spec.ts`: por IP con archivo válido (pendiente, sin datos internos,
+auditoría con canal portal y el archivo solo con nombre y tamaño), archivo de otro tipo, de más de 5 MB
+o ausente (422 en `archivo` con texto claro), fecha futura, transferencia sin banco y con el catálogo
+público, referencia duplicada (409 sin ids) e idempotencia, IP sin servicio (422), servicio de otro
+cliente con sesión (404) y sin sesión (401), lista de la sesión con el motivo del rechazo y el `id` de
+las cuentas públicas.
 
 `tests/portal/empresa.spec.ts`: valores por defecto con versión 0 y sin cuentas, guardado con auditoría
 y diff, lectura pública con las cuentas de la fuente (falsa), documentos con `{{empresa.*}}`, borrar

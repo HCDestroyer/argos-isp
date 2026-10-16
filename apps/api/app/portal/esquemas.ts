@@ -13,6 +13,7 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { EstadoServicio } from '#core/esquemas'
+import { METODOS_PAGO } from '#shared/eventos'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -174,7 +175,7 @@ export const PortalPago = definirEsquema(
     'PortalPago',
     objeto({
         id,
-        metodo: enumerado(['caja', 'pasarela', 'deposito', 'agente', 'debito']),
+        metodo: enumerado(METODOS_PAGO),
         monto: Dinero,
         referencia: nulable(texto),
         estado: enumerado(['registrado', 'pendiente_verificacion', 'anulado']),
@@ -287,6 +288,7 @@ export const Empresa = definirEsquema(
 export const CuentaDeposito = definirEsquema(
     'CuentaDeposito',
     objeto({
+        id: { ...id, description: 'Se envía como `cuenta_bancaria_id` al subir un comprobante' },
         banco: texto,
         alias: { ...texto, description: 'Nombre visible de la cuenta (p. ej. "Monetaria ArgosIsp")' },
         numero: texto,
@@ -337,5 +339,36 @@ export const PlantillaDocumento = definirEsquema(
             description: '0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar',
         },
         variables: lista(VariableDocumento),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Comprobantes de depósito (tarea 5)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalBanco = definirEsquema('PortalBanco', objeto({ id, nombre: texto }))
+
+export const PortalComprobante = definirEsquema(
+    'PortalComprobante',
+    objeto({
+        id,
+        servicio_id: nulable(id),
+        metodo: enumerado(['deposito', 'transferencia', 'ach', 'remesa']),
+        cuenta_destino: { ...texto, description: 'Banco y alias de la cuenta: "Banrural · Monetaria"' },
+        banco_origen: {
+            ...nulable(texto),
+            description: 'Banco desde el que transfirió (transferencia y ACH)',
+        },
+        referencia: texto,
+        monto: Dinero,
+        fecha_deposito: fecha,
+        archivo_tipo: enumerado(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+        archivo_nombre: nulable(texto),
+        estado: enumerado(['pendiente', 'aprobado', 'rechazado']),
+        motivo_rechazo: { ...nulable(texto), description: 'Por qué se rechazó (lo escribe quien lo revisó)' },
+        created_at: instante,
+        verificado_en: nulable(instante),
     }),
 )

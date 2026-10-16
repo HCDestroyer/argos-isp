@@ -15,7 +15,7 @@ export interface SolicitudFixture {
     params: Record<string, string>
     query: URLSearchParams
     headers: Headers
-    /** Cuerpo JSON ya parseado, o `null` si no hay. */
+    /** Cuerpo JSON ya parseado (multipart: objeto con los campos y los `File`), o `null` si no hay. */
     cuerpo: unknown
     /** Token Bearer recibido, o `null`. */
     token: string | null
@@ -76,6 +76,10 @@ function responder({ status, cuerpo, contentType }: RespuestaFixture): Response 
 }
 
 async function leerCuerpo(request: Request): Promise<unknown> {
+    // multipart (comprobantes): campos como texto y archivos como `File`
+    if (request.headers.get('Content-Type')?.startsWith('multipart/form-data')) {
+        return Object.fromEntries((await request.formData()).entries())
+    }
     const texto = await request.text()
     if (!texto) {
         return null

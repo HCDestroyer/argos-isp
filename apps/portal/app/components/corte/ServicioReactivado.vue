@@ -3,10 +3,16 @@
  * Lo que ve el cliente en `/corte` cuando el estado en vivo pasa a `activo`. Sin datos personales.
  * "Seguir navegando" lleva a `NUXT_PUBLIC_SEGUIR_NAVEGANDO_URL`: con el servicio activo ya no
  * hace falta que esté en el walled garden.
+ *
+ * Si se reactivó por una promesa enviada desde esta página, le recuerda lo que prometió: la
+ * reactivación llega en menos de un segundo y, sin esto, el cliente no alcanza a leer el aviso.
  */
-defineProps<{
+withDefaults(defineProps<{
     url: string
-}>()
+    promesa?: Pick<PromesaSolicitada, 'monto' | 'vence_en'> | null
+}>(), {
+    promesa: null,
+})
 </script>
 
 <template>
@@ -29,6 +35,16 @@ defineProps<{
                 Tu servicio está activo de nuevo. Si alguna página no abre, espera unos segundos y vuelve a intentarlo.
             </p>
         </div>
+        <UAlert
+            v-if="promesa"
+            color="info"
+            variant="subtle"
+            icon="i-lucide-calendar-check"
+            title="Recuerda tu promesa de pago"
+            :description="`Pagarás ${montoEnTexto(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Si no se paga a tiempo, el servicio se vuelve a suspender.`"
+            class="text-start"
+            data-testid="reactivado-promesa"
+        />
         <UButton
             label="Seguir navegando"
             icon="i-lucide-globe"
