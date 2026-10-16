@@ -37,7 +37,7 @@ describe('lista de servicios · filtros del contrato', () => {
 
         const [primero] = delCliente
         expect(primero).toBeDefined()
-        const porUsuario = await filas({ q: primero?.user_ppp.slice(0, 6) })
+        const porUsuario = await filas({ q: primero?.user_ppp?.slice(0, 6) })
         expect(porUsuario.some(s => s.id === primero?.id)).toBe(true)
 
         const porIp = await filas({ q: primero?.ipv4 ?? '' })

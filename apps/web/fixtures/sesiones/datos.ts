@@ -19,7 +19,8 @@ export function nuevaSesion(id: number, servicio: Servicio, inicio: string): Ses
         router_id: servicio.router_id,
         nas_ip: router?.nas_ip ?? '10.10.0.1',
         acct_session_id: acctSessionId(id),
-        user_ppp: servicio.user_ppp,
+        // Solo los servicios PPPoE tienen sesión; los fixtures de sesiones usan servicios PPPoE.
+        user_ppp: servicio.user_ppp ?? '',
         ipv4: servicio.ipv4,
         prefijo_enlace_v6: servicio.prefijo_enlace_v6,
         prefijo_delegado_v6: servicio.prefijo_delegado_v6,

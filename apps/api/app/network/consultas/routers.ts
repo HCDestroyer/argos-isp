@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import type { ControlVelocidad } from '#network/velocidad'
 
 /**
  * Lecturas de routers y redes IPv4. Las credenciales nunca salen: solo `tiene_api_password` y
@@ -18,6 +19,12 @@ export interface RouterVista {
     tiene_radius_secret: boolean
     nas_ip: string
     modo_seguridad: 'radius' | 'api'
+    /** cola simple por servicio o árbol con PCQ por plan (`contratos/velocidad.md`) */
+    control_velocidad: ControlVelocidad
+    /** techo del padre global; null = sin techo */
+    capacidad_bajada_kbps: number | null
+    capacidad_subida_kbps: number | null
+    /** @deprecated derivado de `control_velocidad` (`arbol_pcq` → `pcq`) */
     modo_velocidad: 'simple' | 'pcq'
     activo: boolean
     version: number
@@ -45,7 +52,10 @@ const COLUMNAS_ROUTER = [
     db.raw('(radius_secret IS NOT NULL) AS tiene_radius_secret'),
     db.raw('host(nas_ip) AS nas_ip'),
     'modo_seguridad',
-    'modo_velocidad',
+    'control_velocidad',
+    'capacidad_bajada_kbps',
+    'capacidad_subida_kbps',
+    db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
     'activo',
     'version',
     'created_at',

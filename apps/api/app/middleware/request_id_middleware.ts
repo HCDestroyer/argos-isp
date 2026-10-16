@@ -9,6 +9,11 @@ const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
  * Toma `X-Request-Id` (o genera un UUID), lo devuelve en la respuesta y deja en el ctx
  * `requestId` y `contextoAccion()`, que arma el `ContextoAccion` para las acciones de dominio:
  * actor = usuario autenticado (`token` si entró con un token de API; sistema si es anónimo), canal = header `X-Canal` (por defecto `api`).
+ *
+ * Log de acceso (pedido de A6): al terminar cada petición, una línea `info` con `request_id`,
+ * `metodo`, `ruta` (el patrón de la ruta, p. ej. `/api/v1/servicios/:id`, nunca la URL con datos;
+ * null si no hubo ruta), `status` y `duracion_ms`. Sin cuerpo, query ni headers. El logger de la
+ * petición lleva `request_id` (mismo nombre que en `audit.*` y en el stream de eventos).
  */
 export default class RequestIdMiddleware {
     handle(ctx: HttpContext, next: NextFn) {
@@ -19,7 +24,8 @@ export default class RequestIdMiddleware {
 
         ctx.requestId = requestId
         ctx.response.header('X-Request-Id', requestId)
-        ctx.logger = ctx.logger.child({ requestId })
+        ctx.logger = ctx.logger.child({ request_id: requestId })
+        registrarAcceso(ctx)
         ctx.contextoAccion = (canalForzado?: Canal): ContextoAccion => {
             const usuario = 'auth' in ctx ? ctx.auth.user : undefined
             const viaToken = usuario !== undefined && ctx.auth.authenticatedViaGuard === 'tokens'
@@ -34,6 +40,31 @@ export default class RequestIdMiddleware {
 
         return next()
     }
+}
+
+/** Escribe la línea de acceso cuando la respuesta termina de enviarse (o se corta la conexión). */
+export function registrarAcceso(ctx: HttpContext) {
+    const inicio = process.hrtime.bigint()
+    const metodo = ctx.request.method()
+    const respuesta = ctx.response.response
+    let escrito = false
+    const escribir = () => {
+        if (escrito) return
+        escrito = true
+        const duracion = Number(process.hrtime.bigint() - inicio) / 1e6
+        ctx.logger.info(
+            {
+                request_id: ctx.requestId,
+                metodo,
+                ruta: ctx.route?.pattern ?? null,
+                status: respuesta.statusCode,
+                duracion_ms: Math.round(duracion * 10) / 10,
+            },
+            'petición',
+        )
+    }
+    respuesta.once('finish', escribir)
+    respuesta.once('close', escribir)
 }
 
 declare module '@adonisjs/core/http' {

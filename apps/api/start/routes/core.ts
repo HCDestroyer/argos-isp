@@ -497,7 +497,7 @@ const servicios: Ruta[] = [
         metodo: 'post',
         ruta: '/servicios',
         operacion: 'serviciosCrear',
-        resumen: 'Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp)',
+        resumen: 'Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)',
         etiqueta: 'servicios',
         permiso: 'servicios.crear',
         cuerpo: v.crearServicioValidator,

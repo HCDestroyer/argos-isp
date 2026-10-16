@@ -6310,7 +6310,53 @@
                   "reuso": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 64
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   },
                   "dual_stack": {
                     "type": "string",
@@ -6532,7 +6578,53 @@
                   "reuso": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 64
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   },
                   "dual_stack": {
                     "type": "string",
@@ -6790,7 +6882,71 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 200
+                    "maxLength": 200,
+                    "description": "Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo"
+                  },
+                  "reuso": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "N de 1:N (1 = dedicado)"
+                  },
+                  "garantizado_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 100,
+                    "description": "CIR (limit-at) como % del MIR; null = 100 / reuso. Máximo 100 / reuso"
+                  },
+                  "rafaga_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de bajada (> bajada_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "burst-limit de subida (> subida_kbps); null = sin ráfaga"
+                  },
+                  "rafaga_umbral_pct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 99,
+                    "description": "burst-threshold como % del MIR (75)"
+                  },
+                  "rafaga_segundos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "description": "burst-time en segundos (16)"
+                  },
+                  "prioridad": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "1 (alta) a 8 (baja, por defecto)"
                   }
                 },
                 "required": [],
@@ -9624,6 +9780,7 @@
                         "roles.crear",
                         "roles.editar",
                         "roles.ver",
+                        "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
                         "routers.ver",
@@ -9805,6 +9962,7 @@
                         "roles.crear",
                         "roles.editar",
                         "roles.ver",
+                        "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
                         "routers.ver",
@@ -10076,12 +10234,31 @@
                       "api"
                     ]
                   },
-                  "modo_velocidad": {
+                  "control_velocidad": {
                     "type": "string",
                     "enum": [
                       "simple",
-                      "pcq"
-                    ]
+                      "arbol_pcq"
+                    ],
+                    "description": "simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad"
+                  },
+                  "capacidad_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
+                  },
+                  "capacidad_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
                   },
                   "activo": {
                     "type": "boolean"
@@ -10287,12 +10464,23 @@
                       "api"
                     ]
                   },
-                  "modo_velocidad": {
-                    "type": "string",
-                    "enum": [
-                      "simple",
-                      "pcq"
-                    ]
+                  "capacidad_bajada_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
+                  },
+                  "capacidad_subida_kbps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000,
+                    "description": "kbps del enlace (techo de la cola padre global); null = sin techo"
                   },
                   "activo": {
                     "type": "boolean"
@@ -10369,6 +10557,130 @@
           }
         },
         "x-permiso": "routers.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/cambiar-control-velocidad": {
+      "post": {
+        "operationId": "routersCambiarControlVelocidad",
+        "summary": "Cambiar el control de velocidad del router (simple o arbol_pcq)",
+        "description": "Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "control_velocidad": {
+                    "type": "string",
+                    "enum": [
+                      "simple",
+                      "arbol_pcq"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "control_velocidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Router con el control nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Router"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
         "x-implementado": true
       }
     },
@@ -10885,6 +11197,19 @@
             }
           },
           {
+            "name": "tipo_conexion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pppoe",
+                "ip_estatica",
+                "dhcp_fija"
+              ]
+            }
+          },
+          {
             "name": "zona_id",
             "in": "query",
             "required": false,
@@ -10969,7 +11294,7 @@
       },
       "post": {
         "operationId": "serviciosCrear",
-        "summary": "Crear servicio PPPoE (asigna IPv4/IPv6, genera user_ppp)",
+        "summary": "Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)",
         "tags": [
           "servicios"
         ],
@@ -11010,6 +11335,19 @@
                     "type": "integer",
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Por defecto pppoe"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
                   "plantilla_facturacion_id": {
                     "type": [
                       "integer",
@@ -11021,13 +11359,13 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
                     "maxLength": 64,
-                    "description": "Se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -11426,10 +11764,29 @@
                     ],
                     "minimum": 1
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)"
+                  },
+                  "amarre_ip_mac": {
+                    "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
+                    "type": "boolean"
+                  },
+                  "user_ppp": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._@-]{3,64}$",
+                    "description": "Solo al cambiar a pppoe; se genera si no viene"
+                  },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
-                    "maxLength": 64
+                    "maxLength": 64,
+                    "description": "Solo pppoe; al cambiar a pppoe se genera si no viene"
                   },
                   "mac": {
                     "type": [
@@ -13127,6 +13484,7 @@
                             "roles.crear",
                             "roles.editar",
                             "roles.ver",
+                            "routers.cambiar_control_velocidad",
                             "routers.crear",
                             "routers.editar",
                             "routers.ver",
@@ -14022,6 +14380,12 @@
         "type": "http",
         "scheme": "bearer",
         "description": "INTERNAL_TOKEN compartido con los servicios aaa y coa"
+      },
+      "portal": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "argos_portal",
+        "description": "Sesión del portal del cliente (cookie httpOnly que deja el acceso por código)"
       }
     },
     "schemas": {
@@ -14034,6 +14398,7 @@
           "pass_ppp",
           "estado",
           "router_id",
+          "control_velocidad",
           "plan",
           "ipv4",
           "ipv6"
@@ -14062,6 +14427,14 @@
             "type": "integer",
             "minimum": 1
           },
+          "control_velocidad": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ],
+            "description": "network.routers.control_velocidad del router del servicio"
+          },
           "plan": {
             "type": "object",
             "required": [
@@ -14071,7 +14444,10 @@
               "subida_limitada_kbps",
               "bajada_limitada_kbps",
               "rate_limit_override",
-              "profile_ppp"
+              "profile_ppp",
+              "rate_limit",
+              "rate_limit_limitado",
+              "reuso"
             ],
             "properties": {
               "id": {
@@ -14101,6 +14477,20 @@
                   "string",
                   "null"
                 ]
+              },
+              "rate_limit": {
+                "type": "string",
+                "description": "Mikrotik-Rate-Limit completo en estado activo: \"rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx\" (o rate_limit_override)"
+              },
+              "rate_limit_limitado": {
+                "type": "string",
+                "description": "Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)"
+              },
+              "reuso": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64,
+                "description": "Reuso efectivo 1:N en el router"
               }
             }
           },
@@ -14716,6 +15106,8 @@
           "campos_personalizados",
           "canal_preferido",
           "telegram_chat_id",
+          "responsable_pago_id",
+          "responsable_pago_nombre",
           "version",
           "created_at",
           "updated_at"
@@ -16568,6 +16960,44 @@
           "reuso": {
             "type": "integer"
           },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "CIR (limit-at) como % del MIR; null = 100 / reuso"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de bajada; null = sin ráfaga"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de subida; null = sin ráfaga"
+          },
+          "rafaga_umbral_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "burst-threshold como % del MIR"
+          },
+          "rafaga_segundos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "burst-time en segundos"
+          },
+          "prioridad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "1 (alta) a 8 (baja)"
+          },
           "dual_stack": {
             "type": "string",
             "enum": [
@@ -16658,7 +17088,46 @@
             "type": "integer"
           },
           "reuso": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Reuso efectivo en el router"
+          },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "CIR (limit-at) como % del MIR; null = 100 / reuso"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de bajada; null = sin ráfaga"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "burst-limit de subida; null = sin ráfaga"
+          },
+          "rafaga_umbral_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "burst-threshold como % del MIR"
+          },
+          "rafaga_segundos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "burst-time en segundos"
+          },
+          "prioridad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "1 (alta) a 8 (baja)"
           },
           "dual_stack": {
             "type": "string",
@@ -16711,11 +17180,11 @@
           },
           "rate_limit": {
             "type": "string",
-            "description": "rate-limit MikroTik subida/bajada: \"5000k/20000k\""
+            "description": "Mikrotik-Rate-Limit completo en estado activo: \"5M/20M 0/0 0/0 0/0 8 5M/20M\" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override"
           },
           "rate_limit_limitado": {
             "type": "string",
-            "description": "rate-limit en estado limitado"
+            "description": "Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)"
           },
           "profile_ppp": {
             "type": [
@@ -16820,6 +17289,55 @@
               "string",
               "null"
             ]
+          },
+          "reuso": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "garantizado_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_umbral_pct": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "rafaga_segundos": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
+          },
+          "prioridad": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = hereda del plan"
           },
           "version": {
             "type": "integer",
@@ -18536,12 +19054,36 @@
               "api"
             ]
           },
+          "control_velocidad": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "arbol_pcq"
+            ],
+            "description": "simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)"
+          },
+          "capacidad_bajada_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Capacidad del enlace (techo del padre global); null = sin techo"
+          },
+          "capacidad_subida_kbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Capacidad del enlace (techo del padre global); null = sin techo"
+          },
           "modo_velocidad": {
             "type": "string",
             "enum": [
               "simple",
               "pcq"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad"
           },
           "activo": {
             "type": "boolean"
@@ -18583,6 +19125,7 @@
           "prefijo_delegado_v6",
           "ipv6_modo",
           "ipv6_duid",
+          "excepciones",
           "version",
           "created_at",
           "updated_at"
@@ -18628,8 +19171,25 @@
               "null"
             ]
           },
+          "tipo_conexion": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS"
+          },
           "user_ppp": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null fuera de pppoe"
+          },
+          "amarre_ip_mac": {
+            "type": "boolean",
+            "description": "ARP estático IP-MAC en el router (solo sin PPPoE)"
           },
           "mac": {
             "type": [

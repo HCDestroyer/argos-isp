@@ -47,7 +47,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
 | `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
-| `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y cambios de plan (reescribe `aaa:user:<user_ppp>`) |
+| `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y `plan.velocidad_cambiada` (reescribe `aaa:user:<user_ppp>`) |
 
 - Dentro de `apps/api` el consumidor implementa la interfaz `ConsumidorEventos` (en `apps/api/app/shared/eventos_bus.ts`; `apps/api/app/notify/consumidor.ts` la reexporta):
 
@@ -59,6 +59,25 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 - Ejecutor genérico para `apps/api`: `new EjecutorGrupo({ grupo, consumidores })` de `#shared/eventos_bus` (`iniciar()`, `detener()`, `procesarLote()`). Crea el grupo con `XGROUP CREATE ... 0 MKSTREAM` (un grupo nuevo lee el stream desde el principio), lee con `XREADGROUP`, confirma con `XACK` cuando todos los consumidores que `acepta`n terminaron bien y reclama con `XAUTOCLAIM` lo pendiente hace más de 60 s. Lo usan `node ace eventos:relay` (`aaa-cache`) y `node ace notify:worker` (`notify`); A3 lo usa igual para `billing`.
 - `procesar` es **idempotente por `id`**: el mismo evento puede llegar dos veces. Si lanza, el worker no hace `XACK` y el evento se reintenta (reclamado con `XAUTOCLAIM` tras 60 s).
 - Los consumidores no deciden estados ni mueven dinero por su cuenta: llaman acciones de dominio (regla 1).
+
+## Payloads del núcleo (A1)
+
+`servicio.config_cambiada`: `{ servicio_id, campos[] }`. Valores de `campos`:
+
+| Campo | Cuándo |
+| --- | --- |
+| `plan`, `router`, `ips`, `prefijo_v6` | Cambió el plan, el router, la IPv4 o los prefijos/modo IPv6 (desde el día 2) |
+| `tipo_conexion` | Semana 2 (WISP, `contratos/routeros.md`): el servicio pasó entre `pppoe`, `ip_estatica` y `dhcp_fija`. El dispatcher limpia en el router lo del tipo anterior. Al dejar `pppoe`, `aaa:user:<user_ppp viejo>` queda con lápida |
+| `mac`, `amarre_ip_mac` | Semana 2: cambió la MAC (lease de `dhcp_fija`, ARP) o el amarre IP-MAC |
+
+Eventos de velocidad (semana 2, `contratos/velocidad.md`). Decisión de A1: eventos propios por plan y por router en vez de un `servicio.config_cambiada` por cada servicio afectado (un plan con 500 servicios serían 500 eventos, y A2 recalcula por plan y router, no por servicio):
+
+| Evento | Emite | Payload | Lo consume |
+| --- | --- | --- | --- |
+| `plan.velocidad_cambiada` | A1 (`EditarPlan`, `ImplementarPlan`) | `plan_id`, `router_id` (null = cambió la plantilla del plan y afecta todos los routers; un id = cambió la excepción de ese router), `campos[]` (`bajada_kbps`, `subida_kbps`, `bajada_limitada_kbps`, `subida_limitada_kbps`, `reuso`, `garantizado_pct`, `rafaga_bajada_kbps`, `rafaga_subida_kbps`, `rafaga_umbral_pct`, `rafaga_segundos`, `prioridad`; en una excepción también `rate_limit_override` y `profile_ppp`) | A2: recalcula padres (`limitesPadrePlan`), PCQ y perfiles PPP del plan; `aaa-cache` (A1): reescribe `aaa:user:*` de los servicios del plan |
+| `router.control_cambiado` | A1 (`CambiarControlVelocidad`, `EditarRouter`) | `router_id`, `de`, `a` (`simple` o `arbol_pcq`; iguales si solo cambió la capacidad), `capacidad_bajada_kbps`, `capacidad_subida_kbps` (null = sin techo), `campos[]` (`control_velocidad` o `capacidad`), `motivo` (null si no vino) | A2: ejecuta el cambio de modo por lotes (sin colas huérfanas) o ajusta el padre global |
+
+Los consumidores no deben fallar con un campo que no conocen: el dispatcher recalcula el estado deseado completo del servicio con cualquier `servicio.config_cambiada`.
 
 ## Payloads de pagos (A3)
 

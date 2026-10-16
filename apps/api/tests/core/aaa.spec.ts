@@ -2,14 +2,8 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { redis } from '#shared/redis'
-import {
-    claveAaa,
-    prefijoAaa,
-    escribirRegistrosAaa,
-    publicarAaa,
-    valorRedis,
-    type RegistroAaa,
-} from '#core/aaa'
+import { claveAaa, escribirRegistrosAaa, publicarAaa, valorRedis, type RegistroAaa } from '#core/aaa'
+import { limpiarClavesAaa } from '#tests/core/ayudas_aaa'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
@@ -49,17 +43,6 @@ async function crearServicioApi(client: any, token: string, extra: Record<string
 const internoGet = (client: any, userPpp: string) =>
     client.get('/api/v1/internal/aaa/servicio').qs({ user_ppp: userPpp }).bearerToken(TOKEN_INTERNO())
 
-/** La base de pruebas se recrea en cada corrida (ids y user_ppp se repiten): se limpia el prefijo. */
-export async function limpiarClavesAaa() {
-    const patron = `${prefijoAaa()}*`
-    let cursor = '0'
-    do {
-        const [siguiente, claves] = await redis().scan(cursor, 'MATCH', patron, 'COUNT', 500)
-        if (claves.length > 0) await redis().del(...claves)
-        cursor = siguiente
-    } while (cursor !== '0')
-}
-
 test.group('AAA · registro de autorización RADIUS', (group) => {
     group.setup(limpiarClavesAaa)
 
@@ -85,6 +68,7 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
             pass_ppp: fila.pass_ppp,
             estado: 'activo',
             router_id: routerId,
+            control_velocidad: 'simple',
             plan: {
                 id: planId,
                 subida_kbps: 5000,
@@ -93,6 +77,10 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
                 bajada_limitada_kbps: 2048,
                 rate_limit_override: null,
                 profile_ppp: null,
+                // plan sin campos nuevos: misma velocidad, más el limit-at del reuso 1 (= MIR)
+                rate_limit: '5M/20M 0/0 0/0 0/0 8 5M/20M',
+                rate_limit_limitado: '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k',
+                reuso: 1,
             },
             ipv4: { modo: 'estatico', ip: `${base}.2` },
             ipv6: {

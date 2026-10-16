@@ -705,7 +705,7 @@ test.group('Servicios · lectura y alcance', () => {
         const config = await obtenerConfiguracionEfectiva(creado.body().id)
         assert.equal(config.servicio.id, creado.body().id)
         assert.equal(config.plan.id, planId)
-        assert.equal(config.plan.rate_limit, '5000k/20000k')
+        assert.equal(config.plan.rate_limit, '5M/20M 0/0 0/0 0/0 8 5M/20M')
         assert.equal(config.plantilla_facturacion!.id, plantilla!.id)
         assert.deepEqual(config.excepciones, [])
         assert.equal(config.facturacion!.plantilla_id, plantilla!.id)

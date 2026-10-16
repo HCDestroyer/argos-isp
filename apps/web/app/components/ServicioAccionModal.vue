@@ -52,7 +52,7 @@ async function confirmar(evento: FormSubmitEvent<DatosMotivo>) {
     <UModal
         v-model:open="abierto"
         :title="accion ? `${accion.confirmar}` : ''"
-        :description="servicio.user_ppp"
+        :description="etiquetaServicio(servicio)"
         :dismissible="!enviando"
     >
         <template #body>
