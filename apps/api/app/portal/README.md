@@ -167,6 +167,17 @@ Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nomb
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
 `{ ip }`) porque son públicas y revelan información de un cliente.
 
+### Vincular Telegram desde el portal (semana 2)
+
+Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su tabla
+(`notify.telegram_codigos`), el webhook y el canje son de A6; el portal solo pide el código y muestra el estado.
+
+| Ruta | Acción | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/telegram` (sesión) | `acceso/telegram.ts` (`estadoTelegram`, lectura) | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario |
+| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
+| `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1; si el canal preferido era Telegram pasa a correo (`clientes.editar`). Idempotente |
+
 ### Auditoría una vez por ventana
 
 Cada visita a `/corte` y cada consulta del estado en vivo (cada 5 s) escribían una fila y llenaban la
@@ -252,6 +263,12 @@ o ausente (422 en `archivo` con texto claro), fecha futura, transferencia sin ba
 público, referencia duplicada (409 sin ids) e idempotencia, IP sin servicio (422), servicio de otro
 cliente con sesión (404) y sin sesión (401), lista de la sesión con el motivo del rechazo y el `id` de
 las cuentas públicas.
+
+`tests/portal/telegram.spec.ts` (con `CanjearCodigoTelegram` de A6 como lo llama el bot): código y
+enlace al bot, solo el hash guardado y sin código en la auditoría, "vinculado" y canal preferido
+Telegram, uso único (otro chat 422, reintento del mismo chat), vencido, reemplazado al pedir otro,
+código de otro cliente (vincula a su dueño) y sesión ajena que no lo toca, 401 sin sesión, desvincular
+con canal a correo e idempotente, 503 sin bot y límite por IP.
 
 `tests/portal/empresa.spec.ts`: valores por defecto con versión 0 y sin cuentas, guardado con auditoría
 y diff, lectura pública con las cuentas de la fuente (falsa), documentos con `{{empresa.*}}`, borrar

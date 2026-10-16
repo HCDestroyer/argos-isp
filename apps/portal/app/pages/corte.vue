@@ -178,34 +178,7 @@ const hayDatosDeposito = computed(() => !empresa.value
                 v-if="!retirado"
                 class="flex flex-col gap-2"
             >
-                <!-- Apagado hasta la semana 2: neutro, no el azul primario, y dice que llega pronto. -->
-                <UButton
-                    data-testid="pagar-en-linea"
-                    label="Pagar en línea"
-                    icon="i-lucide-credit-card"
-                    color="neutral"
-                    variant="soft"
-                    size="xl"
-                    block
-                    disabled
-                    aria-describedby="pagar-en-linea-pronto"
-                >
-                    <template #trailing>
-                        <UBadge
-                            label="Pronto"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            class="ms-auto"
-                        />
-                    </template>
-                </UButton>
-                <p
-                    id="pagar-en-linea-pronto"
-                    class="-mt-1 text-center text-xs text-muted"
-                >
-                    El pago en línea llega pronto. Mientras tanto, paga en nuestra oficina o por depósito.
-                </p>
+                <PagoEnLinea />
                 <UButton
                     v-if="hayDatosDeposito"
                     label="Ver datos de depósito"

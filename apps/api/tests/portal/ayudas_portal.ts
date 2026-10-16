@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { ApiResponse } from '@japa/api-client'
 import { unico } from '#tests/ayudas'
 import type { CanalCodigo, EnviadorCodigo, MensajeCodigo } from '#portal/acceso/envio_codigo'
+import { generarToken, hashToken } from '#portal/acceso/codigos'
 
 /**
  * Datos de prueba del portal: cliente, servicio con facturas y sesiones de red.
@@ -159,4 +160,22 @@ export function cookieDeSesion(respuesta: ApiResponse): string | null {
     if (!cookie) return null
     const valor = cookie.split(';')[0]!
     return valor === 'argos_portal=' ? null : valor
+}
+
+/**
+ * Sesión del portal creada directo en la tabla (sin pasar por el código): para pruebas que solo
+ * necesitan estar dentro. Devuelve la cookie `argos_portal=<token>` y el id de la sesión.
+ */
+export async function sesionDirecta(clienteId: number): Promise<{ cookie: string; sesionId: number }> {
+    const token = generarToken()
+    const [fila] = await db
+        .table('core.portal_sesiones')
+        .insert({
+            cliente_id: clienteId,
+            token_hash: hashToken(token),
+            expira_en: db.raw("now() + interval '30 minutes'"),
+            expira_max_en: db.raw("now() + interval '4 hours'"),
+        })
+        .returning('id')
+    return { cookie: `argos_portal=${token}`, sesionId: Number(fila.id) }
 }

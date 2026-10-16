@@ -26,7 +26,7 @@ import {
     condicionesConPromesaFixture,
     condicionesFixture,
     promesaSolicitadaFixture,
-    type ResultadoPromesaFixture,
+    type EscenarioResultadoFixture,
 } from './promesas'
 
 /**
@@ -42,12 +42,12 @@ function escenarioCorte(): EscenarioCorte {
 let consultasEstado = 0
 
 /**
- * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|pendiente_aprobacion|con_promesa` en la
+ * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|rechazada_fecha|pendiente_aprobacion|con_promesa` en la
  * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
  * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
  */
-type EscenarioPromesa = ResultadoPromesaFixture | 'con_promesa'
-const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'pendiente_aprobacion', 'con_promesa']
+type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa']
 const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
 
 export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {
@@ -96,10 +96,37 @@ function escenarioComprobante(): EscenarioComprobante {
 /** Sesión del portal simulada. */
 const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
 
+/**
+ * Telegram en fixtures (contrato de A6): tras `POST /portal/telegram/vincular`, la segunda consulta de
+ * `GET /portal/telegram` lo da por vinculado (como si el bot hubiera recibido `/start`).
+ * `fijarTelegramFixture(false)` simula un portal sin bot configurado.
+ */
+const telegram = { disponible: true, pendienteHasta: null as string | null, consultas: 0 }
+
 /** Pruebas: abre o cierra la sesión simulada y restablece el contacto. */
 export function fijarSesionFixture(abierta: boolean): void {
     sesion.abierta = abierta
     sesion.contacto = { ...CONTACTO_FIXTURE }
+    telegram.pendienteHasta = null
+    telegram.consultas = 0
+}
+
+/** Pruebas: con o sin bot configurado. */
+export function fijarTelegramFixture(disponible: boolean): void {
+    telegram.disponible = disponible
+    telegram.pendienteHasta = null
+    telegram.consultas = 0
+}
+
+export const BOT_FIXTURE = 'ArgosIspBot'
+export const CODIGO_TELEGRAM_FIXTURE = 'K7QX2M9PTA'
+
+function estadoTelegramFixture(): Schema<'PortalTelegram'> {
+    return {
+        vinculado: sesion.contacto.telegram_vinculado,
+        disponible: telegram.disponible,
+        bot: telegram.disponible ? BOT_FIXTURE : null,
+    }
 }
 
 function problema(status: number, codigo: string, title: string, detail: string): RespuestaFixture {
@@ -268,6 +295,42 @@ export const rutasFixture: RutasFixture = {
         comprobantes.recibidos.unshift(recibido)
         return { status: 201, cuerpo: recibido }
     },
+    'GET /api/v1/portal/telegram': conSesion(() => {
+        if (telegram.pendienteHasta) {
+            telegram.consultas += 1
+            if (telegram.consultas >= 2) {
+                telegram.pendienteHasta = null
+                sesion.contacto = { ...sesion.contacto, telegram_vinculado: true, version: sesion.contacto.version + 1 }
+            }
+        }
+        return { status: 200, cuerpo: estadoTelegramFixture() }
+    }),
+    'POST /api/v1/portal/telegram/vincular': conSesion(() => {
+        if (!telegram.disponible) {
+            return problema(503, 'telegram_no_configurado', 'Telegram no disponible', 'La vinculación con Telegram aún no está disponible. Intenta más tarde.')
+        }
+        telegram.pendienteHasta = new Date(Date.now() + 15 * 60_000).toISOString()
+        telegram.consultas = 0
+        const cuerpo: Schema<'PortalVinculoTelegram'> = {
+            codigo: CODIGO_TELEGRAM_FIXTURE,
+            enlace: `https://t.me/${BOT_FIXTURE}?start=${CODIGO_TELEGRAM_FIXTURE}`,
+            bot: BOT_FIXTURE,
+            vence_en: telegram.pendienteHasta,
+        }
+        return { status: 201, cuerpo }
+    }),
+    'POST /api/v1/portal/telegram/desvincular': conSesion(() => {
+        telegram.pendienteHasta = null
+        if (sesion.contacto.telegram_vinculado) {
+            sesion.contacto = {
+                ...sesion.contacto,
+                telegram_vinculado: false,
+                canal_preferido: sesion.contacto.canal_preferido === 'telegram' ? 'correo' : sesion.contacto.canal_preferido,
+                version: sesion.contacto.version + 1,
+            }
+        }
+        return { status: 200, cuerpo: estadoTelegramFixture() }
+    }),
     'PUT /api/v1/portal/contacto': ({ cuerpo }) => {
         if (!sesion.abierta) {
             return SIN_SESION()
