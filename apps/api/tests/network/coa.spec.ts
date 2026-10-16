@@ -338,8 +338,10 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         assert.deepEqual(
             paquetes.map((p) => [p.codigo, p.atributos['Mikrotik-Rate-Limit']]),
             [
-                ['CoA-Request', '1024k/2048k'],
-                ['CoA-Request', '5120k/20480k'],
+                // rate-limit completo de `network/velocidad.ts` (A1): MIR, sin ráfaga, prioridad 8 y
+                // limit-at = MIR con reuso 1
+                ['CoA-Request', '1024k/2048k 0/0 0/0 0/0 8 1024k/2048k'],
+                ['CoA-Request', '5120k/20480k 0/0 0/0 0/0 8 5120k/20480k'],
             ],
         )
     })
