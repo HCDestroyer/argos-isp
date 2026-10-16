@@ -111,8 +111,33 @@ largas siguen en otra página.
 - La usan `/corte`, `/contacto`, el encabezado del portal, el mensaje del código de acceso y `{{empresa.*}}`
   de los documentos (`empresa.ts`).
 - **Cuentas para depósito**: no se guardan aquí. Su fuente única es `billing.cuentas_bancarias` (A3);
-  el portal las lee por el puerto `cuentas_deposito.ts` (solo banco, alias, número y moneda). Hasta que la
-  consulta de A3 esté en `main` el puerto devuelve `[]` y `/corte` no muestra cuentas (nunca inventadas).
+  el portal las lee por el puerto `cuentas_deposito.ts` con `listarCuentasBancarias({ activa: true })` de
+  A3 (solo lectura; salen banco, alias, número y moneda, nada del libro). Sin cuentas activas, `[]` y
+  `/corte` no muestra la sección (nunca inventadas).
+- **Las cuentas en USD no se muestran** (decisión de la tarea 9): los avisos y los pagos son en
+  quetzales y un depósito a una cuenta en dólares lo convierte el banco a su tipo de cambio, así que lo
+  acreditado no cuadra con la deuda. Ocultarlas es más claro en el teléfono que marcarlas.
+
+### Promesa de pago desde el portal (tarea 4)
+
+| Endpoint | Identifica | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante) y si requiere aprobación |
+| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` y actor sistema. Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
+
+- **Sin lógica de promesas en el portal.** La decisión, la auditoría (`promesas.crear`, canal `portal`), el
+  evento `promesa.creada` y la reactivación son de `CrearPromesaPago`. `promesas.ts` solo identifica el
+  servicio, traduce el resultado y lee los límites para mostrarlos antes de enviar (con
+  `leerServicio`, `configuracionDeServicio` y `datosEvaluacion` de A3, solo lectura). Las reglas que
+  dependen del historial (cupo del periodo, cumplimiento, bloqueo tras incumplida) no se adelantan: las
+  dice el resultado.
+- Identificación: sin `servicio_id`, la IP de origen (422 `no_identificado` si no es de ningún servicio);
+  con `servicio_id`, la sesión del portal (401 sin ella) y el servicio debe ser del cliente (404).
+- `motivo` sale de `resultado_evaluacion.regla` y su límite (`motivoParaCliente`): "La fecha de pago debe
+  estar dentro de los próximos 3 días.", nunca `plazo_max_dias`. Una regla nueva cae en el `motivo` de A3.
+- La respuesta no lleva `cliente_id`, reglas, historial ni deuda detallada. El 409 `promesa_abierta` de A3
+  (que nombra ids) se reescribe como "Ya tienes una promesa de pago en curso."
+- `Idempotency-Key` (middleware común) y límite por IP propio (`promesas`, `promesas-condiciones`).
 
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
@@ -214,3 +239,9 @@ por IPv4 y por /64, fin de la ventana, `0` lo apaga, Redis caído deja pasar, co
 `tests/portal/quien_soy.spec.ts`: IPv4, IPv6 en /56 delegado y /64 de enlace, asignaciones sin sesión,
 sesión cerrada, X-Forwarded-For falso, sin proxies confiables, cabecera configurable, auditoría y que
 no se filtren datos personales.
+
+`tests/portal/promesas.spec.ts`: condiciones por IP sin datos personales (plazo del canal portal, deuda),
+abono inicial, aprobación y fecha máxima antes de la siguiente factura; aprobada por IP reactiva y
+`/portal/estado` la ve, auditada como sistema/portal con `promesa.creada`; rechazada con motivo legible;
+pendiente de aprobación, condiciones no disponibles y 409 legible; IP desconocida 422; monto mayor que la
+deuda y fecha pasada 422; `Idempotency-Key`; 429; por sesión (401 sin cookie, 404 servicio ajeno).

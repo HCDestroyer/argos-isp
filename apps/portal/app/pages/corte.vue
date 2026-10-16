@@ -4,8 +4,9 @@
  * portal cautivo). Identifica el servicio por la IP de origen (`GET /portal/quien-soy`) y solo
  * muestra nombre parcial, estado y montos.
  *
- * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Comprobante y promesa
- * se activan el día 4; el pago en línea, en la semana 2 (mientras, el botón se ve apagado).
+ * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Día 4: solicitar promesa
+ * de pago (tarea 4, `PromesaSolicitar`); el comprobante llega en otra tanda y el pago en línea en
+ * la semana 2 (mientras, esos botones se ven apagados).
  *
  * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
@@ -24,6 +25,14 @@ const identificado = computed(() => corte.value?.identificado === true)
 const retirado = computed(() => corte.value?.estado === 'retirado')
 
 const verDeposito = ref(false)
+const verPromesa = ref(false)
+
+/** Última promesa enviada desde esta página (aprobada o pendiente; la rechazada se ve en el modal). */
+const promesa = ref<PromesaSolicitada | null>(null)
+const puedePedirPromesa = computed(() => identificado.value
+    && !corte.value?.promesa_activa
+    && corte.value?.estado !== 'activo'
+    && promesa.value === null)
 
 const { activo: servicioActivo, vigilando, agotado, vigilar } = useEstadoServicio()
 /** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
@@ -52,6 +61,17 @@ watch(() => corte.value?.promesa_activa, (promesa) => {
 
 onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad))
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', alCambiarVisibilidad))
+
+/** Aprobada: el servicio ya se reactivó en la API; el estado en vivo lo confirma ("Ya tienes servicio"). */
+function promesaResuelta(resultado: PromesaSolicitada) {
+    if (resultado.resultado === 'rechazada') {
+        return
+    }
+    promesa.value = resultado
+    if (resultado.resultado === 'aprobada') {
+        vigilarEstado()
+    }
+}
 
 /** Llamar es lo que funciona con el servicio suspendido; si no hay teléfono, la página de contacto. */
 const contacto = computed(() => {
@@ -116,6 +136,25 @@ const hayDatosDeposito = computed(() => !empresa.value
                 :corte="corte"
             />
 
+            <UAlert
+                v-if="promesa?.resultado === 'aprobada'"
+                color="success"
+                variant="subtle"
+                icon="i-lucide-circle-check"
+                title="Promesa de pago aprobada"
+                :description="`Pagarás ${montoEnTexto(promesa.monto)} a más tardar el ${formatearFecha(promesa.vence_en)}. Estamos reactivando tu servicio.`"
+                data-testid="promesa-aprobada"
+            />
+            <UAlert
+                v-else-if="promesa?.resultado === 'pendiente_aprobacion'"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-hourglass"
+                title="Tu promesa está pendiente de aprobación"
+                :description="promesa.motivo"
+                data-testid="promesa-pendiente-corte"
+            />
+
             <div
                 v-if="!retirado"
                 class="flex flex-col gap-2"
@@ -166,17 +205,18 @@ const hayDatosDeposito = computed(() => !empresa.value
                     disabled
                 />
                 <UButton
-                    v-if="!corte.promesa_activa"
+                    v-if="puedePedirPromesa"
+                    data-testid="solicitar-promesa"
                     label="Solicitar promesa de pago"
                     icon="i-lucide-hand-coins"
                     color="neutral"
                     variant="outline"
                     size="xl"
                     block
-                    disabled
+                    @click="verPromesa = true"
                 />
                 <p class="text-center text-xs text-muted">
-                    Subir el comprobante y solicitar la promesa de pago estarán disponibles pronto.
+                    Subir el comprobante estará disponible pronto.
                 </p>
             </div>
 
@@ -228,5 +268,9 @@ const hayDatosDeposito = computed(() => !empresa.value
         </template>
 
         <CorteDatosDeposito v-model:open="verDeposito" />
+        <PromesaSolicitar
+            v-model:open="verPromesa"
+            @resultado="promesaResuelta"
+        />
     </div>
 </template>

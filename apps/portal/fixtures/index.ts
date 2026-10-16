@@ -5,6 +5,7 @@
  * El portal usa sesión por cookie httpOnly (sin Bearer). En fixtures la sesión es un estado en
  * memoria: se abre con el código `123456` (`POST /portal/verificar`) y se cierra con `salir`.
  */
+import Decimal from 'decimal.js'
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } from './corte'
@@ -20,6 +21,12 @@ import {
     SOLICITUD_POR_IP_FIXTURE,
 } from './cuenta'
 import { EMPRESA_FIXTURE } from './empresa'
+import {
+    condicionesConPromesaFixture,
+    condicionesFixture,
+    promesaSolicitadaFixture,
+    type ResultadoPromesaFixture,
+} from './promesas'
 
 /**
  * Escenario de `/corte` en fixtures: `?fixture=activo|suspendido|desconocido` en la URL del
@@ -32,6 +39,28 @@ function escenarioCorte(): EscenarioCorte {
 }
 
 let consultasEstado = 0
+
+/**
+ * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|pendiente_aprobacion|con_promesa` en la
+ * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
+ * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
+ */
+type EscenarioPromesa = ResultadoPromesaFixture | 'con_promesa'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'pendiente_aprobacion', 'con_promesa']
+const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
+
+export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {
+    promesa.escenario = escenario
+    promesa.aprobada = false
+}
+
+function escenarioPromesa(): EscenarioPromesa {
+    if (promesa.escenario) {
+        return promesa.escenario
+    }
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('promesa')
+    return ESCENARIOS_PROMESA.find(e => e === pedido) ?? 'aprobada'
+}
 
 /** Pruebas: qué responde `GET /portal/empresa` (o un 500 con `null`). */
 const empresa: { respuesta: Schema<'EmpresaPublica'> | null } = { respuesta: EMPRESA_FIXTURE }
@@ -77,7 +106,7 @@ export const rutasFixture: RutasFixture = {
     'GET /api/v1/portal/estado': () => {
         consultasEstado += 1
         const escenario = escenarioCorte()
-        if (escenario === 'reactivacion' && consultasEstado >= 2) {
+        if (promesa.aprobada || (escenario === 'reactivacion' && consultasEstado >= 2)) {
             return { status: 200, cuerpo: ESTADO_REACTIVADO }
         }
         return { status: 200, cuerpo: estadoDe(ESCENARIOS_CORTE[escenario]) }
@@ -119,11 +148,56 @@ export const rutasFixture: RutasFixture = {
     },
     'GET /api/v1/portal/cuenta': conSesion(() => ({
         status: 200,
-        cuerpo: { ...CUENTA_FIXTURE, cliente: sesion.contacto } satisfies Schema<'PortalCuenta'>,
+        cuerpo: {
+            ...CUENTA_FIXTURE,
+            cliente: sesion.contacto,
+            servicios: CUENTA_FIXTURE.servicios.map(servicio => promesa.aprobada
+                ? { ...servicio, estado: 'activo' as const, promesa_activa: true }
+                : servicio),
+        } satisfies Schema<'PortalCuenta'>,
     })),
     'GET /api/v1/portal/facturas': conSesion(() => pagina(FACTURAS_FIXTURE)),
     'GET /api/v1/portal/pagos': conSesion(() => pagina(PAGOS_FIXTURE)),
     'GET /api/v1/portal/promesas': conSesion(() => pagina(PROMESAS_FIXTURE)),
+    'GET /api/v1/portal/promesas/condiciones': ({ query }) => {
+        if (query.has('servicio_id') && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        return {
+            status: 200,
+            cuerpo: escenarioPromesa() === 'con_promesa' || promesa.aprobada
+                ? condicionesConPromesaFixture()
+                : condicionesFixture(),
+        }
+    },
+    'POST /api/v1/portal/promesas': ({ cuerpo }) => {
+        const datos = (cuerpo ?? {}) as { vence_el?: string, monto?: string, servicio_id?: number }
+        if (datos.servicio_id !== undefined && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        const escenario = escenarioPromesa()
+        if (escenario === 'con_promesa' || promesa.aprobada) {
+            return problema(409, 'promesa_abierta', 'Promesa abierta', 'Ya tienes una promesa de pago en curso.')
+        }
+        if (new Decimal(datos.monto ?? '0').greaterThan('525.00')) {
+            return {
+                status: 422,
+                cuerpo: {
+                    type: 'urn:argosisp:problema:validacion',
+                    title: 'Datos inválidos',
+                    status: 422,
+                    errors: [{ field: 'monto', message: 'El monto supera la deuda pendiente del servicio (Q525.00)' }],
+                } satisfies Problem,
+            }
+        }
+        if (escenario === 'aprobada') {
+            promesa.aprobada = true
+        }
+        return {
+            status: 201,
+            cuerpo: promesaSolicitadaFixture(escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
+        }
+    },
     'PUT /api/v1/portal/contacto': ({ cuerpo }) => {
         if (!sesion.abierta) {
             return SIN_SESION()

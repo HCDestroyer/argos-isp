@@ -1,6 +1,6 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { versionEsperada } from '#shared/validadores'
+import { dinero, fechaIso, idEntidad, versionEsperada } from '#shared/validadores'
 
 /**
  * Validadores del portal del cliente (A5). Espejo en `apps/portal` (esquemas de `UForm`).
@@ -89,3 +89,24 @@ export const editarContactoValidator = vine.compile(
         canal_preferido: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
     }),
 )
+
+const servicioDeLaSesion = () =>
+    idEntidad()
+        .optional()
+        .meta({ description: 'Solo con la sesión del portal; sin él se identifica por la IP de origen' })
+
+/**
+ * `POST /portal/promesas` (tarea 4). Sin `servicio_id` identifica por la IP de origen (página de
+ * corte); con `servicio_id` exige la sesión del portal y que el servicio sea del cliente.
+ */
+export const solicitarPromesaValidator = vine.compile(
+    vine.object({
+        // Día de pago (YYYY-MM-DD, hora de Guatemala); la promesa vence a las 23:59:59 de ese día.
+        vence_el: fechaIso(),
+        monto: dinero(),
+        servicio_id: servicioDeLaSesion(),
+    }),
+)
+
+/** `GET /portal/promesas/condiciones`: mismo criterio de identificación que `POST /portal/promesas`. */
+export const condicionesPromesaValidator = vine.compile(vine.object({ servicio_id: servicioDeLaSesion() }))

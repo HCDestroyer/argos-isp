@@ -1209,6 +1209,30 @@ export interface paths {
          */
         get: operations["portalPromesas"];
         put?: never;
+        /**
+         * El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)
+         * @description Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalSolicitarPromesa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/promesas/condiciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Límites de una promesa de pago desde el portal (antes de enviarla)
+         * @description Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalPromesaCondiciones"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2171,7 +2195,7 @@ export interface components {
             horario: string | null;
             /** @description Texto que acompaña los datos de depósito */
             instrucciones_pago: string | null;
-            /** @description Cuentas bancarias activas para depósito (fuente: billing.cuentas_bancarias de A3). Vacía = no se muestran */
+            /** @description Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
         };
         EnvioNotificacion: {
@@ -2549,6 +2573,43 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PortalCondicionesPromesa: {
+            /** @description Se puede enviar una solicitud ahora */
+            disponible: boolean;
+            /** @description Por qué no está disponible, en palabras del cliente */
+            motivo: string | null;
+            promesa_abierta: {
+                /** @enum {string} */
+                estado: "activa" | "pendiente_aprobacion";
+                /** Format: date-time */
+                vence_en: string;
+                monto: components["schemas"]["Dinero"];
+            } | null;
+            /**
+             * Format: date
+             * @description Primer día de pago admitido (hoy en Guatemala)
+             */
+            fecha_minima: string | null;
+            /**
+             * Format: date
+             * @description Último día de pago admitido: plazo máximo del canal portal y antes de la siguiente factura
+             */
+            fecha_maxima: string | null;
+            plazo_max_dias: number | null;
+            /** @description Deuda pendiente del servicio */
+            monto_maximo: components["schemas"]["Dinero"] | null;
+            /** @description Saldo vencido (o pendiente si no hay vencido) */
+            monto_sugerido: components["schemas"]["Dinero"] | null;
+            /** @description La plantilla exige abonar este porcentaje de la deuda antes de prometer */
+            abono_inicial: {
+                porcentaje: number;
+                requerido: components["schemas"]["Dinero"];
+                abonado: components["schemas"]["Dinero"];
+                faltante: components["schemas"]["Dinero"];
+            } | null;
+            /** @description La promesa quedará pendiente de aprobación */
+            requiere_aprobacion: boolean;
+        };
         PortalContacto: {
             nombre: string;
             nit_cui: string | null;
@@ -2635,6 +2696,18 @@ export interface components {
             canal: "portal" | "ia" | "operador" | "supervisor";
             /** Format: date-time */
             created_at: string;
+        };
+        PortalPromesaSolicitada: {
+            id: number;
+            /** @enum {string} */
+            resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
+            /** Format: date-time */
+            vence_en: string;
+            monto: components["schemas"]["Dinero"];
+            /** @description Resultado en palabras del cliente (nunca el código de la regla) */
+            motivo: string;
+            /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
+            servicio_estado: components["schemas"]["EstadoServicio"] | null;
         };
         PortalServicio: {
             id: number;
@@ -7609,6 +7682,111 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSolicitarPromesa: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date */
+                    vence_el: string;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
+                    servicio_id?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Promesa evaluada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPromesaSolicitada"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPromesaCondiciones: {
+        parameters: {
+            query?: {
+                /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
+                servicio_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Condiciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCondicionesPromesa"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
