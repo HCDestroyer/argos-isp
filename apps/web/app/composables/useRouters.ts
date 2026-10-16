@@ -7,6 +7,7 @@ export type Ipv6Bloque = Schema<'Ipv6Bloque'>
 export type FiltrosRouters = Omit<NonNullable<paths['/api/v1/routers']['get']['parameters']['query']>, 'cursor'>
 export type PlanEfectivo = Schema<'PlanEfectivo'>
 export type CambiosRouter = paths['/api/v1/routers/{id}']['put']['requestBody']['content']['application/json']
+export type VistaPreviaControl = Schema<'VistaPreviaControl'>
 export type CambioControlVelocidad = paths['/api/v1/routers/{id}/cambiar-control-velocidad']['post']['requestBody']['content']['application/json']
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
@@ -38,6 +39,15 @@ export function useRouters() {
         return resolver(api.POST('/api/v1/routers/{id}/cambiar-control-velocidad', { params: { path: { id } }, body: datos }))
     }
 
+    /**
+     * `GET /routers/:id/vista-previa-control?a=` (`routers.cambiar_control_velocidad`): lo que el
+     * cambio a `a` crea, corrige y borra en RouterOS, los lotes y las sesiones PPPoE que se
+     * desconectan. No toca el router. Con `a` igual al modo actual todo viene vacío.
+     */
+    function vistaPreviaControl(id: number, a: ControlVelocidad): Promise<Resultado<VistaPreviaControl>> {
+        return resolver(api.GET('/api/v1/routers/{id}/vista-previa-control', { params: { path: { id }, query: { a } } }))
+    }
+
     /** Planes disponibles en el router (globales + implementados en él), con su rate-limit efectivo. */
     function planes(id: number): Promise<Resultado<PlanEfectivo[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/planes', { params: { path: { id } } }))
@@ -51,5 +61,5 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, planes, redesIpv4, ipv6Bloques }
+    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques }
 }

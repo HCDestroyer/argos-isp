@@ -8,7 +8,7 @@ useHead({ title: 'Pagos · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const nombres = useNombresClientes()
 
 const TODOS = 'todos'
@@ -148,7 +148,8 @@ watch([clienteId, metodo, estado, cajaId, desde, hasta], aplicarFiltros)
 onMounted(async () => {
     void lista.recargar()
     void cargarCajas()
-    if (clienteId.value) {
+    // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
+    if (clienteId.value && puede('clientes.ver')) {
         const resultado = await useClientes().ver(clienteId.value)
         if (resultado.ok) {
             alElegirCliente(resultado.data)
@@ -290,7 +291,7 @@ onMounted(async () => {
 
                     <template #cliente_id-cell="{ row }">
                         <ULink
-                            :to="`/clientes/${row.original.cliente_id}?tab=cuenta`"
+                            :to="enlace(`/clientes/${row.original.cliente_id}?tab=cuenta`)"
                             class="text-sm text-default hover:text-primary"
                         >
                             {{ nombres.nombre(row.original.cliente_id) }}

@@ -193,7 +193,8 @@ onMounted(async () => {
         void cargarCuentas()
         void diario.recargar()
     }
-    if (clienteId.value) {
+    // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
+    if (clienteId.value && puede('clientes.ver')) {
         const resultado = await useClientes().ver(clienteId.value)
         if (resultado.ok) {
             alElegirCliente(resultado.data)

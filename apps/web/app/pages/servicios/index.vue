@@ -7,7 +7,7 @@ useHead({ title: 'Servicios · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const serviciosApi = useServicios()
 
 /** Valor de los `USelect` para "sin filtro" (Reka UI no admite `''` como valor de un ítem). */
@@ -205,7 +205,7 @@ onMounted(async () => {
         verRouters.value ? useRouters().listar() : null,
         verPlanes.value ? usePlanes().listar() : null,
         verZonas.value ? useZonas().listar() : null,
-        clienteId.value ? useClientes().ver(clienteId.value) : null,
+        clienteId.value && puede('clientes.ver') ? useClientes().ver(clienteId.value) : null,
     ])
     if (resultadoZonas?.ok) {
         zonas.value = resultadoZonas.data
@@ -392,7 +392,7 @@ onMounted(async () => {
                     <template #cliente_id-cell="{ row }">
                         <div class="flex min-w-32 flex-col">
                             <ULink
-                                :to="`/clientes/${row.original.cliente_id}`"
+                                :to="enlace(`/clientes/${row.original.cliente_id}`)"
                                 class="text-sm text-default hover:text-primary"
                             >
                                 {{ nombreCliente(row.original) }}

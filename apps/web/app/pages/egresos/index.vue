@@ -13,7 +13,7 @@ useHead({ title: 'Egresos · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 const TODOS = 'todos'
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
@@ -190,7 +190,7 @@ onMounted(() => {
                 <p class="text-xs text-muted">
                     Fechas contables (día de Guatemala). Cada egreso tiene su asiento en el
                     <ULink
-                        to="/libro?origen=egreso"
+                        :to="enlace('/libro?origen=egreso')"
                         class="underline"
                     >libro diario</ULink>.
                 </p>

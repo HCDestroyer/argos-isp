@@ -8,7 +8,7 @@ useHead({ title: 'Nuevo servicio · ArgosIsp' })
 
 const route = useRoute()
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, destinoPermitido, enlace } = usePermisos()
 const routersApi = useRouters()
 
 const clienteInicial = Number(route.query.cliente) || undefined
@@ -158,7 +158,7 @@ const precioEfectivo = computed(() => estado.costo_override?.trim() || plan.valu
 */
 
 async function cargarCliente(id: number) {
-    const resultado = await useClientes().ver(id)
+    const resultado = puede('clientes.ver') ? await useClientes().ver(id) : { ok: false as const, problema: problemaSinPermiso('clientes.ver') }
     if (resultado.ok) {
         alElegirCliente(resultado.data)
     }
@@ -307,7 +307,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
             color: 'success',
             icon: 'i-lucide-circle-check',
         })
-        await navigateTo(`/clientes/${resultado.data.cliente_id}?tab=servicios`)
+        await navigateTo(destinoPermitido(`/clientes/${resultado.data.cliente_id}?tab=servicios`))
         return
     }
     problema.value = resultado.problema
@@ -330,8 +330,8 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
     >
         <template #acciones>
             <UButton
-                v-if="cliente"
-                :to="`/clientes/${cliente.id}`"
+                v-if="cliente && enlace(`/clientes/${cliente.id}`)"
+                :to="enlace(`/clientes/${cliente.id}`)"
                 icon="i-lucide-arrow-left"
                 :label="cliente.nombre"
                 color="neutral"

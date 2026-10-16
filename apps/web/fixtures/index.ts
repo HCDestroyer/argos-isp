@@ -101,6 +101,15 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return respuesta ? { status: 200, cuerpo: respuesta } : { status: 401, cuerpo: credencialesInvalidas }
     },
 
+    /** Como `POST /auth/logout`: revoca el token actual y responde 204; sin sesión, 401. */
+    'POST /api/v1/auth/logout': ({ token }) => {
+        if (!token || !usuariosPorToken[token]) {
+            return sinSesion()
+        }
+        bd.sesionesCerradas.push(token)
+        return { status: 204, cuerpo: undefined }
+    },
+
     'GET /api/v1/me': ({ token }) => {
         const usuario = token ? usuariosPorToken[token] : undefined
         return usuario ? { status: 200, cuerpo: usuario } : sinSesion()

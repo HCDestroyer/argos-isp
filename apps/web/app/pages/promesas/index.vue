@@ -7,7 +7,7 @@ useHead({ title: 'Promesas · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const toast = useToast()
 const nombres = useNombresClientes()
 
@@ -144,7 +144,8 @@ const simuladorAbierto = ref(false)
 
 onMounted(async () => {
     void lista.recargar()
-    if (clienteId.value) {
+    // Sin `clientes.ver` el filtro por cliente sigue por id, sin pedir su nombre (revisión de ACL).
+    if (clienteId.value && puede('clientes.ver')) {
         const resultado = await useClientes().ver(clienteId.value)
         if (resultado.ok) {
             alElegirCliente(resultado.data)
@@ -261,7 +262,7 @@ onMounted(async () => {
                             <span class="text-xs text-muted">Vence {{ formatearFechaHora(row.original.vence_en) }}</span>
                             <span class="text-xs text-muted">
                                 <ULink
-                                    :to="`/servicios/${row.original.servicio_id}`"
+                                    :to="enlace(`/servicios/${row.original.servicio_id}`)"
                                     class="hover:text-primary"
                                 >servicio {{ row.original.servicio_id }}</ULink>
                                 · {{ CANALES_PROMESA[row.original.canal] }}
@@ -316,7 +317,7 @@ onMounted(async () => {
 
                     <template #cliente_id-cell="{ row }">
                         <ULink
-                            :to="`/clientes/${row.original.cliente_id}?tab=cuenta`"
+                            :to="enlace(`/clientes/${row.original.cliente_id}?tab=cuenta`)"
                             class="text-sm text-default hover:text-primary"
                         >
                             {{ nombres.nombre(row.original.cliente_id) }}
