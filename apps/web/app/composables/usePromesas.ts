@@ -8,7 +8,7 @@ export type FiltrosPromesas = Omit<NonNullable<paths['/api/v1/promesas']['get'][
 
 export const LIMITE_PROMESAS = 25
 
-/** Promesas de pago: lista, alta (la API evalúa las reglas de la plantilla) y aprobación. */
+/** Promesas de pago: lista, alta (la API evalúa las reglas de la plantilla), aprobación, rechazo y cancelación. */
 export function usePromesas() {
     const api = useApi()
 
@@ -39,5 +39,24 @@ export function usePromesas() {
         }))
     }
 
-    return { listar, crear, aprobar }
+    /** `POST /promesas/:id/rechazar` (`promesas.rechazar`): solo pendientes; motivo obligatorio. */
+    function rechazar(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Promesa>> {
+        return resolver(api.POST('/api/v1/promesas/{id}/rechazar', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    /**
+     * `POST /promesas/:id/cancelar` (`promesas.cancelar`): activa o pendiente. Si estaba activa, la
+     * API re-evalúa el servicio y puede volver a cortarlo.
+     */
+    function cancelar(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Promesa>> {
+        return resolver(api.POST('/api/v1/promesas/{id}/cancelar', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    return { listar, crear, aprobar, rechazar, cancelar }
 }

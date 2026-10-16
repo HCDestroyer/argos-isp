@@ -105,4 +105,16 @@ describe('pago de terceros y responsable de pago', () => {
         expect(recibo.get('[data-recibo-cliente="12"]').text()).toContain('Andrea Paola Gómez · pagado por Carlos Enrique Monterroso')
         expect(recibo.get('[data-prueba="recibo-reactivado"]').text()).toContain('Andrea Paola Gómez')
     })
+
+    it('en pantalla: marcar el grupo del dependiente suma "de otros clientes" y tras el pago no quedan marcadas', async () => {
+        const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=10' })
+        await vi.waitFor(() => expect(vista.find('[data-grupo="12"] button[role="checkbox"]').exists()).toBe(true))
+        await vista.get('[data-grupo="12"] button[role="checkbox"]').trigger('click')
+        await vi.waitFor(() => expect(vista.get('[data-prueba="total-marcadas"]').text()).toMatch(/de otros clientes \(Q [\d,]+\.\d{2}\)/))
+
+        await vista.get('form').trigger('submit')
+        await vi.waitFor(() => expect(vista.find('article[aria-label="Recibo de pago"]').exists()).toBe(true))
+        expect(vista.get('article[aria-label="Recibo de pago"]').text()).toContain('pagado por Carlos Enrique Monterroso')
+        await vi.waitFor(() => expect(vista.find('[data-prueba="total-marcadas"]').exists()).toBe(false))
+    })
 })

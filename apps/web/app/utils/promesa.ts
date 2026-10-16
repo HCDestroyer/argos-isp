@@ -2,6 +2,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { BadgeProps } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 import * as z from 'zod'
+import { formatearFecha, formatearFechaHora, formatearQuetzales } from './formato'
 
 type PromesaPago = Schema<'Promesa'>
 type Color = NonNullable<BadgeProps['color']>
@@ -28,6 +29,8 @@ const REGLAS: Record<string, string> = {
     habilitadas: 'Promesas habilitadas',
     canal: 'Canal permitido',
     permitido: 'Canal permitido',
+    canal_permitido: 'Canal permitido',
+    sin_deuda: 'Tiene deuda',
     plazo_max_dias: 'Plazo máximo',
     max_por_periodo: 'Máximo por periodo',
     max_por_periodo_buen_historial: 'Máximo por buen historial',
@@ -61,8 +64,11 @@ export interface EvaluacionLegible {
     regla: string | null
     motivo: string | null
     verificaciones: Verificacion[]
-    /** Claves que el panel no sabe leer, para no esconder nada de lo que mande la API. */
-    otros: { clave: string, valor: string }[]
+    /**
+     * Datos extra de la evaluación (deuda, historial, fechas…) con su etiqueta en español; las
+     * claves que el panel no conoce van tal cual, para no esconder nada de lo que mande la API.
+     */
+    otros: { clave: string, etiqueta: string, valor: string, mono: boolean }[]
 }
 
 function texto(valor: unknown): string | null {
@@ -116,7 +122,7 @@ export function leerEvaluacion(promesa: Pick<PromesaPago, 'estado' | 'resultado_
     const decision = decisionDe(datos.decision ?? datos.resultado ?? datos.estado) ?? decisionPorEstado(promesa.estado)
     const otros = Object.entries(datos)
         .filter(([clave]) => !CONOCIDAS.has(clave))
-        .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) }))
+        .map(([clave, valor]) => datoExtra(clave, valor))
     return {
         decision,
         regla: texto(datos.regla) ?? texto(datos.regla_aplicada),
@@ -124,6 +130,75 @@ export function leerEvaluacion(promesa: Pick<PromesaPago, 'estado' | 'resultado_
         verificaciones: verificacionesDe(datos.verificaciones ?? datos.reglas),
         otros,
     }
+}
+
+function registro(valor: unknown): Record<string, unknown> | null {
+    return typeof valor === 'object' && valor !== null && !Array.isArray(valor) ? (valor as Record<string, unknown>) : null
+}
+
+const MONTO_API = /^-?\d+(\.\d+)?$/
+
+function dinero(valor: unknown): string | null {
+    return typeof valor === 'string' && MONTO_API.test(valor) ? formatearQuetzales(valor) : null
+}
+
+/** Cómo se muestran los datos extra que manda `evaluarPromesa` (A3, `app/billing/promesas.ts`). */
+const EXTRAS: Record<string, { etiqueta: string, leer: (valor: unknown) => string | null }> = {
+    deuda: {
+        etiqueta: 'Deuda del servicio',
+        leer: (valor) => {
+            const d = registro(valor)
+            if (!d) {
+                return null
+            }
+            const vencidas = typeof d.facturas_vencidas === 'number' ? ` · ${d.facturas_vencidas} ${d.facturas_vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : ''
+            return `Vencida ${dinero(d.vencida) ?? '—'} · pendiente ${dinero(d.pendiente) ?? '—'}${vencidas}`
+        },
+    },
+    historial: {
+        etiqueta: 'Historial de promesas',
+        leer: (valor) => {
+            const h = registro(valor)
+            if (!h || typeof h.resueltas !== 'number' || typeof h.cumplidas !== 'number') {
+                return null
+            }
+            const ventana = typeof h.ventana === 'number' ? ` (últimas ${h.ventana})` : ''
+            return h.resueltas === 0 ? `Sin promesas anteriores${ventana}` : `${h.cumplidas} de ${h.resueltas} cumplidas${ventana}`
+        },
+    },
+    evaluada_en: { etiqueta: 'Evaluada', leer: valor => (typeof valor === 'string' ? formatearFechaHora(valor) : null) },
+    siguiente_facturacion: { etiqueta: 'Siguiente facturación', leer: valor => (typeof valor === 'string' ? formatearFecha(valor) : null) },
+    aprobacion: {
+        etiqueta: 'Aprobación',
+        leer: (valor) => {
+            const a = registro(valor)
+            if (!a || typeof a.en !== 'string') {
+                return null
+            }
+            return `${formatearFechaHora(a.en)}${texto(a.nota) ? ` · ${texto(a.nota)}` : ''}`
+        },
+    },
+    cierre: {
+        etiqueta: 'Cierre',
+        leer: (valor) => {
+            const c = registro(valor)
+            if (!c || typeof c.en !== 'string') {
+                return null
+            }
+            const estado = texto(c.estado)
+            const etiqueta = estado && estado in ESTADOS_PROMESA ? ESTADOS_PROMESA[estado as PromesaPago['estado']].etiqueta : estado
+            return `${etiqueta ? `${etiqueta} · ` : ''}${formatearFechaHora(c.en)}${texto(c.motivo) ? ` · ${texto(c.motivo)}` : ''}`
+        },
+    },
+}
+
+function datoExtra(clave: string, valor: unknown): EvaluacionLegible['otros'][number] {
+    const conocido = EXTRAS[clave]
+    const legible = conocido?.leer(valor) ?? null
+    if (conocido && legible !== null) {
+        return { clave, etiqueta: conocido.etiqueta, valor: legible, mono: false }
+    }
+    return { clave, etiqueta: clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor), mono: true }
 }
 
 function decisionPorEstado(estado: PromesaPago['estado']): DecisionPromesa | null {

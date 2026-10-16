@@ -122,7 +122,9 @@ onMounted(() => cargarDependientes())
                         Paga sus propias facturas.
                     </p>
                     <p class="text-xs text-muted">
-                        En el cobro, al buscar al responsable aparecen también las facturas de este cliente.
+                        {{ dependientes.length
+                            ? 'Al cobrarle, aparecen también las facturas de los clientes de los que es responsable.'
+                            : 'En el cobro, al buscar al responsable aparecen también las facturas de este cliente.' }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">

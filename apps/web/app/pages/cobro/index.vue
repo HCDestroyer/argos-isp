@@ -145,11 +145,21 @@ const montoValido = computed(() => /^\d{1,12}(\.\d{1,2})?$/.test(estado.monto.tr
  */
 const marcadas = ref<number[]>([])
 const totalMarcadas = computed(() => (resumen.value ? sumaMarcadas(facturasPantalla.value, marcadas.value) : null))
-/** Marcadas de otros clientes (pago de terceros). */
+/** Marcadas de otros clientes (pago de terceros): cuántas y cuánto suman. */
 const marcadasDeTerceros = computed(() => {
     const propias = new Set((resumen.value?.facturas ?? []).map(f => f.id))
-    return marcadas.value.filter(id => !propias.has(id)).length
+    const ajenas = new Set(marcadas.value.filter(id => !propias.has(id)))
+    return { cuantas: ajenas.size, total: sumaMarcadas(facturasPantalla.value, [...ajenas]) }
 })
+/** Ayuda del monto: lo marcado y, con facturas de terceros, cuánto es de otros clientes. */
+const ayudaMonto = computed(() => {
+    if (!resumen.value) {
+        return undefined
+    }
+    const terceros = marcadasDeTerceros.value.cuantas ? ` (${formatearQuetzales(marcadasDeTerceros.value.total)} de otros clientes)` : ''
+    return `Marcadas ${formatearQuetzales(totalMarcadas.value)}${terceros} · vencido del cliente ${formatearQuetzales(resumen.value.vencido)} · pendiente ${formatearQuetzales(resumen.value.pendiente)}`
+})
+
 /** Cómo aplicará la API el monto escrito (pedidas primero, luego las demás del pagador, luego anticipo). */
 const distribucion = computed(() => (resumen.value && montoValido.value && marcadas.value.length
     ? distribuirPago(new Decimal(estado.monto.trim()), facturasPantalla.value, marcadas.value, resumen.value.facturas)
@@ -248,6 +258,14 @@ function quitarGrupo(grupo: GrupoCobro) {
 async function recargarGrupos() {
     await Promise.all(grupos.value.map(g => cargarGrupo(g)))
 }
+
+/** Si una factura deja de estar en pantalla (pagada, grupo quitado), deja de estar marcada. */
+watch(facturasPantalla, (facturas) => {
+    const visibles = new Set(facturas.map(f => f.id))
+    if (marcadas.value.some(id => !visibles.has(id))) {
+        marcadas.value = marcadas.value.filter(id => visibles.has(id))
+    }
+})
 
 /** Al cambiar las marcadas, el monto vuelve a ser su suma (el cajero puede editarlo después). */
 watch(marcadas, () => {
@@ -790,12 +808,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                     />
                                 </div>
                                 <p
-                                    v-if="totalMarcadas && marcadas.length"
+                                    v-if="totalMarcadas && marcadas.length && !pago"
                                     class="text-xs text-muted"
                                     data-prueba="total-marcadas"
                                 >
-                                    {{ marcadas.length }} {{ marcadas.length === 1 ? 'marcada' : 'marcadas' }} · {{ formatearQuetzales(totalMarcadas) }}<template v-if="marcadasDeTerceros">
-                                        · {{ marcadasDeTerceros }} de otros clientes
+                                    {{ marcadas.length }} {{ marcadas.length === 1 ? 'marcada' : 'marcadas' }} · {{ formatearQuetzales(totalMarcadas) }}<template v-if="marcadasDeTerceros.cuantas">
+                                        · {{ marcadasDeTerceros.cuantas }} de otros clientes ({{ formatearQuetzales(marcadasDeTerceros.total) }})
                                     </template>
                                 </p>
                             </div>
@@ -947,7 +965,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         label="Monto"
                         name="monto"
                         required
-                        :help="resumen ? `Marcadas ${formatearQuetzales(totalMarcadas)} · vencido ${formatearQuetzales(resumen.vencido)} · pendiente ${formatearQuetzales(resumen.pendiente)}` : undefined"
+                        :help="ayudaMonto"
                     >
                         <UInput
                             v-model="estado.monto"

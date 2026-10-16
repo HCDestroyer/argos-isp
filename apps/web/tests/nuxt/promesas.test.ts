@@ -78,7 +78,7 @@ describe('tarea 13 · promesas', () => {
         const otra = leerEvaluacion({ estado: 'activa', resultado_evaluacion: { resultado: 'ok', regla_aplicada: 'deuda_maxima', extra: 5 } })
         expect(otra.decision).toBe('aprobada')
         expect(otra.regla).toBe('deuda_maxima')
-        expect(otra.otros).toEqual([{ clave: 'extra', valor: '5' }])
+        expect(otra.otros).toEqual([{ clave: 'extra', etiqueta: 'extra', valor: '5', mono: true }])
         expect(etiquetaRegla('canales.operador.requiere_aprobacion')).toBe('Requiere aprobación (Operador)')
     })
 
@@ -107,5 +107,39 @@ describe('tarea 13 · promesas', () => {
         expect(esquema.safeParse({ monto: '150.00', vence: '2026-10-15', canal: 'operador' }).success).toBe(true)
         expect(esquema.safeParse({ monto: '0', vence: '2026-10-16', canal: 'operador' }).success).toBe(false)
         expect(esquema.safeParse({ monto: '150.00', vence: '2026-10-14', canal: 'operador' }).success).toBe(false)
+    })
+    it('leerEvaluacion: deuda, historial y fechas de la API en español', () => {
+        const evaluacion = leerEvaluacion({
+            estado: 'rechazada',
+            resultado_evaluacion: {
+                resultado: 'rechazada',
+                regla: 'plazo_max_dias',
+                deuda: { vencida: '970.00', pendiente: '970.00', facturas_vencidas: 2, pagado_pendientes: '0.00' },
+                historial: { ventana: 6, cumplidas: 0, resueltas: 0, cumplimiento_pct: null },
+                siguiente_facturacion: '2026-11-01',
+            },
+        })
+        expect(evaluacion.otros).toEqual([
+            { clave: 'deuda', etiqueta: 'Deuda del servicio', valor: 'Vencida Q 970.00 · pendiente Q 970.00 · 2 facturas vencidas', mono: false },
+            { clave: 'historial', etiqueta: 'Historial de promesas', valor: 'Sin promesas anteriores (últimas 6)', mono: false },
+            { clave: 'siguiente_facturacion', etiqueta: 'Siguiente facturación', valor: '01/11/2026', mono: false },
+        ])
+        expect(etiquetaRegla('sin_deuda')).toBe('Tiene deuda')
+        expect(etiquetaRegla('canal_permitido')).toBe('Canal permitido')
+    })
+
+    it('rechazar solo una pendiente y cancelar una activa (409 en otro estado, motivo obligatorio)', async () => {
+        const sinMotivo = await usePromesas().rechazar(4, 'no', nuevaClaveIdempotencia())
+        expect(!sinMotivo.ok && sinMotivo.problema.errors?.[0]?.field).toBe('motivo')
+
+        const rechazada = await usePromesas().rechazar(4, 'El cliente ya incumplió en septiembre', nuevaClaveIdempotencia())
+        expect(rechazada.ok && rechazada.data.estado).toBe('rechazada')
+        expect(rechazada.ok && leerEvaluacion(rechazada.data).otros.find(o => o.clave === 'cierre')?.valor).toContain('Rechazada')
+
+        const activa = await usePromesas().rechazar(3, 'No aplica', nuevaClaveIdempotencia())
+        expect(!activa.ok && activa.problema.type).toBe('urn:argosisp:problema:promesa_no_pendiente')
+
+        const cancelada = await usePromesas().cancelar(3, 'Pagará por transferencia la otra semana', nuevaClaveIdempotencia())
+        expect(cancelada.ok && cancelada.data.estado).toBe('cancelada')
     })
 })
