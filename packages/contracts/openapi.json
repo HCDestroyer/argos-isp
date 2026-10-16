@@ -18332,6 +18332,34 @@
           }
         }
       },
+      "AprobacionPromesa": {
+        "type": "object",
+        "required": [
+          "por",
+          "en",
+          "nota"
+        ],
+        "properties": {
+          "por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Supervisor que aprobó"
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Asiento": {
         "type": "object",
         "required": [
@@ -18904,6 +18932,48 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "CierrePromesa": {
+        "type": "object",
+        "required": [
+          "estado",
+          "en"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cumplida",
+              "incumplida",
+              "cancelada",
+              "rechazada"
+            ]
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "motivo": {
+            "type": "string",
+            "description": "Rechazo o cancelación (operador, o \"venció sin aprobación\")"
+          },
+          "por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Quién la rechazó o canceló"
+          },
+          "pagado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida: lo pagado mientras estuvo activa"
+          },
+          "deuda_vencida": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida: deuda vencida al resolverse"
           }
         }
       },
@@ -19904,6 +19974,29 @@
           }
         }
       },
+      "DeudaEvaluada": {
+        "type": "object",
+        "required": [
+          "pendiente",
+          "vencida",
+          "pagado_pendientes",
+          "facturas_vencidas"
+        ],
+        "properties": {
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "vencida": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pagado_pendientes": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "facturas_vencidas": {
+            "type": "integer"
+          }
+        }
+      },
       "Dinero": {
         "type": "string",
         "pattern": "^-?\\d{1,12}\\.\\d{2}$",
@@ -20475,6 +20568,96 @@
           "retirado"
         ]
       },
+      "EvaluacionPromesa": {
+        "type": "object",
+        "required": [
+          "resultado",
+          "regla",
+          "motivo",
+          "canal",
+          "evaluada_en",
+          "reglas",
+          "deuda",
+          "historial",
+          "siguiente_facturacion"
+        ],
+        "properties": {
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion"
+            ]
+          },
+          "regla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "habilitadas",
+              "canal_permitido",
+              "sin_deuda",
+              "plazo_max_dias",
+              "no_exceder_siguiente_facturacion",
+              "deuda_maxima",
+              "abono_inicial_pct",
+              "antiguedad_minima_dias",
+              "cumplimiento_minimo_pct",
+              "bloqueo_tras_incumplida_dias",
+              "max_por_periodo",
+              "requiere_aprobacion",
+              null
+            ],
+            "description": "La primera que falló (rechazada), requiere_aprobacion (pendiente) o null (aprobada)"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ]
+          },
+          "evaluada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaEvaluada"
+            },
+            "description": "Reglas revisadas en orden; termina en la que decidió"
+          },
+          "deuda": {
+            "$ref": "#/components/schemas/DeudaEvaluada"
+          },
+          "historial": {
+            "$ref": "#/components/schemas/HistorialPromesas"
+          },
+          "siguiente_facturacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "aprobacion": {
+            "$ref": "#/components/schemas/AprobacionPromesa",
+            "description": "Al aprobar una pendiente"
+          },
+          "cierre": {
+            "$ref": "#/components/schemas/CierrePromesa",
+            "description": "Al cumplirse, incumplirse, rechazarse o cancelarse"
+          }
+        }
+      },
       "ExcepcionesServicio": {
         "type": "object",
         "description": "Excepciones a la plantilla de facturación del servicio",
@@ -20771,6 +20954,33 @@
           "total": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Saldo pendiente de las facturas vencidas"
+          }
+        }
+      },
+      "HistorialPromesas": {
+        "type": "object",
+        "required": [
+          "ventana",
+          "resueltas",
+          "cumplidas",
+          "cumplimiento_pct"
+        ],
+        "properties": {
+          "ventana": {
+            "type": "integer",
+            "description": "Cuántas promesas resueltas se miran"
+          },
+          "resueltas": {
+            "type": "integer"
+          },
+          "cumplidas": {
+            "type": "integer"
+          },
+          "cumplimiento_pct": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       },
@@ -22939,7 +23149,7 @@
               "null"
             ],
             "additionalProperties": true,
-            "description": "resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar"
+            "description": "Forma estable: components.schemas.EvaluacionPromesa (Schema<\"EvaluacionPromesa\">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md"
           },
           "servicio": {
             "$ref": "#/components/schemas/ServicioEvaluado",
@@ -23125,6 +23335,77 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReglaEvaluada": {
+        "type": "object",
+        "required": [
+          "regla",
+          "ok",
+          "valor",
+          "limite",
+          "origen",
+          "detalle"
+        ],
+        "properties": {
+          "regla": {
+            "type": "string",
+            "enum": [
+              "habilitadas",
+              "canal_permitido",
+              "sin_deuda",
+              "plazo_max_dias",
+              "no_exceder_siguiente_facturacion",
+              "deuda_maxima",
+              "abono_inicial_pct",
+              "antiguedad_minima_dias",
+              "cumplimiento_minimo_pct",
+              "bloqueo_tras_incumplida_dias",
+              "max_por_periodo",
+              "requiere_aprobacion"
+            ],
+            "description": "Nombre estable de la regla (contratos/promesas.md)"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "valor": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Lo medido (días, monto \"0.00\", cantidad, %)"
+          },
+          "limite": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Límite aplicado (null = sin límite)"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "general",
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ],
+            "description": "general o el canal cuyo límite reemplazó al general"
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Explicación para la pantalla"
+          },
+          "aplica": {
+            "type": "boolean",
+            "description": "Solo en la simulación: false si la configuración no la exige"
           }
         }
       },

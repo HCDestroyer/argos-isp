@@ -2657,6 +2657,13 @@ export interface components {
             cliente_id?: number;
             cliente_nombre?: string;
         };
+        AprobacionPromesa: {
+            /** @description Supervisor que aprobó */
+            por: number | null;
+            /** Format: date-time */
+            en: string;
+            nota: string | null;
+        };
         Asiento: {
             id: number;
             /** Format: date */
@@ -2788,6 +2795,20 @@ export interface components {
             reabierto_por: number | null;
             reabierto_por_nombre: string | null;
             motivo_reapertura: string | null;
+        };
+        CierrePromesa: {
+            /** @enum {string} */
+            estado: "cumplida" | "incumplida" | "cancelada" | "rechazada";
+            /** Format: date-time */
+            en: string;
+            /** @description Rechazo o cancelación (operador, o "venció sin aprobación") */
+            motivo?: string;
+            /** @description Quién la rechazó o canceló */
+            por?: number | null;
+            /** @description Cumplida o incumplida: lo pagado mientras estuvo activa */
+            pagado?: components["schemas"]["Dinero"];
+            /** @description Cumplida o incumplida: deuda vencida al resolverse */
+            deuda_vencida?: components["schemas"]["Dinero"];
         };
         Cliente: {
             id: number;
@@ -3028,6 +3049,12 @@ export interface components {
              */
             estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
         };
+        DeudaEvaluada: {
+            pendiente: components["schemas"]["Dinero"];
+            vencida: components["schemas"]["Dinero"];
+            pagado_pendientes: components["schemas"]["Dinero"];
+            facturas_vencidas: number;
+        };
         /**
          * @description Monto en quetzales con 2 decimales, como string
          * @example 150.00
@@ -3153,6 +3180,30 @@ export interface components {
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        EvaluacionPromesa: {
+            /** @enum {string} */
+            resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
+            /**
+             * @description La primera que falló (rechazada), requiere_aprobacion (pendiente) o null (aprobada)
+             * @enum {string|null}
+             */
+            regla: "habilitadas" | "canal_permitido" | "sin_deuda" | "plazo_max_dias" | "no_exceder_siguiente_facturacion" | "deuda_maxima" | "abono_inicial_pct" | "antiguedad_minima_dias" | "cumplimiento_minimo_pct" | "bloqueo_tras_incumplida_dias" | "max_por_periodo" | "requiere_aprobacion" | null;
+            motivo: string;
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            evaluada_en: string;
+            /** @description Reglas revisadas en orden; termina en la que decidió */
+            reglas: components["schemas"]["ReglaEvaluada"][];
+            deuda: components["schemas"]["DeudaEvaluada"];
+            historial: components["schemas"]["HistorialPromesas"];
+            /** Format: date */
+            siguiente_facturacion: string | null;
+            /** @description Al aprobar una pendiente */
+            aprobacion?: components["schemas"]["AprobacionPromesa"];
+            /** @description Al cumplirse, incumplirse, rechazarse o cancelarse */
+            cierre?: components["schemas"]["CierrePromesa"];
+        };
         /** @description Excepciones a la plantilla de facturación del servicio */
         ExcepcionesServicio: {
             dia?: number;
@@ -3242,6 +3293,13 @@ export interface components {
             cantidad: number;
             /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
+        };
+        HistorialPromesas: {
+            /** @description Cuántas promesas resueltas se miran */
+            ventana: number;
+            resueltas: number;
+            cumplidas: number;
+            cumplimiento_pct: number | null;
         };
         Ipv6Bloque: {
             id: number;
@@ -3799,7 +3857,7 @@ export interface components {
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
             aprobada_por: number | null;
-            /** @description resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar */
+            /** @description Forma estable: components.schemas.EvaluacionPromesa (Schema<"EvaluacionPromesa">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md */
             resultado_evaluacion: {
                 [key: string]: unknown;
             } | null;
@@ -3855,6 +3913,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ReglaEvaluada: {
+            /**
+             * @description Nombre estable de la regla (contratos/promesas.md)
+             * @enum {string}
+             */
+            regla: "habilitadas" | "canal_permitido" | "sin_deuda" | "plazo_max_dias" | "no_exceder_siguiente_facturacion" | "deuda_maxima" | "abono_inicial_pct" | "antiguedad_minima_dias" | "cumplimiento_minimo_pct" | "bloqueo_tras_incumplida_dias" | "max_por_periodo" | "requiere_aprobacion";
+            ok: boolean;
+            /** @description Lo medido (días, monto "0.00", cantidad, %) */
+            valor: string | number | boolean | null;
+            /** @description Límite aplicado (null = sin límite) */
+            limite: string | number | boolean | null;
+            /**
+             * @description general o el canal cuyo límite reemplazó al general
+             * @enum {string}
+             */
+            origen: "general" | "portal" | "ia" | "operador" | "supervisor";
+            /** @description Explicación para la pantalla */
+            detalle: string;
+            /** @description Solo en la simulación: false si la configuración no la exige */
+            aplica?: boolean;
         };
         ReglaSimulada: {
             regla: string;
