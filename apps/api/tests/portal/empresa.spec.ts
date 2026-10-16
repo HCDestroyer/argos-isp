@@ -13,7 +13,7 @@ import { vistaDeEjemplo } from '#portal/documentos/variables'
  */
 
 const CUENTAS: CuentaDeposito[] = [
-    { banco: 'Banco Industrial', alias: 'Monetaria ArgosIsp', numero: '123-456789-0', moneda: 'GTQ' },
+    { id: 1, banco: 'Banco Industrial', alias: 'Monetaria ArgosIsp', numero: '123-456789-0', moneda: 'GTQ' },
 ]
 
 test.group('Empresa: configuración editable', (group) => {
@@ -161,11 +161,17 @@ test.group('Empresa: configuración editable', (group) => {
         assert.notInclude(numeros, dolares.numero)
         assert.deepEqual(
             cuentas.find((c) => c.numero === visible.numero),
-            { banco: 'Banrural', alias: visible.alias, numero: visible.numero, moneda: 'GTQ' },
+            {
+                id: visible.id,
+                banco: 'Banrural',
+                alias: visible.alias,
+                numero: visible.numero,
+                moneda: 'GTQ',
+            },
         )
         for (const cuenta of cuentas) {
             assert.equal(cuenta.moneda, 'GTQ')
-            assert.sameMembers(Object.keys(cuenta), ['banco', 'alias', 'numero', 'moneda'])
+            assert.sameMembers(Object.keys(cuenta), ['id', 'banco', 'alias', 'numero', 'moneda'])
         }
     })
 })

@@ -21,6 +21,7 @@ import {
     SOLICITUD_POR_IP_FIXTURE,
 } from './cuenta'
 import { EMPRESA_FIXTURE } from './empresa'
+import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import {
     condicionesConPromesaFixture,
     condicionesFixture,
@@ -67,6 +68,29 @@ const empresa: { respuesta: Schema<'EmpresaPublica'> | null } = { respuesta: EMP
 
 export function fijarEmpresaFixture(respuesta: Schema<'EmpresaPublica'> | null): void {
     empresa.respuesta = respuesta
+}
+
+/**
+ * Comprobante en fixtures: `fijarComprobanteFixture` en pruebas o `?comprobante=duplicada|archivo`
+ * en la URL (solo desarrollo). Por defecto se recibe; los recibidos se agregan a la lista.
+ */
+type EscenarioComprobante = 'recibido' | 'duplicada' | 'archivo'
+const comprobantes: { escenario: EscenarioComprobante | null, recibidos: Schema<'PortalComprobante'>[] } = {
+    escenario: null,
+    recibidos: [],
+}
+
+export function fijarComprobanteFixture(escenario: EscenarioComprobante | null): void {
+    comprobantes.escenario = escenario
+    comprobantes.recibidos = []
+}
+
+function escenarioComprobante(): EscenarioComprobante {
+    if (comprobantes.escenario) {
+        return comprobantes.escenario
+    }
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('comprobante')
+    return pedido === 'duplicada' || pedido === 'archivo' ? pedido : 'recibido'
 }
 
 /** Sesión del portal simulada. */
@@ -197,6 +221,52 @@ export const rutasFixture: RutasFixture = {
             status: 201,
             cuerpo: promesaSolicitadaFixture(escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
         }
+    },
+    'GET /api/v1/portal/bancos': () => ({ status: 200, cuerpo: BANCOS_FIXTURE }),
+    'GET /api/v1/portal/comprobantes': conSesion(() => pagina([...comprobantes.recibidos, ...COMPROBANTES_FIXTURE])),
+    'POST /api/v1/portal/comprobantes': ({ cuerpo }) => {
+        const datos = (cuerpo ?? {}) as Record<string, string | File | undefined>
+        if (datos.servicio_id !== undefined && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        const escenario = escenarioComprobante()
+        if (escenario === 'duplicada') {
+            return problema(
+                409,
+                'referencia_duplicada',
+                'Referencia duplicada',
+                'Ya recibimos un pago o comprobante con esa referencia para esa cuenta. Si ya lo enviaste, espera la revisión; si no, revisa el número de la boleta.',
+            )
+        }
+        if (escenario === 'archivo') {
+            return {
+                status: 422,
+                cuerpo: {
+                    type: 'urn:argosisp:problema:validacion',
+                    title: 'Datos inválidos',
+                    status: 422,
+                    detail: 'Revisa los datos del comprobante',
+                    errors: [{ field: 'archivo', rule: 'tipo', message: 'Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.' }],
+                } satisfies Problem,
+            }
+        }
+        const cuenta = EMPRESA_FIXTURE.cuentas_deposito.find(c => String(c.id) === datos.cuenta_bancaria_id)
+        const banco = BANCOS_FIXTURE.find(b => String(b.id) === datos.banco_origen_id)
+        const archivo = datos.archivo instanceof File ? datos.archivo : null
+        const recibido = comprobanteFixture({
+            id: 100 + comprobantes.recibidos.length,
+            metodo: (datos.metodo as Schema<'PortalComprobante'>['metodo'] | undefined) ?? 'deposito',
+            cuenta_destino: cuenta ? `${cuenta.banco} · ${cuenta.alias}` : 'Cuenta',
+            banco_origen: banco?.nombre ?? null,
+            referencia: String(datos.referencia ?? ''),
+            monto: String(datos.monto ?? '0.00'),
+            fecha_deposito: String(datos.fecha_deposito ?? ''),
+            archivo_tipo: archivo?.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg',
+            archivo_nombre: archivo?.name ?? null,
+            created_at: new Date().toISOString(),
+        })
+        comprobantes.recibidos.unshift(recibido)
+        return { status: 201, cuerpo: recibido }
     },
     'PUT /api/v1/portal/contacto': ({ cuerpo }) => {
         if (!sesion.abierta) {

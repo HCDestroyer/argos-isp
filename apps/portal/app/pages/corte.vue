@@ -5,8 +5,8 @@
  * muestra nombre parcial, estado y montos.
  *
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Día 4: solicitar promesa
- * de pago (tarea 4, `PromesaSolicitar`); el comprobante llega en otra tanda y el pago en línea en
- * la semana 2 (mientras, esos botones se ven apagados).
+ * de pago (tarea 4, `PromesaSolicitar`) y subir el comprobante de depósito (tarea 5,
+ * `ComprobanteSubir`). El pago en línea llega en la semana 2 (mientras, ese botón se ve apagado).
  *
  * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
@@ -26,6 +26,14 @@ const retirado = computed(() => corte.value?.estado === 'retirado')
 
 const verDeposito = ref(false)
 const verPromesa = ref(false)
+const verComprobante = ref(false)
+
+/** Último comprobante enviado desde esta página: queda en revisión; al aprobarlo, el servicio vuelve. */
+const comprobante = ref<ComprobantePortal | null>(null)
+function comprobanteEnviado(enviado: ComprobantePortal) {
+    comprobante.value = enviado
+    vigilarEstado()
+}
 
 /** Última promesa enviada desde esta página (aprobada o pendiente; la rechazada se ve en el modal). */
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -137,6 +145,16 @@ const hayDatosDeposito = computed(() => !empresa.value
             />
 
             <UAlert
+                v-if="comprobante"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-file-check"
+                title="Recibimos tu comprobante, lo revisaremos"
+                :description="`${formatearQuetzales(comprobante.monto)} · Ref. ${comprobante.referencia}. Al aprobarlo se reactiva tu servicio.`"
+                data-testid="comprobante-recibido"
+            />
+
+            <UAlert
                 v-if="promesa?.resultado === 'aprobada'"
                 color="success"
                 variant="subtle"
@@ -196,13 +214,14 @@ const hayDatosDeposito = computed(() => !empresa.value
                     @click="verDeposito = true"
                 />
                 <UButton
-                    label="Subir comprobante de depósito"
+                    data-testid="subir-comprobante"
+                    label="Subir comprobante de pago"
                     icon="i-lucide-upload"
                     color="neutral"
                     variant="outline"
                     size="xl"
                     block
-                    disabled
+                    @click="verComprobante = true"
                 />
                 <UButton
                     v-if="puedePedirPromesa"
@@ -215,9 +234,6 @@ const hayDatosDeposito = computed(() => !empresa.value
                     block
                     @click="verPromesa = true"
                 />
-                <p class="text-center text-xs text-muted">
-                    Subir el comprobante estará disponible pronto.
-                </p>
             </div>
 
             <CorteEstadoEnVivo
@@ -271,6 +287,10 @@ const hayDatosDeposito = computed(() => !empresa.value
         <PromesaSolicitar
             v-model:open="verPromesa"
             @resultado="promesaResuelta"
+        />
+        <ComprobanteSubir
+            v-model:open="verComprobante"
+            @enviado="comprobanteEnviado"
         />
     </div>
 </template>

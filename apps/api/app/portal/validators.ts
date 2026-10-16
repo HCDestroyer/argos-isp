@@ -110,3 +110,27 @@ export const solicitarPromesaValidator = vine.compile(
 
 /** `GET /portal/promesas/condiciones`: mismo criterio de identificación que `POST /portal/promesas`. */
 export const condicionesPromesaValidator = vine.compile(vine.object({ servicio_id: servicioDeLaSesion() }))
+
+/**
+ * `POST /portal/comprobantes` (tarea 5), `multipart/form-data`: estos campos más el archivo
+ * `archivo` (foto JPG, PNG o WebP, o PDF, hasta 5 MB; lo valida `RegistrarComprobante` por el
+ * contenido). Los campos llegan como texto y los vacíos como `null`. Mismo criterio de
+ * identificación que la promesa.
+ */
+export const subirComprobanteValidator = vine.compile(
+    vine.object({
+        metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const),
+        cuenta_bancaria_id: idEntidad().meta({
+            description: 'id de una de `cuentas_deposito` (GET /portal/empresa)',
+        }),
+        banco_origen_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Solo con transferencia y ACH (catálogo GET /portal/bancos)' }),
+        referencia: vine.string().trim().minLength(1).maxLength(100),
+        monto: dinero(),
+        fecha_deposito: fechaIso(),
+        nota: vine.string().trim().maxLength(500).nullable().optional(),
+        servicio_id: servicioDeLaSesion(),
+    }),
+)

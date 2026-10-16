@@ -3,7 +3,8 @@ import type { TabsItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Portal autenticado: saldo y servicios arriba; facturas, pagos, promesas y datos en pestañas.
+ * Portal autenticado: saldo y servicios arriba; facturas, pagos (con los comprobantes de depósito
+ * enviados), promesas y datos en pestañas.
  * Sin sesión (401) manda a `/entrar`. Si la cuenta no se puede leer, muestra el error con
  * "Reintentar" y ningún monto.
  */
@@ -41,6 +42,12 @@ function contactoActualizado(contacto: ContactoPortal) {
 function admitePromesa(servicio: { estado: string, promesa_activa: boolean, monto_adeudado: string }) {
     return servicio.estado !== 'retirado' && !servicio.promesa_activa && new Decimal(servicio.monto_adeudado).greaterThan(0)
 }
+
+/** Servicio al que se asocia un comprobante: el primero con saldo (o el primero). Solo informativo para A3. */
+const servicioComprobante = computed(() => {
+    const servicios = cuenta.value?.servicios ?? []
+    return (servicios.find(s => new Decimal(s.monto_adeudado).greaterThan(0)) ?? servicios[0])?.id
+})
 
 const verPromesa = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
@@ -197,7 +204,21 @@ async function salir() {
                     <CuentaFacturas />
                 </template>
                 <template #pagos>
-                    <CuentaPagos />
+                    <div class="flex flex-col gap-6">
+                        <CuentaComprobantes :servicio-id="servicioComprobante" />
+                        <section
+                            class="flex flex-col gap-3"
+                            aria-labelledby="titulo-pagos"
+                        >
+                            <h2
+                                id="titulo-pagos"
+                                class="text-sm font-semibold text-highlighted"
+                            >
+                                Pagos registrados
+                            </h2>
+                            <CuentaPagos />
+                        </section>
+                    </div>
                 </template>
                 <template #promesas>
                     <CuentaPromesas />
