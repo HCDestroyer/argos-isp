@@ -19,13 +19,23 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 - Un solo relay activo a la vez (lock en Redis `<COLAS_PREFIJO>:lock:eventos-relay` con dueño y renovación, regla 6).
 - Implementación (A1, tarea 10): `apps/api/app/shared/relay_outbox.ts`, comando `node ace eventos:relay` (que además consume el grupo `aaa-cache`; `--sin-aaa-cache` lo apaga). El orden es el de `id` dentro de cada lote; una transacción que confirma tarde puede publicar un `id` menor después de uno mayor.
 
+## Eventos fuera de la tabla de `CLAUDE.md`
+
+El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` + `EVENTOS`). Eventos agregados después de la tabla de `CLAUDE.md` (pendiente de que el líder los pase a esa tabla):
+
+| Evento | Emite | Payload | Lo consume |
+| --- | --- | --- | --- |
+| `sesion.desconexion_solicitada` | A2 (`DesconectarSesion`, `DesconectarServicio`) | `sesion_id`, `servicio_id` (null si el `user_ppp` no existe), `nas_ip`, `acct_session_id`, `user_ppp`, `motivo` | `coa`: Disconnect-Request a esa sesión si sigue abierta; envío y respuesta en `audit.red` (`comando.evento` = este nombre, `comando.razon` = `manual: <motivo>`), `coa.fallido` si no hay ACK |
+
+`coa.fallido` admite `servicio_id: null` solo en una desconexión manual de una sesión sin servicio conocido.
+
 ## Consumo
 
 - Cada consumidor usa su propio **grupo** de Redis Streams sobre `argos:eventos` (`XREADGROUP` + `XACK`). Nombres de grupo:
 
 | Grupo | Dueño | Eventos que le interesan |
 | --- | --- | --- |
-| `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada` |
+| `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
 | `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y cambios de plan (reescribe `aaa:user:<user_ppp>`) |

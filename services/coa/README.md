@@ -8,6 +8,7 @@ coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configurac
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `servicio.estado_cambiado`                  | `coa.fallido` `{servicio_id, nas_ip, tipo: coa\|disconnect, error}` cuando una sesión no recibe ACK |
 | `servicio.config_cambiada`                  |                                                                                                     |
+| `sesion.desconexion_solicitada`             | (mismo `coa.fallido`; `servicio_id` null si la sesión no tiene servicio)                            |
 
 Consumo según `.claude/integration/contratos/eventos.md`: `XREADGROUP` + `XACK`; si el proceso cae relee sus pendientes al arrancar; lo que lleva 60 s sin confirmar se reclama con `XAUTOCLAIM`. Un evento que falla por Postgres no se confirma y se reintenta; los siguientes del mismo servicio esperan detrás de él. Un payload ilegible o fuera del catálogo se confirma y se descarta.
 
@@ -24,6 +25,7 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 | → `retirado`                                     | Disconnect | — (al reconectar `aaa` lo rechaza)                                                                     |
 | config con `ips`, `prefijo_v6` o `router`        | Disconnect | — (al reconectar trae la IP, el prefijo o el NAS nuevos)                                               |
 | config solo con `plan`                           | CoA        | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido (se aplica al reactivar)              |
+| `sesion.desconexion_solicitada` (panel o API)    | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`   |
 
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
 - Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).

@@ -74,7 +74,17 @@ export interface CatalogoEventos {
     // aaa (A2)
     'sesion.iniciada': PayloadSesion
     'sesion.terminada': PayloadSesion
-    'coa.fallido': { servicio_id: number; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
+    /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
+    'sesion.desconexion_solicitada': {
+        sesion_id: number
+        servicio_id: number | null
+        nas_ip: string
+        acct_session_id: string
+        user_ppp: string
+        motivo: string
+    }
+    /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
+    'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
     'aaa.caido': { nodo: string; desde: string }
 
     // billing (A3)
@@ -116,6 +126,7 @@ export const EVENTOS = [
     'asignacion.cambiada',
     'sesion.iniciada',
     'sesion.terminada',
+    'sesion.desconexion_solicitada',
     'coa.fallido',
     'aaa.caido',
     'factura.emitida',
