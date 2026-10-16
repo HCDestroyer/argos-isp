@@ -59,6 +59,17 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
 
+## Cierre mensual (`cierres.ts`)
+
+| Acción                  | Archivo                      | Permiso                 | Qué hace                                                                                                                                                                                  |
+| ----------------------- | ---------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `libro.cerrar_periodo`  | `actions/cerrar_periodo.ts`  | `libro.cerrar_periodo`  | `cerrarPeriodo(anio, mes)`: solo meses terminados (422 `periodo_en_curso`), 409 `periodo_cerrado` si ya lo está. Guarda el resumen del mes (asientos, debe, haber, movimiento por cuenta) |
+| `libro.reabrir_periodo` | `actions/reabrir_periodo.ts` | `libro.reabrir_periodo` | Con motivo obligatorio; agrega `ledger.reaperturas_mensuales` (no borra el cierre). 409 `periodo_abierto`. Se puede volver a cerrar (cierre nuevo)                                        |
+
+- Un mes está cerrado si tiene un cierre sin reapertura: `ledger.periodo_cerrado(fecha)`, la misma función en la acción (`registrarAsiento`) y en los triggers de asientos y movimientos. Después del cierre ningún asiento puede tener fecha en el mes, **ni siquiera un reverso**: `RevertirAsiento` usa la fecha de hoy (periodo abierto) y con una fecha del mes cerrado responde 422.
+- `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
+- `cerrar_periodo` está en `contabilidad`; `reabrir_periodo` solo en `admin`.
+
 ## Egresos (`egresos.ts`)
 
 | Acción              | Archivo                       | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

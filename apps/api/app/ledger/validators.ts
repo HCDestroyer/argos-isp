@@ -100,3 +100,22 @@ export const listarEgresosValidator = vine.compile(
         cuenta_bancaria_id: idEntidad().optional(),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Cierre mensual
+|--------------------------------------------------------------------------
+*/
+
+const periodo = {
+    anio: vine.number().withoutDecimals().range([2000, 2100]),
+    mes: vine.number().withoutDecimals().range([1, 12]),
+}
+
+export const cerrarPeriodoValidator = vine.compile(vine.object(periodo))
+
+export const reabrirPeriodoValidator = vine.compile(vine.object({ ...periodo, motivo: motivo() }))
+
+export const listarCierresValidator = vine.compile(
+    vine.object({ ...reglasPaginacion, estado: vine.enum(['cerrado', 'reabierto'] as const).optional() }),
+)

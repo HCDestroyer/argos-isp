@@ -6,7 +6,19 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
-import { Asiento, Caja, CajaTurno, CategoriaEgreso, Cuenta, Egreso, Mayor } from '#ledger/esquemas'
+import {
+    Asiento,
+    Caja,
+    CajaTurno,
+    CategoriaEgreso,
+    CierrePeriodo,
+    Cuenta,
+    Egreso,
+    Mayor,
+} from '#ledger/esquemas'
+import { listarCierres } from '#ledger/cierres'
+import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import { dimensionesDeEgreso, listarCategoriasEgreso, listarEgresos, verEgreso } from '#ledger/egresos'
 import { cajaPrincipalId } from '#billing/pagos'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
@@ -201,4 +213,46 @@ const egresos: Ruta[] = [
     }),
 ]
 
-export default [...cajas, ...libro, ...egresos]
+const periodos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/periodos',
+        operacion: 'libroPeriodos',
+        resumen: 'Cierres mensuales y reaperturas (el más reciente primero)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.listarCierresValidator,
+        respuesta: { status: 200, descripcion: 'Página de cierres', esquema: pagina(CierrePeriodo) },
+        handler: (_ctx, { query }) => listarCierres(query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/periodos/cerrar',
+        operacion: 'libroCerrarPeriodo',
+        resumen: 'Cerrar un mes del libro',
+        etiqueta: 'libro',
+        permiso: 'libro.cerrar_periodo',
+        cuerpo: v.cerrarPeriodoValidator,
+        idempotente: true,
+        descripcion:
+            'Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.',
+        respuesta: { status: 201, descripcion: 'Mes cerrado', esquema: CierrePeriodo },
+        handler: (ctx, { cuerpo }) => new CerrarPeriodo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/periodos/reabrir',
+        operacion: 'libroReabrirPeriodo',
+        resumen: 'Reabrir un mes cerrado (con motivo)',
+        etiqueta: 'libro',
+        permiso: 'libro.reabrir_periodo',
+        cuerpo: v.reabrirPeriodoValidator,
+        idempotente: true,
+        descripcion:
+            'No borra el cierre: registra la reapertura con motivo (auditada). Se puede volver a cerrar. 409 periodo_abierto si el mes no está cerrado.',
+        respuesta: { status: 200, descripcion: 'Mes reabierto', esquema: CierrePeriodo },
+        handler: (ctx, { cuerpo }) => new ReabrirPeriodo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+]
+
+export default [...cajas, ...libro, ...egresos, ...periodos]

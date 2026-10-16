@@ -186,3 +186,25 @@ export const Egreso = definirEsquema(
         ...auditable,
     }),
 )
+
+export const CierrePeriodo = definirEsquema(
+    'CierrePeriodo',
+    objeto({
+        id,
+        periodo: { type: 'string', pattern: '^\\d{4}-\\d{2}$', description: 'YYYY-MM' },
+        estado: enumerado(['cerrado', 'reabierto']),
+        cerrado_en: instante,
+        cerrado_por: nulable(id),
+        cerrado_por_nombre: nulable(texto),
+        resumen: {
+            type: ['object', 'null'],
+            additionalProperties: true,
+            description:
+                'Al cerrar: desde, hasta, asientos, debe, haber y cuentas[] (codigo, nombre, debe, haber) del mes',
+        },
+        reabierto_en: nulable(instante),
+        reabierto_por: nulable(id),
+        reabierto_por_nombre: nulable(texto),
+        motivo_reapertura: nulable(texto),
+    }),
+)

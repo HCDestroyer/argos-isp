@@ -3,6 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
+import { periodoCerrado } from '#ledger/cierres'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -280,8 +281,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
 
     private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string) {
         const periodo = inicioDeMes(fecha)
-        const cierre = await trx.from('ledger.cierres_mensuales').where('periodo', periodo).first()
-        if (cierre) {
+        // misma regla que los triggers: hay un cierre del mes sin reapertura
+        if (await periodoCerrado(trx, fecha)) {
             throw new ReglaNegocio(
                 `Periodo ${periodo.slice(0, 7)} cerrado: no se registran asientos con fecha ${fecha}`,
                 'periodo_cerrado',
