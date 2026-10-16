@@ -1,5 +1,8 @@
 import { test } from '@japa/runner'
+import type { HttpContext } from '@adonisjs/core/http'
 import env from '#start/env'
+import { despachar, type Ruta } from '#shared/rutas'
+import { NoImplementado } from '#shared/errores'
 import { estado, usuarioConRoles } from '#tests/ayudas'
 
 const PROBLEM_JSON = 'application/problem+json; charset=utf-8'
@@ -26,19 +29,18 @@ test.group('ACL y endpoints sin implementar', () => {
         )
     })
 
-    test('con el permiso, un endpoint sin implementar responde 501 problem+json', async ({
-        client,
+    test('una ruta sin handler responde 501 problem+json (ya no queda ninguna en la API)', async ({
         assert,
     }) => {
-        const { token } = await usuarioConRoles(['soporte'])
-
-        const respuesta = await estado(client.get('/api/v1/sesiones').bearerToken(token), 501)
-        assert.equal(respuesta.header('content-type'), PROBLEM_JSON)
-        assert.deepEqual(respuesta.body(), {
+        const ruta = { operacion: 'pruebaSinHandler' } as unknown as Ruta
+        const ctx = { request: { body: () => ({}), qs: () => ({}) } } as unknown as HttpContext
+        const error = await despachar(ruta, ctx).catch((e: unknown) => e)
+        assert.instanceOf(error, NoImplementado)
+        assert.deepEqual((error as NoImplementado).toJSON(), {
             type: 'urn:argosisp:problema:no_implementado',
             title: 'No implementado',
             status: 501,
-            detail: 'La operación sesionesListar aún no está implementada',
+            detail: 'La operación pruebaSinHandler aún no está implementada',
         })
     })
 
