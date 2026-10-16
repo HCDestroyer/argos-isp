@@ -44,6 +44,10 @@ export const cuentas: Cuenta[] = [
     cuenta(13, '4.1.02', 'Recargos por mora', 'ingreso', 11, true),
     cuenta(14, '5', 'Gastos', 'gasto', null, false),
     cuenta(15, '5.1.02', 'Comisiones de pasarelas', 'gasto', 14, true),
+    // Subcuentas de las cuentas bancarias propias (`bancos/datos.ts`), como las crea A3.
+    cuenta(16, '1.1.02.02', 'Banco Industrial · Monetaria (****3456)', 'activo', 1, true),
+    cuenta(17, '1.1.02.03', 'Banco Industrial · Dólares (****7651)', 'activo', 1, true),
+    cuenta(18, '1.1.02.04', 'Banco G&T Continental · Cuenta anterior (****5678)', 'activo', 1, true),
 ]
 
 export const CUENTA_CXC = 7

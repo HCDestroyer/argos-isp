@@ -62,7 +62,7 @@ describe('cobro rápido · composables y reglas', () => {
     })
 
     it('esquema espejo de POST /pagos: monto, caja y referencia', () => {
-        const base = { monto: '150.00', metodo: 'caja' as const, caja_id: 1, referencia: '', nota: '' }
+        const base = { monto: '150.00', metodo: 'caja' as const, caja_id: 1, cuenta_bancaria_id: null, banco_origen_id: null, referencia: '', nota: '' }
         expect(esquemaCobro.safeParse(base).success).toBe(true)
         expect(esquemaCobro.safeParse({ ...base, monto: '12,50' }).success).toBe(false)
         expect(esquemaCobro.safeParse({ ...base, monto: '0.00' }).success).toBe(false)
@@ -70,7 +70,8 @@ describe('cobro rápido · composables y reglas', () => {
         // Sin caja elegida, la API usa la caja principal.
         expect(esquemaCobro.safeParse({ ...base, caja_id: null }).success).toBe(true)
         expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null }).success).toBe(false)
-        expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null, referencia: 'BI-1234' }).success).toBe(true)
+        expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null, referencia: 'BI-1234' }).success).toBe(false)
+        expect(esquemaCobro.safeParse({ ...base, metodo: 'deposito', caja_id: null, cuenta_bancaria_id: 1, referencia: 'BI-1234' }).success).toBe(true)
         expect(METODOS_COBRO.map(m => m.metodo)).not.toContain('pasarela')
     })
 
@@ -197,7 +198,7 @@ describe('cobro rápido · composables y reglas', () => {
         const cuenta = await useClientes().estadoCuenta(22)
         const pendiente = cuenta.ok ? resumenPendiente(cuenta.data.facturas_pendientes, hoyGuatemala()).pendiente : new Decimal(0)
         expect(pendiente.gt(0)).toBe(true)
-        const pago = await usePagos().registrar({ cliente_id: 22, metodo: 'deposito', monto: pendiente.toFixed(2), referencia: 'B-1' }, nuevaClaveIdempotencia())
+        const pago = await usePagos().registrar({ cliente_id: 22, metodo: 'deposito', monto: pendiente.toFixed(2), cuenta_bancaria_id: 1, referencia: 'B-1' }, nuevaClaveIdempotencia())
         expect(pago.ok).toBe(true)
         if (pago.ok) {
             const evaluado = pago.data.servicios?.find(s => s.servicio_id === servicio.id)

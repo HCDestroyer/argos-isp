@@ -11,6 +11,12 @@ interface Semilla {
     canal?: Cliente['canal_preferido']
 }
 
+/**
+ * Responsable de pago (A1, día 4): Carlos Enrique Monterroso (10) paga por Andrea Paola Gómez
+ * (12, suspendida) y Silvia Patricia Orellana (17, limitada). Un solo nivel.
+ */
+const RESPONSABLES: Record<number, number> = { 12: 10, 17: 10 }
+
 /** Clientes de ejemplo; el id es la posición + 1. Los ids 1 a 6 tienen la historia más completa. */
 const semillas: Semilla[] = [
     { nombre: 'María José Pérez López', nit: '1234567-8', zona: 1 },
@@ -79,6 +85,9 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         campos_personalizados: {},
         canal_preferido: semilla.canal ?? 'correo',
         telegram_chat_id: semilla.canal === 'telegram' ? `70012${indice}` : null,
+        // Como la API: siempre vienen; null si paga él mismo.
+        responsable_pago_id: RESPONSABLES[id] ?? null,
+        responsable_pago_nombre: RESPONSABLES[id] ? (semillas[(RESPONSABLES[id] ?? 0) - 1]?.nombre ?? null) : null,
         version: 1,
         created_at: creado,
         updated_at: creado,

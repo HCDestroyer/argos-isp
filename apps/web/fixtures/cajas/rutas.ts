@@ -2,15 +2,16 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, usuariosPorToken } from '../comun'
 
 type Turno = Schema<'CajaTurno'>
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 
-function reglaNegocio(codigo: string, detalle: string): RespuestaFixture {
-    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: 'Regla de negocio', status: 422, detail: detalle }
-    return { status: 422, cuerpo }
+/** Como `Conflicto` de la API (`abrirCaja`/`cerrarCaja`): 409 con `type` `urn:argosisp:problema:<codigo>`. */
+function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: titulo, status: 409, detail: detalle }
+    return { status: 409, cuerpo }
 }
 
 /**
@@ -45,7 +46,7 @@ export const rutasCajas: RutasFixture = {
             return datosInvalidos([{ field: 'fondo_inicial', message: 'Monto con hasta 2 decimales, sin comas', rule: 'regex' }])
         }
         if (caja.turno_abierto_id !== null) {
-            return reglaNegocio('turno_abierto', `La caja ${caja.nombre} ya tiene un turno abierto`)
+            return conflicto('turno_abierto', 'Turno abierto', `La caja ${caja.id} ya tiene el turno ${caja.turno_abierto_id} abierto`)
         }
         const momento = ahora()
         const turno: Turno = {
@@ -58,6 +59,8 @@ export const rutasCajas: RutasFixture = {
             contado: null,
             diferencia: null,
             motivo: null,
+            abierto_por: usuariosPorToken[solicitud.token ?? '']?.id ?? null,
+            cerrado_por: null,
             version: 1,
             created_at: momento,
             updated_at: momento,
@@ -79,7 +82,7 @@ export const rutasCajas: RutasFixture = {
         }
         const turno = bd.turnos.find(t => t.id === caja.turno_abierto_id)
         if (!turno) {
-            return reglaNegocio('turno_cerrado', `La caja ${caja.nombre} no tiene un turno abierto`)
+            return conflicto('sin_turno_abierto', 'Sin turno abierto', `La caja ${caja.id} no tiene un turno abierto`)
         }
         const esperado = esperadoDelTurno(turno)
         const diferencia = new Decimal(contado).minus(esperado)
@@ -94,6 +97,7 @@ export const rutasCajas: RutasFixture = {
             contado: new Decimal(contado).toFixed(2),
             diferencia: diferencia.toFixed(2),
             motivo: textoMotivo || null,
+            cerrado_por: usuariosPorToken[solicitud.token ?? '']?.id ?? null,
             version: turno.version + 1,
             updated_at: momento,
         })

@@ -57,7 +57,7 @@ describe('tarea 12 · caja', () => {
         expect(cajas.ok && cajas.data.find(c => c.id === 1)?.turno_abierto_id).toBeNull()
     })
 
-    it('abrir turno con fondo inicial; abrir dos veces es 422', async () => {
+    it('abrir turno con fondo inicial; abrir dos veces es 409', async () => {
         const api = useCajas()
         const turno = await api.abrir(3, '250.00', nuevaClaveIdempotencia())
         expect(turno.ok && turno.data.fondo_inicial).toBe('250.00')

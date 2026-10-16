@@ -33,6 +33,49 @@ const periodos = computed(() => new Map(props.facturas.map(f => [f.id, f])))
 const aplicado = computed(() => props.pago.aplicaciones.reduce((total, a) => total.plus(a.monto), new Decimal(0)))
 const aFavor = computed(() => new Decimal(props.pago.monto).minus(aplicado.value))
 
+/** Nombre de cada cliente que aparece en el pago: el pagador y los dueños de las facturas. */
+const nombres = computed(() => {
+    const mapa = new Map<number, string>([[props.cliente.id, props.cliente.nombre]])
+    for (const a of props.pago.aplicaciones) {
+        if (a.cliente_id !== undefined && a.cliente_nombre) {
+            mapa.set(a.cliente_id, a.cliente_nombre)
+        }
+    }
+    for (const s of [...props.servicios, ...props.reactivados]) {
+        if (s.cliente_nombre && !mapa.has(s.cliente_id)) {
+            mapa.set(s.cliente_id, s.cliente_nombre)
+        }
+    }
+    return mapa
+})
+
+/**
+ * Pago de terceros (A3): las aplicaciones agrupadas por dueño de la factura, el pagador primero.
+ * Sin `cliente_id` (API vieja) todo es del pagador.
+ */
+const gruposAplicacion = computed(() => {
+    const grupos = new Map<number, Schema<'AplicacionPago'>[]>()
+    for (const a of props.pago.aplicaciones) {
+        const dueno = a.cliente_id ?? props.cliente.id
+        grupos.set(dueno, [...(grupos.get(dueno) ?? []), a])
+    }
+    return [...grupos.entries()]
+        .sort(([a], [b]) => Number(b === props.cliente.id) - Number(a === props.cliente.id))
+        .map(([clienteId, aplicaciones]) => ({ clienteId, nombre: nombres.value.get(clienteId) ?? `Cliente #${clienteId}`, aplicaciones }))
+})
+const deTerceros = computed(() => gruposAplicacion.value.some(g => g.clienteId !== props.cliente.id))
+
+/** Servicios reactivados por cliente, con el nombre del dueño cuando no es el pagador. */
+const reactivadosPorCliente = computed(() => {
+    const grupos = new Map<number, Servicio[]>()
+    for (const s of props.reactivados) {
+        grupos.set(s.cliente_id, [...(grupos.get(s.cliente_id) ?? []), s])
+    }
+    return [...grupos.entries()]
+        .sort(([a], [b]) => Number(b === props.cliente.id) - Number(a === props.cliente.id))
+        .map(([clienteId, servicios]) => ({ clienteId, nombre: nombres.value.get(clienteId) ?? null, servicios }))
+})
+
 function periodo(facturaId: number): string {
     const factura = periodos.value.get(facturaId)
     if (!factura) {
@@ -84,11 +127,36 @@ function periodo(facturaId: number): string {
             <dd class="text-right">
                 {{ ETIQUETAS_METODO[pago.metodo] }}
             </dd>
+            <template v-if="pago.banco_origen_nombre">
+                <dt class="text-muted">
+                    Banco de origen
+                </dt>
+                <dd
+                    class="text-right"
+                    data-prueba="recibo-banco-origen"
+                >
+                    {{ pago.banco_origen_nombre }}
+                </dd>
+            </template>
+            <template v-if="pago.cuenta_bancaria_nombre">
+                <dt class="text-muted">
+                    Cuenta de destino
+                </dt>
+                <dd
+                    class="text-right"
+                    data-prueba="recibo-cuenta-destino"
+                >
+                    {{ pago.cuenta_bancaria_nombre }}
+                </dd>
+            </template>
             <template v-if="pago.referencia">
                 <dt class="text-muted">
-                    Referencia
+                    {{ etiquetaReferencia(pago.metodo) }}
                 </dt>
-                <dd class="break-all text-right font-mono">
+                <dd
+                    class="break-all text-right font-mono"
+                    data-prueba="recibo-referencia"
+                >
                     {{ pago.referencia }}
                 </dd>
             </template>
@@ -123,12 +191,27 @@ function periodo(facturaId: number): string {
                 Sin facturas pendientes: queda como saldo a favor.
             </p>
             <div
-                v-for="aplicacion in pago.aplicaciones"
-                :key="aplicacion.factura_id"
-                class="flex justify-between gap-3"
+                v-for="grupo in gruposAplicacion"
+                :key="grupo.clienteId"
+                class="flex flex-col gap-1"
+                :data-recibo-cliente="grupo.clienteId"
             >
-                <span>{{ periodo(aplicacion.factura_id) }}</span>
-                <span class="tabular-nums">{{ formatearQuetzales(aplicacion.monto) }}</span>
+                <p
+                    v-if="deTerceros"
+                    class="text-xs font-medium text-highlighted"
+                >
+                    {{ grupo.nombre }}<template v-if="grupo.clienteId !== cliente.id">
+                        · pagado por {{ cliente.nombre }}
+                    </template>
+                </p>
+                <div
+                    v-for="aplicacion in grupo.aplicaciones"
+                    :key="aplicacion.factura_id"
+                    class="flex justify-between gap-3"
+                >
+                    <span>{{ periodo(aplicacion.factura_id) }}</span>
+                    <span class="tabular-nums">{{ formatearQuetzales(aplicacion.monto) }}</span>
+                </div>
             </div>
             <div
                 v-if="aFavor.gt(0) && pago.aplicaciones.length"
@@ -149,18 +232,23 @@ function periodo(facturaId: number): string {
         <template v-if="reactivados.length || suspendidosManual.length">
             <USeparator type="dashed" />
             <div class="flex flex-col gap-1">
-                <p
-                    v-for="servicio in reactivados"
-                    :key="`r-${servicio.id}`"
-                    class="flex items-center gap-1.5 text-success"
-                    data-prueba="recibo-reactivado"
+                <template
+                    v-for="grupo in reactivadosPorCliente"
+                    :key="`rc-${grupo.clienteId}`"
                 >
-                    <UIcon
-                        name="i-lucide-circle-check"
-                        class="size-4 shrink-0"
-                    />
-                    <span>Servicio <span class="font-mono">{{ servicio.user_ppp }}</span> reactivado</span>
-                </p>
+                    <p
+                        v-for="servicio in grupo.servicios"
+                        :key="`r-${servicio.id}`"
+                        class="flex items-center gap-1.5 text-success"
+                        data-prueba="recibo-reactivado"
+                    >
+                        <UIcon
+                            name="i-lucide-circle-check"
+                            class="size-4 shrink-0"
+                        />
+                        <span>Servicio <span class="font-mono">{{ servicio.user_ppp }}</span> reactivado<template v-if="grupo.clienteId !== cliente.id && grupo.nombre"> · {{ grupo.nombre }}</template></span>
+                    </p>
+                </template>
                 <p
                     v-for="servicio in suspendidosManual"
                     :key="`m-${servicio.id}`"

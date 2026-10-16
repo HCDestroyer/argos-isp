@@ -38,6 +38,38 @@ const servicios = shallowRef<Servicio[]>([])
 const cargandoServicios = ref(false)
 const problemaServicios = ref<Problem | null>(null)
 
+/**
+ * Pago de terceros (A3, día 4): facturas de otros clientes que paga el mismo pagador. Los
+ * dependientes del pagador (responsable de pago, A1) se cargan solos como grupo plegado; el
+ * cajero puede agregar cualquier otro cliente. Cada grupo lee su estado de cuenta y servicios.
+ */
+interface GrupoCobro {
+    cliente: { id: number, nombre: string, nit_cui: string | null }
+    origen: 'dependiente' | 'agregado'
+    cuenta: EstadoCuenta | null
+    problema: Problem | null
+    cargando: boolean
+    servicios: Servicio[]
+    abierto: boolean
+}
+const grupos = ref<GrupoCobro[]>([])
+const problemaDependientes = ref<Problem | null>(null)
+const agregando = ref(false)
+const clienteAgregado = ref(0)
+const hoy = hoyGuatemala()
+
+function resumenGrupo(grupo: GrupoCobro): ResumenPendiente | null {
+    return grupo.cuenta ? resumenPendiente(grupo.cuenta.facturas_pendientes, hoy) : null
+}
+
+/** Todas las facturas en el orden de la pantalla: primero las del pagador, luego cada grupo. */
+const facturasPantalla = computed(() => [
+    ...(resumen.value?.facturas ?? []),
+    ...grupos.value.flatMap(g => resumenGrupo(g)?.facturas ?? []),
+])
+/** Servicios de todos los clientes en pantalla (pagador y grupos). */
+const serviciosPantalla = computed(() => [...servicios.value, ...grupos.value.flatMap(g => g.servicios)])
+
 // Cajas (método "caja"). Elegir caja es opcional: sin `caja_id`, la API usa la caja principal.
 const CAJA_PRINCIPAL = 'principal'
 const cajas = shallowRef<Caja[]>([])
@@ -57,9 +89,23 @@ const cajaElegida = computed({
     },
 })
 
+// Datos bancarios (depósito, transferencia, ACH, remesa): banco de origen y cuenta propia de destino.
+const bancos = shallowRef<Banco[]>([])
+const problemaBancos = ref<Problem | null>(null)
+const cuentasBancarias = shallowRef<CuentaBancaria[]>([])
+const problemaCuentas = ref<Problem | null>(null)
+/** Solo las activas en quetzales reciben pagos (una cuenta en USD responde 422). */
+const cuentasDestino = computed(() => cuentasBancarias.value.filter(c => c.activa && c.moneda === 'GTQ'))
+const itemsBanco = computed(() => bancos.value.map(b => ({ label: b.nombre, value: b.id })))
+const itemsCuenta = computed(() => cuentasDestino.value.map(c => ({
+    label: `${c.banco_nombre} · ${c.alias}`,
+    description: c.numero,
+    value: c.id,
+})))
+
 // Formulario
 const formulario = useTemplateRef('formulario')
-const estado = reactive<EntradaCobro>({ monto: '', metodo: 'caja', caja_id: null, referencia: '', nota: '' })
+const estado = reactive<EntradaCobro>({ monto: '', metodo: 'caja', caja_id: null, cuenta_bancaria_id: null, banco_origen_id: null, referencia: '', nota: '' })
 const enviando = ref(false)
 const problemaPago = ref<Problem | null>(null)
 let claveIdempotencia = nuevaClaveIdempotencia()
@@ -68,6 +114,26 @@ let claveIdempotencia = nuevaClaveIdempotencia()
 const pago = shallowRef<Pago | null>(null)
 const facturasAntes = shallowRef<EstadoCuenta['facturas_pendientes']>([])
 const seguimiento = useSeguimientoReactivacion()
+
+/** Campos del formulario: un 422 en otro campo (p. ej. `facturas.0`) se lista en el aviso. */
+const CAMPOS_COBRO = new Set(['monto', 'metodo', 'caja_id', 'cuenta_bancaria_id', 'banco_origen_id', 'referencia', 'nota'])
+const erroresSinCampo = computed(() => (problemaPago.value?.status === 422
+    ? (problemaPago.value.errors ?? []).filter(e => !CAMPOS_COBRO.has(e.field))
+    : []))
+
+/** Los selectores de Nuxt UI usan `undefined` para "sin elegir"; el esquema, `null`. */
+const bancoOrigen = computed<number | undefined>({
+    get: () => estado.banco_origen_id ?? undefined,
+    set: (valor) => {
+        estado.banco_origen_id = valor ?? null
+    },
+})
+const cuentaDestino = computed<number | undefined>({
+    get: () => estado.cuenta_bancaria_id ?? undefined,
+    set: (valor) => {
+        estado.cuenta_bancaria_id = valor ?? null
+    },
+})
 
 const itemsMetodo: SelectItem[] = METODOS_COBRO.map(m => ({ label: m.etiqueta, value: m.metodo, icon: m.icono }))
 
@@ -78,36 +144,128 @@ const montoValido = computed(() => /^\d{1,12}(\.\d{1,2})?$/.test(estado.monto.tr
  * Por defecto, las vencidas; el monto sugerido es la suma de las marcadas y sigue editable.
  */
 const marcadas = ref<number[]>([])
-const totalMarcadas = computed(() => (resumen.value ? sumaMarcadas(resumen.value.facturas, marcadas.value) : null))
-/** Cómo aplicará la API el monto escrito (pedidas primero, luego las demás, luego anticipo). */
+const totalMarcadas = computed(() => (resumen.value ? sumaMarcadas(facturasPantalla.value, marcadas.value) : null))
+/** Marcadas de otros clientes (pago de terceros): cuántas y cuánto suman. */
+const marcadasDeTerceros = computed(() => {
+    const propias = new Set((resumen.value?.facturas ?? []).map(f => f.id))
+    const ajenas = new Set(marcadas.value.filter(id => !propias.has(id)))
+    return { cuantas: ajenas.size, total: sumaMarcadas(facturasPantalla.value, [...ajenas]) }
+})
+/** Ayuda del monto: lo marcado y, con facturas de terceros, cuánto es de otros clientes. */
+const ayudaMonto = computed(() => {
+    if (!resumen.value) {
+        return undefined
+    }
+    const terceros = marcadasDeTerceros.value.cuantas ? ` (${formatearQuetzales(marcadasDeTerceros.value.total)} de otros clientes)` : ''
+    return `Marcadas ${formatearQuetzales(totalMarcadas.value)}${terceros} · vencido del cliente ${formatearQuetzales(resumen.value.vencido)} · pendiente ${formatearQuetzales(resumen.value.pendiente)}`
+})
+
+/** Cómo aplicará la API el monto escrito (pedidas primero, luego las demás del pagador, luego anticipo). */
 const distribucion = computed(() => (resumen.value && montoValido.value && marcadas.value.length
-    ? distribuirPago(new Decimal(estado.monto.trim()), resumen.value.facturas, marcadas.value)
+    ? distribuirPago(new Decimal(estado.monto.trim()), facturasPantalla.value, marcadas.value, resumen.value.facturas)
     : null))
 /** Sin facturas marcadas: cuánto quedaría debiendo, o el saldo a favor si paga de más. */
 const restante = computed(() => (resumen.value && montoValido.value && !marcadas.value.length ? resumen.value.pendiente.minus(new Decimal(estado.monto.trim())) : null))
 
-const nombresServicio = computed(() => new Map(servicios.value.map(s => [s.id, s.user_ppp])))
+const nombresServicio = computed(() => new Map(serviciosPantalla.value.map(s => [s.id, s.user_ppp])))
 
-function servicioDeFactura(factura: { servicio_id: number | null }): string | null {
-    if (factura.servicio_id === null) {
-        return null
-    }
-    return nombresServicio.value.get(factura.servicio_id) ?? `servicio ${factura.servicio_id}`
-}
-
-function marcar(facturaId: number, valor: boolean | 'indeterminate') {
-    if (!resumen.value) {
-        return
-    }
+function marcar(facturaId: number, valor: boolean) {
     const elegidas = new Set(marcadas.value)
-    if (valor === true) {
+    if (valor) {
         elegidas.add(facturaId)
     }
     else {
         elegidas.delete(facturaId)
     }
-    marcadas.value = resumen.value.facturas.filter(f => elegidas.has(f.id)).map(f => f.id)
+    marcadas.value = facturasPantalla.value.filter(f => elegidas.has(f.id)).map(f => f.id)
 }
+
+/** Marca o desmarca de una vez las facturas de un grupo (con casilla "todas"). */
+function marcarGrupo(grupo: GrupoCobro, valor: boolean) {
+    const ids = new Set((resumenGrupo(grupo)?.facturas ?? []).map(f => f.id))
+    const elegidas = new Set(marcadas.value.filter(id => !ids.has(id)))
+    if (valor) {
+        ids.forEach(id => elegidas.add(id))
+    }
+    marcadas.value = facturasPantalla.value.filter(f => elegidas.has(f.id)).map(f => f.id)
+}
+
+function estadoCasillaGrupo(grupo: GrupoCobro): boolean | 'indeterminate' {
+    const ids = (resumenGrupo(grupo)?.facturas ?? []).map(f => f.id)
+    const cuantas = ids.filter(id => marcadas.value.includes(id)).length
+    if (!cuantas) {
+        return false
+    }
+    return cuantas === ids.length ? true : 'indeterminate'
+}
+
+async function cargarGrupo(grupo: GrupoCobro) {
+    grupo.cargando = true
+    const [cuentaGrupo, serviciosGrupo] = await Promise.all([
+        puede('clientes.estado_cuenta') ? useClientes().estadoCuenta(grupo.cliente.id) : Promise.resolve(null),
+        puede('servicios.ver') ? useServicios().listar({ cliente_id: grupo.cliente.id, limit: 200 }) : Promise.resolve(null),
+    ])
+    grupo.cargando = false
+    grupo.cuenta = cuentaGrupo?.ok ? cuentaGrupo.data : null
+    grupo.problema = cuentaGrupo && !cuentaGrupo.ok ? cuentaGrupo.problema : null
+    grupo.servicios = serviciosGrupo?.ok ? serviciosGrupo.data.data : grupo.servicios
+}
+
+function nuevoGrupo(datos: GrupoCobro['cliente'], origen: GrupoCobro['origen']): GrupoCobro {
+    return { cliente: datos, origen, cuenta: null, problema: null, cargando: true, servicios: [], abierto: origen === 'agregado' }
+}
+
+/** Dependientes del pagador (`GET /clientes/:id/dependientes`), cada uno con sus pendientes. */
+async function cargarDependientes(pagadorId: number) {
+    problemaDependientes.value = null
+    const resultado = await useClientes().dependientes(pagadorId)
+    if (pagadorId !== clienteId.value) {
+        return
+    }
+    if (!resultado.ok) {
+        problemaDependientes.value = resultado.problema
+        return
+    }
+    const agregados = grupos.value.filter(g => g.origen === 'agregado' && !resultado.data.data.some(d => d.id === g.cliente.id))
+    grupos.value = [...resultado.data.data.map(d => nuevoGrupo({ id: d.id, nombre: d.nombre, nit_cui: d.nit_cui }, 'dependiente')), ...agregados]
+    await Promise.all(grupos.value.map(g => cargarGrupo(g)))
+}
+
+/** "Agregar facturas de otro cliente": otro grupo, abierto, con sus pendientes. */
+async function agregarCliente(otro: Cliente) {
+    agregando.value = false
+    clienteAgregado.value = 0
+    if (otro.id === clienteId.value || grupos.value.some(g => g.cliente.id === otro.id)) {
+        const existente = grupos.value.find(g => g.cliente.id === otro.id)
+        if (existente) {
+            existente.abierto = true
+        }
+        return
+    }
+    grupos.value.push(nuevoGrupo({ id: otro.id, nombre: otro.nombre, nit_cui: otro.nit_cui }, 'agregado'))
+    const grupo = grupos.value.at(-1)
+    if (grupo) {
+        await cargarGrupo(grupo)
+    }
+}
+
+function quitarGrupo(grupo: GrupoCobro) {
+    const ids = new Set((resumenGrupo(grupo)?.facturas ?? []).map(f => f.id))
+    marcadas.value = marcadas.value.filter(id => !ids.has(id))
+    grupos.value = grupos.value.filter(g => g !== grupo)
+}
+
+async function recargarGrupos() {
+    await Promise.all(grupos.value.map(g => cargarGrupo(g)))
+}
+
+/** Si una factura deja de estar en pantalla (pagada, grupo quitado), deja de estar marcada. */
+watch(facturasPantalla, (facturas) => {
+    const visibles = new Set(facturas.map(f => f.id))
+    if (marcadas.value.some(id => !visibles.has(id))) {
+        marcadas.value = marcadas.value.filter(id => visibles.has(id))
+    }
+})
 
 /** Al cambiar las marcadas, el monto vuelve a ser su suma (el cajero puede editarlo después). */
 watch(marcadas, () => {
@@ -128,8 +286,14 @@ const nombreCaja = computed(() => {
 const cajaPedida = ref<number | null>(null)
 const saldoAFavor = computed(() => (cuenta.value?.saldo_a_favor ? new Decimal(cuenta.value.saldo_a_favor) : null))
 
-/** Servicios a mostrar: los que sigue el seguimiento tras el pago, o los cargados. */
-const serviciosVista = computed(() => (pago.value && seguimiento.servicios.value.length ? seguimiento.servicios.value : servicios.value))
+/** Servicios del pagador a mostrar: los que sigue el seguimiento tras el pago, o los cargados. */
+const serviciosVista = computed(() => {
+    if (!pago.value || !seguimiento.servicios.value.length) {
+        return servicios.value
+    }
+    const propios = new Set(servicios.value.map(s => s.id))
+    return seguimiento.servicios.value.filter(s => propios.has(s.id) || s.cliente_id === cliente.value?.id)
+})
 const reactivados = computed(() => new Set(seguimiento.reactivados.value.map(s => s.id)))
 
 /** La caja con turno abierto del cajero; si no tiene, la principal (`null`). */
@@ -149,6 +313,30 @@ async function cargarCajas() {
     cajas.value = resultado.ok ? resultado.data : []
     problemaCajas.value = resultado.ok ? null : resultado.problema
     cajaPorDefecto()
+}
+
+async function cargarBancos() {
+    const resultado = await useBancos().listar()
+    bancos.value = resultado.ok ? resultado.data : []
+    problemaBancos.value = resultado.ok ? null : resultado.problema
+}
+
+async function cargarCuentasBancarias() {
+    if (!puede('cuentas_bancarias.ver')) {
+        return
+    }
+    const resultado = await useCuentasBancarias().listar({ activa: true })
+    cuentasBancarias.value = resultado.ok ? resultado.data : []
+    problemaCuentas.value = resultado.ok ? null : resultado.problema
+    cuentaPorDefecto()
+}
+
+/** Con una sola cuenta de destino posible, queda elegida. */
+function cuentaPorDefecto() {
+    if (estado.cuenta_bancaria_id !== null && cuentasDestino.value.some(c => c.id === estado.cuenta_bancaria_id)) {
+        return
+    }
+    estado.cuenta_bancaria_id = cuentasDestino.value.length === 1 ? (cuentasDestino.value[0]?.id ?? null) : null
 }
 
 async function cargarCuenta() {
@@ -178,6 +366,8 @@ function limpiarFormulario() {
     estado.monto = totalMarcadas.value?.gt(0) ? totalMarcadas.value.toFixed(2) : ''
     estado.metodo = 'caja'
     estado.referencia = ''
+    estado.banco_origen_id = null
+    cuentaPorDefecto()
     estado.nota = ''
     cajaPorDefecto()
     problemaPago.value = null
@@ -190,6 +380,9 @@ async function elegirCliente(id: number) {
     seguimiento.reiniciar()
     cuenta.value = null
     servicios.value = []
+    grupos.value = []
+    problemaDependientes.value = null
+    agregando.value = false
     problemaCliente.value = null
     problemaCuenta.value = null
     problemaServicios.value = null
@@ -204,7 +397,7 @@ async function elegirCliente(id: number) {
         cliente.value = resultado.ok ? resultado.data : null
         problemaCliente.value = resultado.ok ? null : resultado.problema
     }
-    await Promise.all([cargarCuenta(), cargarServicios()])
+    await Promise.all([cargarCuenta(), cargarServicios(), puede('clientes.ver') ? cargarDependientes(id) : Promise.resolve()])
     limpiarFormulario()
 }
 
@@ -220,7 +413,8 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         metodo: datos.metodo,
         monto: new Decimal(datos.monto).toFixed(2),
         referencia: datos.referencia || null,
-        caja_id: datos.metodo === 'caja' ? datos.caja_id : null,
+        // Solo los datos que pide el método: con otro, la API responde `no_aplica`.
+        ...datosBancarios(datos),
         nota: datos.nota || null,
         // En el orden de la pantalla; sin marcadas, la API aplica a la más antigua.
         ...(marcadas.value.length ? { facturas: [...marcadas.value] } : {}),
@@ -230,22 +424,29 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
     if (!resultado.ok) {
         problemaPago.value = resultado.problema
         // Un rechazo definitivo (4xx salvo 409 "en curso") estrena clave; un error de red o 5xx
-        // la conserva para que reintentar no cobre dos veces.
+        // la conserva para que reintentar no cobre dos veces. La referencia duplicada también es
+        // definitiva: el cajero corrige la referencia y eso ya es otro pago.
         const { status } = resultado.problema
-        if (status >= 400 && status < 500 && status !== 409) {
+        const duplicada = esReferenciaDuplicada(resultado.problema)
+        if ((status >= 400 && status < 500 && status !== 409) || duplicada) {
             claveIdempotencia = nuevaClaveIdempotencia()
         }
         if (status === 422) {
+            // Cada error junto a su campo; los de `facturas.<i>` van en el aviso de abajo.
             formulario.value?.setErrors(erroresDeFormulario(resultado.problema))
+        }
+        if (duplicada) {
+            formulario.value?.setErrors([{ name: 'referencia', message: 'Ya está registrada en otro pago con este método y cuenta. Revisa el número.' }])
         }
         return
     }
 
-    facturasAntes.value = cuenta.value?.facturas_pendientes ?? []
+    facturasAntes.value = [...(cuenta.value?.facturas_pendientes ?? []), ...grupos.value.flatMap(g => g.cuenta?.facturas_pendientes ?? [])]
     cajaPedida.value = datos.metodo === 'caja' ? datos.caja_id : null
     pago.value = resultado.data
-    // `Pago.servicios[]` trae cómo quedó cada servicio: la reactivación se ve ya. Sin él, se sondea.
-    seguimiento.iniciar(cliente.value.id, servicios.value, resultado.data.servicios)
+    // `Pago.servicios[]` trae cómo quedó cada servicio de cada dueño de factura: la reactivación
+    // se ve ya. Sin él, se sondean los del pagador.
+    seguimiento.iniciar(cliente.value.id, serviciosPantalla.value, resultado.data.servicios)
     const reactivadosAhora = seguimiento.reactivados.value.length
     toast.add({
         title: 'Pago registrado',
@@ -254,13 +455,24 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         color: 'success',
     })
     void cargarCuenta()
+    void recargarGrupos()
 }
 
 function nuevoCobro() {
     pago.value = null
     seguimiento.reiniciar()
     void cargarServicios()
+    void recargarGrupos()
     limpiarFormulario()
+}
+
+/** Servicios de un grupo tal como quedaron tras el pago (si hubo), para el estado y la insignia. */
+function serviciosDeGrupo(grupo: GrupoCobro): Servicio[] {
+    if (!pago.value) {
+        return grupo.servicios
+    }
+    const ids = new Set(grupo.servicios.map(s => s.id))
+    return seguimiento.servicios.value.filter(s => ids.has(s.id))
 }
 
 function imprimir() {
@@ -292,11 +504,16 @@ watch(() => estado.metodo, (metodo) => {
     if (metodo === 'caja') {
         cajaPorDefecto()
     }
+    if (pideDato(metodo, 'cuenta_bancaria_id')) {
+        cuentaPorDefecto()
+    }
 })
 
 onMounted(() => {
     window.addEventListener('keydown', alTeclear)
     void cargarCajas()
+    void cargarBancos()
+    void cargarCuentasBancarias()
     if (clienteId.value) {
         void elegirCliente(clienteId.value)
     }
@@ -431,49 +648,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                 <p class="text-xs text-muted">
                                     Marca las facturas que paga; se aplican en este orden.
                                 </p>
-                                <ul
-                                    class="flex flex-col divide-y divide-default rounded-md border border-default"
-                                    aria-label="Facturas pendientes"
-                                >
-                                    <li
-                                        v-for="factura in resumen.facturas"
-                                        :key="factura.id"
-                                        class="flex items-start gap-3 px-3 py-2 text-sm"
-                                        :class="facturaVencida(factura, hoyGuatemala()) ? 'border-l-2 border-l-error' : ''"
-                                        :data-factura="factura.id"
-                                    >
-                                        <UCheckbox
-                                            :model-value="marcadas.includes(factura.id)"
-                                            :aria-label="`Pagar el aviso ${factura.id}`"
-                                            class="mt-0.5"
-                                            @update:model-value="marcar(factura.id, $event)"
-                                        />
-                                        <div class="flex min-w-0 flex-1 flex-col">
-                                            <span class="text-highlighted">
-                                                Aviso #{{ factura.id }} · {{ etiquetaPeriodo(factura.periodo) }}
-                                            </span>
-                                            <span class="text-xs text-muted">
-                                                <template v-if="servicioDeFactura(factura)">{{ servicioDeFactura(factura) }} · </template>Vence {{ formatearFecha(factura.vence_en) }} · total {{ formatearQuetzales(factura.total) }}
-                                            </span>
-                                        </div>
-                                        <div class="flex shrink-0 flex-col items-end gap-1">
-                                            <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(saldoFactura(factura)) }}</span>
-                                            <UBadge
-                                                :label="facturaVencida(factura, hoyGuatemala()) ? 'Vencida' : ESTADOS_FACTURA[factura.estado].etiqueta"
-                                                :color="facturaVencida(factura, hoyGuatemala()) ? 'error' : ESTADOS_FACTURA[factura.estado].color"
-                                                variant="subtle"
-                                                size="sm"
-                                            />
-                                        </div>
-                                    </li>
-                                </ul>
-                                <p
-                                    v-if="totalMarcadas"
-                                    class="text-xs text-muted"
-                                    data-prueba="total-marcadas"
-                                >
-                                    {{ marcadas.length }} {{ marcadas.length === 1 ? 'marcada' : 'marcadas' }} · {{ formatearQuetzales(totalMarcadas) }}
-                                </p>
+                                <CobroFacturasLista
+                                    :facturas="resumen.facturas"
+                                    :marcadas="marcadas"
+                                    :servicios="nombresServicio"
+                                    @marcar="marcar"
+                                />
                             </div>
                             <p
                                 v-else
@@ -485,6 +665,158 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                 />
                                 No tiene avisos pendientes.
                             </p>
+
+                            <!-- Pago de terceros: dependientes del pagador y otros clientes agregados. -->
+                            <ProblemaAlerta
+                                v-if="problemaDependientes"
+                                :problema="problemaDependientes"
+                                :reintentar="() => cargarDependientes(clienteId)"
+                            />
+                            <div
+                                v-for="grupo in grupos"
+                                :key="grupo.cliente.id"
+                                class="flex flex-col gap-2 rounded-md border border-default bg-elevated/40 p-2"
+                                :data-grupo="grupo.cliente.id"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <UCheckbox
+                                        v-if="resumenGrupo(grupo)?.facturas.length"
+                                        :model-value="estadoCasillaGrupo(grupo)"
+                                        :aria-label="`Pagar todas las facturas de ${grupo.cliente.nombre}`"
+                                        class="ps-1"
+                                        @update:model-value="marcarGrupo(grupo, $event === true)"
+                                    />
+                                    <UButton
+                                        :icon="grupo.abierto ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                                        color="neutral"
+                                        variant="ghost"
+                                        class="min-w-0 flex-1 justify-start text-start"
+                                        :aria-expanded="grupo.abierto"
+                                        @click="grupo.abierto = !grupo.abierto"
+                                    >
+                                        <span class="flex min-w-0 flex-col">
+                                            <span class="truncate text-xs text-muted">
+                                                {{ grupo.origen === 'dependiente' ? 'Responsable de pago de:' : 'Facturas de otro cliente:' }}
+                                            </span>
+                                            <span class="truncate font-medium text-highlighted">{{ grupo.cliente.nombre }}</span>
+                                        </span>
+                                    </UButton>
+                                    <span
+                                        v-if="resumenGrupo(grupo)"
+                                        class="flex shrink-0 flex-col items-end text-xs"
+                                    >
+                                        <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(resumenGrupo(grupo)?.pendiente ?? null) }}</span>
+                                        <span :class="resumenGrupo(grupo)?.vencidas ? 'text-error' : 'text-muted'">
+                                            {{ resumenGrupo(grupo)?.facturas.length }} {{ resumenGrupo(grupo)?.facturas.length === 1 ? 'aviso' : 'avisos' }}<template v-if="resumenGrupo(grupo)?.vencidas"> · {{ resumenGrupo(grupo)?.vencidas }} {{ resumenGrupo(grupo)?.vencidas === 1 ? 'vencido' : 'vencidos' }}</template>
+                                        </span>
+                                    </span>
+                                    <UButton
+                                        v-if="grupo.origen === 'agregado'"
+                                        icon="i-lucide-x"
+                                        color="neutral"
+                                        variant="ghost"
+                                        size="xs"
+                                        :aria-label="`Quitar a ${grupo.cliente.nombre} de este cobro`"
+                                        @click="quitarGrupo(grupo)"
+                                    />
+                                </div>
+                                <template v-if="grupo.abierto">
+                                    <ProblemaAlerta
+                                        v-if="grupo.problema"
+                                        :problema="grupo.problema"
+                                        :reintentar="() => cargarGrupo(grupo)"
+                                        :reintentando="grupo.cargando"
+                                    />
+                                    <USkeleton
+                                        v-else-if="!resumenGrupo(grupo)"
+                                        class="h-12"
+                                    />
+                                    <CobroFacturasLista
+                                        v-else-if="resumenGrupo(grupo)?.facturas.length"
+                                        :facturas="resumenGrupo(grupo)?.facturas ?? []"
+                                        :marcadas="marcadas"
+                                        :servicios="nombresServicio"
+                                        :etiqueta="`Facturas pendientes de ${grupo.cliente.nombre}`"
+                                        @marcar="marcar"
+                                    />
+                                    <p
+                                        v-else
+                                        class="px-2 text-sm text-success"
+                                    >
+                                        No tiene avisos pendientes.
+                                    </p>
+                                    <div
+                                        v-if="serviciosDeGrupo(grupo).length"
+                                        class="flex flex-wrap gap-x-3 gap-y-1 px-2 pb-1"
+                                    >
+                                        <span
+                                            v-for="servicio in serviciosDeGrupo(grupo)"
+                                            :key="servicio.id"
+                                            class="flex items-center gap-1 text-xs"
+                                            :data-servicio="servicio.id"
+                                        >
+                                            <ULink
+                                                :to="`/servicios/${servicio.id}`"
+                                                class="font-mono text-highlighted hover:text-primary"
+                                            >
+                                                {{ servicio.user_ppp }}
+                                            </ULink>
+                                            <UBadge
+                                                v-if="reactivados.has(servicio.id)"
+                                                label="Servicio reactivado"
+                                                icon="i-lucide-party-popper"
+                                                color="success"
+                                                variant="solid"
+                                                size="sm"
+                                            />
+                                            <EstadoServicioBadge
+                                                :estado="servicio.estado"
+                                                size="sm"
+                                            />
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div class="flex flex-col gap-2">
+                                <UButton
+                                    v-if="!agregando"
+                                    label="Agregar facturas de otro cliente"
+                                    icon="i-lucide-user-plus"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    class="self-start"
+                                    @click="agregando = true"
+                                />
+                                <div
+                                    v-else
+                                    class="flex items-center gap-2"
+                                >
+                                    <ClienteSelector
+                                        v-model="clienteAgregado"
+                                        placeholder="Buscar otro cliente…"
+                                        aria-label="Buscar otro cliente para agregar sus facturas"
+                                        @elegido="agregarCliente"
+                                    />
+                                    <UButton
+                                        icon="i-lucide-x"
+                                        color="neutral"
+                                        variant="ghost"
+                                        aria-label="Cancelar"
+                                        @click="agregando = false"
+                                    />
+                                </div>
+                                <p
+                                    v-if="totalMarcadas && marcadas.length && !pago"
+                                    class="text-xs text-muted"
+                                    data-prueba="total-marcadas"
+                                >
+                                    {{ marcadas.length }} {{ marcadas.length === 1 ? 'marcada' : 'marcadas' }} · {{ formatearQuetzales(totalMarcadas) }}<template v-if="marcadasDeTerceros.cuantas">
+                                        · {{ marcadasDeTerceros.cuantas }} de otros clientes ({{ formatearQuetzales(marcadasDeTerceros.total) }})
+                                    </template>
+                                </p>
+                            </div>
                         </template>
                     </section>
 
@@ -593,7 +925,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     :pago="pago"
                     :cliente="cliente"
                     :facturas="facturasAntes"
-                    :servicios="servicios"
+                    :servicios="serviciosPantalla"
                     :caja="nombreCaja"
                     :cajero="usuario?.nombre ?? null"
                     :reactivados="seguimiento.reactivados.value"
@@ -620,6 +952,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 title="Registrar pago"
                 icon="i-lucide-banknote"
                 variant="outline"
+                class="lg:sticky lg:top-0"
             >
                 <UForm
                     ref="formulario"
@@ -633,7 +966,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         label="Monto"
                         name="monto"
                         required
-                        :help="resumen ? `Marcadas ${formatearQuetzales(totalMarcadas)} · vencido ${formatearQuetzales(resumen.vencido)} · pendiente ${formatearQuetzales(resumen.pendiente)}` : undefined"
+                        :help="ayudaMonto"
                     >
                         <UInput
                             v-model="estado.monto"
@@ -757,15 +1090,101 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     </UFormField>
 
                     <UFormField
-                        label="Referencia"
+                        v-if="pideDato(estado.metodo, 'banco_origen_id')"
+                        label="Banco de origen"
+                        name="banco_origen_id"
+                        required
+                        description="Banco desde el que el cliente envió el dinero"
+                    >
+                        <USelectMenu
+                            v-model="bancoOrigen"
+                            :items="itemsBanco"
+                            value-key="value"
+                            placeholder="Elegir banco…"
+                            icon="i-lucide-landmark"
+                            :search-input="{ placeholder: 'Buscar banco…' }"
+                            class="w-full"
+                            aria-label="Banco de origen"
+                        />
+                        <div
+                            v-if="problemaBancos"
+                            class="mt-1 flex flex-wrap items-center gap-x-2 text-sm"
+                            data-prueba="bancos-error"
+                        >
+                            <span class="text-error">No se pudo leer el catálogo de bancos ({{ problemaBancos.status }})</span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarBancos"
+                            />
+                        </div>
+                    </UFormField>
+
+                    <UFormField
+                        v-if="pideDato(estado.metodo, 'cuenta_bancaria_id')"
+                        label="Cuenta de destino"
+                        name="cuenta_bancaria_id"
+                        required
+                        description="Cuenta propia donde entró el dinero (activas, en quetzales)"
+                    >
+                        <USelect
+                            v-if="cuentasDestino.length"
+                            v-model="cuentaDestino"
+                            :items="itemsCuenta"
+                            placeholder="Elegir cuenta…"
+                            icon="i-lucide-wallet-cards"
+                            class="w-full"
+                            aria-label="Cuenta de destino"
+                        />
+                        <p
+                            v-else-if="!puede('cuentas_bancarias.ver')"
+                            class="text-sm text-error"
+                        >
+                            Te falta el permiso para ver las cuentas bancarias (cuentas_bancarias.ver).
+                        </p>
+                        <div
+                            v-else-if="problemaCuentas"
+                            class="flex flex-wrap items-center gap-x-2 text-sm"
+                            data-prueba="cuentas-error"
+                        >
+                            <span class="text-error">No se pudo leer las cuentas bancarias ({{ problemaCuentas.status }})</span>
+                            <UButton
+                                label="Reintentar"
+                                icon="i-lucide-refresh-cw"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                @click="cargarCuentasBancarias"
+                            />
+                        </div>
+                        <p
+                            v-else
+                            class="text-sm text-warning"
+                        >
+                            No hay cuentas bancarias activas en quetzales.
+                            <ULink
+                                v-if="puede('cuentas_bancarias.editar')"
+                                to="/configuracion/cuentas-bancarias"
+                                class="text-primary"
+                            >
+                                Crear una
+                            </ULink>
+                        </p>
+                    </UFormField>
+
+                    <UFormField
+                        :label="etiquetaReferencia(estado.metodo)"
                         name="referencia"
-                        :required="estado.metodo !== 'caja'"
-                        :hint="estado.metodo === 'caja' ? 'Opcional' : undefined"
+                        :required="pideDato(estado.metodo, 'referencia')"
+                        :hint="pideDato(estado.metodo, 'referencia') ? undefined : 'Opcional'"
                     >
                         <UInput
                             v-model="estado.referencia"
                             autocomplete="off"
-                            placeholder="No. de boleta, transferencia o autorización"
+                            :placeholder="estado.metodo === 'remesa' ? 'Código que dio la remesadora' : 'Tal como aparece en el comprobante'"
                             class="w-full"
                         />
                     </UFormField>
@@ -782,8 +1201,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         />
                     </UFormField>
 
+                    <UAlert
+                        v-if="problemaPago && esReferenciaDuplicada(problemaPago)"
+                        color="error"
+                        variant="subtle"
+                        icon="i-lucide-copy-x"
+                        title="Esa referencia ya se registró"
+                        :description="`${problemaPago.detail ?? ''}. No se cobró de nuevo: revisa el comprobante o busca el pago anterior en Pagos.`"
+                        data-prueba="referencia-duplicada"
+                    />
                     <ProblemaAlerta
-                        v-if="problemaPago && problemaPago.status !== 422"
+                        v-else-if="problemaPago && problemaPago.status !== 422"
                         :problema="problemaPago"
                     />
                     <UAlert
@@ -793,7 +1221,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         icon="i-lucide-circle-alert"
                         :title="problemaPago.title"
                         :description="problemaPago.detail ?? 'Corrige los campos marcados.'"
-                    />
+                    >
+                        <template
+                            v-if="erroresSinCampo.length"
+                            #description
+                        >
+                            <p>{{ problemaPago.detail ?? 'Corrige los campos marcados.' }}</p>
+                            <ul
+                                class="mt-1 list-disc ps-4"
+                                data-prueba="errores-sin-campo"
+                            >
+                                <li
+                                    v-for="error in erroresSinCampo"
+                                    :key="`${error.field}-${error.message}`"
+                                >
+                                    {{ error.message }}
+                                </li>
+                            </ul>
+                        </template>
+                    </UAlert>
 
                     <div class="flex flex-wrap items-center gap-2">
                         <UButton

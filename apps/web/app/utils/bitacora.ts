@@ -163,6 +163,16 @@ export function rutaEntidad(tipo: string | null, id: number | null): string | nu
 }
 
 /**
+ * Nombre actual de un campo de `audit.cambios`. Antes del 2026-10-16 la API separaba los dígitos
+ * (`string.snakeCase`) y las filas viejas no se reescriben (regla 4): `ipv_4` es `ipv4`,
+ * `prefijo_enlace_v_6` es `prefijo_enlace_v6`, `red_ipv_4_id` es `red_ipv4_id`, `pool_ipv_6_enlace`
+ * es `pool_ipv6_enlace`… Regla de `apps/api/app/core/README.md`: quitar el `_` antes de un dígito.
+ */
+export function nombreCampoCambio(campo: string): string {
+    return campo.replace(/_(?=\d)/g, '')
+}
+
+/**
  * Valor de un campo en el historial de cambios: `***` (dato sensible) tal cual, `null` como
  * "vacío", textos sin comillas y lo demás en JSON.
  */

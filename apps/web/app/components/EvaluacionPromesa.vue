@@ -13,6 +13,10 @@ const props = withDefaults(defineProps<{
 
 const evaluacion = computed(() => leerEvaluacion(props.promesa))
 const decision = computed(() => (evaluacion.value.decision ? DECISIONES[evaluacion.value.decision] : null))
+/** Lo último que pasó: cierre (rechazo o cancelación por un supervisor) o aprobación manual. */
+const ultimo = computed(() => evaluacion.value.otros.find(o => o.clave === 'cierre' && !o.mono)
+    ?? evaluacion.value.otros.find(o => o.clave === 'aprobacion' && !o.mono)
+    ?? null)
 </script>
 
 <template>
@@ -21,6 +25,11 @@ const decision = computed(() => (evaluacion.value.decision ? DECISIONES[evaluaci
         class="flex min-w-0 flex-col gap-0.5"
         data-prueba="evaluacion-compacta"
     >
+        <span
+            v-if="ultimo"
+            class="line-clamp-2 text-xs whitespace-normal text-highlighted"
+            data-prueba="ultimo-paso"
+        >{{ ultimo.clave === 'aprobacion' ? 'Aprobada' : 'Cierre' }}: {{ ultimo.valor }}</span>
         <span
             v-if="evaluacion.regla"
             class="truncate text-xs text-muted"
@@ -99,9 +108,9 @@ const decision = computed(() => (evaluacion.value.decision ? DECISIONES[evaluaci
             <DatoFicha
                 v-for="otro in evaluacion.otros"
                 :key="otro.clave"
-                :etiqueta="otro.clave"
+                :etiqueta="otro.etiqueta"
                 :valor="otro.valor"
-                mono
+                :mono="otro.mono"
             />
         </dl>
     </section>

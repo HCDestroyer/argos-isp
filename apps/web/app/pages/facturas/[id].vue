@@ -25,6 +25,38 @@ const cargandoAsientos = ref(false)
 const problemaAsientos = ref<Problem | null>(null)
 
 const anularAbierto = ref(false)
+const generandoPdf = ref(false)
+
+/**
+ * Abre el PDF del aviso de cobro (`GET /documentos/aviso-cobro/:facturaId`) en otra pestaña. La
+ * pestaña se abre antes de pedir el PDF para que el navegador no la bloquee; si falla, se cierra
+ * y el error sale en un toast.
+ */
+async function abrirAvisoPdf() {
+    if (!factura.value || generandoPdf.value) {
+        return
+    }
+    const ventana = window.open('', '_blank')
+    generandoPdf.value = true
+    const resultado = await useDocumentos().avisoCobro(factura.value.id)
+    generandoPdf.value = false
+    if (!resultado.ok) {
+        ventana?.close()
+        toast.add({ title: 'No se pudo generar el PDF', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    const url = URL.createObjectURL(resultado.data)
+    if (ventana) {
+        ventana.location.href = url
+    }
+    else {
+        const enlace = document.createElement('a')
+        enlace.href = url
+        enlace.download = `aviso-cobro-${factura.value.id}.pdf`
+        enlace.click()
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
 
 useHead(() => ({ title: `Factura #${route.params.id} · ArgosIsp` }))
 
@@ -219,14 +251,25 @@ onMounted(cargar)
                         </template>
                     </p>
                 </div>
-                <UButton
-                    v-if="puedeAnular"
-                    label="Anular"
-                    icon="i-lucide-ban"
-                    color="error"
-                    variant="outline"
-                    @click="anularAbierto = true"
-                />
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        label="Aviso de cobro (PDF)"
+                        icon="i-lucide-file-down"
+                        color="neutral"
+                        variant="outline"
+                        :loading="generandoPdf"
+                        data-prueba="aviso-pdf"
+                        @click="abrirAvisoPdf"
+                    />
+                    <UButton
+                        v-if="puedeAnular"
+                        label="Anular"
+                        icon="i-lucide-ban"
+                        color="error"
+                        variant="outline"
+                        @click="anularAbierto = true"
+                    />
+                </div>
             </div>
 
             <div class="grid gap-4 lg:grid-cols-2">

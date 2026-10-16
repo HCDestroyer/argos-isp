@@ -4,8 +4,9 @@ import * as z from 'zod'
 /**
  * Espejo de `crearServicioValidator` (apps/api/app/core/validators.ts) para el asistente de alta.
  *
- * Campos solo de la pantalla: `asignacion` (automática o IP fija) y `red_id` (para validar que la
- * IP fija cae en una red del router). La API no recibe la red: asigna de las redes del router.
+ * Campos solo de la pantalla: `asignacion` (automática o IP fija) y `red_id`. `red_id` se manda
+ * como `red_ipv4_id` (A1, día 4): con IP fija es la red de esa IP; en automática es opcional y,
+ * sin elegirla, la API toma la siguiente IP libre de cualquier red del router.
  */
 
 const PATRON_DINERO = /^\d{1,12}(\.\d{1,2})?$/
@@ -94,13 +95,20 @@ export function entradaServicioVacia(clienteId?: number): EntradaServicio {
     }
 }
 
+export interface OpcionesCuerpoServicio {
+    /**
+     * Sin `plantillas.ver` (técnico) el campo se **omite** y la API usa la plantilla por defecto;
+     * mandar `null` significaría "sin plantilla" (A1, día 4).
+     */
+    omitirPlantilla?: boolean
+}
+
 /** Salida validada → cuerpo de `POST /servicios`; solo manda lo que aplica al modo elegido. */
-export function cuerpoServicio(datos: SalidaServicio): CuerpoCrearServicio {
+export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoServicio = {}): CuerpoCrearServicio {
     const cuerpo: CuerpoCrearServicio = {
         cliente_id: datos.cliente_id,
         router_id: datos.router_id,
         plan_id: datos.plan_id,
-        plantilla_facturacion_id: datos.plantilla_facturacion_id,
         user_ppp: datos.user_ppp,
         pass_ppp: datos.pass_ppp,
         mac: datos.mac,
@@ -111,8 +119,14 @@ export function cuerpoServicio(datos: SalidaServicio): CuerpoCrearServicio {
         excluir_firewall: datos.excluir_firewall,
         ipv6_modo: datos.ipv6_modo,
     }
+    if (!opciones.omitirPlantilla) {
+        cuerpo.plantilla_facturacion_id = datos.plantilla_facturacion_id
+    }
     if (datos.asignacion === 'fija') {
         cuerpo.ipv4 = datos.ipv4
+    }
+    if (datos.red_id !== undefined) {
+        cuerpo.red_ipv4_id = datos.red_id
     }
     if (datos.ipv6_modo === 'duid') {
         cuerpo.ipv6_duid = datos.ipv6_duid

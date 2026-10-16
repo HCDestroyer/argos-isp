@@ -15,6 +15,7 @@ import {
     registrarAccion,
     usuariosPorToken,
 } from '../comun'
+import { nombreCuentaDestino } from '../bancos/datos'
 import { asientoPago, asientoReverso } from '../libro/datos'
 import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
@@ -25,7 +26,15 @@ type Pago = Schema<'Pago'>
 type ServicioEvaluado = Schema<'ServicioEvaluado'>
 type Errores = NonNullable<Problem['errors']>
 
-const METODOS: readonly Pago['metodo'][] = ['caja', 'pasarela', 'deposito', 'agente', 'debito']
+const METODOS: readonly Pago['metodo'][] = ['caja', 'pasarela', 'deposito', 'transferencia', 'ach', 'remesa', 'agente', 'debito']
+
+/** Como `DATOS_POR_METODO` de `registrarPago` (A3). */
+const DATOS_POR_METODO: Partial<Record<Pago['metodo'], readonly ('referencia' | 'cuenta_bancaria_id' | 'banco_origen_id')[]>> = {
+    deposito: ['cuenta_bancaria_id', 'referencia'],
+    transferencia: ['banco_origen_id', 'cuenta_bancaria_id', 'referencia'],
+    ach: ['banco_origen_id', 'cuenta_bancaria_id', 'referencia'],
+    remesa: ['cuenta_bancaria_id', 'referencia'],
+}
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const ESTADOS_FACTURA: readonly Factura['estado'][] = ['emitida', 'parcial', 'pagada', 'vencida', 'anulada']
 const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verificacion', 'anulado']
@@ -35,6 +44,12 @@ function usuarioDe(solicitud: SolicitudFixture): number | null {
 }
 
 /** Como `ReglaNegocio` de la API: 422 con `type` `urn:argosisp:problema:<codigo>`. */
+/** Como `Conflicto` de la API (`anularFactura`): 409 con `type` `urn:argosisp:problema:<codigo>`. */
+function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: titulo, status: 409, detail: detalle }
+    return { status: 409, cuerpo }
+}
+
 function reglaNegocio(codigo: string, detalle: string): RespuestaFixture {
     const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: 'Regla de negocio', status: 422, detail: detalle }
     return { status: 422, cuerpo }
@@ -130,16 +145,76 @@ function validar(cuerpo: Record<string, unknown>): Errores {
     if (typeof nota === 'string' && nota.length > 500) {
         errores.push({ field: 'nota', message: 'Máximo 500 caracteres', rule: 'maxLength' })
     }
-    // Como `facturasPendientes`: cada factura pedida debe ser del cliente y tener saldo.
-    if (Array.isArray(cuerpo.facturas) && typeof clienteId === 'number') {
-        const pendientes = new Set(pendientesDe(clienteId).map(f => f.id))
-        for (const id of cuerpo.facturas) {
-            if (!pendientes.has(Number(id))) {
-                errores.push({ field: 'facturas', message: `La factura ${String(id)} no es del cliente o no tiene saldo pendiente`, rule: 'factura_pendiente' })
+    errores.push(...validarBancarios(cuerpo))
+    // Pago de terceros (A3): cada factura pedida puede ser de cualquier cliente, pero debe existir
+    // y tener saldo; el error va en `facturas.<índice>`.
+    if (Array.isArray(cuerpo.facturas)) {
+        cuerpo.facturas.forEach((id: unknown, indice: number) => {
+            const factura = bd.facturas.find(f => f.id === Number(id))
+            if (!factura || factura.estado === 'pagada' || factura.estado === 'anulada') {
+                errores.push({ field: `facturas.${indice}`, message: `La factura ${String(id)} no existe o no tiene saldo pendiente`, rule: 'factura_pendiente' })
             }
-        }
+        })
     }
     return errores
+}
+
+/** Datos bancarios por método, como `datosBancarios` de `registrarPago`: un error por campo. */
+function validarBancarios(cuerpo: Record<string, unknown>): Errores {
+    if (!esMetodo(cuerpo.metodo)) {
+        return []
+    }
+    const metodo = cuerpo.metodo
+    const requeridos = DATOS_POR_METODO[metodo] ?? []
+    const valores = {
+        referencia: textoOpcional(cuerpo.referencia),
+        cuenta_bancaria_id: typeof cuerpo.cuenta_bancaria_id === 'number' ? cuerpo.cuenta_bancaria_id : null,
+        banco_origen_id: typeof cuerpo.banco_origen_id === 'number' ? cuerpo.banco_origen_id : null,
+    }
+    const errores: Errores = []
+    for (const campo of requeridos) {
+        if (valores[campo] === null) {
+            errores.push({ field: campo, message: `Obligatorio con método ${metodo}`, rule: 'required' })
+        }
+    }
+    for (const campo of ['cuenta_bancaria_id', 'banco_origen_id'] as const) {
+        if (valores[campo] !== null && !requeridos.includes(campo)) {
+            errores.push({ field: campo, message: `No aplica con método ${metodo}`, rule: 'no_aplica' })
+        }
+    }
+    if (valores.cuenta_bancaria_id !== null && requeridos.includes('cuenta_bancaria_id')) {
+        const cuenta = bd.cuentasBancarias.find(c => c.id === valores.cuenta_bancaria_id && c.activa)
+        if (!cuenta) {
+            errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${valores.cuenta_bancaria_id} no existe o está inactiva`, rule: 'exists' })
+        }
+        else if (cuenta.moneda !== 'GTQ') {
+            errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${cuenta.id} es en ${cuenta.moneda}; los pagos se registran en quetzales`, rule: 'moneda' })
+        }
+    }
+    if (valores.banco_origen_id !== null && requeridos.includes('banco_origen_id') && !bd.bancos.some(b => b.id === valores.banco_origen_id)) {
+        errores.push({ field: 'banco_origen_id', message: `El banco ${valores.banco_origen_id} no existe`, rule: 'exists' })
+    }
+    return errores
+}
+
+/** 409 `referencia_duplicada`: la referencia es única por (método, cuenta bancaria, referencia). */
+function referenciaRepetida(cuerpo: Record<string, unknown>): RespuestaFixture | null {
+    const referencia = textoOpcional(cuerpo.referencia)
+    if (!referencia) {
+        return null
+    }
+    const cuenta = typeof cuerpo.cuenta_bancaria_id === 'number' ? cuerpo.cuenta_bancaria_id : null
+    const repetido = bd.pagos.find(p => p.metodo === cuerpo.metodo && p.referencia === referencia && (p.cuenta_bancaria_id ?? null) === cuenta)
+    if (!repetido) {
+        return null
+    }
+    const cuerpoProblema: Problem = {
+        type: 'urn:argosisp:problema:referencia_duplicada',
+        title: 'Referencia duplicada',
+        status: 409,
+        detail: `La referencia ${referencia} ya está registrada en el pago ${repetido.id} (${String(cuerpo.metodo)}${cuenta ? `, cuenta bancaria ${cuenta})` : ')'}`,
+    }
+    return { status: 409, cuerpo: cuerpoProblema }
 }
 
 /** Facturas con saldo del cliente en el orden de `facturasPendientes` (vencimiento, periodo, id). */
@@ -154,9 +229,9 @@ function pendientesDe(clienteId: number) {
  * antigua a la más nueva; el excedente queda como anticipo.
  */
 function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null): Pago['aplicaciones'] {
-    const todas = pendientesDe(clienteId)
-    const primero = (indicadas ?? []).map(id => todas.find(f => f.id === id)).filter(f => f !== undefined)
-    const pendientes = [...primero, ...todas.filter(f => !primero.includes(f))]
+    const propias = pendientesDe(clienteId)
+    const primero = (indicadas ?? []).map(id => bd.facturas.find(f => f.id === id)).filter(f => f !== undefined)
+    const pendientes = [...primero, ...propias.filter(f => !primero.includes(f))]
     const aplicaciones: Pago['aplicaciones'] = []
     let resto = monto
     for (const factura of pendientes) {
@@ -172,7 +247,13 @@ function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null):
             version: factura.version + 1,
             updated_at: ahora(),
         })
-        aplicaciones.push({ factura_id: factura.id, monto: dinero(parte) })
+        // Como `conAplicaciones` de la API: el dueño de cada factura (puede no ser el pagador).
+        aplicaciones.push({
+            factura_id: factura.id,
+            monto: dinero(parte),
+            cliente_id: factura.cliente_id,
+            cliente_nombre: bd.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
+        })
         resto = resto.minus(parte)
     }
     return aplicaciones
@@ -249,6 +330,9 @@ function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
     const metodo = cuerpo.metodo as Pago['metodo']
     const momento = ahora()
     const usuario = solicitud.token ? (usuariosPorToken[solicitud.token]?.id ?? null) : null
+    const requeridos = DATOS_POR_METODO[metodo] ?? []
+    const cuenta = requeridos.includes('cuenta_bancaria_id') ? bd.cuentasBancarias.find(c => c.id === cuerpo.cuenta_bancaria_id) : undefined
+    const banco = requeridos.includes('banco_origen_id') ? bd.bancos.find(b => b.id === cuerpo.banco_origen_id) : undefined
     return {
         id: siguienteId(bd.pagos),
         cliente_id: clienteId,
@@ -264,6 +348,10 @@ function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
         aplicaciones: aplicar(clienteId, monto, indicadas),
         anulado_en: null,
         motivo_anulacion: null,
+        banco_origen_id: banco?.id ?? null,
+        banco_origen_nombre: banco?.nombre ?? null,
+        cuenta_bancaria_id: cuenta?.id ?? null,
+        cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
         version: 1,
         created_at: momento,
         updated_at: momento,
@@ -272,6 +360,14 @@ function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
 
 export const rutasFacturacion: RutasFixture = {
     'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia((solicitud) => {
+        const errores = validar(cuerpoObjeto(solicitud))
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        const repetida = referenciaRepetida(cuerpoObjeto(solicitud))
+        if (repetida) {
+            return repetida
+        }
         const resultado = registrarPago(solicitud)
         if (Array.isArray(resultado)) {
             return datosInvalidos(resultado)
@@ -356,8 +452,8 @@ export const rutasFacturacion: RutasFixture = {
     }),
 
     /**
-     * Hoy 501 en la API (A3, día 4). Aquí el camino feliz: una factura con pagos aplicados no se
-     * anula (422, primero se anulan los pagos); al anular se revierte su asiento.
+     * Como `anularFactura` (A3): una factura con pagos aplicados no se anula (409
+     * `factura_con_pagos`, primero se anula el pago); al anular se revierte su asiento.
      */
     'POST /api/v1/facturas/:id/anular': conPermiso('facturas.anular', conIdempotencia((solicitud) => {
         const factura = bd.facturas.find(f => f.id === idDe(solicitud))
@@ -369,13 +465,13 @@ export const rutasFacturacion: RutasFixture = {
             return datosInvalidos(motivo)
         }
         if (factura.estado === 'anulada') {
-            return reglaNegocio('factura_anulada', `La factura ${factura.id} ya está anulada`)
+            return conflicto('factura_anulada', 'Factura anulada', `La factura ${factura.id} ya está anulada`)
         }
         if (new Decimal(factura.pagado).gt(0)) {
-            return reglaNegocio('factura_con_pagos', `La factura ${factura.id} tiene pagos aplicados: anula primero esos pagos`)
+            return conflicto('factura_con_pagos', 'Factura con pagos', `La factura ${factura.id} tiene pagos aplicados (factura ${factura.id}: Q${factura.pagado}); anula primero el pago`)
         }
         const momento = ahora()
-        Object.assign(factura, { estado: 'anulada', version: factura.version + 1, updated_at: momento })
+        Object.assign(factura, { estado: 'anulada', anulada_en: momento, motivo_anulacion: motivo, version: factura.version + 1, updated_at: momento })
         const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
         if (original) {
             bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, momento, usuarioDe(solicitud)))

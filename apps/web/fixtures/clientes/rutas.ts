@@ -88,6 +88,38 @@ const VACIO: CamposCliente = {
     zona_id: null,
     campos_personalizados: {},
     canal_preferido: 'correo',
+    responsable_pago_id: null,
+    responsable_pago_nombre: null,
+}
+
+const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }
+
+/** Fila de `GET /clientes/:id/dependientes`: el estado más grave de sus servicios no retirados. */
+function dependiente(cliente: Cliente): Schema<'DependientePago'> {
+    const servicios = bd.servicios.filter(s => s.cliente_id === cliente.id)
+    const vivos = servicios.filter(s => s.estado !== 'retirado')
+    const peor = vivos.reduce<Schema<'Servicio'>['estado'] | null>((estado, s) => (estado === null || GRAVEDAD[s.estado] > GRAVEDAD[estado] ? s.estado : estado), null)
+    return {
+        id: cliente.id,
+        nombre: cliente.nombre,
+        nit_cui: cliente.nit_cui,
+        servicios: vivos.length,
+        estado_servicio: peor ?? (servicios.length ? 'retirado' : null),
+    }
+}
+
+/** Motivo opcional de 3 a 500 caracteres, como el validador de responsable de pago. */
+function errorMotivo(cuerpo: Record<string, unknown>): NonNullable<Problem['errors']> {
+    const { motivo } = cuerpo
+    if (motivo === undefined) {
+        return []
+    }
+    const texto = typeof motivo === 'string' ? motivo.trim() : ''
+    return texto.length < 3 || texto.length > 500 ? [{ field: 'motivo', message: 'El motivo debe tener entre 3 y 500 caracteres', rule: 'minLength' }] : []
+}
+
+function responsableInvalido(message: string) {
+    return datosInvalidos([{ field: 'responsable_id', message, rule: 'responsable_pago' }])
 }
 
 /** Igual que la API: nombre, NIT/CUI, teléfono, móvil, user_ppp o IP de alguno de sus servicios. */
@@ -142,8 +174,10 @@ export const rutasClientes: RutasFixture = {
     'GET /api/v1/clientes': conPermiso('clientes.ver', (solicitud) => {
         const q = solicitud.query.get('q') ?? ''
         const zona = numeroQuery(solicitud, 'zona_id')
+        const responsable = numeroQuery(solicitud, 'responsable_pago_id')
         const filas = bd.clientes
             .filter(cliente => zona === undefined || cliente.zona_id === zona)
+            .filter(cliente => responsable === undefined || cliente.responsable_pago_id === responsable)
             .filter(cliente => coincide(cliente, q))
             .filter(cliente => cumpleFiltrosAvanzados(cliente, solicitud))
             .sort((a, b) => b.id - a.id)
@@ -154,6 +188,73 @@ export const rutasClientes: RutasFixture = {
         const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
         return cliente ? { status: 200, cuerpo: cliente } : noEncontrado('el cliente')
     }),
+
+    'GET /api/v1/clientes/:id/dependientes': conPermiso('clientes.ver', (solicitud) => {
+        const id = idDe(solicitud)
+        if (!bd.clientes.some(c => c.id === id)) {
+            return noEncontrado('el cliente')
+        }
+        const filas = bd.clientes
+            .filter(c => c.responsable_pago_id === id)
+            .sort((a, b) => a.nombre.localeCompare(b.nombre) || a.id - b.id)
+            .map(dependiente)
+        return { status: 200, cuerpo: paginar(filas, solicitud) }
+    }),
+
+    /** Como `AsignarResponsablePago` (A1): un solo nivel, sin ciclos; repetir el mismo no cambia nada. */
+    'POST /api/v1/clientes/:id/responsable-pago': conPermiso('clientes.asignar_responsable_pago', conIdempotencia((solicitud) => {
+        const id = idDe(solicitud)
+        const cliente = bd.clientes.find(c => c.id === id)
+        const cuerpo = cuerpoObjeto(solicitud)
+        const responsableId = cuerpo.responsable_id
+        if (typeof responsableId !== 'number' || !Number.isInteger(responsableId) || responsableId < 1) {
+            return datosInvalidos([{ field: 'responsable_id', message: 'Elige el cliente responsable', rule: 'required' }])
+        }
+        const motivo = errorMotivo(cuerpo)
+        if (motivo.length) {
+            return datosInvalidos(motivo)
+        }
+        if (id === responsableId) {
+            return responsableInvalido('Un cliente no puede ser su propio responsable de pago')
+        }
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        const responsable = bd.clientes.find(c => c.id === responsableId)
+        if (!responsable) {
+            return responsableInvalido(`El cliente ${responsableId} no existe`)
+        }
+        if (cliente.responsable_pago_id === responsableId) {
+            return { status: 200, cuerpo: cliente }
+        }
+        if (responsable.responsable_pago_id !== null && responsable.responsable_pago_id !== undefined) {
+            return responsableInvalido(`El cliente ${responsableId} tiene a su vez un responsable de pago; solo se admite un nivel`)
+        }
+        if (bd.clientes.some(c => c.responsable_pago_id === cliente.id)) {
+            return responsableInvalido(`El cliente ${cliente.id} es responsable de pago de otros clientes y no puede tener responsable`)
+        }
+        Object.assign(cliente, { responsable_pago_id: responsable.id, responsable_pago_nombre: responsable.nombre, version: cliente.version + 1, updated_at: ahora() })
+        registrarAccion(solicitud, 'clientes.asignar_responsable_pago', { tipo: 'cliente', id: cliente.id }, cuerpo)
+        return { status: 200, cuerpo: cliente }
+    })),
+
+    'POST /api/v1/clientes/:id/quitar-responsable-pago': conPermiso('clientes.quitar_responsable_pago', conIdempotencia((solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        const motivo = errorMotivo(cuerpo)
+        if (motivo.length) {
+            return datosInvalidos(motivo)
+        }
+        if (cliente.responsable_pago_id === null || cliente.responsable_pago_id === undefined) {
+            return { status: 200, cuerpo: cliente }
+        }
+        Object.assign(cliente, { responsable_pago_id: null, responsable_pago_nombre: null, version: cliente.version + 1, updated_at: ahora() })
+        registrarAccion(solicitud, 'clientes.quitar_responsable_pago', { tipo: 'cliente', id: cliente.id }, cuerpo)
+        return { status: 200, cuerpo: cliente }
+    })),
 
     'GET /api/v1/clientes/:id/estado-cuenta': conPermiso('clientes.estado_cuenta', (solicitud) => {
         const id = idDe(solicitud)

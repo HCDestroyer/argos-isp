@@ -24,10 +24,13 @@ function numeroAIp(numero: number): string {
     return [24, 16, 8, 0].map(desplazamiento => Math.floor(numero / 2 ** desplazamiento) % 256).join('.')
 }
 
-/** Siguiente IP libre de las redes estáticas del router (salta red, gateway y broadcast). */
-function ipLibre(routerId: number): string | null {
+/**
+ * Siguiente IP libre de las redes estáticas del router (salta red, gateway y broadcast); con
+ * `redId` (`red_ipv4_id`), solo de esa red.
+ */
+function ipLibre(routerId: number, redId?: number): string | null {
     const usadas = new Set(bd.servicios.map(s => s.ipv4).filter(Boolean))
-    for (const red of bd.redesIpv4.filter(r => r.router_id === routerId && r.tipo === 'estatico')) {
+    for (const red of bd.redesIpv4.filter(r => r.router_id === routerId && (redId === undefined ? r.tipo === 'estatico' : r.id === redId))) {
         const [base = '', prefijo = '32'] = red.cidr.split('/')
         const inicio = ipv4ANumero(base) ?? 0
         const tamano = 2 ** (32 - Number(prefijo))
@@ -76,6 +79,14 @@ function validarAlta(cuerpo: Record<string, unknown>): Errores {
     if (typeof usuario === 'string' && bd.servicios.some(s => s.user_ppp === usuario)) {
         errores.push({ field: 'user_ppp', message: 'Ese usuario PPP ya existe', rule: 'unique' })
     }
+    const redId = cuerpo.red_ipv4_id
+    if (redId !== undefined && !bd.redesIpv4.some(r => r.id === redId && r.router_id === routerId)) {
+        errores.push({ field: 'red_ipv4_id', message: 'La red no existe o no es del router', rule: 'red_router' })
+    }
+    // Sin `plantilla_facturacion_id` (técnico sin plantillas.ver): la única plantilla, o 422 si hay varias.
+    if (!('plantilla_facturacion_id' in cuerpo) && bd.plantillas.length > 1) {
+        errores.push({ field: 'plantilla_facturacion_id', message: 'Hay varias plantillas de facturación: elige una', rule: 'required' })
+    }
     if (typeof ipv4 === 'string') {
         if (bd.servicios.some(s => s.ipv4 === ipv4)) {
             errores.push({ field: 'ipv4', message: 'Esa IP ya está asignada a otro servicio', rule: 'unique' })
@@ -94,7 +105,7 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         return errores
     }
     const routerId = Number(cuerpo.router_id)
-    const ipv4 = texto(cuerpo.ipv4) ?? ipLibre(routerId)
+    const ipv4 = texto(cuerpo.ipv4) ?? ipLibre(routerId, typeof cuerpo.red_ipv4_id === 'number' ? cuerpo.red_ipv4_id : undefined)
     if (!ipv4) {
         return [{ field: 'ipv4', message: 'No quedan IPs libres en las redes del router', rule: 'agotado' }]
     }
@@ -109,7 +120,9 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         cliente_id: Number(cuerpo.cliente_id),
         router_id: routerId,
         plan_id: Number(cuerpo.plan_id),
-        plantilla_facturacion_id: typeof cuerpo.plantilla_facturacion_id === 'number' ? cuerpo.plantilla_facturacion_id : null,
+        plantilla_facturacion_id: 'plantilla_facturacion_id' in cuerpo
+            ? (typeof cuerpo.plantilla_facturacion_id === 'number' ? cuerpo.plantilla_facturacion_id : null)
+            : (bd.plantillas[0]?.id ?? null),
         estado: 'activo',
         promesa_activa: false,
         user_ppp: texto(cuerpo.user_ppp) ?? `cliente${cliente?.id ?? id}.${id}`,
@@ -129,6 +142,7 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         suspension_manual: false,
         suspension_manual_motivo: null,
         ...nombresDe(Number(cuerpo.cliente_id), Number(cuerpo.plan_id), routerId),
+        excepciones: typeof cuerpo.excepciones === 'object' && cuerpo.excepciones !== null ? (cuerpo.excepciones as Schema<'ExcepcionesServicio'>) : {},
         version: 1,
         created_at: momento,
         updated_at: momento,

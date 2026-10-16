@@ -81,3 +81,15 @@ export function entradaDesdeCliente(cliente?: Schema<'Cliente'>): EntradaCliente
         canal_preferido: cliente?.canal_preferido ?? 'correo',
     }
 }
+
+/**
+ * Espejo de `POST /clientes/:id/responsable-pago`: `responsable_id` obligatorio y motivo de 3 a
+ * 500 caracteres (la API lo acepta opcional; el panel lo pide para la bitácora).
+ */
+export const esquemaResponsable = z.object({
+    responsable_id: z.number().int().positive('Elige el cliente que paga'),
+    motivo: z.string().trim().min(3, 'Escribe el motivo (mínimo 3 caracteres)').max(500, 'Máximo 500 caracteres'),
+})
+
+export type EntradaResponsable = z.input<typeof esquemaResponsable>
+export type SalidaResponsable = z.output<typeof esquemaResponsable>

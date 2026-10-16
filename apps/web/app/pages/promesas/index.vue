@@ -63,7 +63,7 @@ const columnas = computed<TableColumn<Promesa>[]>(() => [
     { accessorKey: 'cliente_id', header: 'Cliente', meta: SOLO_ANCHO },
     { accessorKey: 'monto', header: 'Monto', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
     { accessorKey: 'estado', header: 'Estado y evaluación', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden whitespace-normal sm:table-cell' } } },
-    ...(puede('promesas.aprobar') ? [{ id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden text-right sm:table-cell' } } }] : []),
+    ...(conAcciones.value ? [{ id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden text-right sm:table-cell' } } }] : []),
 ])
 
 const hayFiltros = computed(() => estado.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
@@ -98,6 +98,39 @@ function alElegirCliente(cliente: Cliente) {
 function abrirAprobar(promesa: Promesa) {
     porAprobar.value = promesa
     aprobarAbierto.value = true
+}
+
+// Rechazar (solo pendientes) y cancelar (activa o pendiente), con motivo (A3, día 4).
+const cierre = shallowRef<{ promesa: Promesa, accion: 'rechazar' | 'cancelar' } | null>(null)
+const cierreAbierto = ref(false)
+
+const puedeRechazar = (promesa: Promesa) => puede('promesas.rechazar') && promesa.estado === 'pendiente_aprobacion'
+const puedeCancelar = (promesa: Promesa) => puede('promesas.cancelar') && (promesa.estado === 'activa' || promesa.estado === 'pendiente_aprobacion')
+const conAcciones = computed(() => puede('promesas.aprobar') || puede('promesas.rechazar') || puede('promesas.cancelar'))
+
+function abrirCierre(promesa: Promesa, accion: 'rechazar' | 'cancelar') {
+    cierre.value = { promesa, accion }
+    cierreAbierto.value = true
+}
+
+function ejecutarCierre(motivo: string, clave: string) {
+    const actual = cierre.value
+    if (!actual) {
+        return Promise.resolve<Resultado<Promesa>>({ ok: false, problema: { type: 'about:blank', title: 'Sin promesa', status: 0 } })
+    }
+    return actual.accion === 'rechazar'
+        ? usePromesas().rechazar(actual.promesa.id, motivo, clave)
+        : usePromesas().cancelar(actual.promesa.id, motivo, clave)
+}
+
+function alCerrar(promesa: Promesa) {
+    toast.add({
+        title: promesa.estado === 'rechazada' ? 'Promesa rechazada' : 'Promesa cancelada',
+        description: `Promesa #${promesa.id} · servicio ${promesa.servicio_id}`,
+        icon: 'i-lucide-circle-slash',
+        color: 'success',
+    })
+    void lista.recargar()
 }
 
 function alAprobar(promesa: Promesa) {
@@ -235,16 +268,35 @@ onMounted(async () => {
                                     :promesa="row.original"
                                     compacta
                                 />
-                                <UButton
-                                    v-if="puede('promesas.aprobar') && row.original.estado === 'pendiente_aprobacion'"
-                                    label="Aprobar"
-                                    icon="i-lucide-check"
-                                    color="success"
-                                    variant="outline"
-                                    size="sm"
-                                    class="self-start"
-                                    @click="abrirAprobar(row.original)"
-                                />
+                                <div class="flex flex-wrap gap-1.5">
+                                    <UButton
+                                        v-if="puede('promesas.aprobar') && row.original.estado === 'pendiente_aprobacion'"
+                                        label="Aprobar"
+                                        icon="i-lucide-check"
+                                        color="success"
+                                        variant="outline"
+                                        size="sm"
+                                        @click="abrirAprobar(row.original)"
+                                    />
+                                    <UButton
+                                        v-if="puedeRechazar(row.original)"
+                                        label="Rechazar"
+                                        icon="i-lucide-x"
+                                        color="error"
+                                        variant="ghost"
+                                        size="sm"
+                                        @click="abrirCierre(row.original, 'rechazar')"
+                                    />
+                                    <UButton
+                                        v-if="puedeCancelar(row.original)"
+                                        label="Cancelar promesa"
+                                        icon="i-lucide-circle-slash"
+                                        color="neutral"
+                                        variant="ghost"
+                                        size="sm"
+                                        @click="abrirCierre(row.original, 'cancelar')"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -280,15 +332,36 @@ onMounted(async () => {
                     </template>
 
                     <template #acciones-cell="{ row }">
-                        <UButton
-                            v-if="row.original.estado === 'pendiente_aprobacion'"
-                            label="Aprobar"
-                            icon="i-lucide-check"
-                            color="success"
-                            variant="outline"
-                            size="sm"
-                            @click="abrirAprobar(row.original)"
-                        />
+                        <div class="flex justify-end gap-1">
+                            <UButton
+                                v-if="puede('promesas.aprobar') && row.original.estado === 'pendiente_aprobacion'"
+                                label="Aprobar"
+                                icon="i-lucide-check"
+                                color="success"
+                                variant="outline"
+                                size="sm"
+                                @click="abrirAprobar(row.original)"
+                            />
+                            <UButton
+                                v-if="puedeRechazar(row.original)"
+                                label="Rechazar"
+                                icon="i-lucide-x"
+                                color="error"
+                                variant="ghost"
+                                size="sm"
+                                @click="abrirCierre(row.original, 'rechazar')"
+                            />
+                            <UButton
+                                v-if="puedeCancelar(row.original)"
+                                icon="i-lucide-circle-slash"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Cancelar la promesa ${row.original.id}`"
+                                title="Cancelar promesa"
+                                @click="abrirCierre(row.original, 'cancelar')"
+                            />
+                        </div>
                     </template>
 
                     <template #empty>
@@ -318,6 +391,22 @@ onMounted(async () => {
             :promesa="porAprobar"
             :nombre-cliente="porAprobar ? nombres.nombre(porAprobar.cliente_id) : undefined"
             @aprobada="alAprobar"
+        />
+
+        <AccionMotivoModal
+            v-model:open="cierreAbierto"
+            :titulo="cierre?.accion === 'rechazar' ? 'Rechazar promesa' : 'Cancelar promesa'"
+            :descripcion="cierre ? `Promesa #${cierre.promesa.id} · ${nombres.nombre(cierre.promesa.cliente_id)} · ${formatearQuetzales(cierre.promesa.monto)}` : undefined"
+            :efecto="cierre?.accion === 'rechazar'
+                ? 'La promesa no se activa y el servicio sigue como está.'
+                : cierre?.promesa.estado === 'activa'
+                    ? 'La promesa deja de proteger el servicio: se vuelve a evaluar y puede cortarse si tiene avisos vencidos.'
+                    : 'La promesa pendiente se descarta sin activarse.'"
+            :confirmar="cierre?.accion === 'rechazar' ? 'Rechazar' : 'Cancelar promesa'"
+            :icono="cierre?.accion === 'rechazar' ? 'i-lucide-x' : 'i-lucide-circle-slash'"
+            placeholder="Ej.: el cliente ya no puede pagar en esa fecha"
+            :ejecutar="ejecutarCierre"
+            @hecho="alCerrar"
         />
     </PanelPagina>
 </template>

@@ -10,6 +10,9 @@
     "permisos": [
       "clientes.ver",
       "clientes.estado_cuenta",
+      "clientes.asignar_responsable_pago",
+      "clientes.quitar_responsable_pago",
+      "zonas.ver",
       "servicios.ver",
       "planes.ver",
       "facturas.ver",
@@ -18,8 +21,12 @@
       "cajas.ver",
       "cajas.abrir",
       "cajas.cerrar",
+      "cuentas_bancarias.ver",
       "promesas.ver",
-      "promesas.crear"
+      "promesas.crear",
+      "comprobantes.ver",
+      "comprobantes.aprobar",
+      "comprobantes.rechazar"
     ]
   }
 }

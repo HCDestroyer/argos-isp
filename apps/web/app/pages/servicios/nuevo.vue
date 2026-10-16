@@ -98,6 +98,19 @@ const itemsRed = computed<SelectItem[]>(() => redes.value.map(r => ({
     value: r.id,
 })))
 
+/** Asignación automática: red opcional (`red_ipv4_id`); "cualquiera" = la API elige. */
+const CUALQUIER_RED = 'cualquiera'
+const itemsRedAutomatica = computed<SelectItem[]>(() => [
+    { label: 'Cualquier red del router', value: CUALQUIER_RED },
+    ...redes.value.map(r => ({ label: `${r.cidr} · ${r.tipo === 'pool' ? 'pool' : 'estática'}`, value: String(r.id) })),
+])
+const redAutomatica = computed({
+    get: () => (estado.red_id === undefined ? CUALQUIER_RED : String(estado.red_id)),
+    set: (valor: string) => {
+        estado.red_id = valor === CUALQUIER_RED ? undefined : Number(valor)
+    },
+})
+
 const itemsIpv6 = computed<RadioGroupItem[]>(() => {
     const delegado = plan.value ? `/${plan.value.tamano_prefijo_delegado}` : ''
     return [
@@ -258,7 +271,7 @@ function pasoDeCampo(campo: string): number {
 async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
     enviando.value = true
     problema.value = null
-    const resultado = await useServicios().crear(cuerpoServicio(evento.data), claveIdempotencia)
+    const resultado = await useServicios().crear(cuerpoServicio(evento.data, { omitirPlantilla: !puede('plantillas.ver') }), claveIdempotencia)
     enviando.value = false
     if (resultado.ok) {
         toast.add({
@@ -471,6 +484,21 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         v-else
                         class="flex flex-col gap-2"
                     >
+                        <UFormField
+                            v-if="redes.length > 1"
+                            name="red_id"
+                            label="Red"
+                            hint="Opcional"
+                            description="Sin elegir, la API toma la siguiente IP libre de cualquier red del router."
+                            class="sm:max-w-sm"
+                        >
+                            <USelect
+                                v-model="redAutomatica"
+                                :items="itemsRedAutomatica"
+                                class="w-full"
+                                aria-label="Red de la que asignar la IP"
+                            />
+                        </UFormField>
                         <p class="text-sm text-muted">
                             Redes de {{ router?.nombre ?? 'el router' }}:
                         </p>
@@ -773,7 +801,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     />
                     <DatoFicha
                         etiqueta="IPv4"
-                        :valor="estado.asignacion === 'fija' ? estado.ipv4 : 'Automática'"
+                        :valor="estado.asignacion === 'fija' ? estado.ipv4 : (red ? `Automática de ${red.cidr}` : 'Automática')"
                         mono
                     />
                     <DatoFicha
@@ -792,7 +820,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     />
                     <DatoFicha
                         etiqueta="Plantilla"
-                        :valor="plantilla?.nombre ?? 'Sin plantilla'"
+                        :valor="puede('plantillas.ver') ? (plantilla?.nombre ?? 'Sin plantilla') : 'La plantilla por defecto'"
                     />
                     <DatoFicha
                         etiqueta="Firewall"

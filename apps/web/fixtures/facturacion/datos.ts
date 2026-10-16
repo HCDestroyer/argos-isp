@@ -1,5 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
+import { clientes } from '../clientes/datos'
 import { planes } from '../planes/datos'
 import { servicios } from '../servicios/datos'
 
@@ -81,6 +82,8 @@ export const facturas: Factura[] = servicios
                 tipo: 'servicio',
                 factura_origen_id: null,
                 vencida_en: estado === 'vencida' ? `${sumarDias(vence, 1)}T06:05:00.000Z` : null,
+                anulada_en: null,
+                motivo_anulacion: null,
                 version: 1,
                 created_at: emitida,
                 updated_at: emitida,
@@ -105,9 +108,19 @@ export const pagos: Pago[] = facturas
             estado: 'registrado',
             nota: null,
             registrado_por: 2,
-            aplicaciones: [{ factura_id: factura.id, monto: factura.pagado }],
+            aplicaciones: [{
+                factura_id: factura.id,
+                monto: factura.pagado,
+                cliente_id: factura.cliente_id,
+                cliente_nombre: clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
+            }],
             anulado_en: null,
             motivo_anulacion: null,
+            // Como la vista `Pago` de la API: siempre trae los datos bancarios (null en efectivo).
+            banco_origen_id: null,
+            banco_origen_nombre: null,
+            cuenta_bancaria_id: null,
+            cuenta_bancaria_nombre: null,
             version: 1,
             created_at: fecha,
             updated_at: fecha,
@@ -138,6 +151,8 @@ function turnoCerrado(id: number, cajaId: number, dia: string, fondo: string, es
         contado,
         diferencia: new Decimal(contado).minus(esperado).toFixed(2),
         motivo,
+        abierto_por: 2,
+        cerrado_por: 2,
         version: 2,
         created_at: abierto,
         updated_at: cerrado,
@@ -155,6 +170,8 @@ function turnoAbierto(id: number, cajaId: number, fondo: string): Turno {
         contado: null,
         diferencia: null,
         motivo: null,
+        abierto_por: cajaId === 1 ? 2 : 1,
+        cerrado_por: null,
         version: 1,
         created_at: momentoCaja,
         updated_at: momentoCaja,
