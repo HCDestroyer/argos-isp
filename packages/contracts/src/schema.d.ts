@@ -962,7 +962,7 @@ export interface paths {
         put?: never;
         /**
          * Ver en Horus: URL de autologin con ticket de un solo uso
-         * @description §1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla. Para `servicio` y `cliente` se revisa el acceso del usuario.
+         * @description §1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla; si está en pausa por la espera exponencial, el problem+json trae `reintentar_en` (ISO UTC) y `detail` la hora de Guatemala. Para `servicio` y `cliente` se revisa el acceso del usuario.
          */
         post: operations["horusAbrir"];
         delete?: never;
@@ -1042,7 +1042,7 @@ export interface paths {
         put?: never;
         /**
          * Generar enlace de conexión para pegar en Horus (15 min, un solo uso)
-         * @description §1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear`.
+         * @description §1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear` del mismo host (la URL pública de la API). Si alguien abre el enlace en el navegador, `GET /conectar` de la API lo redirige (302, el fragmento se conserva) a `<PANEL_URL_PUBLICA>/conectar`, que explica que se pega en Horus.
          */
         post: operations["horusEnlaceGenerar"];
         delete?: never;
@@ -1063,6 +1063,26 @@ export interface paths {
          * @description Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`.
          */
         get: operations["horusEnviosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/estado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado del conector para "Ver en Horus": encendido o no, y pausa (sin secretos)
+         * @description Con `horus.abrir` (no hace falta `horus.ver`): el panel deshabilita "Ver en Horus" con el conector apagado o sin URL o código, y avisa hasta cuándo está en pausa si Horus no respondió. No llama a Horus. El conector es uno por instalación: igual para toda empresa.
+         */
+        get: operations["horusConectorEstado"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4324,8 +4344,13 @@ export interface components {
              * @description Cuándo se obtuvo de Horus el dato mostrado
              */
             actualizado_en: string | null;
-            /** @description Por qué no hay dato fresco */
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
             error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
             /** Format: date-time */
             desde: string;
             /** Format: date-time */
@@ -4631,6 +4656,15 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EstadoConectorHorus: {
+            /** @description Encendido y con URL y código de Horus: "Ver en Horus" puede funcionar */
+            activo: boolean;
+            /**
+             * Format: date-time
+             * @description Horus no respondió y está en pausa hasta este instante (UTC); null si no
+             */
+            reintentar_en: string | null;
+        };
         EstadoCuenta: {
             cliente_id: number;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
@@ -4867,16 +4901,61 @@ export interface components {
              * @description Cuándo se obtuvo de Horus el dato mostrado
              */
             actualizado_en: string | null;
-            /** @description Por qué no hay dato fresco */
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
             error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
             /** @enum {string|null} */
             consulta: "external_service_id" | "address" | null;
             /** @description IP actual del servicio en Argos */
             ip: string | null;
-            /** @description Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta) */
-            datos: {
+            /** @description Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta). Se declaran `security` y `meta`, que lee el panel; lo demás llega sin tipar. Cualquier bloque puede faltar (ver `meta.omitted`) */
+            datos: ({
+                security?: {
+                    /** @description `clean`, `suspected`, `compromised` */
+                    state?: string;
+                    open_findings?: number;
+                    findings?: ({
+                        id?: string | number;
+                        /** @description p. ej. `outbound_scanning` */
+                        kind?: string;
+                        /** @description `info`, `low`, `medium`, `high`, `critical` */
+                        severity?: string;
+                        /** Format: date-time */
+                        opened_at?: string;
+                        summary?: string;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                } & {
+                    [key: string]: unknown;
+                };
+                meta?: {
+                    /**
+                     * Format: date-time
+                     * @description Instante del dato en Horus
+                     */
+                    at?: string;
+                    /** @description Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa `{ security: "permission" }` o lista `[{ block, reason }]` */
+                    omitted?: {
+                        [key: string]: string;
+                    } | ({
+                        /** @description `consumption`, `health`, `security` */
+                        block: string;
+                        /** @description `permission`, `unavailable`, `not_requested`, `not_configured` */
+                        reason?: string;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                } & {
+                    [key: string]: unknown;
+                };
+            } & {
                 [key: string]: unknown;
-            } | null;
+            }) | null;
             eventos_recientes: {
                 id: number;
                 evento: string;
@@ -6375,8 +6454,13 @@ export interface components {
              * @description Cuándo se obtuvo de Horus el dato mostrado
              */
             actualizado_en: string | null;
-            /** @description Por qué no hay dato fresco */
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
             error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
             /**
              * @description `alternativa` = Horus aún no tiene §3.5: último dato de la consulta 360 o de los webhooks
              * @enum {string|null}
@@ -10918,6 +11002,44 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusConectorEstado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado del conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoConectorHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.abrir */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

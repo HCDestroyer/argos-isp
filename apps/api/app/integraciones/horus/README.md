@@ -53,6 +53,32 @@ Lecturas (`horus.ver`): `GET /integraciones/horus`, `GET /integraciones/horus/en
 `POST /integraciones/horus/consumo`, `POST /integraciones/horus/seguridad`. Revisan el acceso al
 servicio (alcance y empresa).
 
+`GET /integraciones/horus/estado` (`horus.abrir`, sin `horus.ver`): `{ activo, reintentar_en }`
+para deshabilitar "Ver en Horus"; sin URL, ids ni secretos. El conector es uno por instalación,
+así que es igual para toda empresa. No llama a Horus.
+
+### Enlace de conexión y página del panel
+
+El enlace `<API_PUBLIC_URL>/conectar#<código>` queda en el host de la API porque Horus canjea en
+`<host del enlace>/api/v1/integraciones/horus/conexion/canjear` (§1.4). Quien lo abre en el
+navegador recibe `GET /conectar` → 302 a `<PANEL_URL_PUBLICA>/conectar` (el fragmento no llega al
+servidor y el navegador lo conserva), la página del panel que explica que se pega en Horus.
+
+### Espera exponencial en los errores
+
+Con Horus en pausa, `detail` (502 de `abrir`) y `error` (lecturas) dicen la hora en
+`America/Guatemala` ("se reintenta después de las 17/10/2026 14:33 (hora de Guatemala)") y el
+instante va aparte en `reintentar_en` (ISO UTC): extensión del problem+json de `horus_error` y
+campo de `Horus360Servicio`, `ConsumoHorus` y `SeguridadHorus` (null sin pausa).
+
+### `Horus360Servicio.datos`
+
+La respuesta de §3.1 tal cual. El esquema declara `security` (`state`, `open_findings`,
+`findings[]` con `id`, `kind`, `severity`, `opened_at`, `summary`) y `meta` (`at`, `omitted`), todo
+opcional y abierto a campos nuevos; el resto (`customer`, `external`, `consumption`, `health`)
+llega sin tipar. `meta.omitted` se acepta como mapa `{ bloque: motivo }` o lista
+`[{ block, reason }]` porque el contrato no fija la forma.
+
 ## Eventos
 
 - **Emite:** `horus.config_cambiada` (`activo`, `campos[]`), `horus.hallazgo_abierto`,

@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import { TABLA_SALUD, type ConfigHorus } from '#integraciones/horus/configuracion'
@@ -28,6 +29,8 @@ export class ErrorHorus extends Error {
         readonly tipo: TipoErrorHorus,
         readonly status: number | null = null,
         readonly cuerpo: unknown = null,
+        /** en pausa por la espera exponencial: cuándo se vuelve a llamar a Horus */
+        readonly reintentarEn: Date | null = null,
     ) {
         super(message)
     }
@@ -41,6 +44,16 @@ export class ErrorHorus extends Error {
             (this.tipo === 'http' && this.status !== null && (this.status >= 500 || this.status === 429))
         )
     }
+}
+
+/** `17/10/2026 14:33` en hora de Guatemala, para los textos de error que ve una persona. */
+export function horaGuatemala(instante: Date): string {
+    return DateTime.fromJSDate(instante).setZone('America/Guatemala').toFormat('dd/MM/yyyy HH:mm')
+}
+
+/** `reintentar_en` (ISO UTC) del error si Horus está en pausa; null si no. */
+export function reintentarEnDe(error: unknown): string | null {
+    return error instanceof ErrorHorus && error.reintentarEn ? error.reintentarEn.toISOString() : null
 }
 
 export interface SaludHorus {
@@ -120,8 +133,12 @@ export async function llamarHorus<T = unknown>(
         const salud = await leerSalud()
         if (salud.pausa_hasta && salud.pausa_hasta.getTime() > Date.now()) {
             throw new ErrorHorus(
-                `Horus no respondió (${salud.ultimo_error ?? 'sin detalle'}); se reintenta después de ${salud.pausa_hasta.toISOString()}`,
+                `Horus no respondió (${salud.ultimo_error ?? 'sin detalle'}); se reintenta después de las ` +
+                    `${horaGuatemala(salud.pausa_hasta)} (hora de Guatemala)`,
                 'pausa',
+                null,
+                null,
+                salud.pausa_hasta,
             )
         }
     }

@@ -1,7 +1,8 @@
 import env from '#start/env'
 import { MASCARA } from '#shared/enmascarar'
-import { desdeFila, leerFila, type FilaConector } from '#integraciones/horus/configuracion'
+import { configHorus, desdeFila, leerFila, type FilaConector } from '#integraciones/horus/configuracion'
 import { leerSalud } from '#integraciones/horus/cliente'
+import { urlPanel } from '#core/sso'
 
 /**
  * Vista del conector para el panel (`GET/PUT /integraciones/horus`). Los secretos salen siempre
@@ -81,4 +82,24 @@ export async function vistaDeFila(fila: FilaConector | null): Promise<VistaConec
 
 export async function verConector(): Promise<VistaConector> {
     return vistaDeFila(await leerFila())
+}
+
+/**
+ * Estado mínimo del conector para quien solo tiene `horus.abrir` (`GET /integraciones/horus/estado`):
+ * si "Ver en Horus" puede funcionar y, si Horus está en pausa, hasta cuándo. Sin URL, ids ni
+ * secretos. El conector es uno por instalación (no por empresa): la respuesta es la misma para
+ * cualquier empresa activa.
+ */
+export async function estadoConector(): Promise<{ activo: boolean; reintentar_en: string | null }> {
+    const config = await configHorus()
+    const activo = config.activo && Boolean(config.urlBase && config.token)
+    if (!activo) return { activo: false, reintentar_en: null }
+    const salud = await leerSalud()
+    const pausa = salud.pausa_hasta && salud.pausa_hasta.getTime() > Date.now() ? salud.pausa_hasta : null
+    return { activo: true, reintentar_en: iso(pausa) }
+}
+
+/** Página `/conectar` del panel, a donde se redirige quien abre el enlace de conexión de Argos. */
+export function urlConectarPanel(): string {
+    return `${urlPanel()}/conectar`
 }

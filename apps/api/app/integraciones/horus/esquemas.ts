@@ -1,11 +1,11 @@
 import {
+    type EsquemaJson,
     booleano,
     definirEsquema,
     entero,
     enumerado,
     id,
     instante,
-    jsonLibre,
     lista,
     nulable,
     objeto,
@@ -89,8 +89,60 @@ const lectura = {
     conector,
     stale: { ...booleano, description: 'true = Horus no respondió y se muestra el último dato conocido' },
     actualizado_en: { ...nulable(instante), description: 'Cuándo se obtuvo de Horus el dato mostrado' },
-    error: { ...nulable(texto), description: 'Por qué no hay dato fresco' },
+    error: {
+        ...nulable(texto),
+        description: 'Por qué no hay dato fresco (las horas, en hora de Guatemala)',
+    },
+    reintentar_en: {
+        ...nulable(instante),
+        description:
+            'Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa',
+    },
 }
+
+/** Objeto con propiedades conocidas, todas opcionales, que admite más (Horus agrega campos). */
+function abierto(propiedades: Record<string, EsquemaJson>, requeridas: string[] = []): EsquemaJson {
+    return { type: 'object', required: requeridas, properties: propiedades, additionalProperties: true }
+}
+
+const MOTIVOS_OMITIDO = ['permission', 'unavailable', 'not_requested', 'not_configured']
+
+/** `security` de §3.1 (lo que el panel muestra en la ficha del servicio). */
+const seguridad360 = abierto({
+    state: { ...texto, description: '`clean`, `suspected`, `compromised`' },
+    open_findings: entero,
+    findings: lista(
+        abierto({
+            id: { type: ['string', 'integer'] },
+            kind: { ...texto, description: 'p. ej. `outbound_scanning`' },
+            severity: { ...texto, description: '`info`, `low`, `medium`, `high`, `critical`' },
+            opened_at: instante,
+            summary: texto,
+        }),
+    ),
+})
+
+/** `meta` de §3.1 (1.1.0): bloques omitidos con su motivo e instante del dato. */
+const meta360 = abierto({
+    at: { ...instante, description: 'Instante del dato en Horus' },
+    omitted: {
+        description:
+            'Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa ' +
+            '`{ security: "permission" }` o lista `[{ block, reason }]`',
+        anyOf: [
+            { type: 'object', additionalProperties: { type: 'string', examples: MOTIVOS_OMITIDO } },
+            lista(
+                abierto(
+                    {
+                        block: { ...texto, description: '`consumption`, `health`, `security`' },
+                        reason: { ...texto, description: MOTIVOS_OMITIDO.map((m) => `\`${m}\``).join(', ') },
+                    },
+                    ['block'],
+                ),
+            ),
+        ],
+    },
+})
 
 export const Horus360Servicio = definirEsquema(
     'Horus360Servicio',
@@ -100,9 +152,11 @@ export const Horus360Servicio = definirEsquema(
         consulta: nulable(enumerado(['external_service_id', 'address'])),
         ip: { ...nulable(texto), description: 'IP actual del servicio en Argos' },
         datos: {
-            ...nulable(jsonLibre),
+            ...nulable(abierto({ security: seguridad360, meta: meta360 })),
             description:
-                'Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta)',
+                'Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, ' +
+                'meta). Se declaran `security` y `meta`, que lee el panel; lo demás llega sin tipar. ' +
+                'Cualquier bloque puede faltar (ver `meta.omitted`)',
         },
         eventos_recientes: lista(
             objeto({
@@ -114,6 +168,20 @@ export const Horus360Servicio = definirEsquema(
                 resumen: nulable(texto),
             }),
         ),
+    }),
+)
+
+export const EstadoConectorHorus = definirEsquema(
+    'EstadoConectorHorus',
+    objeto({
+        activo: {
+            ...booleano,
+            description: 'Encendido y con URL y código de Horus: "Ver en Horus" puede funcionar',
+        },
+        reintentar_en: {
+            ...nulable(instante),
+            description: 'Horus no respondió y está en pausa hasta este instante (UTC); null si no',
+        },
     }),
 )
 

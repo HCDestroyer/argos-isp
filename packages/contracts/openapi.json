@@ -7046,7 +7046,7 @@
       "post": {
         "operationId": "horusAbrir",
         "summary": "Ver en Horus: URL de autologin con ticket de un solo uso",
-        "description": "§1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla. Para `servicio` y `cliente` se revisa el acceso del usuario.",
+        "description": "§1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla; si está en pausa por la espera exponencial, el problem+json trae `reintentar_en` (ISO UTC) y `detail` la hora de Guatemala. Para `servicio` y `cliente` se revisa el acceso del usuario.",
         "tags": [
           "integraciones"
         ],
@@ -7418,7 +7418,7 @@
       "post": {
         "operationId": "horusEnlaceGenerar",
         "summary": "Generar enlace de conexión para pegar en Horus (15 min, un solo uso)",
-        "description": "§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear`.",
+        "description": "§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear` del mismo host (la URL pública de la API). Si alguien abre el enlace en el navegador, `GET /conectar` de la API lo redirige (302, el fragmento se conserva) a `<PANEL_URL_PUBLICA>/conectar`, que explica que se pega en Horus.",
         "tags": [
           "integraciones"
         ],
@@ -7589,6 +7589,58 @@
           }
         },
         "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/estado": {
+      "get": {
+        "operationId": "horusConectorEstado",
+        "summary": "Estado del conector para \"Ver en Horus\": encendido o no, y pausa (sin secretos)",
+        "description": "Con `horus.abrir` (no hace falta `horus.ver`): el panel deshabilita \"Ver en Horus\" con el conector apagado o sin URL o código, y avisa hasta cuándo está en pausa si Horus no respondió. No llama a Horus. El conector es uno por instalación: igual para toda empresa.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado del conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.abrir",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.abrir",
         "x-implementado": true
       }
     },
@@ -28299,6 +28351,7 @@
           "stale",
           "actualizado_en",
           "error",
+          "reintentar_en",
           "desde",
           "hasta",
           "granularidad",
@@ -28329,7 +28382,15 @@
               "string",
               "null"
             ],
-            "description": "Por qué no hay dato fresco"
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
           },
           "desde": {
             "type": "string",
@@ -29651,6 +29712,27 @@
           }
         }
       },
+      "EstadoConectorHorus": {
+        "type": "object",
+        "required": [
+          "activo",
+          "reintentar_en"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Encendido y con URL y código de Horus: \"Ver en Horus\" puede funcionar"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus no respondió y está en pausa hasta este instante (UTC); null si no"
+          }
+        }
+      },
       "EstadoCuenta": {
         "type": "object",
         "required": [
@@ -30476,6 +30558,7 @@
           "stale",
           "actualizado_en",
           "error",
+          "reintentar_en",
           "consulta",
           "ip",
           "datos",
@@ -30510,7 +30593,15 @@
               "string",
               "null"
             ],
-            "description": "Por qué no hay dato fresco"
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
           },
           "consulta": {
             "type": [
@@ -30534,8 +30625,105 @@
               "object",
               "null"
             ],
+            "required": [],
+            "properties": {
+              "security": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "description": "`clean`, `suspected`, `compromised`"
+                  },
+                  "open_findings": {
+                    "type": "integer"
+                  },
+                  "findings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [],
+                      "properties": {
+                        "id": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "description": "p. ej. `outbound_scanning`"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "description": "`info`, `low`, `medium`, `high`, `critical`"
+                        },
+                        "opened_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "summary": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "additionalProperties": true
+              },
+              "meta": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Instante del dato en Horus"
+                  },
+                  "omitted": {
+                    "description": "Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa `{ security: \"permission\" }` o lista `[{ block, reason }]`",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "examples": [
+                            "permission",
+                            "unavailable",
+                            "not_requested",
+                            "not_configured"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "block"
+                          ],
+                          "properties": {
+                            "block": {
+                              "type": "string",
+                              "description": "`consumption`, `health`, `security`"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "description": "`permission`, `unavailable`, `not_requested`, `not_configured`"
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
             "additionalProperties": true,
-            "description": "Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta)"
+            "description": "Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta). Se declaran `security` y `meta`, que lee el panel; lo demás llega sin tipar. Cualquier bloque puede faltar (ver `meta.omitted`)"
           },
           "eventos_recientes": {
             "type": "array",
@@ -36566,6 +36754,7 @@
           "stale",
           "actualizado_en",
           "error",
+          "reintentar_en",
           "modo",
           "items"
         ],
@@ -36594,7 +36783,15 @@
               "string",
               "null"
             ],
-            "description": "Por qué no hay dato fresco"
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
           },
           "modo": {
             "type": [
