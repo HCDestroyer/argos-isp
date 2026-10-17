@@ -179,15 +179,14 @@ const rango = computed(() => {
                     />
                 </div>
 
-                <div
-                    class="overflow-x-auto"
-                    tabindex="0"
-                    :aria-label="`Cuentas de ${seccion.nombre_comercial ?? 'la empresa'}`"
-                >
+                <!-- La tabla se desplaza sola en el teléfono: enfocable y con nombre (axe). -->
+                <div class="min-w-0">
                     <UTable
                         :data="seccion.cuentas"
                         :columns="columnas"
                         :ui="{ td: 'py-2' }"
+                        tabindex="0"
+                        :aria-label="`Cuentas de ${seccion.nombre_comercial ?? 'la empresa'}`"
                     >
                         <template #codigo-cell="{ row }">
                             <div class="flex flex-col">

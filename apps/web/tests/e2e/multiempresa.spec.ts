@@ -58,3 +58,29 @@ test('el cajero tiene una sola empresa: no ve el selector', async ({ page }) => 
     await ir(page, 'Cobrar', /\/cobro/)
     await expect(page.locator('[data-prueba="selector-empresa"]')).toHaveCount(0)
 })
+
+test('cobro repartido: un pago por empresa y el recibo con una sección por empresa', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'Cobrar', /\/cobro/)
+    await page.getByPlaceholder('Buscar cliente…').fill('Comercial El Progreso')
+    await page.getByRole('option', { name: /Comercial El Progreso/ }).click()
+    await page.locator('[data-factura="310"] button[role="checkbox"]').click()
+    await page.locator('[data-factura="410"] button[role="checkbox"]').click()
+    await expect(page.locator('[data-prueba="reparto-empresas"]')).toContainText('Fibra del Sur')
+    await page.getByRole('button', { name: 'Registrar pago' }).click()
+
+    const partes = page.locator('[data-prueba="pagos-por-empresa"]')
+    await expect(partes).toContainText('ArgosNet')
+    await expect(partes).toContainText('Fibra del Sur')
+    const recibo = page.getByRole('article', { name: 'Recibo del cobro' })
+    await expect(recibo.locator('section[data-empresa]')).toHaveCount(2)
+    await expect(recibo.locator('[data-prueba="total-cobro"]')).toContainText('Q 900.00')
+})
+
+test('libro: balance por empresa con el total del grupo', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'Libro', /\/libro/)
+    await page.getByRole('tab', { name: 'Balance' }).click()
+    await expect(page.locator('[data-prueba="total-grupo"]')).toBeVisible()
+    await expect(page.locator('[data-prueba="libro-balance"] section[data-empresa="2"]')).toContainText('Fibra del Sur')
+})

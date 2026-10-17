@@ -28,6 +28,9 @@ const PANTALLAS = [
     ['servicio de otra empresa', '/servicios/4'],
     ['cliente con dos empresas', '/clientes/3?tab=cuenta'],
     ['cobro con dos empresas', '/cobro?cliente=3'],
+    ['balance por empresa', '/libro?tab=balance'],
+    ['estado de resultados', '/libro?tab=resultados'],
+    ['bitácora con empresas', '/bitacora'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
