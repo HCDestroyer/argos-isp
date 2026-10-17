@@ -40,7 +40,18 @@ const CSV = fileURLToPath(new URL('../../../../scripts/importacion/sintetico-csv
  */
 function comparable(r: ReporteImportacion, propios: ProblemaFila[] = []) {
     const copia: Partial<ReporteImportacion> = { ...r }
-    for (const campo of ['request_id', 'inicio', 'fin', 'origen', 'fuente'] as const) delete copia[campo]
+    // `tablas` y `notas_origen` son del origen (tablas del volcado frente a archivos CSV)
+    for (const campo of [
+        'request_id',
+        'inicio',
+        'fin',
+        'origen',
+        'fuente',
+        'tablas',
+        'notas_origen',
+    ] as const) {
+        delete copia[campo]
+    }
     copia.formato = r.formato
         .filter((x) => !propios.some((p) => p.id === x.id && p.mensaje === x.mensaje))
         .map(({ id, mensaje, aviso }) => ({ archivo: '', linea: 0, id, mensaje, aviso }))
@@ -56,7 +67,7 @@ INSERT INTO address_routers (id,name,router_id,gateway,type,mask,network,hosts,u
 INSERT INTO plans (id,name,download,upload,num_clients,cost,iva) VALUES (1,'SI 10M',10000,5000,1,150.00,0.00);
 INSERT INTO clients (id,name,email,phone,address,coordinates,photo,dni,password,balance,zona_id,wallet_balance) VALUES (1,'Cliente SmartISP','si@example.com','22223333','Zona 1',NULL,'','CF','portal',100.00,NULL,20.00);
 INSERT INTO client_services (id,client_id,ip,mac,date_in,plan_id,router_id,status,user_hot,pass_hot) VALUES (1,1,'198.18.70.10','00:00:00:00:00:00','2024-01-10',1,1,'ac','si.cliente','clave'),(2,1,'198.18.70.11',NULL,'2024-01-10',1,1,'baja','si.viejo','clave');
-INSERT INTO bill_customers (id,num_bill,period,release_date,expiration_date,iva,cost,total_pay,status,client_id,service_id,open,paid_on,start_date) VALUES (1,'B-1','Septiembre 2026','2026-09-01','2026-09-10',0.00,150.00,150.00,2,1,1,0,NULL,'2026-09-01'),(2,'B-2','Agosto 2026','2026-08-01','2026-08-10',0.00,150.00,150.00,4,1,NULL,0,NULL,NULL);
+INSERT INTO bill_customers (id,num_bill,period,release_date,expiration_date,iva,cost,total_pay,status,client_id,service_id,open,paid_on,start_date) VALUES (1,'B-1','Septiembre 2026','2026-09-01','2026-09-10',0.00,150.00,150.00,3,1,1,0,NULL,'2026-09-01'),(2,'B-2','Agosto 2026','2026-08-01','2026-08-10',0.00,0.00,0.00,2,1,NULL,1,NULL,NULL);
 INSERT INTO payment_news (id,client_id,way_to_pay,date,amount,num_bill,deleted_at) VALUES (1,1,'Efectivo','2026-09-05','50.00','B-1',NULL),(2,1,'Efectivo','2026-09-06','30.00','B-1','2026-09-07 08:00:00');
 `
 
@@ -81,7 +92,7 @@ test.group('importacion · orígenes', (group) => {
         assert.throws(() => fuenteDesdeDumpSmartisp(mikrowisp, 'mikrowisp6.sql'), /falta la tabla clients/)
     })
 
-    test('el runbook pide en el mysqldump exactamente las tablas que lee cada adaptador', async ({
+    test('el runbook pide el mysqldump de la base completa (todo va al archivo del origen)', async ({
         assert,
     }) => {
         const runbook = await readFile(
@@ -91,25 +102,15 @@ test.group('importacion · orígenes', (group) => {
         const comandos = [
             ...runbook.matchAll(/mysqldump [^`]*?-p <base> \\\n([\s\S]*?)> (\w+)-AAAAMMDD\.sql/g),
         ]
-        const tablasDe = (origen: string) =>
-            comandos
-                .find((m) => m[2] === origen)?.[1]
-                ?.replace(/\\/g, ' ')
-                .split(/\s+/)
-                .filter(Boolean)
-                .sort()
-        assert.deepEqual(
-            tablasDe('mikrowisp'),
-            Object.values(ESQUEMA_MIKROWISP)
-                .map((t) => t.tabla)
-                .sort(),
-        )
-        assert.deepEqual(
-            tablasDe('smartisp'),
-            Object.values(ESQUEMA_SMARTISP)
-                .map((t) => t.tabla)
-                .sort(),
-        )
+        for (const origen of ['mikrowisp', 'smartisp']) {
+            const tablas = comandos.find((m) => m[2] === origen)?.[1]
+            assert.isDefined(tablas, origen)
+            assert.equal(tablas!.trim(), '', `${origen}: sin lista de tablas`)
+        }
+        // y nombra las tablas que lee cada adaptador
+        for (const t of [...Object.values(ESQUEMA_MIKROWISP), ...Object.values(ESQUEMA_SMARTISP)]) {
+            assert.include(runbook, `\`${t.tabla}\``, t.tabla)
+        }
     })
 
     test('CSV con los mismos datos que el volcado de Mikrowisp da el mismo reporte', async ({ assert }) => {
@@ -125,12 +126,12 @@ test.group('importacion · orígenes', (group) => {
             plantillaId,
         })
         const { problemas: propios } = filasDesdeDump(await readFile(SQL, 'utf8'), 'mikrowisp-sintetico.sql')
-        assert.lengthOf(propios, 8) // monedas, estado desconocido, tv, avisos (ver la cabecera del fixture)
+        assert.lengthOf(propios, 9) // monedas, estado desconocido, tv, clave del router, avisos (ver la cabecera del fixture)
         assert.deepEqual(comparable(desdeCsv), comparable(desdeSql, propios))
         assert.equal(desdeCsv.origen, 'csv')
         assert.match(desdeCsv.request_id, /^importacion-csv-/)
         assert.isTrue(desdeCsv.saldos.cuadra)
-        assert.equal(desdeCsv.saldos.suma_origen, '1780.00')
+        assert.equal(desdeCsv.saldos.suma_origen, '2280.00')
         assert.deepEqual(desdeCsv.errores, [])
     })
 
@@ -202,9 +203,13 @@ test.group('importacion · orígenes', (group) => {
 
     test('SmartISP: con el esquema real traduce al formato canónico', ({ assert }) => {
         const fuente = fuenteDesdeDumpSmartisp(SMARTISP_REAL)
-        assert.deepEqual(fuente.problemas, [])
+        // único aviso: la clave de la API viene cifrada y no se importa
+        assert.deepEqual(
+            fuente.problemas.map((p) => [p.archivo, p.id, p.aviso]),
+            [['smartisp.sql:routers', '1', true]],
+        )
         assert.containSubset(fuente.routers, [
-            { id: '1', nas_ip: '198.18.70.1', api_usuario: 'argos', radius_secret: 'secreto' },
+            { id: '1', nas_ip: '198.18.70.1', api_usuario: null, radius_secret: 'secreto' },
         ])
         assert.containSubset(fuente.redes, [{ router_id: '1', cidr: '198.18.70.0/24', tipo: 'estatico' }])
         assert.containSubset(fuente.planes, [{ id: '1', bajada_kbps: 10_000, subida_kbps: 5000 }])
@@ -216,10 +221,13 @@ test.group('importacion · orígenes', (group) => {
                 ['2', 'pppoe', 'si.viejo', null, 'retirado'],
             ],
         )
-        // La anulada (status 4) no viene; la pendiente descuenta su pago vigente (el borrado no)
+        // Pendiente (status 3) descuenta su pago vigente (el borrado no); sin cargo (status 2) en 0
         assert.deepEqual(
-            fuente.facturas.map((f) => [f.id, f.servicio_id, f.periodo, f.pendiente]),
-            [['1', '1', '2026-09-01', '100.00']],
+            fuente.facturas.map((f) => [f.id, f.servicio_id, f.periodo, f.total, f.pendiente]),
+            [
+                ['1', '1', '2026-09-01', '150.00', '100.00'],
+                ['2', null, '2026-08-01', '0.00', '0.00'],
+            ],
         )
         assert.deepEqual(
             fuente.pagos.map((p) => [p.id, p.factura_id, p.monto]),

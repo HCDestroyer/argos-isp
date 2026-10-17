@@ -498,11 +498,12 @@ test.group('notify · Telegram · registro del webhook', (group) => {
     test('setWebhook con el secreto y solo `message`; comandos en español', async ({ assert }) => {
         const api = fetchTelegramFalso(() => ({ status: 200, json: { ok: true, result: true } }))
         const resultado = await registrarWebhook({ fetch: api.fetch })
-        assert.equal(resultado.url, VARIABLES.TELEGRAM_WEBHOOK_URL)
+        // una URL por bot: <base>/<id del bot>
+        assert.equal(resultado.url, `${VARIABLES.TELEGRAM_WEBHOOK_URL}/123456`)
 
         const set = api.llamadas.find((l) => l.metodo === 'setWebhook')!
         assert.include(set.url, `/bot${VARIABLES.TELEGRAM_BOT_TOKEN}/setWebhook`)
-        assert.equal(set.cuerpo.url, VARIABLES.TELEGRAM_WEBHOOK_URL)
+        assert.equal(set.cuerpo.url, `${VARIABLES.TELEGRAM_WEBHOOK_URL}/123456`)
         assert.equal(set.cuerpo.secret_token, SECRETO)
         assert.deepEqual(set.cuerpo.allowed_updates, ['message'])
         const comandos = api.llamadas.filter((l) => l.metodo === 'setMyCommands')

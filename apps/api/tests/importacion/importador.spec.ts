@@ -182,17 +182,19 @@ test.group('importacion · Mikrowisp', () => {
             servicios: wisp
                 ? { origen: 13, creados: 6, existentes: 0, omitidos: 7 }
                 : { origen: 13, creados: 3, existentes: 0, omitidos: 10 },
-            // 5001, 5002 (sin servicio_id: el único del cliente) y 5003; 5004 va al saldo,
-            // 5005 está pagada y 5006 es de un cliente que no existe
-            facturas: { origen: 6, creados: 3, existentes: 0, omitidos: 3 },
-            // 101: 300 − 250 de facturas = 50; 103: 170 (su factura no tiene servicio); 105: −20
-            saldos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
+            // Modo B (todas por su total): 5001, 5002 (sin servicio_id: el único del cliente), 5003,
+            // 5004 (su servicio no entró: cargo único del cliente) y 5005 (pagada: saldada en el
+            // origen); 5006 es de un cliente que no existe
+            facturas: { origen: 6, creados: 5, existentes: 0, omitidos: 1 },
+            // la diferencia que las facturas no explican: 103: 170 − 150 = 20; 105: −20 (a favor).
+            // 101 no lleva: sus facturas por su total ya suman los 300 del origen
+            saldos: { origen: 2, creados: 2, existentes: 0, omitidos: 0 },
         })
         assert.equal(r.ids_externos, (await hayIdsExternos()) ? 'tabla' : 'ninguno')
 
         // Suma de saldos: lo que no cuadra son los clientes que no se pudieron importar
         assert.deepEqual(r.saldos, {
-            clientes: 6,
+            clientes: 7, // los 5 del origen (todos en modo B), 106 (solo en saldos) y 999 (solo en facturas)
             suma_origen: '1874.50',
             suma_importada: '1700.50',
             diferencia: '-174.00',
@@ -202,14 +204,28 @@ test.group('importacion · Mikrowisp', () => {
             { cliente_origen: '106', nombre: null, origen: '75.00', importado: '0.00', diferencia: '-75.00' },
             { cliente_origen: '999', nombre: null, origen: '99.00', importado: '0.00', diferencia: '-99.00' },
         ])
-        assert.deepEqual(r.diferencias.facturas_a_saldo, [
+        // su servicio no entró: cargo único del cliente (contrato «Importación completa»)
+        assert.deepEqual(r.diferencias.facturas_a_saldo, [])
+        assert.deepEqual(r.diferencias.facturas_cargo_unico, [
             {
                 factura_origen: '5004',
                 cliente_origen: '103',
-                pendiente: '150.00',
-                motivo: 'el servicio 1003 no se importó',
+                total: '150.00',
+                nota: 'sin servicio en ArgosIsp (el servicio 1003 no se importó): entra como cargo único del cliente',
             },
         ])
+        assert.deepEqual(
+            r.diferencias.facturas_saldadas_en_origen.map((x) => x.factura_origen),
+            ['5005'],
+        )
+        // Cuadre por tabla del directorio CSV: cada fila contada
+        for (const t of r.tablas) {
+            assert.equal(
+                t.leidas,
+                t.creadas + t.existentes + t.al_saldo + t.solo_archivo + t.omitidas,
+                t.tabla,
+            )
+        }
         assert.deepInclude(r.diferencias.referencias_faltantes, {
             entidad: 'factura',
             id_origen: '5006',
@@ -287,7 +303,7 @@ test.group('importacion · Mikrowisp', () => {
         assert.include(texto, '198.19.10.11: servicios 1002, 1003; se importa 1002')
         assert.include(
             texto,
-            'Saldos (6 clientes): origen Q 1874.50 · ArgosIsp Q 1700.50 · DIFERENCIA Q -174.00',
+            'Saldos (7 clientes): origen Q 1874.50 · ArgosIsp Q 1700.50 · DIFERENCIA Q -174.00',
         )
         assert.include(texto, 'cliente 999: origen Q 99.00 · ArgosIsp Q 0.00 · diferencia Q -99.00')
 
@@ -298,14 +314,16 @@ test.group('importacion · Mikrowisp', () => {
         const plantillaId = await crearPlantillaFila()
         const fuente = await leerDirectorio(EJEMPLO)
         // sin el cliente que no existe (106) ni la factura del cliente fantasma (999)
+        // sin archivo del origen: se quitaron filas a mano y el cuadre por tabla las echaría de menos
         const limpia = {
             ...fuente,
+            archivo: undefined,
             saldos: fuente.saldos.filter((x) => x.cliente_id !== '106'),
             facturas: fuente.facturas.filter((f) => f.cliente_id !== '999'),
         }
         const r = await importar(limpia, { sistema: 'mikrowisp', dryRun: true, plantillaId })
         assert.deepEqual(r.saldos, {
-            clientes: 4,
+            clientes: 5,
             suma_origen: '1700.50',
             suma_importada: '1700.50',
             diferencia: '0.00',
@@ -371,8 +389,9 @@ test.group('importacion · Mikrowisp', () => {
                 'clientes.crear': 5,
                 'planes.editar': wisp ? 4 : 3,
                 'servicios.crear': wisp ? 6 : 3,
-                'facturas.importar_pendiente': 3,
-                'facturas.registrar_saldo_inicial': 3,
+                'facturas.importar_pendiente': 5,
+                'facturas.registrar_saldo_inicial': 2,
+                'importacion.archivar': 7, // un lote por archivo CSV
             })
             const eventos = await trx
                 .from('audit.outbox')
@@ -386,13 +405,13 @@ test.group('importacion · Mikrowisp', () => {
                 .from('billing.facturas')
                 .where('clave_externa', 'mikrowisp:factura:5002')
                 .firstOrFail()
-            assert.equal(factura.total, '100.00')
+            assert.equal(factura.total, '150.00') // por su total (modo B)
             assert.equal(Number(factura.servicio_id), Number(servicio.id))
-            const saldoAna = await trx
+            const saldo103 = await trx
                 .from('billing.saldos_iniciales')
-                .where('clave_externa', 'mikrowisp:saldo:101')
+                .where('clave_externa', 'mikrowisp:saldo:103')
                 .firstOrFail()
-            assert.equal(saldoAna.monto, '50.00')
+            assert.equal(saldo103.monto, '20.00')
             assert.equal(primera.saldos.suma_importada, '1700.50')
 
             const segunda = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
@@ -404,8 +423,8 @@ test.group('importacion · Mikrowisp', () => {
                 servicios: wisp
                     ? { origen: 13, creados: 0, existentes: 6, omitidos: 7 }
                     : { origen: 13, creados: 0, existentes: 3, omitidos: 10 },
-                facturas: { origen: 6, creados: 0, existentes: 3, omitidos: 3 },
-                saldos: { origen: 3, creados: 0, existentes: 3, omitidos: 0 },
+                facturas: { origen: 6, creados: 0, existentes: 5, omitidos: 1 },
+                saldos: { origen: 2, creados: 0, existentes: 2, omitidos: 0 },
             })
             assert.deepEqual(segunda.errores, [])
             // la suma no cambia al repetir

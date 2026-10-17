@@ -55,7 +55,8 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
         assert.deepEqual(
             fuente.routers.map((r) => [r.id, r.nas_ip, r.api_usuario, r.radius_secret]),
             [
-                ['1', '198.18.70.1', 'argos', 'secreto-si-norte'],
+                // routers.password viene cifrada: usuario y clave de la API quedan pendientes
+                ['1', '198.18.70.1', null, 'secreto-si-norte'],
                 ['2', '198.18.80.1', null, null],
                 ['3', '198.18.90.1', null, null],
                 ['4', '198.18.100.1', null, null],
@@ -90,7 +91,7 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
         assert.containSubset(s('6'), { tipo_conexion: 'dhcp_fija', ip: null, mac: 'AA:BB:CC:00:90:60' })
         for (const omitido of ['7', '9', '10']) assert.isUndefined(s(omitido), omitido) // hotspot, xx, sin usuario
 
-        // Anulada (105) y status desconocido (107) no vienen; pagada 102 con pendiente 0
+        // Status desconocido (107) no viene; pagada 102 con pendiente 0; 105 sin cargo (status 2)
         assert.deepEqual(
             Object.fromEntries(fuente.facturas.map((f) => [f.id, [f.servicio_id, f.total, f.pendiente]])),
             {
@@ -98,19 +99,21 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
                 '102': ['1', '150.00', '0.00'],
                 '103': ['2', '600.00', '350.00'],
                 '104': ['5', '150.00', '100.00'],
+                '105': ['1', '0.00', '0.00'],
                 '106': [null, '150.00', '150.00'], // total_pay NULL = cost + iva
                 '108': ['3', '150.00', '0.00'],
                 '109': ['3', '150.00', '150.00'],
                 '110': ['8', '75.00', '75.00'],
             },
         )
-        // El pago borrado (504) no viene
+        // El pago borrado (504) no viene; 505 (num_bill que no existe) entra sin factura
         assert.deepEqual(
             fuente.pagos.map((p) => [p.id, p.cliente_id, p.factura_id]),
             [
                 ['501', '1', '102'],
                 ['502', '2', '103'],
                 ['503', '4', '104'],
+                ['505', '7', null],
             ],
         )
         assert.deepEqual(
@@ -131,6 +134,8 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
             ['clients.balance', '5', true], // balance ≠ pendiente
             ['plans', '2', true], // iva aparte
             ['invoices', null, true], // tabla vieja con filas
+            ['payment_news', '505', true], // num_bill que no existe
+            ['routers', '1', true], // clave de la API cifrada
         ]) {
             assert.deepInclude(problemas, esperado)
         }
@@ -160,7 +165,7 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
 
         assert.deepEqual(r1.errores, [])
         assert.deepEqual(r1.saldos, {
-            clientes: 6,
+            clientes: 7,
             suma_origen: '925.00',
             suma_importada: '925.00',
             diferencia: '0.00',
@@ -171,7 +176,10 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
             clientes: { origen: 7, creados: 7, existentes: 0, omitidos: 0 },
             // 7 filas válidas: 4 (IP repetida) y 8 (sin plan) no entran
             servicios: { origen: 7, creados: 5, existentes: 0, omitidos: 2 },
-            pagos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
+            // todas por su total: la pagada sin pago (108) saldada en el origen, la sin cargo (105)
+            // y la del servicio sin plan como cargo único del cliente (110)
+            facturas: { origen: 9, creados: 9, existentes: 0, omitidos: 0 },
+            pagos: { origen: 4, creados: 4, existentes: 0, omitidos: 0 },
         })
 
         const d = r1.diferencias
@@ -187,10 +195,29 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
             d.pagos_cruzados.map((x) => [x.pago_origen, x.pagador_origen, x.dueno_origen]),
             [['503', '4', '5']],
         )
+        assert.deepEqual(d.facturas_a_saldo, [])
         assert.deepEqual(
-            d.facturas_a_saldo.map((x) => x.factura_origen),
+            d.facturas_cargo_unico.map((x) => x.factura_origen),
             ['110'],
         )
+        assert.deepEqual(
+            d.facturas_saldadas_en_origen.map((x) => x.factura_origen),
+            ['108'],
+        )
+        assert.deepEqual(
+            d.facturas_sin_cargo.map((x) => x.factura_origen),
+            ['105'],
+        )
+        assert.deepInclude(r1.dinero.diferencia, { facturado: '0.00', pagos: '0.00' })
+        const pagosTabla = r1.tablas.find((t) => t.tabla === 'payment_news')!
+        assert.deepInclude(pagosTabla, { leidas: 5, creadas: 4, solo_archivo: 1 }) // 504 borrado
+        for (const t of r1.tablas) {
+            assert.equal(
+                t.leidas,
+                t.creadas + t.existentes + t.al_saldo + t.solo_archivo + t.omitidas,
+                t.tabla,
+            )
+        }
         assert.deepEqual(d.saldos_distintos, [])
 
         const lineas = lineasDiferencias(r1).map((x) => [x.entidad, x.id_origen, x.tipo])
@@ -257,6 +284,19 @@ test.group('importacion · SmartISP desde volcado SQL', (group) => {
             for (const secreto of ['clave-si', 'secreto-si-norte', 'portal-']) {
                 assert.notInclude(salidas, secreto)
             }
+            // Archivo del origen: credenciales como ***, la pagada sin pago saldada en el origen
+            const archivo = JSON.stringify(
+                await trx.from('importacion.filas_origen').where('origen', 'smartisp').select('fila'),
+            )
+            for (const secreto of ['clave-si', 'secreto-si-norte', 'portal-']) {
+                assert.notInclude(archivo, secreto)
+            }
+            const f108 = (await trx
+                .from('billing.facturas')
+                .where({ origen: 'smartisp', clave_externa: 'smartisp:factura:108' })
+                .select('estado', 'pagado', 'total')
+                .first()) as { estado: string; pagado: string; total: string }
+            assert.deepEqual(f108, { estado: 'pagada', pagado: '150.00', total: '150.00' })
 
             const auditadas = (await trx
                 .from('audit.acciones')

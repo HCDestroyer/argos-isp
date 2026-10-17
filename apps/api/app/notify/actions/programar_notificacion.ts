@@ -17,6 +17,7 @@ import {
     tercerosDelPago,
 } from '#notify/avisos_pago'
 import { cargarDestinatario, construirVariables, resolverCliente } from '#notify/variables'
+import { configPara, empresaDelEvento } from '#notify/configuracion'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -54,6 +55,9 @@ interface Aviso {
  * - Sin plantilla activa para el evento: no hace nada (el evento no se notifica).
  * - Hay plantilla pero el cliente no tiene destino en ningún canal: registra un envío `fallido`
  *   ("sin destino") para que se vea en el panel y emite `notificacion.enviada` con estado fallido.
+ * - Configuración (`configuracion.ts`): la de la empresa del evento si tiene la suya, si no la
+ *   global. Un canal o un tipo de aviso apagado no se envía: queda un envío `omitido` con el
+ *   motivo (sin `notificacion.enviada`).
  * - `pago.registrado` (`avisos_pago.ts`): el pagador recibe un solo aviso por pago. Si el pago
  *   salió de aprobar un comprobante, el aviso es el de `comprobante.aprobado` y aquí se omite.
  *   Cada dueño de factura distinto del pagador (`clientes[]`) recibe `pago.registrado.tercero`.
@@ -124,8 +128,10 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         const destinatario = await cargarDestinatario(t.trx, aviso.clienteId)
         if (!destinatario) return null
 
+        const empresaId = await empresaDelEvento(t.trx, aviso.payload)
+        const config = await configPara(empresaId)
         const variables = await construirVariables(t.trx, aviso.evento, aviso.payload, destinatario, ahora)
-        const elegidos = elegirCanales(destinatario, plantillas)
+        const elegidos = elegirCanales(destinatario, plantillas, config, aviso.evento)
 
         if (elegidos.length === 0) {
             const canal = destinatario.canalPreferido
@@ -141,6 +147,7 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                 plantilla,
                 requestId: t.ctx.requestId,
                 error: 'El cliente no tiene destino en su canal preferido ni correo',
+                empresaId,
             })
             if (envio.nuevo) {
                 await t.emit('notificacion.enviada', {
@@ -165,6 +172,8 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                     variables,
                     plantilla: eleccion.plantilla,
                     requestId: t.ctx.requestId,
+                    omitido: eleccion.omitido,
+                    empresaId,
                 }),
             )
         }
