@@ -20,6 +20,17 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 - Un job inválido (contrato roto) falla sin reintentos; un error de Postgres se reintenta con el backoff que fija `aaa` (8 intentos desde 1 s).
 - Cada paquete pasa por una `DomainAction`. Se audita en `audit.acciones` todo salvo el Interim-Update que solo actualiza contadores (`auditarExito()` en `ActualizarSesion`, excepción de la regla 9); si el Interim abre la sesión, o falla, sí se audita.
 
+## Sesiones colgadas (semana 3)
+
+Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:worker` (`colgadas.ts`, acción `CerrarSesionesColgadas`, permiso/nombre `sesiones.cerrar_colgadas`). `--sin-cron` lo apaga en una réplica.
+
+- Colgada = abierta y sin accounting (Start, Interim-Update) desde `SESIONES_COLGADAS_INTERVALOS` (3) × `AAA_INTERIM_SEGUNDOS` (300, el mismo `Acct-Interim-Interval` de `services/aaa`) = 15 min. El último accounting es `updated_at` de la fila. Revisa cada `SESIONES_COLGADAS_CADA_MS` (300000; 0 lo apaga).
+- Se cierra con `fin` = último accounting y `causa_fin = 'sin_interim'`; `sesion.terminada` lleva `motivo: 'sin_interim'` (campo nuevo `motivo` = `causa_fin` en todo `sesion.terminada`, ver `contratos/eventos.md`). Cada sesión deja su fila en `audit.cambios`.
+- Procesa todo lo pendiente hasta ahora por lotes de 500 (una transacción y una fila de `audit.acciones` por lote). Lock: worker con concurrencia 1 y advisory lock de Postgres durante la corrida; otra réplica omite su corrida. `FOR UPDATE SKIP LOCKED`: una sesión que el worker de accounting tiene bloqueada queda para la próxima.
+- **Salvaguarda**: solo se cierran sesiones de NAS que siguen mandando accounting (alguna sesión abierta suya se actualizó o empezó después del corte). Si `aaa`, Redis o el worker se caen, ningún NAS tiene accounting reciente y no se cierra nada; esos NAS salen en `nas_silenciosos` del log. Un NAS que se apagó cierra las suyas con su `Accounting-On`.
+- Si después llega un Interim-Update de una sesión cerrada por `sin_interim` (y el usuario no abrió otra), la sesión se reabre (`fin` y causa a null, auditado) y se emite `sesion.iniciada`; si llega su Stop, se corrigen `fin`, causa y contadores sin repetir `sesion.terminada`. Una sesión cerrada por el NAS sigue sin reabrirse con un Interim tardío.
+- Auditoría: `audit.acciones` solo cuando la corrida cerró algo (`auditarExito`): el cron corre cada 5 min y casi siempre no encuentra nada (excepción de la regla 9 pedida al líder en `a2.md`). Los errores se auditan siempre.
+
 ## Panel (tarea 8)
 
 | Ruta                                | Permiso                 | Qué hace                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -84,6 +95,7 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 ## Pruebas
 
 - `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados fuera, 404/422/403, alcance).
+- `tests/network/sesiones_colgadas.spec.ts`: cierre con `sin_interim`, evento con `motivo`, auditoría, idempotencia, NAS silencioso, lotes, lock, reapertura por Interim, corrección por Stop y programación del job.
 - `tests/network/migracion_aaa.spec.ts`: marcar, volver a marcar, desmarcar, auditoría, 409/422/404/403, alcance, `Idempotency-Key` y `desde` por defecto del resumen.
 - `tests/network/eventos_red.spec.ts`: `GET /red/eventos` (filtros, fechas, cursor, credenciales como `***`, permiso y alcance).
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).

@@ -29,6 +29,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'sesiones.actualizar': 'Sesión PPPoE actualizada',
     'sesiones.terminar': 'Sesión PPPoE terminada',
     'sesiones.cerrar_nas': 'Sesiones del router cerradas',
+    'sesiones.cerrar_colgadas': 'Sesiones sin accounting cerradas',
     'facturas.emitir': 'Aviso de cobro emitido',
     'facturas.vencer': 'Aviso de cobro vencido',
     'facturas.vencer_pendientes': 'Avisos de cobro vencidos',

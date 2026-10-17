@@ -48,6 +48,16 @@ export default await Env.create(new URL('../', import.meta.url), {
     AAA_SALUD_NODOS: Env.schema.string.optional(),
     /** ms sin responder antes de emitir `aaa.caido` (por defecto 60000) */
     AAA_CAIDO_TRAS_MS: Env.schema.number.optional(),
+
+    /**
+     * Sesiones colgadas (A2, cron de `node ace sesiones:worker`): se cierran las abiertas sin
+     * Interim-Update ni Stop en `SESIONES_COLGADAS_INTERVALOS` (3) × `AAA_INTERIM_SEGUNDOS` (300,
+     * el mismo `Acct-Interim-Interval` que entrega `aaa`). Revisa cada `SESIONES_COLGADAS_CADA_MS`
+     * (300000); 0 lo apaga.
+     */
+    AAA_INTERIM_SEGUNDOS: Env.schema.number.optional(),
+    SESIONES_COLGADAS_INTERVALOS: Env.schema.number.optional(),
+    SESIONES_COLGADAS_CADA_MS: Env.schema.number.optional(),
     /** ms entre health checks (por defecto 5000) */
     AAA_SALUD_CADA_MS: Env.schema.number.optional(),
 
