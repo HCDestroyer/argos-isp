@@ -310,3 +310,133 @@ export const EstablecimientoFiscal = definirEsquema(
         updated_at: instante,
     }),
 )
+
+/*
+| FEL (fase 3)
+*/
+
+const ambienteFel = enumerado(['pruebas', 'produccion'])
+
+export const CredencialesFel = definirEsquema(
+    'CredencialesFel',
+    objeto({
+        id,
+        empresa_id: id,
+        proveedor: texto,
+        ambiente: ambienteFel,
+        campos_visibles: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+            description: 'Solo lo que se puede mostrar (usuario); las llaves nunca salen de la API',
+        },
+        probada_en: nulable(instante),
+        resultado_prueba: nulable(objeto({ ok: booleano, detalle: texto })),
+        version: entero,
+        updated_at: instante,
+    }),
+)
+
+export const ConfiguracionFel = definirEsquema(
+    'ConfiguracionFel',
+    objeto({
+        empresa_id: id,
+        proveedor: nulable(enumerado(['infile', 'falso'])),
+        ambiente: ambienteFel,
+        modo: enumerado(['obligatoria', 'opcional', 'desactivada']),
+        contingencia_activa: booleano,
+        contingencia_motivo: nulable(texto),
+        contingencia_desde: nulable(instante),
+        version: { ...entero, description: '0 si la empresa nunca se configuró (está desactivada)' },
+        updated_at: nulable(instante),
+        credenciales: lista(CredencialesFel),
+    }),
+)
+
+const receptorDte = objeto({
+    tipo: enumerado(['nit', 'cui', 'pasaporte', 'cf']),
+    id: texto,
+    nombre: texto,
+    direccion: nulable(texto),
+    correo: nulable(texto),
+})
+
+export const Dte = definirEsquema(
+    'Dte',
+    objeto({
+        id,
+        empresa_id: id,
+        establecimiento_id: nulable(id),
+        documento_tipo: enumerado(['factura', 'nota_credito', 'nota_debito']),
+        documento_id: id,
+        tipo_dte: { ...texto, description: 'FACT, FPEQ, NCRE, NDEB…' },
+        estado: enumerado([
+            'pendiente',
+            'enviando',
+            'certificado',
+            'error_temporal',
+            'rechazado',
+            'contingencia',
+            'anulacion_pendiente',
+            'anulado',
+        ]),
+        proveedor: texto,
+        ambiente: ambienteFel,
+        identificador: {
+            ...texto,
+            format: 'uuid',
+            description: 'Clave de idempotencia ante el certificador',
+        },
+        autorizacion: { ...nulable(texto), description: 'UUID de autorización de la SAT' },
+        serie: nulable(texto),
+        numero: nulable(texto),
+        fecha_emision: instante,
+        certificado_en: nulable(instante),
+        receptor: receptorDte,
+        referencia: nulable(
+            objeto({
+                autorizacion: texto,
+                serie: nulable(texto),
+                numero: nulable(texto),
+                fecha,
+                motivo: texto,
+            }),
+        ),
+        total: { type: 'string', description: 'Monto con 2 decimales' },
+        iva: { type: 'string', description: 'Monto con 2 decimales' },
+        contingencia: booleano,
+        intentos: entero,
+        proximo_intento: nulable(instante),
+        ultimo_error: {
+            ...nulable(texto),
+            description: 'Error visible (SAT, receptor_requerido, aviso_sin_cubrir…)',
+        },
+        definitivo: {
+            ...booleano,
+            description: 'Rechazo definitivo: se corrige el dato y se reintenta a mano',
+        },
+        solicitud: enumerado(['automatico', 'manual']),
+        anulado_en: nulable(instante),
+        motivo_anulacion: nulable(texto),
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+export const SolicitudCertificacion = definirEsquema(
+    'SolicitudCertificacion',
+    objeto({
+        factura_id: id,
+        dte: nulable(Dte),
+        creado: booleano,
+        motivo: nulable(texto),
+    }),
+)
+
+export const LoteCertificacion = definirEsquema(
+    'LoteCertificacion',
+    objeto({
+        solicitadas: lista(SolicitudCertificacion),
+        errores: lista(objeto({ factura_id: id, tipo: texto, detalle: texto })),
+    }),
+)

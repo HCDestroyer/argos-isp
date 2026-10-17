@@ -91,7 +91,7 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
 )
 
 export const FacturaLinea = definirEsquema(
@@ -138,10 +138,23 @@ export const Factura = definirEsquema(
                 ...Dinero,
                 description: 'Parte de pagado que viene de notas de crédito (saldo = total − pagado)',
             },
-            fel_uuid: nulable(texto),
+            fel_uuid: { ...nulable(texto), description: 'Autorización (UUID SAT) del DTE vigente' },
             fel_serie: nulable(texto),
             fel_numero: nulable(texto),
-            fel_estado: nulable(texto),
+            fel_estado: {
+                ...nulable(texto),
+                description:
+                    'Estado del DTE vigente (o del último rechazado): pendiente, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado',
+            },
+            dte_id: { ...nulable(id), description: 'DTE vigente (GET /dte/:id)' },
+            fel_error: { ...nulable(texto), description: 'Error visible del DTE (SAT, receptor_requerido…)' },
+            aviso_cobro: {
+                ...booleano,
+                description:
+                    'Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse',
+            },
+            certificar_al: nulable(enumerado(['emitir', 'pagar', 'nunca'])),
+            tipo_dte: { ...nulable(texto), description: 'FACT, FPEQ… (null sin FEL)' },
             tipo: {
                 ...enumerado(['servicio', 'mora']),
                 description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
@@ -170,6 +183,11 @@ export const Factura = definirEsquema(
             'id_externo',
             'empresa_id',
             'empresa_nombre',
+            'dte_id',
+            'fel_error',
+            'aviso_cobro',
+            'certificar_al',
+            'tipo_dte',
         ],
     ),
 )
@@ -313,6 +331,19 @@ export const NotaCreditoEmitida = definirEsquema('NotaCreditoEmitida', {
         }),
     ],
 })
+
+export const SustitucionFactura = definirEsquema(
+    'SustitucionFactura',
+    objeto({
+        original: {
+            ...FacturaDetalle,
+            description: 'La factura sustituida (anulada o acreditada por completo)',
+        },
+        nueva: { ...FacturaDetalle, description: 'La factura nueva del mismo periodo' },
+        tipo: enumerado(['anulacion', 'nota_credito']),
+        nota_credito_id: { ...nulable(id), description: 'La nota (NCRE) que acreditó la original' },
+    }),
+)
 
 export const Pago = definirEsquema(
     'Pago',

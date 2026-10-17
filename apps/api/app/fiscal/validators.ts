@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 import { empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada } from '#shared/validadores'
+import { reglasPaginacion } from '#shared/paginacion'
 
 /**
  * Validadores VineJS del módulo fiscal (de aquí sale el OpenAPI). Las reglas de negocio (rango del
@@ -148,5 +149,78 @@ export const agregarFraseValidator = vine.compile(
             .meta({ description: 'Resolución de la SAT (pago directo)' }),
         motivo: motivo(),
         empresa_id: empresaOpcional(),
+    }),
+)
+
+/*
+| FEL (fase 3, contrato §8 y §11.1)
+*/
+
+export const consultaEmpresaValidator = vine.compile(vine.object({ empresa_id: empresaOpcional() }))
+
+export const configurarFelValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        proveedor: vine
+            .enum(['infile', 'falso'] as const)
+            .nullable()
+            .meta({
+                description: 'Certificador; falso solo en pruebas. Obligatorio salvo con modo desactivada',
+            }),
+        ambiente: vine.enum(['pruebas', 'produccion'] as const),
+        modo: vine.enum(['obligatoria', 'opcional', 'desactivada'] as const),
+        version: vine.number().withoutDecimals().min(0).meta({
+            description: 'version leída (0 si la empresa nunca se configuró); si cambió responde 409',
+        }),
+    }),
+)
+
+export const credencialesFelValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        proveedor: vine.enum(['infile', 'falso'] as const).optional(),
+        credenciales: vine.record(vine.string().trim().maxLength(500)).meta({
+            description:
+                'Campos del certificador (infile: usuario_firma, llave_firma, usuario_api, llave_api, correo_copia; falso: usuario, llave). Nunca se devuelven ni se auditan',
+        }),
+    }),
+)
+
+export const contingenciaFelValidator = vine.compile(
+    vine.object({ empresa_id: empresaOpcional(), motivo: motivo() }),
+)
+
+export const listarDteValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine
+            .enum([
+                'pendiente',
+                'enviando',
+                'certificado',
+                'error_temporal',
+                'rechazado',
+                'contingencia',
+                'anulacion_pendiente',
+                'anulado',
+            ] as const)
+            .optional(),
+        documento_tipo: vine.enum(['factura', 'nota_credito', 'nota_debito'] as const).optional(),
+        documento_id: idEntidad().optional(),
+    }),
+)
+
+export const loteFelValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        facturas: vine
+            .array(idEntidad())
+            .minLength(1)
+            .maxLength(500)
+            .optional()
+            .meta({ description: 'Facturas a certificar; o desde/hasta (fecha de emisión, Guatemala)' }),
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
     }),
 )
