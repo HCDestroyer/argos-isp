@@ -15,19 +15,7 @@ interface Pendiente {
 }
 
 const PENDIENTES: Pendiente[] = [
-    // Localización fiscal · fase 2 (módulo fiscal, paquete gt-2026.1, cuentas GT)
-    {
-        titulo: 'instalar gt-2026.1 dos veces no agrega cuentas ni cambia CUENTAS.*',
-        fase: 'localización fiscal, fase 2',
-        criterio:
-            'Contrato §12: la segunda instalación no inserta filas en ledger.cuentas; los códigos de CUENTAS de hoy conservan id, tipo y naturaleza; las cuentas nuevas de patrimonio no tienen movimientos.',
-    },
-    {
-        titulo: 'un parámetro con vigencia futura no cambia el pasado',
-        fase: 'localización fiscal, fase 2',
-        criterio:
-            'Contrato §4: recalcular una declaración vieja usa el valor vigente en su fecha; fiscal.parametros_valores rechaza UPDATE/DELETE.',
-    },
+    // Localización fiscal · fase 2: activados en `fase2.spec.ts` (instalación, vigencia y cadena de hash)
     // Fase 3 (FEL)
     {
         titulo: '2.1.11 IVA por certificar = IVA de los avisos de cobro sin DTE',
@@ -72,12 +60,6 @@ const PENDIENTES: Pendiente[] = [
         fase: 'localización fiscal, fase 5',
         criterio:
             'Contrato §9.2: con ledger.bloqueos duro hasta F, todo asiento con fecha ≤ F → 422 periodo_cerrado (acción y trigger), también reversos; reabrir_periodo → 409 bloqueo_duro; un bloqueo duro nuevo nunca retrocede.',
-    },
-    {
-        titulo: 'la cadena de hash de los asientos es íntegra',
-        fase: 'localización fiscal, fase 5 (libros con folio; estudio Odoo n.º 35)',
-        criterio:
-            'ledger.asientos.hash = sha256(hash_anterior + campos fijos del asiento y sus movimientos), calculado en el INSERT por empresa; recalcular toda la cadena desde el primer asiento da el mismo último hash; cualquier alteración (aun como dueño) rompe la verificación.',
     },
     {
         titulo: 'libros emitidos solo bajo bloqueo, con folios correlativos',

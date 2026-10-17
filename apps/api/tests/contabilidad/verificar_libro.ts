@@ -6,6 +6,7 @@ import { saldoAnticipos } from '#billing/cobros'
 import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
 import { resumenDelMes } from '#ledger/cierres'
 import { carteraVencida } from '#billing/reportes/reportes'
+import { verificarCadena } from '#ledger/sellos'
 
 /**
  * Auditor contable · `verificarLibro(empresaId?)`.
@@ -625,6 +626,19 @@ export async function verificarLibro(
             violaciones.push({
                 invariante: '7.mes_cerrado_cambio (resumen guardado ≠ libro actual)',
                 detalle: { cierre_id: cierre.id, guardado, actual },
+            })
+        }
+    }
+
+    /*
+    | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
+    */
+    for (const empresa of empresas) {
+        const integridad = await verificarCadena(empresa)
+        if (integridad.ruptura) {
+            violaciones.push({
+                invariante: '11.cadena_de_hash_rota (recalcular la cadena no da el hash guardado)',
+                detalle: { empresa_id: empresa, ...integridad.ruptura },
             })
         }
     }

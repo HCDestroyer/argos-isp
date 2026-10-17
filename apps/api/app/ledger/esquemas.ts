@@ -332,8 +332,18 @@ export const CierrePeriodo = definirEsquema(
             reabierto_por: nulable(id),
             reabierto_por_nombre: nulable(texto),
             motivo_reapertura: nulable(texto),
+            ultimo_sello: {
+                type: ['integer', 'null'],
+                description:
+                    'Último sello de la cadena de hash de la empresa al cerrar el mes (§10.10); null en cierres anteriores a la cadena',
+            },
+            ultimo_hash: {
+                type: ['string', 'null'],
+                pattern: '^[0-9a-f]{64}$',
+                description: 'Hash de ese sello (SHA-256 en hexadecimal)',
+            },
         },
-        ['empresa_id'],
+        ['empresa_id', 'ultimo_sello', 'ultimo_hash'],
     ),
 )
 
@@ -399,5 +409,47 @@ export const EstadoResultados = definirEsquema(
         consolidado: booleano,
         empresas: lista(seccion(totalesResultados)),
         total: objeto({ cuentas: lista(lineaEstado), totales: totalesResultados }),
+    }),
+)
+
+const hashHex = { type: 'string', pattern: '^[0-9a-f]{64}$', description: 'SHA-256 en hexadecimal' }
+
+export const IntegridadLibro = definirEsquema(
+    'IntegridadLibro',
+    objeto({
+        empresa_id: id,
+        version: { ...texto, description: 'Versión del JSON canónico de la cadena (`v1`)' },
+        verificado: {
+            ...booleano,
+            description: 'true si toda la cadena encadena y cada hash recalculado coincide con el guardado',
+        },
+        sellos: { ...entero, description: 'Sellos de toda la cadena de la empresa' },
+        verificados: {
+            ...entero,
+            description: 'Sellos cuyo hash se recalculó (asientos con fecha en el rango)',
+        },
+        sin_sellar: {
+            ...entero,
+            description: 'Asientos del rango sin sello todavía (el sellador corre cada minuto)',
+        },
+        primer_sello: nulable(entero),
+        ultimo_sello: nulable(entero),
+        primer_hash: nulable(hashHex),
+        ultimo_hash: nulable(hashHex),
+        ruptura: nulable(
+            objeto({
+                sello: entero,
+                asiento_id: nulable(id),
+                motivo: enumerado([
+                    'hash_distinto',
+                    'encadenamiento',
+                    'sello_faltante',
+                    'asiento_inexistente',
+                    'cierre_distinto',
+                ]),
+                esperado: { ...texto, description: 'Valor guardado (hash, sello o hash del cierre)' },
+                obtenido: { ...texto, description: 'Valor recalculado o encontrado' },
+            }),
+        ),
     }),
 )

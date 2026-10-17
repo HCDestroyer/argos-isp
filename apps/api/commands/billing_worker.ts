@@ -11,7 +11,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * refrescar los resúmenes del dashboard, `ConsumidorResumenes`; `fiscal.parametros_cambiados` →
  * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas` o `conciliar`) y termina:
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar` o `integridad`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -25,7 +25,8 @@ export default class BillingWorker extends BaseCommand {
     }
 
     @flags.string({
-        description: 'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar) y termina',
+        description:
+            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad) y termina',
     })
     declare unaVez?: string
 

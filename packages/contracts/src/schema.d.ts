@@ -1505,6 +1505,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/integridad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verificar la cadena de hash del libro (una sección por empresa)
+         * @description Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.
+         */
+        get: operations["libroIntegridad"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/mayor": {
         parameters: {
             query?: never;
@@ -3957,6 +3977,10 @@ export interface components {
             reabierto_por: number | null;
             reabierto_por_nombre: string | null;
             motivo_reapertura: string | null;
+            /** @description Último sello de la cadena de hash de la empresa al cerrar el mes (§10.10); null en cierres anteriores a la cadena */
+            ultimo_sello?: number | null;
+            /** @description Hash de ese sello (SHA-256 en hexadecimal) */
+            ultimo_hash?: string | null;
         };
         CierrePromesa: {
             /** @enum {string} */
@@ -4876,6 +4900,35 @@ export interface components {
             fecha: string;
             pais: string;
             impuestos: components["schemas"]["ImpuestoFiscal"][];
+        };
+        IntegridadLibro: {
+            empresa_id: number;
+            /** @description Versión del JSON canónico de la cadena (`v1`) */
+            version: string;
+            /** @description true si toda la cadena encadena y cada hash recalculado coincide con el guardado */
+            verificado: boolean;
+            /** @description Sellos de toda la cadena de la empresa */
+            sellos: number;
+            /** @description Sellos cuyo hash se recalculó (asientos con fecha en el rango) */
+            verificados: number;
+            /** @description Asientos del rango sin sello todavía (el sellador corre cada minuto) */
+            sin_sellar: number;
+            primer_sello: number | null;
+            ultimo_sello: number | null;
+            /** @description SHA-256 en hexadecimal */
+            primer_hash: string | null;
+            /** @description SHA-256 en hexadecimal */
+            ultimo_hash: string | null;
+            ruptura: {
+                sello: number;
+                asiento_id: number | null;
+                /** @enum {string} */
+                motivo: "hash_distinto" | "encadenamiento" | "sello_faltante" | "asiento_inexistente" | "cierre_distinto";
+                /** @description Valor guardado (hash, sello o hash del cierre) */
+                esperado: string;
+                /** @description Valor recalculado o encontrado */
+                obtenido: string;
+            } | null;
         };
         IpNoEncontradaHorus: {
             ip: string;
@@ -12681,6 +12734,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EstadoResultados"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroIntegridad: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Recalcula el hash de los asientos con fecha desde este día (sin rango, todos) */
+                desde?: string;
+                /** @description Hasta este día (inclusive) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Integridad por empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["IntegridadLibro"][];
+                    };
                 };
             };
             /** @description No autenticado */

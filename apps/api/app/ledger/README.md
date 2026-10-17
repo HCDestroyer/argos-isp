@@ -78,6 +78,17 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - `GET /libro/diario` y `GET /libro/asientos/:id` traen `diario`, `numero` y `partida` (null con el mes abierto).
 - Inmutables: `asientos_numeros` y `asientos_partidas` (trigger y `REVOKE`); `secuencias` solo admite `UPDATE (ultimo)`; `diarios` es configuración (`version`).
 
+## Cadena de hash e integridad (`sellos.ts`, contrato de localización fiscal §10.10)
+
+El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la cadena prueba además que nadie con acceso a la base lo alteró.
+
+- `ledger.asientos_sellos` (`asiento_id` PK, `empresa_id`, `sello` correlativo por empresa, `version` `v1`, `hash_anterior`, `hash`, `sellado_en`): solo inserción (trigger y `REVOKE`). Un trigger exige que cada fila encadene con el último sello de su empresa (`sello = último + 1`, `hash_anterior = hash del último`, 64 ceros en el primero) y que el asiento sea de esa empresa: la cadena no se bifurca.
+- `hash = SHA-256(hash_anterior ‖ json)`, JSON canónico v1 con claves ordenadas: `empresa_id`, `asiento_id`, `fecha`, `diario`, `numero`, `origen_tipo`, `origen_id`, `descripcion`, `reversa_de` y los movimientos en orden de id (`cuenta_codigo`, `debe`, `haber` con 2 decimales, `cliente_id`, `proveedor_id` (null hasta la fase 4), `impuesto_codigo`, `cuadricula`). Lo calcula la aplicación (`calcularHash`).
+- **Sellador** `libro.sellar` (`actions/sellar_asientos.ts`): sella en orden de id los asientos confirmados sin sello, por empresa, con `pg_advisory_xact_lock(3006, empresa)`. Lo corre el cron `sellar` del `billing:worker` cada minuto (con el lock de los crons; si no hay asientos pendientes no llama la acción) y `cerrarPeriodo` (anidado). Antes de encadenar recalcula el último sello: si no coincide emite `libro.integridad_rota`. La cadena sigue el orden de sellado, no el de los ids.
+- `libro.verificar_integridad` (`actions/verificar_integridad.ts`, cron `integridad` diario a las 02:15 de Guatemala): recalcula la cadena completa de cada empresa y emite `libro.integridad_rota` con la primera ruptura. El aviso sale una vez por (empresa, sello).
+- `GET /libro/integridad?desde&hasta` (`libro.ver`, `?empresas=todas`): una sección `IntegridadLibro` por empresa con `verificado`, `sellos`, `verificados`, `sin_sellar`, primer y último sello y hash, y la primera `ruptura` (`hash_distinto`, `encadenamiento`, `sello_faltante`, `asiento_inexistente`, `cierre_distinto`). El encadenamiento se revisa siempre completo; el hash se recalcula para los asientos con fecha en el rango (sin rango, todos). Es una lectura: no emite.
+- **Cierre mensual**: sella lo pendiente de la empresa, recalcula la cadena y, si no verifica (o queda algo sin sellar), responde 409 `integridad_rota`. El cierre guarda `ultimo_sello` y `ultimo_hash` (columnas nuevas de `ledger.cierres_mensuales`, null en los anteriores) y la verificación comprueba que ese hash siga en la cadena.
+
 ## Cajas y turnos (tarea 9, `cajas.ts`)
 
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
@@ -130,4 +141,4 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 
 ## Eventos
 
-Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`). Consume: ninguno.
+Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.

@@ -41,3 +41,5 @@ Errores: 422 `localizacion_no_instalada`, `pais_no_soportado`, `parametro_no_edi
 ## Libro (`ledger`) en esta fase
 
 `ledger.cuentas`: tipo `patrimonio`, `pais`, `contracuenta`, `naturaleza` y `reinicia_anual` (generadas), `categoria_flujo`, `categoria_fiscal`, `auxiliar_proveedor`, `libro_inventario`. `ledger.movimientos.impuesto_codigo` + `cuadricula` (etiqueta de base o cuota con signo, `+V_IVA`; `registrarAsiento` la acepta y valida contra `CUADRICULAS_GT`, y la base exige el formato). El balance suma patrimonio y resta las contracuentas.
+
+También de la fase 2, en `ledger` (detalle en `app/ledger/README.md`): diarios y numeración guardada (§10.7) y la **cadena de hash** con sellador e integridad (§10.10): `ledger.asientos_sellos`, `libro.sellar` (cron `sellar` cada minuto), `libro.verificar_integridad` (cron diario), `GET /libro/integridad` y el evento `libro.integridad_rota`. El cierre mensual exige la cadena verificada (409 `integridad_rota`).
