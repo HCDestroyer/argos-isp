@@ -8,11 +8,22 @@ import type { CanalNotificacion } from '#shared/eventos'
  *   (destino inválido, bot bloqueado, 5xx SMTP) y el envío pasa directo a `fallido`.
  * - `estado` consulta la entrega de un id devuelto por `enviar`. Correo y Telegram no tienen
  *   acuse de entrega: responden `enviado` (aceptado por el proveedor).
+ * - `opciones.remitenteNombre` (solo correo): nombre visible del remitente para este mensaje (el
+ *   nombre comercial de la empresa del aviso); la dirección sigue siendo la de la configuración.
  */
 export interface Canal {
     readonly nombre: CanalNotificacion
-    enviar(destino: string, asunto: string | null, cuerpo: string): Promise<ResultadoEnvio>
+    enviar(
+        destino: string,
+        asunto: string | null,
+        cuerpo: string,
+        opciones?: OpcionesEnvio,
+    ): Promise<ResultadoEnvio>
     estado(id: string): Promise<EstadoEntrega>
+}
+
+export interface OpcionesEnvio {
+    remitenteNombre?: string | null
 }
 
 export interface ResultadoEnvio {

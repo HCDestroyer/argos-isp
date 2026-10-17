@@ -70,10 +70,10 @@ Este contrato manda sobre lo que choque con él en `modelo-datos.md` y en los ot
   - Con sesión y servicios de varias empresas, `/cuenta` agrupa por empresa y cada sección lleva su marca, sus cuentas bancarias y su pago en línea.
   - El pago en línea no mezcla empresas.
 - **Notificaciones (A6).**
-  - `{{empresa.*}}` sale de la empresa del servicio o de la factura del evento.
-  - El remitente es único en la fase 1 y lleva el nombre comercial de la empresa en el nombre visible.
-  - Telegram también es único: el mensaje lleva el nombre de la empresa.
-- **Importación (A6).** `--empresa=<id|nit>` asigna la empresa a todo lo importado, o se asigna por zona o router con un mapa en el archivo de origen.
+  - `{{empresa.*}}` sale de la empresa del servicio o de la factura del evento (A6: `nombre`, `nombre_comercial`, `razon_social`, `nit`, `direccion_fiscal`, `logo_url`, `soporte.*` y los de siempre; detalle en `apps/api/app/notify/README.md`).
+  - El remitente es único en la fase 1 y lleva el nombre comercial de la empresa en el nombre visible (una empresa con configuración de correo propia y nombre visible propio usa el suyo).
+  - Telegram: cada empresa avisa por el bot de su configuración (el global si hereda) y el mensaje lleva el nombre de la empresa. La vinculación es por bot (`contratos/telegram.md`, "Varios bots"): un cliente con servicios en dos empresas con bots distintos puede quedar vinculado a los dos.
+- **Importación (A6).** `node ace importar --empresa=<id|nit>` asigna la empresa a todo lo importado: servicios (y con ellos sus facturas, pagos y promesas), `empresa_sugerida_id` de las zonas y routers que crea, la auditoría (`audit.acciones.empresa_id`) y el archivo del origen (`importacion.filas_origen.empresa_id`). Sin `--empresa`: con una sola empresa activa, esa; con varias, la corrida falla antes de tocar nada con la lista de empresas. Un servicio ya importado en otra empresa no se mueve (diferencia `servicios_otra_empresa`). El mapa por zona o router en el archivo de origen queda para cuando un ISP lo necesite.
 - **PDF del aviso de cobro (A5).** Lleva el logo, la razón social, el NIT y la dirección fiscal de la empresa de la factura.
 
 ## Configuración de canales de notificación (decisión del PM, 17 oct)

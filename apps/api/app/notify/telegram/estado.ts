@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { Decimal } from 'decimal.js'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoAnticipos } from '#billing/cobros'
+import { clientesDelChat, empresasDelBot } from '#notify/telegram/vinculos'
 
 /**
  * Lo que `/estado` muestra a un chat vinculado: por cada cliente con ese `telegram_chat_id`, su
@@ -25,15 +26,22 @@ export interface CuentaChat {
     a_favor: Decimal
 }
 
-export async function cuentasDelChat(chatId: string): Promise<CuentaChat[]> {
-    const clientes = (await db
-        .from('core.clientes')
-        .where('telegram_chat_id', chatId)
-        .orderBy('id')
-        .select('id', 'nombre')) as Array<{ id: number; nombre: string }>
+/**
+ * Con `botId` (Telegram por empresa): solo los clientes vinculados a **ese** bot y, de cada uno,
+ * los servicios de las empresas que avisan por ese bot (`empresasDelBot`). Sin `botId`, todos los
+ * clientes con ese chat (el bot global de antes).
+ */
+export async function cuentasDelChat(chatId: string, botId: string | null = null): Promise<CuentaChat[]> {
+    const ids = await clientesDelChat(chatId, botId)
+    const clientes = (
+        ids.length === 0
+            ? []
+            : await db.from('core.clientes').whereIn('id', ids).orderBy('id').select('id', 'nombre')
+    ) as Array<{ id: number; nombre: string }>
+    const empresas = await empresasDelBot(botId)
     const cuentas: CuentaChat[] = []
     for (const cliente of clientes) {
-        const servicios = (await db
+        const consulta = db
             .from('core.servicios as s')
             .join('network.planes as p', 'p.id', 's.plan_id')
             .leftJoin('billing.promesas as pr', (join) => {
@@ -42,12 +50,9 @@ export async function cuentasDelChat(chatId: string): Promise<CuentaChat[]> {
             .where('s.cliente_id', cliente.id)
             .whereNot('s.estado', 'retirado')
             .orderBy('s.id')
-            .select(
-                's.id',
-                'p.nombre as plan',
-                's.estado',
-                'pr.vence_en as promesa_vence_en',
-            )) as ServicioEstado[]
+            .select('s.id', 'p.nombre as plan', 's.estado', 'pr.vence_en as promesa_vence_en')
+        if (empresas !== null) consulta.whereIn('s.empresa_id', empresas)
+        const servicios = (await consulta) as ServicioEstado[]
         cuentas.push({
             cliente_id: cliente.id,
             nombre: cliente.nombre.trim().split(/\s+/)[0] ?? '',

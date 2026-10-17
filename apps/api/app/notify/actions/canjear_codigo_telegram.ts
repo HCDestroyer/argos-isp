@@ -2,12 +2,18 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio } from '#shared/errores'
 import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
 import { hashCodigoVinculacion, normalizarCodigo } from '#notify/telegram/config'
+import { botGlobalId } from '#notify/telegram/vinculos'
 
 export interface EntradaCanjearCodigoTelegram {
     /** el código del enlace `?start=`; se audita como `***` */
     token_vinculacion: string
     /** chat privado que manda `/start <código>` */
     chat_id: string
+    /**
+     * Bot por el que llegó el `/start` (webhook por bot). El código solo vale en el bot para el
+     * que se pidió; sin él (ruta antigua del webhook), el bot global.
+     */
+    bot_id?: string | null
 }
 
 export interface ResultadoCanje {
@@ -34,12 +40,15 @@ interface FilaCodigo {
     estado: 'pendiente' | 'usado' | 'reemplazado' | 'anulado'
     vence_en: Date
     chat_id: string | null
+    bot_id: string | null
+    empresa_id: number | null
 }
 
 /**
  * `notificaciones.telegram_vincular`: canjea un código de `GenerarCodigoTelegram` desde el
  * webhook del bot y vincula el chat con `VincularTelegramCliente` (A1) en la misma transacción
- * (`contratos/telegram.md`). Idempotente para el mismo chat; cualquier otro caso es 422.
+ * (`contratos/telegram.md`), y registra el vínculo con **ese bot** en `notify.telegram_vinculos`
+ * (Telegram por empresa: un cliente puede quedar vinculado a varios bots). Idempotente para el mismo chat; cualquier otro caso es 422.
  */
 export default class CanjearCodigoTelegram extends DomainAction<
     EntradaCanjearCodigoTelegram,
@@ -54,10 +63,16 @@ export default class CanjearCodigoTelegram extends DomainAction<
             .from('notify.telegram_codigos')
             .where('codigo_hash', hashCodigoVinculacion(codigo))
             .forUpdate()
-            .select('id', 'cliente_id', 'estado', 'vence_en', 'chat_id')
+            .select('id', 'cliente_id', 'estado', 'vence_en', 'chat_id', 'bot_id', 'empresa_id')
             .first()) as FilaCodigo | null
         if (!fila) throw new CodigoTelegramInvalido()
         t.fijarEntidad('cliente', fila.cliente_id)
+        if (fila.empresa_id) t.fijarEmpresa(Number(fila.empresa_id))
+        // El bot que recibe el /start: el del webhook o, en la ruta antigua, el global.
+        const bot = input.bot_id ?? (await botGlobalId())
+        // Un código pedido para un bot no se canjea en otro (el cliente quedaría vinculado a un bot
+        // que no es el de la empresa de su servicio).
+        if (fila.bot_id && bot !== fila.bot_id) throw new CodigoTelegramInvalido()
 
         // Reintento del mismo chat, salvo que el vínculo haya cambiado desde el canje (desvinculó).
         if (
@@ -81,9 +96,40 @@ export default class CanjearCodigoTelegram extends DomainAction<
             throw new CodigoTelegramInvalido()
         }
 
+        const antes = (await t.trx
+            .from('core.clientes')
+            .where('id', fila.cliente_id)
+            .select('telegram_chat_id')
+            .first()) as { telegram_chat_id: string | null } | null
         await new VincularTelegramCliente().execute({ id: fila.cliente_id, chat_id: input.chat_id }, t.ctx, {
             trx: t.trx,
         })
+        if (bot) {
+            // Sin vínculo general (desvinculado desde el panel o el portal): los vínculos por bot de
+            // antes ya no valen; se empieza de nuevo con este.
+            if (!antes?.telegram_chat_id) {
+                await t.trx
+                    .from('notify.telegram_vinculos')
+                    .where('cliente_id', fila.cliente_id)
+                    .whereNot('bot_id', bot)
+                    .delete()
+            }
+            await t.trx
+                .knexQuery()
+                .table('notify.telegram_vinculos')
+                .insert({
+                    cliente_id: fila.cliente_id,
+                    bot_id: bot,
+                    chat_id: input.chat_id,
+                    empresa_id: fila.empresa_id,
+                })
+                .onConflict(['cliente_id', 'bot_id'])
+                .merge({
+                    chat_id: input.chat_id,
+                    empresa_id: fila.empresa_id,
+                    updated_at: t.trx.knexRawQuery('now()'),
+                })
+        }
         await t.trx
             .from('notify.telegram_codigos')
             .where('id', fila.id)

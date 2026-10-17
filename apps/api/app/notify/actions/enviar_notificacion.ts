@@ -5,6 +5,8 @@ import { ErrorCanal } from '#notify/canales/canal'
 import { resolverCanal } from '#notify/canales/registro'
 import { crearEnvio, plantillasActivas, type EstadoEnvio } from '#notify/envios'
 import { cargarDestinatario, type Variables } from '#notify/variables'
+import { configPara } from '#notify/configuracion'
+import { nombreRemitente } from '#notify/marca'
 
 export interface EntradaEnviar {
     envioId: number
@@ -45,6 +47,8 @@ interface FilaEnvio {
  *   intentos; devuelve `reintentar` y el worker lanza para que BullMQ reintente con backoff.
  * - Canal apagado en la configuración desde que se programó → `omitido` con el motivo (sin
  *   evento ni fallback: lo apagó alguien a propósito).
+ * - Correo: el nombre visible del remitente es el nombre comercial de la empresa del envío
+ *   (`marca.ts`); la dirección, la de la configuración.
  * - Error permanente o último intento → `fallido`; emite `notificacion.enviada` (fallido) y, si
  *   el canal no era correo, crea el envío de fallback por correo (`fallbackId`).
  */
@@ -91,7 +95,13 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
         const canal = resuelto.canal
         try {
             if (!canal) throw new ErrorCanal(envio.canal, resuelto.motivo ?? 'canal no configurado', true)
-            const resultado = await canal.enviar(envio.destino, envio.asunto, envio.cuerpo ?? '')
+            const remitenteNombre =
+                envio.canal === 'correo'
+                    ? await nombreRemitente(t.trx, await configPara(envio.empresa_id), envio.empresa_id)
+                    : null
+            const resultado = await canal.enviar(envio.destino, envio.asunto, envio.cuerpo ?? '', {
+                remitenteNombre,
+            })
             await t.trx
                 .from('notify.envios')
                 .where('id', envio.id)

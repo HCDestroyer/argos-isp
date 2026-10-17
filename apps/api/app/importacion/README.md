@@ -14,7 +14,14 @@ pnpm importar --origen=smartisp --fuente=smartisp.sql --dry-run                 
 pnpm importar --origen=csv --fuente=exportacion/ --sistema=wisphub --dry-run          # cualquier sistema, con las plantillas CSV
 pnpm importar:plantillas plantillas/                                                  # plantillas CSV vacías con su LEEME
 pnpm importar --origen=<origen> --fuente=<ruta>                                       # real
+pnpm importar ... --empresa=<id|nit>                                                  # varias empresas: a cuál va todo
+pnpm importar ... --excluir-tablas=radacct,logs                                       # tablas enormes fuera del archivo
 ```
+
+## Multiempresa y tablas excluidas
+
+- **`--empresa=<id|nit>`** (`resolverEmpresaImportacion`): todo lo importado va a esa empresa. Los servicios se crean con `empresa_id` (sus facturas, pagos y promesas toman la empresa del servicio en las acciones de A3), las zonas y routers nuevos con `empresa_sugerida_id`, el contexto de la corrida lleva `empresaId` (lo registra `audit.acciones.empresa_id` y lo usan las acciones que no dependen de un servicio) y el archivo del origen guarda `importacion.filas_origen.empresa_id`. Se busca primero por id y después por NIT (sin guion ni espacios). Sin `--empresa`: la única empresa activa; con varias, falla antes de tocar la base (`EmpresaImportacionRequerida`, con la lista de empresas); desactivada o inexistente, también. Un servicio ya importado en otra empresa no se mueve: sale en `servicios_otra_empresa`. El reporte lleva `empresa { id, nombre, nit }`.
+- **`--excluir-tablas=a,b`** (`tablasExcluidas`): por defecto se archiva todo. Las tablas indicadas no se guardan en el archivo ni se cuentan en el cuadre; el reporte las lista en `tablas_excluidas` con sus filas. Solo tablas sin filas vinculadas a una entidad de ArgosIsp; una tabla que se importa, o que no está en el volcado, hace fallar la corrida. Pensado para `radacct` y los logs (runbook).
 
 Paso a paso para operar (en seco, leer el reporte, corregir el origen, importación real): `docs/runbooks/importacion.md`.
 
@@ -191,7 +198,7 @@ Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinan
 
 - Aplicar el estado suspendido del origen: con las facturas, por `evaluarEstadoServicio` en la siguiente evaluación.
 - IPv6 y DUID de Mikrowisp (`tblservicios.ipv6`, `ipv6_duid`): el formato canónico no los lleva; hoy salen como aviso (y quedan en el archivo).
-- Multiempresa: `--empresa` y el mapa por zona o router (contrato `multiempresa.md`), cuando `core.empresas` llegue a `main`.
+- Multiempresa: el mapa por zona o router en el archivo de origen (contrato `multiempresa.md`); hoy una corrida = una empresa.
 
 ## Eventos
 

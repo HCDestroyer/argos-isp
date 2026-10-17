@@ -1,3 +1,4 @@
+import { nombreRemitente } from '#notify/marca'
 import { randomUUID } from 'node:crypto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
@@ -73,7 +74,11 @@ export default class ProbarCanalNotificacion extends DomainAction<EntradaProbar,
                     : `Falta el token del bot en ${donde}`
         } else {
             try {
-                const resultado = await canal.enviar(destino, asunto, cuerpo)
+                const remitenteNombre =
+                    input.canal === 'correo'
+                        ? await nombreRemitente(t.trx, config, input.empresa_id ?? null)
+                        : null
+                const resultado = await canal.enviar(destino, asunto, cuerpo, { remitenteNombre })
                 proveedorId = resultado.id || null
             } catch (falla) {
                 error = (falla instanceof Error ? falla.message : String(falla)).slice(0, 2000)

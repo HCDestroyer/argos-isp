@@ -62,6 +62,21 @@ const r = await new GenerarCodigoTelegram().execute({ cliente_id }, ctx.contexto
 - **Fallos.** Si la Bot API no acepta la respuesta, el webhook igual responde 200 (la vinculación queda) y el error va al log. Si falla la base de datos, responde 500 y Telegram reintenta.
 - **Privacidad.** Los textos del bot no llevan NIT, usuario ni contraseña PPPoE, IPs, direcciones ni apellidos: solo el primer nombre, número de servicio, plan, estado y montos. Sin `parse_mode` (texto plano).
 
+## Varios bots: Telegram por empresa (multiempresa, 17 oct)
+
+Cada empresa avisa por el bot de **su** configuración de canales: el suyo (`hereda = false` con token) o el global. Un bot solo puede escribir a quien lo inició, así que la vinculación es **por bot**.
+
+- **`notify.telegram_vinculos`** (`cliente_id`, `bot_id`, `chat_id`, `empresa_id`): uno por cliente y bot. Un cliente con servicios en dos empresas con bots distintos queda vinculado a los dos (dos códigos, uno por bot).
+- **`core.clientes.telegram_chat_id` (A1) sigue siendo el interruptor general.** Sin él no se envía por ningún bot: desvincular desde el portal o el panel (`DesvincularTelegramCliente`) corta todo. Al volver a vincular, los vínculos por bot anteriores se descartan.
+- **Vinculación anterior.** Un cliente con `telegram_chat_id` y **sin** filas en `telegram_vinculos` (vinculado antes de este cambio, o por `POST /clientes/:id/vincular-telegram` del panel) vale para el bot global.
+- **Código por bot.** `GenerarCodigoTelegram({ cliente_id, empresa_id? })` → `{ codigo, enlace, bot, vence_en, empresa_id }`. Con `empresa_id`: el bot de esa empresa (422 `servicio_en_empresa` si el cliente no tiene servicios en ella). Sin él: la única empresa de los servicios vigentes del cliente; con varias (o ninguna), el bot global (`empresa_id: null`). El código guarda `bot_id` y solo se canjea en ese bot (en otro responde "código no válido"). Un pendiente por cliente **y bot**.
+- **`/start <código>`** en el bot B: vincula el chat (A1) y registra (cliente, B, chat).
+- **`/estado`** en el bot B: los clientes vinculados a B y, de cada uno, solo los servicios de las empresas que avisan por B.
+- **`/desvincular`** en el bot B: `DesvincularTelegramBot` (`notificaciones.telegram_desvincular`) borra el vínculo con B y anula sus códigos; si no le queda ningún bot, desvincula del todo (`DesvincularTelegramCliente` + `AnularCodigosTelegram`).
+- **Envíos.** `ProgramarNotificacion` usa como destino de Telegram el chat que el bot de la configuración de la empresa del aviso tiene vinculado; si ese bot no tiene al cliente, el aviso sale por los demás canales (correo).
+- **Portal (A5).** Con servicios en varias empresas, pedir el código con `empresa_id` (una sección por empresa) y mostrar el estado con `telegramPorEmpresa(cliente_id)` de `#notify/telegram/vinculos` (`[{ empresa_id, bot, bot_id, vinculado }]`). `telegram_vinculado` de la cuenta sigue diciendo si hay vínculo general.
+- **Firma.** Las plantillas base de Telegram terminan con `{{empresa.nombre}}`: con un bot compartido por varias empresas, el mensaje dice de cuál es.
+
 ## Variables
 
 | Variable | Dónde | Qué |

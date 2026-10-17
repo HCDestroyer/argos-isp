@@ -411,7 +411,12 @@ test.group('notify · Telegram · webhook del bot', (group) => {
         const acciones = await db.from('audit.acciones').where('request_id', requestId).orderBy('id')
         assert.deepEqual(
             acciones.map((a) => a.accion),
-            ['clientes.desvincular_telegram', 'notificaciones.telegram_anular_codigos'],
+            [
+                'clientes.desvincular_telegram',
+                'notificaciones.telegram_anular_codigos',
+                // Telegram por empresa: la desvinculación del bot (la última: no le quedan bots)
+                'notificaciones.telegram_desvincular',
+            ],
         )
         // Idempotente: sin pendientes no cambia nada
         const r = await new AnularCodigosTelegram().execute(

@@ -3,7 +3,9 @@ import { DateTime } from 'luxon'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
 import { CAMPOS_EMPRESA, verEmpresa } from '#portal/empresa'
+import { EMPRESA_PRINCIPAL, urlLogoEmpresa } from '#core/empresas'
 import type { CanalNotificacion } from '#shared/eventos'
+import { empresaDelEvento } from '#notify/configuracion'
 import {
     diasEntre,
     fechaCalendario,
@@ -103,37 +105,76 @@ export async function cargarDestinatario(
 }
 
 /**
- * `{{empresa.*}}`: los datos de la empresa (`core.empresas`, la 1 por defecto) que se editan en el
- * panel (`verEmpresa` de `#portal/empresa`; sin guardar usa `NOTIFY_EMPRESA_NOMBRE` y
- * `NOTIFY_EMPRESA_TELEFONO`) más
- * `portal_url` (`NOTIFY_PORTAL_URL`). Los campos vacíos van como `''` para que las secciones
- * Mustache (`{{#empresa.telefono}}`) no se muestren.
+ * `{{empresa.*}}` (`contratos/multiempresa.md`, "Marca"): la empresa del servicio o de la factura
+ * del evento (`empresaDelEvento`; sin ella, la principal). Campos de siempre (`verEmpresa` de
+ * `#portal/empresa`: `nombre`, `nit`, `direccion`, `telefono`, `telefono_alterno`, `whatsapp`,
+ * `correo`, `horario`, `instrucciones_pago`; con la empresa 1 sin guardar, los valores por defecto
+ * del entorno) y los de multiempresa:
+ *
+ * - `id`, `nombre_comercial` (= `nombre`), `razon_social`, `direccion_fiscal` (= `direccion`),
+ *   `municipio`, `departamento`, `sitio_web`;
+ * - `logo_url`: URL absoluta del logo (`NOTIFY_API_URL` + `/api/v1/empresas/:id/logo?v=…`); vacía
+ *   sin logo o sin `NOTIFY_API_URL`;
+ * - `soporte.telefono`, `soporte.whatsapp`, `soporte.correo`, `soporte.horario` y `soporte.texto`
+ *   (lo que haya, en una línea: "Tel. 2222-0000 · WhatsApp 5555-0000 · ayuda@isp.gt");
+ * - `portal_url` (`NOTIFY_PORTAL_URL`).
+ *
+ * Los campos vacíos van como `''` para que las secciones Mustache (`{{#empresa.telefono}}`) no se
+ * muestren.
  */
 export async function variablesEmpresa(cliente: QueryClientContract, empresaId?: number): Promise<Variables> {
-    const empresa = await verEmpresa(cliente, empresaId)
+    const id = empresaId ?? EMPRESA_PRINCIPAL
+    const empresa = await verEmpresa(cliente, id)
     const variables: Variables = {}
     for (const campo of CAMPOS_EMPRESA) variables[campo] = empresa[campo] ?? ''
+    const fila = (await cliente
+        .from('core.empresas')
+        .where('id', id)
+        .select('razon_social', 'municipio', 'departamento', 'sitio_web', 'logo_etag', 'version')
+        .first()) as {
+        razon_social: string | null
+        municipio: string | null
+        departamento: string | null
+        sitio_web: string | null
+        logo_etag: string | null
+        version: number
+    } | null
+    const guardada = fila !== null && Number(fila.version) > 0
+    const base = (env.get('NOTIFY_API_URL') ?? '').replace(/\/+$/, '')
+    const logo = guardada ? urlLogoEmpresa(id, fila.logo_etag) : null
+
+    variables.id = fila ? id : EMPRESA_PRINCIPAL
+    variables.nombre_comercial = variables.nombre
+    variables.direccion_fiscal = variables.direccion
+    variables.razon_social = (guardada && fila.razon_social) || ''
+    variables.municipio = (guardada && fila.municipio) || ''
+    variables.departamento = (guardada && fila.departamento) || ''
+    variables.sitio_web = (guardada && fila.sitio_web) || ''
+    variables.logo_url = logo && base ? `${base}${logo}` : ''
+    variables.soporte = soporte(empresa)
     variables.portal_url = env.get('NOTIFY_PORTAL_URL') ?? ''
     return variables
 }
 
-/**
- * Empresa del evento (multiempresa, A1): `empresa_id` del payload (eventos de servicio y, cuando A3
- * lo agregue, los financieros) o la del servicio del payload; sin ninguno, la principal.
- */
-async function empresaDelEvento(cliente: QueryClientContract, payload: Payload): Promise<number | undefined> {
-    const directa = entero(payload.empresa_id)
-    if (directa) return directa
-    const servicioId = entero(payload.servicio_id)
-    if (!servicioId) return undefined
-    const fila = (await cliente
-        .from('core.servicios')
-        .where('id', servicioId)
-        .select('empresa_id')
-        .first()) as {
-        empresa_id: number
-    } | null
-    return fila ? Number(fila.empresa_id) : undefined
+function soporte(empresa: {
+    telefono: string | null
+    whatsapp: string | null
+    correo: string | null
+    horario: string | null
+}) {
+    const partes = [
+        empresa.telefono ? `Tel. ${empresa.telefono}` : null,
+        empresa.whatsapp ? `WhatsApp ${empresa.whatsapp}` : null,
+        empresa.correo || null,
+        empresa.horario || null,
+    ].filter(Boolean)
+    return {
+        telefono: empresa.telefono ?? '',
+        whatsapp: empresa.whatsapp ?? '',
+        correo: empresa.correo ?? '',
+        horario: empresa.horario ?? '',
+        texto: partes.join(' · '),
+    }
 }
 
 /** Variables de una factura: del payload, completadas con la fila de `billing.facturas` si existe. */
@@ -321,7 +362,7 @@ export async function construirVariables(
 ): Promise<Variables> {
     const variables: Variables = {
         evento,
-        empresa: await variablesEmpresa(cliente, await empresaDelEvento(cliente, payload)),
+        empresa: await variablesEmpresa(cliente, (await empresaDelEvento(cliente, payload)) ?? undefined),
         cliente: {
             id: destinatario.clienteId,
             nombre: destinatario.nombre,
