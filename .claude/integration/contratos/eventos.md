@@ -30,7 +30,7 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 
 ## Eventos fuera de la tabla de `CLAUDE.md`
 
-El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` + `EVENTOS`). Eventos agregados después de la tabla de `CLAUDE.md` (pendiente de que el líder los pase a esa tabla):
+El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` + `EVENTOS`). Eventos agregados después de la primera tabla de `CLAUDE.md`, con su detalle (desde 2026-10-17 todos están también en esa tabla, con `empresa_id` y `cobro_id`):
 
 | Evento | Emite | Payload | Lo consume |
 | --- | --- | --- | --- |
