@@ -15171,6 +15171,95 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/resumen-sesiones": {
+      "get": {
+        "operationId": "routersResumenSesiones",
+        "summary": "Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha",
+        "description": "Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde` (p. ej. la fecha de migración al nuevo `aaa`). 404 si el router no existe.",
+        "tags": [
+          "sesiones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen de sesiones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenSesionesRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sesiones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sesiones.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/vista-previa-control": {
       "get": {
         "operationId": "routersVistaPreviaControl",
@@ -17209,6 +17298,7 @@
       "get": {
         "operationId": "sesionesListar",
         "summary": "Sesiones PPPoE (activas o históricas)",
+        "description": "`desde`/`hasta` filtran por solapamiento: la sesión estuvo viva en algún momento de [desde, hasta) (abierta o `fin >= desde`, e `inicio < hasta`).",
         "tags": [
           "sesiones"
         ],
@@ -17263,6 +17353,26 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Sesiones vivas en o después de este instante: abiertas o con `fin >= desde`",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Sesiones iniciadas antes de este instante (`inicio < hasta`)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         ],
@@ -26296,6 +26406,50 @@
           }
         }
       },
+      "ResumenSesionesRouter": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "desde",
+          "servicios",
+          "con_sesion_activa",
+          "sesiones_activas",
+          "con_sesion_desde",
+          "sin_sesion_desde"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "servicios": {
+            "type": "integer",
+            "description": "Servicios PPPoE no retirados del router (dentro del alcance)"
+          },
+          "con_sesion_activa": {
+            "type": "integer",
+            "description": "De esos servicios, los que tienen sesión abierta"
+          },
+          "sesiones_activas": {
+            "type": "integer",
+            "description": "Sesiones abiertas en el router (incluye user_ppp desconocidos)"
+          },
+          "con_sesion_desde": {
+            "type": "integer",
+            "description": "De esos servicios, los que tuvieron sesión viva en o después de `desde`"
+          },
+          "sin_sesion_desde": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioSinSesion"
+            }
+          }
+        }
+      },
       "Rol": {
         "type": "object",
         "required": [
@@ -26719,6 +26873,57 @@
           },
           "motivo": {
             "type": "string"
+          }
+        }
+      },
+      "ServicioSinSesion": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "cliente_id",
+          "cliente_nombre",
+          "user_ppp",
+          "estado",
+          "ultima_sesion_inicio",
+          "ultima_sesion_fin"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "user_ppp": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido"
+            ]
+          },
+          "ultima_sesion_inicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Última sesión registrada (de cualquier fecha)"
+          },
+          "ultima_sesion_fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },

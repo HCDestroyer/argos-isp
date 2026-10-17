@@ -23,6 +23,7 @@ import {
     Router,
     Sesion,
     EventoRed,
+    ResumenSesionesRouter,
     VistaPreviaControl,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
@@ -33,7 +34,12 @@ import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
 import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementacion_plan'
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
-import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
+import {
+    dimensionesDeSesion,
+    listarSesiones,
+    resumenSesionesRouter,
+    verSesion,
+} from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { listarEventosRed } from '#network/sesiones/eventos_red'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
@@ -344,11 +350,34 @@ const sesiones: Ruta[] = [
         ruta: '/sesiones',
         operacion: 'sesionesListar',
         resumen: 'Sesiones PPPoE (activas o históricas)',
+        descripcion:
+            '`desde`/`hasta` filtran por solapamiento: la sesión estuvo viva en algún momento de ' +
+            '[desde, hasta) (abierta o `fin >= desde`, e `inicio < hasta`).',
         etiqueta: 'sesiones',
         permiso: 'sesiones.ver',
         query: v.listarSesionesValidator,
         respuesta: { status: 200, descripcion: 'Página de sesiones', esquema: pagina(Sesion) },
         handler: (ctx, { query }) => listarSesiones(query, ctx.alcance),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/resumen-sesiones',
+        operacion: 'routersResumenSesiones',
+        resumen:
+            'Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha',
+        descripcion:
+            'Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no ' +
+            'tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde` (p. ej. la fecha de ' +
+            'migración al nuevo `aaa`). 404 si el router no existe.',
+        etiqueta: 'sesiones',
+        permiso: 'sesiones.ver',
+        query: v.resumenSesionesRouterValidator,
+        respuesta: { status: 200, descripcion: 'Resumen de sesiones', esquema: ResumenSesionesRouter },
+        handler: (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return resumenSesionesRouter(id, query.desde, ctx.alcance)
+        },
     }),
     definirRuta({
         metodo: 'post',

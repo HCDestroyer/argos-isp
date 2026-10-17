@@ -22,11 +22,14 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 
 ## Panel (tarea 8)
 
-| Ruta                              | Permiso                 | Qué hace                                                                                                                               |
-| --------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /sesiones`                   | `sesiones.ver`          | `?servicio_id=&router_id=&activa=&cursor=&limit=`, contrato `Sesion`, más reciente primero; alcance por router y zona (`consultas.ts`) |
-| `POST /sesiones/:id/desconectar`  | `sesiones.desconectar`  | `DesconectarSesion` con `{ motivo }` e `Idempotency-Key`: 202 con la sesión; 404 si no existe, 409 `sesion_terminada` si ya cerró      |
-| `POST /servicios/:id/desconectar` | `servicios.desconectar` | `DesconectarServicio`: todas las sesiones abiertas del servicio; 200 con el servicio; 404 si no existe o no tiene sesión activa        |
+| Ruta                                | Permiso                 | Qué hace                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /sesiones`                     | `sesiones.ver`          | `?servicio_id=&router_id=&activa=&cursor=&limit=`, contrato `Sesion`, más reciente primero; alcance por router y zona (`consultas.ts`)                                                                                                                                                                                                           |
+| `GET /routers/:id/resumen-sesiones` | `sesiones.ver`          | `?desde=` (obligatorio): `servicios` PPPoE no retirados, `con_sesion_activa`, `sesiones_activas` del router (incluye `user_ppp` desconocidos), `con_sesion_desde` y la lista `sin_sesion_desde[]` (`servicio_id`, `cliente_id`, `cliente_nombre`, `user_ppp`, `estado`, `ultima_sesion_inicio`, `ultima_sesion_fin`). 404 si el router no existe |
+| `POST /sesiones/:id/desconectar`    | `sesiones.desconectar`  | `DesconectarSesion` con `{ motivo }` e `Idempotency-Key`: 202 con la sesión; 404 si no existe, 409 `sesion_terminada` si ya cerró                                                                                                                                                                                                                |
+| `POST /servicios/:id/desconectar`   | `servicios.desconectar` | `DesconectarServicio`: todas las sesiones abiertas del servicio; 200 con el servicio; 404 si no existe o no tiene sesión activa                                                                                                                                                                                                                  |
+
+`GET /sesiones` acepta además `desde`/`hasta` (semana 3): filtran por solapamiento, la sesión estuvo viva en algún momento de `[desde, hasta)` (abierta o `fin >= desde`, e `inicio < hasta`). El resumen usa la misma regla para "con sesión desde" y busca las sesiones por `servicio_id` (índice `sesiones_servicio_inicio`).
 
 Desconectar no habla con el NAS: emite `sesion.desconexion_solicitada` (`sesion_id`, `servicio_id`, `nas_ip`, `acct_session_id`, `user_ppp`, `motivo`) en la misma transacción que la auditoría, y `services/coa` manda el Disconnect-Request y deja envío y respuesta en `audit.red`. La sesión se cierra con el Stop que manda el NAS al cortar. No cambia el estado del servicio.
 
@@ -69,6 +72,7 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 ## Pruebas
 
+- `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados fuera, 404/422/403, alcance).
 - `tests/network/eventos_red.spec.ts`: `GET /red/eventos` (filtros, fechas, cursor, credenciales como `***`, permiso y alcance).
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).
 - `tests/network/freeradius.spec.ts` (tarea 10): FreeRADIUS en Docker + `aaa` + `coa` como procesos: authorize de los cuatro estados, accounting completo, CoA ACK y NAK, Disconnect. Cómo correrla en `services/aaa/README.md`.

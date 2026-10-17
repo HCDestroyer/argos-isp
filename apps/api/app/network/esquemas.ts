@@ -215,6 +215,43 @@ export const Sesion = definirEsquema(
     }),
 )
 
+/** PPPoE del router sin sesión desde una fecha (`GET /routers/:id/resumen-sesiones`). */
+export const ServicioSinSesion = definirEsquema(
+    'ServicioSinSesion',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        user_ppp: texto,
+        estado: enumerado(['activo', 'limitado', 'suspendido']),
+        ultima_sesion_inicio: {
+            ...nulable(instante),
+            description: 'Última sesión registrada (de cualquier fecha)',
+        },
+        ultima_sesion_fin: nulable(instante),
+    }),
+)
+
+/** Resumen de sesiones de un router para la pantalla "Migración de router" (A4). */
+export const ResumenSesionesRouter = definirEsquema(
+    'ResumenSesionesRouter',
+    objeto({
+        router_id: id,
+        desde: instante,
+        servicios: { ...entero, description: 'Servicios PPPoE no retirados del router (dentro del alcance)' },
+        con_sesion_activa: { ...entero, description: 'De esos servicios, los que tienen sesión abierta' },
+        sesiones_activas: {
+            ...entero,
+            description: 'Sesiones abiertas en el router (incluye user_ppp desconocidos)',
+        },
+        con_sesion_desde: {
+            ...entero,
+            description: 'De esos servicios, los que tuvieron sesión viva en o después de `desde`',
+        },
+        sin_sesion_desde: lista(ServicioSinSesion),
+    }),
+)
+
 /**
  * Fila de `audit.red` (`GET /red/eventos`): un CoA, un Disconnect-Request o una escritura en
  * RouterOS, con la respuesta del equipo. Las credenciales salen como `***`.

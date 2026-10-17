@@ -2262,6 +2262,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/resumen-sesiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha
+         * @description Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde` (p. ej. la fecha de migración al nuevo `aaa`). 404 si el router no existe.
+         */
+        get: operations["routersResumenSesiones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/vista-previa-control": {
         parameters: {
             query?: never;
@@ -2481,7 +2501,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Sesiones PPPoE (activas o históricas) */
+        /**
+         * Sesiones PPPoE (activas o históricas)
+         * @description `desde`/`hasta` filtran por solapamiento: la sesión estuvo viva en algún momento de [desde, hasta) (abierta o `fin >= desde`, e `inicio < hasta`).
+         */
         get: operations["sesionesListar"];
         put?: never;
         post?: never;
@@ -4488,6 +4511,20 @@ export interface components {
                 resumen_promesas: string | null;
             };
         };
+        ResumenSesionesRouter: {
+            router_id: number;
+            /** Format: date-time */
+            desde: string;
+            /** @description Servicios PPPoE no retirados del router (dentro del alcance) */
+            servicios: number;
+            /** @description De esos servicios, los que tienen sesión abierta */
+            con_sesion_activa: number;
+            /** @description Sesiones abiertas en el router (incluye user_ppp desconocidos) */
+            sesiones_activas: number;
+            /** @description De esos servicios, los que tuvieron sesión viva en o después de `desde` */
+            con_sesion_desde: number;
+            sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
+        };
         Rol: {
             id: number;
             nombre: string;
@@ -4597,6 +4634,21 @@ export interface components {
             estado: "activo" | "limitado" | "suspendido" | "retirado";
             cambiado: boolean;
             motivo: string;
+        };
+        ServicioSinSesion: {
+            servicio_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            user_ppp: string;
+            /** @enum {string} */
+            estado: "activo" | "limitado" | "suspendido";
+            /**
+             * Format: date-time
+             * @description Última sesión registrada (de cualquier fecha)
+             */
+            ultima_sesion_inicio: string | null;
+            /** Format: date-time */
+            ultima_sesion_fin: string | null;
         };
         Sesion: {
             id: number;
@@ -13120,6 +13172,66 @@ export interface operations {
             };
         };
     };
+    routersResumenSesiones: {
+        parameters: {
+            query: {
+                desde: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen de sesiones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenSesionesRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sesiones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     routersVistaPreviaControl: {
         parameters: {
             query: {
@@ -14172,6 +14284,10 @@ export interface operations {
                 router_id?: number;
                 servicio_id?: number;
                 activa?: boolean;
+                /** @description Sesiones vivas en o después de este instante: abiertas o con `fin >= desde` */
+                desde?: string;
+                /** @description Sesiones iniciadas antes de este instante (`inicio < hasta`) */
+                hasta?: string;
             };
             header?: never;
             path?: never;

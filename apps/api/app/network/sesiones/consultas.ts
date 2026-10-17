@@ -36,6 +36,10 @@ export interface FiltrosSesiones extends OpcionesPaginacion {
     servicio_id?: number
     router_id?: number
     activa?: boolean
+    /** Sesiones vivas en o después de `desde`: abiertas o con `fin >= desde`. */
+    desde?: Date
+    /** Sesiones iniciadas antes de `hasta` (exclusive). */
+    hasta?: Date
 }
 
 function columnas(cliente: QueryClientContract) {
@@ -79,6 +83,12 @@ export async function listarSesiones(
     if (filtros.router_id !== undefined) consulta.where('ses.router_id', filtros.router_id)
     if (filtros.activa === true) consulta.whereNull('ses.fin')
     if (filtros.activa === false) consulta.whereNotNull('ses.fin')
+    // Solapamiento con [desde, hasta): la sesión estuvo viva en algún momento del intervalo.
+    if (filtros.desde) {
+        const desde = filtros.desde
+        consulta.where((q) => q.whereNull('ses.fin').orWhere('ses.fin', '>=', desde))
+    }
+    if (filtros.hasta) consulta.where('ses.inicio', '<', filtros.hasta)
     filtrarPorAlcance(consulta, alcance, dimensionesSesion)
     return paginar<SesionVista>(consulta, filtros, { columna: 'ses.id' })
 }
@@ -111,4 +121,123 @@ export async function dimensionesDeSesion(
     if (!fila) throw new NoEncontrado(`La sesión ${id} no existe`)
     const numero = (v: number | string | null) => (v === null ? null : Number(v))
     return { router: [numero(fila.router_id)], zona: [numero(fila.zona_id)] }
+}
+
+export interface ServicioSinSesion {
+    servicio_id: number
+    cliente_id: number
+    cliente_nombre: string
+    user_ppp: string
+    estado: string
+    /** Inicio de la última sesión registrada del servicio (de cualquier fecha) o null si nunca hubo */
+    ultima_sesion_inicio: string | null
+    ultima_sesion_fin: string | null
+}
+
+export interface ResumenSesionesRouter {
+    router_id: number
+    desde: string
+    /** Servicios PPPoE no retirados del router (dentro del alcance de quien consulta) */
+    servicios: number
+    /** De esos, cuántos tienen una sesión abierta ahora */
+    con_sesion_activa: number
+    /** Sesiones abiertas en el router (incluye `user_ppp` desconocidos; sin acotar por zona) */
+    sesiones_activas: number
+    /** De esos servicios, cuántos tuvieron sesión viva en o después de `desde` */
+    con_sesion_desde: number
+    /** Los que no: ninguna sesión abierta ni terminada en o después de `desde` */
+    sin_sesion_desde: ServicioSinSesion[]
+}
+
+const dimensionesServicio: FiltrosDimension = {
+    router: (q, ids) => q.whereIn('s.router_id', ids),
+    zona: (q, ids) => q.whereIn('c.zona_id', ids),
+}
+
+/**
+ * Resumen de sesiones de un router para la pantalla "Migración de router" (A4): servicios PPPoE,
+ * cuántos tienen sesión abierta y cuáles no tuvieron ninguna desde `desde`. Una sesión cuenta si
+ * estuvo viva en o después de `desde` (abierta, o `fin >= desde`), igual que `GET /sesiones?desde=`.
+ * Las sesiones se buscan por `servicio_id` (no por el router de la sesión): un servicio que acaba
+ * de cambiar de router cuenta con la sesión que tenga.
+ */
+export async function resumenSesionesRouter(
+    routerId: number,
+    desde: Date,
+    alcance?: Alcance,
+): Promise<ResumenSesionesRouter> {
+    const cliente = db.connection()
+    const router = await cliente.from('network.routers').where('id', routerId).select('id').first()
+    if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
+
+    const consulta = cliente
+        .from('core.servicios as s')
+        .join('core.clientes as c', 'c.id', 's.cliente_id')
+        .where('s.router_id', routerId)
+        .where('s.tipo_conexion', 'pppoe')
+        .whereNot('s.estado', 'retirado')
+        .select(
+            cliente.raw('s.id::int AS servicio_id'),
+            cliente.raw('s.cliente_id::int AS cliente_id'),
+            'c.nombre as cliente_nombre',
+            's.user_ppp',
+            's.estado',
+            cliente.raw(
+                'EXISTS (SELECT 1 FROM network.sesiones a WHERE a.servicio_id = s.id AND a.fin IS NULL) AS activa',
+            ),
+            cliente.raw(
+                `EXISTS (SELECT 1 FROM network.sesiones d WHERE d.servicio_id = s.id
+                    AND (d.fin IS NULL OR d.fin >= ?)) AS con_sesion_desde`,
+                [desde],
+            ),
+            cliente.raw(
+                `(SELECT u.inicio FROM network.sesiones u WHERE u.servicio_id = s.id
+                    ORDER BY u.inicio DESC, u.id DESC LIMIT 1) AS ultima_sesion_inicio`,
+            ),
+            cliente.raw(
+                `(SELECT u.fin FROM network.sesiones u WHERE u.servicio_id = s.id
+                    ORDER BY u.inicio DESC, u.id DESC LIMIT 1) AS ultima_sesion_fin`,
+            ),
+        )
+        .orderBy('s.id', 'asc')
+    filtrarPorAlcance(consulta, alcance, dimensionesServicio)
+    const filas = (await consulta) as Array<{
+        servicio_id: number
+        cliente_id: number
+        cliente_nombre: string
+        user_ppp: string
+        estado: string
+        activa: boolean
+        con_sesion_desde: boolean
+        ultima_sesion_inicio: Date | null
+        ultima_sesion_fin: Date | null
+    }>
+
+    const abiertas = (await cliente
+        .from('network.sesiones')
+        .where('router_id', routerId)
+        .whereNull('fin')
+        .count('* as n')
+        .first()) as { n: number | string }
+
+    const iso = (d: Date | null) => (d === null ? null : new Date(d).toISOString())
+    return {
+        router_id: routerId,
+        desde: desde.toISOString(),
+        servicios: filas.length,
+        con_sesion_activa: filas.filter((f) => f.activa).length,
+        sesiones_activas: Number(abiertas.n),
+        con_sesion_desde: filas.filter((f) => f.con_sesion_desde).length,
+        sin_sesion_desde: filas
+            .filter((f) => !f.con_sesion_desde)
+            .map((f) => ({
+                servicio_id: f.servicio_id,
+                cliente_id: f.cliente_id,
+                cliente_nombre: f.cliente_nombre,
+                user_ppp: f.user_ppp,
+                estado: f.estado,
+                ultima_sesion_inicio: iso(f.ultima_sesion_inicio),
+                ultima_sesion_fin: iso(f.ultima_sesion_fin),
+            })),
+    }
 }
