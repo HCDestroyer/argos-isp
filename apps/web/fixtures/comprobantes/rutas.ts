@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { procesarPago } from '../facturacion/rutas'
 import { archivosComprobante } from './datos'
 
@@ -82,7 +82,7 @@ export const rutasComprobantes: RutasFixture = {
             return datosInvalidos(errores)
         }
         // Como `listarComprobantes`: por id descendente; el resumen cubre todas las páginas.
-        const sinEstado = bd.comprobantes
+        const sinEstado = deLaEmpresa(bd.comprobantes, solicitud)
             .filter(c => cliente === undefined || c.cliente_id === cliente)
             .filter(c => !metodo || c.metodo === metodo)
             .filter(c => cuenta === undefined || c.cuenta_bancaria_id === cuenta)

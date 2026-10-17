@@ -70,6 +70,13 @@ const facturasPantalla = computed(() => [
 /** Servicios de todos los clientes en pantalla (pagador y grupos). */
 const serviciosPantalla = computed(() => [...servicios.value, ...grupos.value.flatMap(g => g.servicios)])
 
+/**
+ * Multiempresa: las facturas marcadas de varias empresas se cobran con un pago por empresa (cada
+ * NIT recibe lo suyo, en su caja). Se muestra el reparto antes de registrar.
+ */
+const { conSelector: variasEmpresas, nombre: nombreEmpresa, empresaId: empresaActiva } = useEmpresaActiva()
+const reparto = computed(() => (variasEmpresas.value ? repartoPorEmpresa(facturasPantalla.value, marcadas.value, serviciosPantalla.value) : []))
+
 // Cajas (método "caja"). Elegir caja es opcional: sin `caja_id`, la API usa la caja principal.
 const CAJA_PRINCIPAL = 'principal'
 const cajas = shallowRef<Caja[]>([])
@@ -120,6 +127,28 @@ const CAMPOS_COBRO = new Set(['monto', 'metodo', 'caja_id', 'cuenta_bancaria_id'
 const erroresSinCampo = computed(() => (problemaPago.value?.status === 422
     ? (problemaPago.value.errors ?? []).filter(e => !CAMPOS_COBRO.has(e.field))
     : []))
+
+/**
+ * Cobro en efectivo de facturas de una empresa en la que el cajero no tiene caja abierta (422
+ * `caja_no_abierta`, A3). Se nombra la empresa y se ofrece abrir la caja.
+ */
+const { empresas: empresasUsuario } = useEmpresaActiva()
+const sinCaja = computed(() => {
+    const id = problemaPago.value ? empresaSinCaja(problemaPago.value) : null
+    if (id === null) {
+        return null
+    }
+    const nombre = empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? `la empresa ${id}`
+    return { id, nombre }
+})
+
+/** Cobro repartido: un pago por empresa con el mismo `cobro_id` (solo efectivo). */
+const pagosDelCobro = computed<Pago[]>(() => (pago.value ? (pago.value.pagos?.length ? pago.value.pagos : [pago.value]) : []))
+const cobroRepartido = computed(() => (pago.value?.cobro_id ?? null) !== null && pagosDelCobro.value.length > 1)
+function nombreDeEmpresa(id: number | undefined): string {
+    return empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? (id ? `Empresa ${id}` : 'Empresa sin identificar')
+}
+const totalCobrado = computed(() => pagosDelCobro.value.reduce((suma, p) => suma.plus(p.monto), new Decimal(0)))
 
 /** Los selectores de Nuxt UI usan `undefined` para "sin elegir"; el esquema, `null`. */
 const bancoOrigen = computed<number | undefined>({
@@ -438,6 +467,9 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         if (duplicada) {
             formulario.value?.setErrors([{ name: 'referencia', message: 'Ya está registrada en otro pago con este método y cuenta. Revisa el número.' }])
         }
+        if (codigoProblema(resultado.problema) === 'cuenta_de_otra_empresa') {
+            formulario.value?.setErrors([{ name: 'cuenta_bancaria_id', message: 'Esta cuenta es de otra empresa que las facturas marcadas. Elige una cuenta de la misma empresa.' }])
+        }
         return
     }
 
@@ -450,7 +482,7 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
     const reactivadosAhora = seguimiento.reactivados.value.length
     toast.add({
         title: 'Pago registrado',
-        description: `${formatearQuetzales(resultado.data.monto)} · ${cliente.value.nombre}${reactivadosAhora ? ` · ${reactivadosAhora === 1 ? 'servicio reactivado' : `${reactivadosAhora} servicios reactivados`}` : ''}`,
+        description: `${formatearQuetzales(totalCobrado.value)}${cobroRepartido.value ? ` en ${pagosDelCobro.value.length} empresas` : ''} · ${cliente.value.nombre}${reactivadosAhora ? ` · ${reactivadosAhora === 1 ? 'servicio reactivado' : `${reactivadosAhora} servicios reactivados`}` : ''}`,
         icon: 'i-lucide-badge-check',
         color: 'success',
     })
@@ -816,6 +848,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                         · {{ marcadasDeTerceros.cuantas }} de otros clientes ({{ formatearQuetzales(marcadasDeTerceros.total) }})
                                     </template>
                                 </p>
+                                <div
+                                    v-if="reparto.length > 1 && !pago"
+                                    class="surface-card flex flex-col gap-2 p-3"
+                                    role="group"
+                                    aria-label="Reparto del cobro por empresa"
+                                    data-prueba="reparto-empresas"
+                                >
+                                    <p class="flex items-center gap-1.5 text-sm font-medium text-highlighted">
+                                        <UIcon
+                                            name="i-lucide-split"
+                                            class="size-4"
+                                        />
+                                        Un pago por empresa
+                                    </p>
+                                    <p class="text-xs text-muted">
+                                        Las facturas son de {{ reparto.length }} empresas: se registra un pago para cada NIT, cada uno en la caja de esa empresa.
+                                    </p>
+                                    <ul class="flex flex-col divide-y divide-default">
+                                        <li
+                                            v-for="parte in reparto"
+                                            :key="parte.empresaId ?? 'ninguna'"
+                                            class="flex items-center justify-between gap-3 py-1.5 text-sm"
+                                            :data-empresa="parte.empresaId ?? 'ninguna'"
+                                        >
+                                            <span class="flex min-w-0 items-center gap-1.5">
+                                                <UIcon
+                                                    name="i-lucide-building-2"
+                                                    class="size-4 shrink-0 text-muted"
+                                                />
+                                                <span class="truncate">{{ parte.empresaId !== null ? nombreEmpresa(parte.empresaId) : empresaActiva !== null ? 'Otras empresas' : 'Empresa sin identificar' }}</span>
+                                                <span class="shrink-0 text-xs text-muted">· {{ parte.facturas.length }} {{ parte.facturas.length === 1 ? 'aviso' : 'avisos' }}</span>
+                                            </span>
+                                            <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(parte.total) }}</span>
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
                         </template>
                     </section>
@@ -921,7 +989,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 v-if="cliente && pago"
                 class="flex flex-col gap-3"
             >
+                <section
+                    v-if="cobroRepartido"
+                    class="surface-card flex flex-col gap-2 p-4"
+                    aria-label="Pagos por empresa"
+                    data-prueba="pagos-por-empresa"
+                >
+                    <p class="text-sm text-muted">
+                        El cobro se repartió en un pago por empresa; cada uno va a la caja de su empresa.
+                    </p>
+                    <ul class="flex flex-col gap-1 text-sm">
+                        <li
+                            v-for="parte in pagosDelCobro"
+                            :key="parte.id"
+                            class="flex justify-between gap-3"
+                        >
+                            <span>
+                                <span class="font-medium text-highlighted">{{ nombreDeEmpresa(parte.empresa_id) }}</span>
+                                <span class="text-muted"> · Pago #{{ parte.id }}</span>
+                            </span>
+                            <span class="tabular-nums">{{ formatearQuetzales(parte.monto) }}</span>
+                        </li>
+                    </ul>
+                    <p class="flex justify-between gap-3 font-semibold text-highlighted">
+                        <span>Total cobrado</span>
+                        <span class="tabular-nums">{{ formatearQuetzales(totalCobrado) }}</span>
+                    </p>
+                </section>
+                <ReciboCobro
+                    v-if="cobroRepartido && pago.cobro_id && puede('pagos.ver')"
+                    :cobro-id="pago.cobro_id"
+                    :cliente="cliente"
+                    :cajero="usuario?.nombre ?? null"
+                />
                 <ReciboPago
+                    v-else
                     :pago="pago"
                     :cliente="cliente"
                     :facturas="facturasAntes"
@@ -1213,6 +1315,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     <ProblemaAlerta
                         v-else-if="problemaPago && problemaPago.status !== 422"
                         :problema="problemaPago"
+                    />
+                    <UAlert
+                        v-else-if="sinCaja"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-lock"
+                        :title="`No tienes caja abierta en ${sinCaja.nombre}`"
+                        description="Las facturas marcadas incluyen avisos de esa empresa y el efectivo va a su propia caja. Abre un turno en una caja de esa empresa y vuelve a registrar el cobro."
+                        :actions="puede('cajas.abrir') ? [{ label: 'Abrir caja', icon: 'i-lucide-lock-open', to: '/caja', color: 'warning', variant: 'solid' }] : []"
+                        data-prueba="caja-no-abierta"
                     />
                     <UAlert
                         v-else-if="problemaPago"

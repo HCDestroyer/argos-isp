@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { aplicarNotaCredito } from './aplicarNotaCredito'
 
 type NotaCredito = Schema<'NotaCredito'>
@@ -68,7 +68,7 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
             const factura = numeroQuery(solicitud, 'factura_id')
             const desde = solicitud.query.get('desde')
             const hasta = solicitud.query.get('hasta')
-            const filas = bd.notasCredito
+            const filas = deLaEmpresa(bd.notasCredito, solicitud)
                 .filter(n => cliente === undefined || n.cliente_id === cliente)
                 .filter(n => factura === undefined || n.factura_id === factura)
                 .filter(n => !desde || n.fecha >= desde)

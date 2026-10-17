@@ -17,11 +17,15 @@ const contadores = computed<Record<string, string | undefined>>(() => ({
     comprobantes: textoContador(comprobantes.contador.value),
 }))
 
-onMounted(() => {
+function actualizarContadores() {
     if (puede('comprobantes.ver')) {
         void comprobantes.actualizarContador()
     }
-})
+}
+
+onMounted(actualizarContadores)
+// Otra empresa activa: los pendientes de verificar son otros.
+watch(useEmpresaActiva().eleccion, actualizarContadores)
 
 function cerrarMovil() {
     abierto.value = false

@@ -22,7 +22,7 @@ describe('semana 2 · simulador de promesas', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('estado de cada regla, decisión y origen del límite', () => {

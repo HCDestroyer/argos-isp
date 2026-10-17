@@ -52,7 +52,7 @@ describe('semana 3 · vista previa del cambio de modo del router', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('el fixture responde como la API: menús ordenados, totales iguales a las listas, vacío al mismo modo', async () => {

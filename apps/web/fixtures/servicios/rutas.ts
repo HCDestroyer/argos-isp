@@ -1,22 +1,27 @@
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import Decimal from 'decimal.js'
+import type { ManejadorFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { ipEnCidr, ipv4ANumero } from '~/utils/red'
 import { bd, siguienteId } from '../bd'
-import { nuevaSesion } from '../sesiones/datos'
 import {
     ahora,
     conIdempotencia,
     conPermiso,
     cuerpoObjeto,
     datosInvalidos,
+    empresaActivaDe,
+    empresasDeLista,
     idDe,
     noEncontrado,
     normalizar,
     numeroQuery,
     paginar,
+    problemaTipado,
     registrarAccion,
+    usuariosPorToken,
     versionCambiada,
 } from '../comun'
+import { nuevaSesion } from '../sesiones/datos'
 
 type Servicio = Schema<'Servicio'>
 type Errores = NonNullable<Problem['errors']>
@@ -157,6 +162,16 @@ function validarAlta(cuerpo: Record<string, unknown>): Errores {
     return errores
 }
 
+/** Empresa de un servicio nuevo, como `CrearServicio` (A1): explícita > zona > router > activa > 1. */
+function empresaDelAlta(solicitud: SolicitudFixture, cuerpo: Record<string, unknown>, routerId: number): number {
+    if (typeof cuerpo.empresa_id === 'number') {
+        return cuerpo.empresa_id
+    }
+    const cliente = bd.clientes.find(c => c.id === Number(cuerpo.cliente_id))
+    const zona = bd.zonas.find(z => z.id === cliente?.zona_id)?.empresa_sugerida_id
+    const router = bd.routers.find(r => r.id === routerId)?.empresa_sugerida_id
+    return zona ?? router ?? empresaActivaDe(solicitud) ?? 1
+}
 function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     const cuerpo = cuerpoObjeto(solicitud)
     const errores = validarAlta(cuerpo)
@@ -178,8 +193,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     return {
         id,
         cliente_id: Number(cuerpo.cliente_id),
-        // Multiempresa (A1): la explícita o la 1 (una sola empresa)
-        empresa_id: typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : 1,
+        // Multiempresa (A1): explícita > la sugerida de la zona del cliente > la del router > la activa > la 1.
+        empresa_id: empresaDelAlta(solicitud, cuerpo, routerId),
         router_id: routerId,
         plan_id: Number(cuerpo.plan_id),
         plantilla_facturacion_id: 'plantilla_facturacion_id' in cuerpo
@@ -344,7 +359,58 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
     })),
 ]))
 
+/**
+ * Como `CambiarEmpresaServicio` (A1): `{ empresa_id, version, motivo }`. 422 `servicio_con_saldo`
+ * si le quedan facturas por cobrar, 422 `servicio_retirado`, 403 `empresa_no_permitida` sin acceso a
+ * las dos empresas, 409 por versión. Misma empresa: 200 sin cambios.
+ */
+const cambiarEmpresa: ManejadorFixture = (solicitud) => {
+    const indice = bd.servicios.findIndex(s => s.id === idDe(solicitud))
+    const actual = bd.servicios[indice]
+    if (!actual) {
+        return noEncontrado('el servicio')
+    }
+    const cuerpo = cuerpoObjeto(solicitud)
+    if (cuerpo.version !== actual.version) {
+        return versionCambiada()
+    }
+    const motivo = texto(cuerpo.motivo)
+    const nueva = bd.empresas.find(e => e.id === cuerpo.empresa_id)
+    const errores: NonNullable<Problem['errors']> = []
+    if (!motivo || motivo.length < 3) {
+        errores.push({ field: 'motivo', message: 'El motivo debe tener al menos 3 caracteres', rule: 'minLength' })
+    }
+    if (!nueva || !nueva.activa) {
+        errores.push({ field: 'empresa_id', message: 'La empresa no existe o está inactiva', rule: 'exists' })
+    }
+    if (errores.length || !nueva) {
+        return datosInvalidos(errores)
+    }
+    const actor = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    const sinAcceso = [actual.empresa_id, nueva.id].find(id => !actor?.alcance_global && !(actor?.empresas ?? []).some(e => e.id === id))
+    if (sinAcceso !== undefined) {
+        return problemaTipado(403, 'empresa_no_permitida', 'Empresa no permitida', `No tienes acceso a la empresa ${sinAcceso}`)
+    }
+    if (actual.estado === 'retirado') {
+        return problemaTipado(422, 'servicio_retirado', 'Regla de negocio', 'El servicio está retirado')
+    }
+    const saldo = bd.facturas
+        .filter(f => f.servicio_id === actual.id && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .reduce((total, f) => total.plus(f.total).minus(f.pagado), new Decimal(0))
+    if (saldo.gt(0)) {
+        return problemaTipado(422, 'servicio_con_saldo', 'Regla de negocio', `El servicio tiene Q ${saldo.toFixed(2)} pendientes: cóbralos o anúlalos antes de cambiar de empresa`)
+    }
+    if (nueva.id === actual.empresa_id) {
+        return { status: 200, cuerpo: vista(actual) }
+    }
+    const despues: Servicio = { ...actual, empresa_id: nueva.id, version: actual.version + 1, updated_at: ahora() }
+    bd.servicios[indice] = despues
+    registrarAccion(solicitud, 'servicios.cambiar_empresa', { tipo: 'servicio', id: actual.id }, cuerpo)
+    return { status: 200, cuerpo: vista(despues) }
+}
+
 export const rutasServicios: RutasFixture = {
+    'POST /api/v1/servicios/:id/cambiar-empresa': conPermiso('servicios.cambiar_empresa', conIdempotencia(cambiarEmpresa)),
     'GET /api/v1/servicios': conPermiso('servicios.ver', (solicitud) => {
         const q = normalizar(solicitud.query.get('q')?.trim())
         const cliente = numeroQuery(solicitud, 'cliente_id')
@@ -354,7 +420,9 @@ export const rutasServicios: RutasFixture = {
         const zona = numeroQuery(solicitud, 'zona_id')
         const deuda = solicitud.query.get('con_deuda_vencida')
         const tipo = solicitud.query.get('tipo_conexion')
+        const empresas = empresasDeLista(solicitud)
         const filas = bd.servicios
+            .filter(s => empresas === null || empresas.includes(s.empresa_id))
             .filter(s => !tipo || (s.tipo_conexion ?? 'pppoe') === tipo)
             .filter(s => zona === undefined || bd.clientes.find(c => c.id === s.cliente_id)?.zona_id === zona)
             .filter(s => deuda === null || bd.facturas.some(f => f.servicio_id === s.id && f.estado === 'vencida') === (deuda === 'true'))

@@ -52,6 +52,7 @@
       "pagos.registrar",
       "pagos.anular",
       "cajas.ver",
+      "cajas.crear",
       "cajas.abrir",
       "cajas.cerrar",
       "cuentas_bancarias.ver",
@@ -92,7 +93,32 @@
       "reportes.ver",
       "facturas.nota_credito",
       "red.ver",
-      "routers.marcar_migrado"
-    ]
+      "routers.marcar_migrado",
+      "servicios.cambiar_empresa",
+      "notificaciones.configurar",
+      "notificaciones.probar",
+      "empresas.ver",
+      "empresas.crear",
+      "empresas.editar",
+      "empresas.desactivar",
+      "empresas.cambiar_logo",
+      "usuarios.asignar_empresas"
+    ],
+    "alcance_global": true,
+    "empresas": [
+      {
+        "id": 1,
+        "nombre_comercial": "ArgosNet",
+        "nit": "1234567-8",
+        "logo_url": null
+      },
+      {
+        "id": 2,
+        "nombre_comercial": "Fibra del Sur",
+        "nit": "7788990-1",
+        "logo_url": null
+      }
+    ],
+    "empresa_activa_id": null
   }
 }

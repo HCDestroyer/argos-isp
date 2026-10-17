@@ -187,6 +187,9 @@ function limpiarFiltros() {
     peticion.value = ''
 }
 
+/** Con varias empresas, cada acción dice de cuál es (A1: `empresa_id`/`empresa_nombre`; null = del grupo). */
+const { conSelector: variasEmpresas } = useEmpresaActiva()
+
 function verDetalle(fila: AccionAuditoria) {
     elegida.value = fila
     detalleAbierto.value = true
@@ -367,6 +370,11 @@ onMounted(async () => {
                             <span class="font-mono text-xs text-muted">{{ row.original.accion }}</span>
                             <span class="text-xs text-muted sm:hidden">{{ formatearFechaHora(row.original.created_at) }}</span>
                             <span class="text-xs text-muted lg:hidden">{{ etiquetaActor(row.original) }} · {{ etiquetaCanal(row.original.canal) }}</span>
+                            <span
+                                v-if="variasEmpresas && row.original.empresa_nombre"
+                                class="text-xs text-muted"
+                                :data-empresa-accion="row.original.empresa_id"
+                            >{{ row.original.empresa_nombre }}</span>
                             <span
                                 v-if="motivoAccion(row.original)"
                                 class="line-clamp-2 text-xs whitespace-normal text-muted"

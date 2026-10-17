@@ -58,6 +58,17 @@ const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) &
 
 const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const puedeSimular = computed(() => puede('promesas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+
+/** Multiempresa: la empresa del servicio se ve y se cambia solo si hay más de una. */
+const { conSelector: variasEmpresas, nombre: nombreEmpresa } = useEmpresaActiva()
+const puedeCambiarEmpresa = computed(() => variasEmpresas.value && puede('servicios.cambiar_empresa') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const cambiarEmpresaAbierto = ref(false)
+
+function alCambiarEmpresa(actualizado: Servicio) {
+    servicio.value = actualizado
+    toast.add({ title: 'Empresa cambiada', description: `${etiquetaServicio(actualizado)} factura ahora con ${nombreEmpresa(actualizado.empresa_id)}`, icon: 'i-lucide-circle-check', color: 'success' })
+    void lineaTiempo.value?.recargar()
+}
 const simuladorAbierto = ref(false)
 
 /**
@@ -279,6 +290,14 @@ onMounted(cargar)
                         variant="outline"
                     />
                     <SuspensionManualBadge :servicio="servicio" />
+                    <UBadge
+                        v-if="variasEmpresas"
+                        :label="nombreEmpresa(servicio.empresa_id)"
+                        icon="i-lucide-building-2"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="empresa-servicio"
+                    />
                 </div>
                 <p class="text-sm text-muted">
                     Servicio #{{ servicio.id }} ·
@@ -315,7 +334,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedePromesa || puedeSimular"
+                v-if="acciones.length || puedePromesa || puedeSimular || puedeCambiarEmpresa"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -345,6 +364,15 @@ onMounted(cargar)
                     variant="outline"
                     data-prueba="abrir-simulador"
                     @click="simuladorAbierto = true"
+                />
+                <UButton
+                    v-if="puedeCambiarEmpresa"
+                    label="Cambiar empresa"
+                    icon="i-lucide-arrow-right-left"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-cambiar-empresa"
+                    @click="cambiarEmpresaAbierto = true"
                 />
             </div>
             <p
@@ -657,6 +685,13 @@ onMounted(cargar)
                 :servicio="servicio"
                 :sugerido="pendienteServicio"
                 @creada="alCrearPromesa"
+            />
+
+            <ServicioCambiarEmpresaModal
+                v-if="puedeCambiarEmpresa"
+                v-model:open="cambiarEmpresaAbierto"
+                :servicio="servicio"
+                @hecho="alCambiarEmpresa"
             />
 
             <ServicioAccionModal

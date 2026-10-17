@@ -26,6 +26,12 @@ export function problema(status: number, title: string, detail?: string, errors?
     return { status, cuerpo }
 }
 
+/** Problem con `type` propio, como `tipoProblema(codigo)` de la API (`urn:argosisp:problema:<codigo>`). */
+export function problemaTipado(status: number, codigo: string, title: string, detail?: string, errors?: Problem['errors']): RespuestaFixture {
+    const respuesta = problema(status, title, detail, errors)
+    return { ...respuesta, cuerpo: { ...(respuesta.cuerpo as Problem), type: `urn:argosisp:problema:${codigo}` } }
+}
+
 export const sinSesion = (): RespuestaFixture => problema(401, 'Sin sesión', 'El token no es válido o expiró.')
 
 /** Exige sesión y el permiso de la acción, como el middleware de ACL de la API. */
@@ -110,6 +116,42 @@ export function conIdempotencia(manejador: ManejadorFixture): ManejadorFixture {
     }
 }
 
+/** Documentos con empresa, para saber de qué empresa es una acción. */
+function documentosDe(tipo: string): readonly { id: number, empresa_id?: number | null }[] | null {
+    switch (tipo) {
+        case 'servicio': return bd.servicios
+        case 'factura': return bd.facturas
+        case 'pago': return bd.pagos
+        case 'caja': return bd.cajas
+        case 'promesa': return bd.promesas
+        case 'comprobante': return bd.comprobantes
+        case 'egreso': return bd.egresos
+        case 'cuenta_bancaria': return bd.cuentasBancarias
+        case 'asiento': return bd.asientos
+        case 'nota_credito': return bd.notasCredito
+        default: return null
+    }
+}
+
+/**
+ * Empresa de una acción como `DomainAction` (A1): la del documento, o la activa de quien la hizo;
+ * `null` si no es de ninguna (clientes y usuarios son del grupo).
+ */
+export function empresaDeAccion(entidad: { tipo: string, id: number }, solicitud: SolicitudFixture | null): { empresa_id: number | null, empresa_nombre: string | null } {
+    let empresaId: number | null
+    if (entidad.tipo === 'cliente' || entidad.tipo === 'usuario') {
+        empresaId = null
+    }
+    else if (entidad.tipo === 'empresa') {
+        empresaId = entidad.id
+    }
+    else {
+        const documento = documentosDe(entidad.tipo)?.find(d => d.id === entidad.id)
+        empresaId = documento?.empresa_id ?? (solicitud ? empresaActivaDe(solicitud) : null)
+    }
+    return { empresa_id: empresaId, empresa_nombre: bd.empresas.find(e => e.id === empresaId)?.nombre_comercial ?? null }
+}
+
 /** Escribe en la bitácora de fixtures lo que haría `DomainAction`. */
 export function registrarAccion(solicitud: SolicitudFixture, accion: string, entidad: { tipo: string, id: number }, entrada: unknown): void {
     const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
@@ -128,9 +170,7 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
-        // Como la API con una sola empresa: la empresa activa es la 1.
-        empresa_id: 1,
-        empresa_nombre: 'ArgosIsp',
+        ...empresaDeAccion(entidad, solicitud),
         created_at: ahora(),
     })
 }
@@ -139,4 +179,52 @@ export const versionCambiada = (): RespuestaFixture => problema(409, 'Conflicto 
 
 export function datosInvalidos(errors: NonNullable<Problem['errors']>): RespuestaFixture {
     return problema(422, 'Datos inválidos', 'Revisa los campos marcados.', errors)
+}
+
+/**
+ * Empresa activa de la petición, como el middleware `empresa` de A1: `X-Empresa-Id` o, sin
+ * cabecera, la única empresa del usuario (con varias, ninguna).
+ */
+export function empresaActivaDe(solicitud: SolicitudFixture): number | null {
+    const cabecera = Number(solicitud.headers.get('X-Empresa-Id'))
+    if (Number.isInteger(cabecera) && cabecera > 0) {
+        return cabecera
+    }
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    const suyas = usuario?.empresas ?? []
+    return !usuario?.alcance_global && suyas.length === 1 ? suyas[0]?.id ?? null : null
+}
+
+/** 403 `empresa_no_permitida` si la cabecera pide una empresa fuera del alcance del usuario. */
+export function empresaNoPermitida(solicitud: SolicitudFixture): RespuestaFixture | null {
+    const pedida = Number(solicitud.headers.get('X-Empresa-Id'))
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    if (!usuario || !Number.isInteger(pedida) || pedida <= 0) {
+        return null
+    }
+    const existe = bd.empresas.some(e => e.id === pedida && e.activa)
+    const permitida = existe && (usuario.alcance_global || (usuario.empresas ?? []).some(e => e.id === pedida))
+    return permitida ? null : problemaTipado(403, 'empresa_no_permitida', 'Empresa no permitida', `No tienes acceso a la empresa ${pedida}`)
+}
+
+/**
+ * Empresas por las que filtra una lista (`empresasDeLaLista` de A1): la activa; sin activa, las del
+ * alcance del usuario (`null` = todas con alcance global); `?empresas=todas` → `null` (consolidado).
+ */
+export function empresasDeLista(solicitud: SolicitudFixture): number[] | null {
+    if (solicitud.query.get('empresas') === 'todas') {
+        return null
+    }
+    const activa = empresaActivaDe(solicitud)
+    if (activa) {
+        return [activa]
+    }
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    return !usuario || usuario.alcance_global ? null : (usuario.empresas ?? []).map(e => e.id)
+}
+
+/** Filtra una lista de documentos por las empresas de la petición (`filtrarPorEmpresa` de A3). */
+export function deLaEmpresa<T extends { empresa_id?: number }>(filas: readonly T[], solicitud: SolicitudFixture): T[] {
+    const empresas = empresasDeLista(solicitud)
+    return empresas === null ? [...filas] : filas.filter(f => empresas.includes(f.empresa_id ?? 1))
 }

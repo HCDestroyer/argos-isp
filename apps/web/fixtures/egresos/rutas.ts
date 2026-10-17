@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { bancosLibro } from '../libro/datos'
 import { categoriasEgreso } from './datos'
 
@@ -70,7 +70,7 @@ export const rutasEgresos: RutasFixture = {
         }
         const caja = numeroQuery(solicitud, 'caja_id')
         const cuenta = numeroQuery(solicitud, 'cuenta_bancaria_id')
-        const filas = bd.egresos
+        const filas = deLaEmpresa(bd.egresos, solicitud)
             .filter(e => !desde || e.fecha >= desde)
             .filter(e => !hasta || e.fecha <= hasta)
             .filter(e => !query.get('categoria') || e.categoria === query.get('categoria'))
@@ -140,6 +140,8 @@ export const rutasEgresos: RutasFixture = {
         const quien = usuario(solicitud)
         const egreso: Egreso = {
             id: siguienteId(bd.egresos),
+            // Multiempresa (A3): la de su caja o cuenta bancaria; si no, la activa.
+            empresa_id: caja?.empresa_id ?? cuenta?.empresa_id ?? banco?.empresa_id ?? empresaActivaDe(solicitud) ?? 1,
             fecha,
             categoria: categoria.clave,
             categoria_nombre: categoria.nombre,
@@ -221,6 +223,7 @@ export const rutasEgresos: RutasFixture = {
         const quien = usuario(solicitud)
         const cierre: Schema<'CierrePeriodo'> = {
             id: siguienteId(bd.cierres),
+            empresa_id: typeof cuerpoObjeto(solicitud).empresa_id === 'number' ? Number(cuerpoObjeto(solicitud).empresa_id) : (empresaActivaDe(solicitud) ?? 1),
             periodo,
             estado: 'cerrado',
             cerrado_en: ahora(),

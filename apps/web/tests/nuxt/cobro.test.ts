@@ -44,7 +44,7 @@ describe('cobro rápido · composables y reglas', () => {
 
     it('una factura que venció ayer cuenta como vencida aunque la API aún diga emitida', () => {
         const base = {
-            id: 1, cliente_id: 1, servicio_id: 1, periodo: '2026-10-01', clave_unica: '1-2026-10-01',
+            id: 1, empresa_id: 1, empresa_nombre: 'ArgosNet', cliente_id: 1, servicio_id: 1, periodo: '2026-10-01', clave_unica: '1-2026-10-01',
             emitida_en: '2026-10-01T14:00:00Z', vence_en: '2026-10-14', estado: 'emitida' as const,
             subtotal: '133.93', iva: '16.07', total: '150.00', pagado: '0.10',
             fel_uuid: null, fel_serie: null, fel_numero: null, fel_estado: null, version: 1,

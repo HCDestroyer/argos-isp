@@ -36,6 +36,7 @@ export function aplicarNotaCredito(
     const asientoId = siguiente(tablas.asientos)
     const nota: NotaCredito = {
         id: siguiente(tablas.notasCredito),
+        empresa_id: factura.empresa_id,
         factura_id: factura.id,
         cliente_id: factura.cliente_id,
         cliente_nombre: tablas.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
@@ -53,6 +54,7 @@ export function aplicarNotaCredito(
     tablas.notasCredito.push(nota)
     tablas.asientos.push({
         id: asientoId,
+        empresa_id: factura.empresa_id,
         fecha: nota.fecha,
         descripcion: `Nota de crédito ${nota.id} · factura ${factura.id} · ${motivo}`,
         origen_tipo: 'nota_credito',

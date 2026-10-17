@@ -197,6 +197,24 @@ export function etiquetaReferencia(metodo: Metodo): string {
     }
 }
 
+/** El código de un problema (`urn:argosisp:problema:<codigo>`) o `null`. */
+export function codigoProblema(problema: { type: string }): string | null {
+    const prefijo = 'urn:argosisp:problema:'
+    return problema.type.startsWith(prefijo) ? problema.type.slice(prefijo.length) : null
+}
+
+/**
+ * La empresa sin caja abierta de un 422 `caja_no_abierta` (A3: `errors[0].field = 'empresa_id'`,
+ * `rule` = su id). `null` si el problema es otro.
+ */
+export function empresaSinCaja(problema: { status: number, type: string, errors?: { field: string, rule?: string }[] }): number | null {
+    if (problema.status !== 422 || codigoProblema(problema) !== 'caja_no_abierta') {
+        return null
+    }
+    const id = Number(problema.errors?.find(e => e.field === 'empresa_id')?.rule)
+    return Number.isInteger(id) && id > 0 ? id : null
+}
+
 /** Una referencia ya registrada (409 `referencia_duplicada`, única por método y cuenta). */
 export function esReferenciaDuplicada(problema: { status: number, type: string }): boolean {
     return problema.status === 409 && problema.type.endsWith(':referencia_duplicada')
