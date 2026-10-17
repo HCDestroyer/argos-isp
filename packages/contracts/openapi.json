@@ -12640,6 +12640,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15330,6 +15333,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15408,7 +15414,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso routers.marcar_migrado",
+            "description": "Sin el permiso routers.marcar_migrado; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15463,6 +15469,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15799,6 +15808,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [

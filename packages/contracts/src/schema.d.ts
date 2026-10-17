@@ -13202,7 +13202,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso routers.marcar_migrado */
+            /** @description Sin el permiso routers.marcar_migrado; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
