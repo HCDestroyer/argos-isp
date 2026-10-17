@@ -198,3 +198,4 @@ Lo pagado de una factura `No pagado` sale de `facturas.cobrado`, no de la suma d
 15. ¿Hay promesas de pago vigentes (`credito.estado`) que haya que recrear en ArgosIsp el día del cambio?
 16. `nas`: ¿cada router tiene su fila con la IP con la que llega al RADIUS? ¿Qué es `server.ip_radius`?
 17. ¿`server.pass` está en claro o cifrada por Mikrowisp? Si está cifrada, las credenciales de la API se cargan a mano.
+18. Clientes `RETIRADO`: hoy se importan (sin servicios) para conservar su deuda. ¿Se importan solo si deben algo, o ninguno?

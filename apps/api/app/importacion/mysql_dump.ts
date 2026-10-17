@@ -116,13 +116,34 @@ function dividirNivelSuperior(texto: string): string[] {
     return partes
 }
 
-/** Sentencias del volcado sin comentarios, separadas por `;` fuera de comillas. */
+/**
+ * Sentencias del volcado sin comentarios, separadas por el delimitador (`;`) fuera de comillas.
+ * Respeta `DELIMITER ;;` / `DELIMITER ;` de los triggers (Mikrowisp 6 los trae, con `INSERT` y
+ * `UPDATE` dentro): el cuerpo del trigger es una sola sentencia y se ignora.
+ */
 function* sentencias(texto: string): Generator<string> {
     let actual = ''
+    let delimitador = ';'
     let i = 0
     const n = texto.length
     while (i < n) {
         const c = texto[i]!
+        // `DELIMITER x` al inicio de una sentencia (es del cliente mysql, no de SQL)
+        if (actual.trim() === '' && (c === 'D' || c === 'd')) {
+            const linea = /^DELIMITER[ \t]+(\S+)[ \t]*(?:\r?\n|$)/i.exec(texto.slice(i, i + 64))
+            if (linea) {
+                delimitador = linea[1]!
+                actual = ''
+                i += linea[0].length
+                continue
+            }
+        }
+        if (texto.startsWith(delimitador, i) && delimitador !== ';') {
+            if (actual.trim()) yield actual.trim()
+            actual = ''
+            i += delimitador.length
+            continue
+        }
         // Comentarios
         if (c === '-' && texto[i + 1] === '-' && (i + 2 >= n || /\s/.test(texto[i + 2]!))) {
             while (i < n && texto[i] !== '\n') i++
@@ -160,7 +181,7 @@ function* sentencias(texto: string): Generator<string> {
             i++
             continue
         }
-        if (c === ';') {
+        if (c === ';' && delimitador === ';') {
             if (actual.trim()) yield actual.trim()
             actual = ''
             i++

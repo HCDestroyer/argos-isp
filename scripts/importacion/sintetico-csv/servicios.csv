@@ -1,14 +1,14 @@
 ﻿id,cliente_id,router_id,plan_id,tipo_conexion,user_ppp,pass_ppp,ip,mac,amarre_ip_mac,direccion,coordenadas,fecha_instalacion,estado
-101,1,1,1,PPPOE,mw.ana.lopez,clave101,198.18.10.10,aa:bb:cc:00:01:01,0,"4a. calle 5-10, zona 1","14.6349,-90.5069",2024-03-15 10:00:00,ACTIVO
-102,2,1,2,PPPOE,mw.elsol,clave102,198.18.10.20,,0,,,2023-11-02 00:00:00,ACTIVO
-103,3,2,1,PPPOE,mw.elsol.bodega,clave103,,,0,,,0000-00-00 00:00:00,ACTIVO
-104,4,1,1,PPPOE,mw.bruno,clave104,198.18.10.40,,0,,,,SUSPENDIDO
-105,5,2,1,PPPOE,mw.carla,clave105,198.18.20.50,,0,,,,ACTIVO
-106,6,2,1,PPPOE,mw.elena,clave106,198.18.20.60,,0,,,,ACTIVO
-107,7,1,0,PPPOE,mw.ernesto,clave107,198.18.10.70,,0,,,,ACTIVO
-108,8,1,2,ESTATICO,,,198.18.10.80,aabb.cc00.0801,1,"Finca Las Flores, casa patronal",,,ACTIVO
-109,9,2,1,DHCP,,,,AA-BB-CC-00-09-01,0,,,,ACTIVO
-110,9,2,1,PPPOE,mw.gabriel,clave110,198.18.20.90,aabbcc000902,0,,,,ACTIVO
-111,10,1,1,PPPOE,mw.hilda,clave111,198.18.10.10,,0,,,,ACTIVO
-112,1,1,1,PPPOE,mw.ana.vieja,clave112,198.18.10.12,,0,,,,RETIRADO
-113,8,1,2,ESTATICO,,,,,0,"Finca Las Flores, beneficio",,,ACTIVO
+101,1,1,1,pppoe,mw.ana.lopez,clave101,198.18.10.10,aa:bb:cc:00:01:01,no,"4a. calle 5-10, zona 1","14.6349,-90.5069",2024-03-15,ACTIVO
+102,2,1,2,pppoe,mw.elsol,clave102,198.18.10.20,,no,,,2023-11-02,ACTIVO
+103,3,2,1,pppoe,mw.elsol.bodega,clave103,,,no,,,0000-00-00,ACTIVO
+104,4,1,1,pppoe,mw.bruno,clave104,198.18.10.40,,no,,,0000-00-00,SUSPENDIDO
+105,5,2,1,pppoe,mw.carla,clave105,198.18.20.50,,no,,,0000-00-00,ACTIVO
+106,6,2,1,pppoe,mw.elena,clave106,198.18.20.60,,no,,,0000-00-00,ACTIVO
+107,7,1,0,pppoe,mw.ernesto,clave107,198.18.10.70,,no,,,0000-00-00,ACTIVO
+108,8,1,2,ip_estatica,,,198.18.10.80,aabb.cc00.0801,si,"Finca Las Flores, casa patronal",,0000-00-00,ACTIVO
+109,9,2,1,dhcp_fija,,,,AA-BB-CC-00-09-01,no,,,0000-00-00,ACTIVO
+110,9,2,1,pppoe,mw.gabriel,clave110,198.18.20.90,aabbcc000902,no,,,0000-00-00,ACTIVO
+111,10,1,1,pppoe,mw.hilda,clave111,198.18.10.10,,no,,,0000-00-00,ACTIVO
+112,11,1,1,pppoe,mw.iris,clave112,198.18.10.12,,no,,,0000-00-00,RETIRADO
+113,8,1,2,ip_estatica,,,,,si,"Finca Las Flores, beneficio",,0000-00-00,ACTIVO

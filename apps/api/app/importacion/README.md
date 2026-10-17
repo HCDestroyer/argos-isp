@@ -4,7 +4,7 @@ Lleva a ArgosIsp los datos de otro sistema de gestión (Mikrowisp, SmartISP o cu
 
 ```sh
 pnpm importar --origen=mikrowisp --fuente=mikrowisp.sql --dry-run --salida=reporte/   # en seco desde el volcado SQL; reporte en Markdown, CSV y JSON
-pnpm importar --origen=smartisp --fuente=smartisp.sql --dry-run                       # SmartISP (esquema supuesto, ver abajo)
+pnpm importar --origen=smartisp --fuente=smartisp.sql --dry-run                       # SmartISP
 pnpm importar --origen=csv --fuente=exportacion/ --sistema=wisphub --dry-run          # cualquier sistema, con las plantillas CSV
 pnpm importar:plantillas plantillas/                                                  # plantillas CSV vacías con su LEEME
 pnpm importar --origen=<origen> --fuente=<ruta>                                       # real
@@ -25,8 +25,8 @@ origen (volcado .sql, CSV)  ──adaptador──▶  formato canónico  ──n
 
 | `--origen`  | `--fuente`                        | Adaptador               | Estado                                                                                                   |
 | ----------- | --------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------- |
-| `mikrowisp` | volcado SQL (`mysqldump`)         | `origenes/mikrowisp.ts` | Esquema supuesto (API pública de Mikrowisp); falta el volcado real para confirmarlo                      |
-| `smartisp`  | volcado SQL (`mysqldump`)         | `origenes/smartisp.ts`  | **Esqueleto con esquema supuesto sin verificar**: se detiene con la lista de lo que falta si no coincide |
+| `mikrowisp` | volcado SQL (`mysqldump`)         | `origenes/mikrowisp.ts` | Esquema real de Mikrowisp 6 (`docs/importacion/mapeo-mikrowisp.md`); valores de estados por confirmar con datos reales |
+| `smartisp`  | volcado SQL (`mysqldump`)         | `origenes/smartisp.ts`  | Esquema real de SmartISP (`docs/importacion/mapeo-smartisp.md`); códigos de estado y control supuestos hasta ver datos |
 | `csv`       | directorio con un CSV por entidad | `origenes/csv.ts`       | Listo: es el formato canónico tal cual. Para cualquier sistema que exporte a hoja de cálculo             |
 
 **Agregar un origen**: un archivo `origenes/<sistema>.ts` que lea la fuente y devuelva `normalizarFuente(filas)` (con `tablasDelEsquema` y `filasCanonicas` de `origenes/esquema_sql.ts` si es un volcado MySQL), y su entrada en `ADAPTADORES` de `origenes/index.ts`. Nada más cambia.
@@ -42,23 +42,18 @@ El nombre del sistema de origen (`sistema`: `mikrowisp`, `smartisp`, `csv` o el 
 
 Mismo origen y mismo id = misma entidad (una segunda corrida no crea nada). Otro origen = otra entidad. Por eso, si los CSV son una exportación de un Mikrowisp que ya se importó (o se importará) desde su volcado, van con `--sistema=mikrowisp`.
 
-## Origen `mikrowisp`: volcado SQL
+## Orígenes `mikrowisp` y `smartisp`: volcado SQL
 
-`origenes/mikrowisp.ts` lee el volcado de la base MySQL de Mikrowisp (`mysqldump` o exportación SQL de phpMyAdmin) sin levantar un MySQL: `mysql_dump.ts` lee los `CREATE TABLE` y los `INSERT` (escapes, `NULL`, comentarios) y el adaptador los lleva al formato canónico.
+`origenes/mikrowisp.ts` y `origenes/smartisp.ts` leen el volcado de la base MySQL (`mysqldump`, Adminer o phpMyAdmin) sin levantar un MySQL: `mysql_dump.ts` lee los `CREATE TABLE` y los `INSERT` (escapes, `NULL`, comentarios, `DELIMITER` de los triggers) y el adaptador los lleva al formato canónico.
 
-**El esquema es supuesto** hasta que llegue la copia real del ISP: tablas `routers`, `redes`, `perfiles` (velocidad `subida/bajada` como el max-limit de MikroTik), `zonas`, `usuarios` (`cedula` = NIT o CUI, `saldo` = saldo a favor), `tblservicios` (`tipo` PPPOE/ESTATICO/DHCP, `idperfil` 0 = sin plan), `facturas` (estado `No pagado`/`Pagado`/`Anulado`) y `operaciones` (pagos: `nfactura`, `idcliente` del que pagó, `cobrado`). Todo el conocimiento del esquema está en `ESQUEMA` y en `filasDesdeDump`: con el volcado real se ajusta ese archivo y nada más. Si falta una tabla o una columna, el comando lo dice (todo lo que falta, de una vez) antes de tocar la base.
+- **Esquema real**: `scripts/importacion/esquemas/mikrowisp6.sql` (Mikrowisp 6, 102 tablas) y `scripts/importacion/esquemas/smartisp.sql` (112 tablas), solo estructura. De qué tabla y columna sale cada dato, con sus transformaciones y las dudas para el PM: `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`.
+- **Validación del esquema** (`tablasDelEsquema`, `origenes/esquema_sql.ts`): antes de tocar la base compara el volcado con las tablas y columnas que el adaptador lee (`ESQUEMA` de cada archivo). Si falta algo, se detiene con la lista completa (`EsquemaIncompleto`). Las tablas marcadas `opcional` pueden faltar (la entidad entra vacía), pero si están deben traer sus columnas.
+- **Problemas del origen** (`ProblemasOrigen`): lo que el adaptador no traduce (factura en dólares, estado desconocido, servicio que no es de internet, hotspot) o traduce con una observación (precio del servicio distinto al del plan, IPv6 que no se importa, `cobrado` distinto de la suma de pagos) sale en el reporte junto a los problemas de formato (`formato_fila` / `formato_campo`).
+- **Ids `zerofill`**: `normalizarId` quita los ceros a la izquierda (`000001` = `1`), así la clave de idempotencia no depende de la herramienta del volcado.
+- **Valores supuestos**: los códigos que solo se confirman con datos reales viven en constantes con nombre (`SEGURIDAD` en Mikrowisp; `ESTADOS_FACTURA`, `ESTADOS_SERVICIO` y `TIPOS_CONTROL` en SmartISP). Un valor desconocido omite la fila con el valor en el mensaje: nunca se adivina.
+- **Contraseñas**: la clave PPPoE (y las credenciales del router) viajan a `CrearServicio` / `CrearRouter`, que las cifran; ningún mensaje del adaptador ni del reporte las lleva (lo comprueba `tests/importacion/mikrowisp.spec.ts`).
 
-Reglas del volcado: lo pagado de cada factura es la suma de sus `operaciones` (de quien sea); las anuladas no se importan; el saldo de un cliente con saldo a favor es lo pendiente de sus facturas menos ese saldo. El fixture `scripts/importacion/mikrowisp-sintetico.sql` tiene los casos difíciles (NIT duplicados, servicio sin plan, router sin credenciales, abonos, saldos a favor, pagos a facturas de otro, IPs repetidas, MAC en cuatro formatos, IP estática sin PPPoE) y su suma de saldos cuadra (Q 1830.00). `scripts/importacion/sintetico-csv/` son los mismos datos como CSV canónicos: el importador da el mismo reporte con los dos.
-
-## Origen `smartisp`: volcado SQL (esqueleto)
-
-`origenes/smartisp.ts` sigue el mismo patrón, pero **no conocemos el esquema de SmartISP**: `ESQUEMA` supone tablas al estilo Laravel (`routers`, `networks`, `plans`, `clients`, `client_services`, `bills`, `payments`) y está marcado como supuesto. Con un volcado que no coincide, el comando se detiene antes de tocar la base con todo lo que falta:
-
-```
-smartisp.sql: no tiene el esquema que espera el origen smartisp (falta la tabla clients; a la tabla routers le faltan las columnas ip). Revisa que --origen sea el sistema correcto; si lo es, el esquema se ajusta en apps/api/app/importacion/origenes/smartisp.ts. No se tocó la base.
-```
-
-Con el primer volcado real se ajusta `ESQUEMA` y las funciones del archivo. Mientras tanto, un ISP con SmartISP puede importar con las plantillas CSV (`--origen=csv --sistema=smartisp`).
+Datos de prueba: `scripts/importacion/mikrowisp-sintetico.sql` son solo `INSERT` con datos inventados; el volcado de prueba es la estructura real seguida de esos datos (`tests/importacion/ayudas_importacion.ts`). `scripts/importacion/sintetico-csv/` son los datos de Mikrowisp como CSV canónicos (`generar-csv-sintetico.mts`): el importador da el mismo reporte con los dos.
 
 ## Origen `csv`: plantillas
 
@@ -183,8 +178,8 @@ Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinan
 ## Pendiente
 
 - Aplicar el estado suspendido del origen: con las facturas, por `evaluarEstadoServicio` en la siguiente evaluación.
-- Ajustar `origenes/mikrowisp.ts` al esquema real cuando llegue el volcado del ISP (falta la copia del PM).
-- Ajustar `origenes/smartisp.ts` con un volcado real de SmartISP (no tenemos ninguno).
+- Confirmar con datos reales los valores supuestos (estados, seguridad del router, tipo de control): preguntas al PM en `docs/importacion/mapeo-*.md`.
+- IPv6 y DUID de Mikrowisp (`tblservicios.ipv6`, `ipv6_duid`): el formato canónico no los lleva; hoy salen como aviso.
 
 ## Eventos
 
@@ -196,10 +191,10 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `canonico.ts`                          | Formato canónico: tipos, `COLUMNAS` (única definición del formato) y `normalizarFuente` (validación) |
 | `origenes/index.ts`                    | `ADAPTADORES` y `leerOrigen(origen, ruta)`                                                           |
-| `origenes/mikrowisp.ts`                | Adaptador Mikrowisp: esquema supuesto y su traducción al formato canónico                            |
-| `origenes/smartisp.ts`                 | Adaptador SmartISP: esqueleto con esquema supuesto sin verificar                                     |
+| `origenes/mikrowisp.ts`                | Adaptador Mikrowisp 6: tablas y columnas reales y su traducción al formato canónico                 |
+| `origenes/smartisp.ts`                 | Adaptador SmartISP: tablas y columnas reales y su traducción al formato canónico                    |
 | `origenes/csv.ts`                      | Adaptador CSV: lee el directorio, avisa de columnas desconocidas, genera plantillas y LEEME          |
-| `origenes/esquema_sql.ts`              | Comprobación del esquema de un volcado (`EsquemaIncompleto`) y paso a filas canónicas                |
+| `origenes/esquema_sql.ts`              | Comprobación del esquema de un volcado (`EsquemaIncompleto`), ids, montos, problemas del origen       |
 | `csv.ts`                               | Lector y escritor de CSV (RFC 4180, coma o punto y coma)                                             |
 | `mysql_dump.ts`                        | Lector de volcados MySQL (CREATE TABLE e INSERT), sin MySQL                                          |
 | `carga_financiera.ts`                  | Puerto hacia las acciones de carga histórica de A3                                                   |
@@ -210,5 +205,5 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | `commands/importar.ts`                 | `node ace importar --origen --fuente` (`pnpm importar` desde la raíz)                                |
 | `commands/importar_plantillas.ts`      | `node ace importar:plantillas <dir>` (`pnpm importar:plantillas`)                                    |
 | `tests/importacion/importador.spec.ts` | Pruebas con el ejemplo CSV (`scripts/importacion/ejemplo/`)                                          |
-| `tests/importacion/mikrowisp.spec.ts`  | Pruebas con el fixture SQL: dos en seco iguales, real dos veces sin duplicar, saldos                 |
-| `tests/importacion/origenes.spec.ts`   | CSV = Mikrowisp con los mismos datos, idempotencia por origen, SmartISP incompleto, plantillas       |
+| `tests/importacion/mikrowisp.spec.ts`  | Volcado sintético sobre el esquema real: dos en seco iguales, real dos veces sin duplicar, saldos    |
+| `tests/importacion/origenes.spec.ts`   | Esquemas reales, CSV = Mikrowisp con los mismos datos, idempotencia por origen, plantillas           |
