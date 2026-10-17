@@ -34,6 +34,10 @@ export interface PagoVista {
     cuenta_bancaria_nombre: string | null
     /** pago importado de otro sistema (`RegistrarPagoHistorico`): no pasó por caja ni bancos */
     historico: boolean
+    /** sistema de origen del pago histórico (`mikrowisp`, `smartisp`…); null si es de ArgosIsp */
+    origen: string | null
+    /** id del pago en ese origen */
+    id_externo: string | null
     /** cliente_id/cliente_nombre: dueño de la factura (en un pago de terceros, no es el pagador) */
     aplicaciones: Array<{ factura_id: number; monto: string; cliente_id: number; cliente_nombre: string }>
     version: number
@@ -63,6 +67,8 @@ const COLUMNAS = [
         "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
     ),
     'p.historico',
+    'p.origen',
+    'p.clave_externa as id_externo',
     'p.version',
     'p.created_at',
     'p.updated_at',

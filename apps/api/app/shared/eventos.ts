@@ -51,6 +51,16 @@ interface PayloadPago {
     clientes?: number[]
 }
 
+/** Nota de crédito interna (A3, semana 3): reduce el saldo de `factura_id` y la CxC del cliente. */
+interface PayloadNotaCredito {
+    nota_credito_id: number
+    factura_id: number
+    servicio_id: number | null
+    cliente_id: number
+    monto: Dinero
+    motivo: string
+}
+
 interface PayloadPromesa {
     promesa_id: number
     servicio_id: number
@@ -168,6 +178,8 @@ export interface CatalogoEventos {
     'factura.anulada': PayloadFactura
     'pago.registrado': PayloadPago
     'pago.anulado': PayloadPago
+    /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
+    'nota_credito.emitida': PayloadNotaCredito
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
@@ -219,6 +231,7 @@ export const EVENTOS = [
     'factura.anulada',
     'pago.registrado',
     'pago.anulado',
+    'nota_credito.emitida',
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',

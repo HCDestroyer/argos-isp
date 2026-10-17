@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -10,7 +11,8 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  * `facturas.anular` (`POST /facturas/:id/anular`, permiso `facturas.anular`, con motivo).
  *
  * - 409 `factura_con_pagos` si la factura (o una de sus moras) tiene pagos aplicados: hay que
- *   anular el pago primero. 409 `factura_anulada` si ya estaba anulada.
+ *   anular el pago primero. 409 `factura_con_notas_credito` si tiene notas de crédito (se
+ *   acredita el resto con otra nota). 409 `factura_anulada` si ya estaba anulada.
  * - Pasa a `anulada` con quién/cuándo/motivo; nunca se borra. Sus recargos de mora pendientes
  *   se anulan con ella (cada uno con su reverso y su evento).
  * - Revierte su asiento (`factura` o `mora`) con `RevertirAsiento`: el saldo del cliente baja.
@@ -69,6 +71,23 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 'Factura anulada',
             )
         }
+        const conNotas = await t.trx
+            .from('billing.notas_credito')
+            .whereIn(
+                'factura_id',
+                facturas.map((f) => f.id),
+            )
+            .orderBy('id', 'asc')
+            .select('id', 'factura_id')
+        if (conNotas.length > 0) {
+            throw new Conflicto(
+                `La factura ${factura.id} tiene notas de crédito (${conNotas
+                    .map((n) => `nota ${n.id} de la factura ${n.factura_id}`)
+                    .join(', ')}); acredita el resto con otra nota en lugar de anularla`,
+                'factura_con_notas_credito',
+                'Factura con notas de crédito',
+            )
+        }
         const conPagos = facturas.filter((f) => f.estado !== 'anulada' && dec(f.pagado).gt(0))
         if (conPagos.length > 0) {
             throw new Conflicto(
@@ -93,7 +112,11 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 .select('a.id')) as Array<{ id: number }>
             for (const asiento of asientos) {
                 await new RevertirAsiento().execute(
-                    { asiento_id: asiento.id, motivo: `anulación de la factura ${f.id}: ${motivo}` },
+                    {
+                        asiento_id: asiento.id,
+                        motivo: `anulación de la factura ${f.id}: ${motivo}`,
+                        por_anulacion: true,
+                    },
                     t.ctx,
                     { trx: t.trx },
                 )
@@ -104,7 +127,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 .update({
                     estado: 'anulada',
                     anulada_en: t.trx.knexRawQuery('now()'),
-                    anulada_por: t.ctx.actor.id,
+                    anulada_por: usuarioDelActor(t.ctx.actor),
                     motivo_anulacion:
                         f.id === factura.id ? motivo : `anulación de la factura ${factura.id}: ${motivo}`,
                     version: t.trx.knexRawQuery('version + 1'),

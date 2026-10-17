@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { bloquearCliente } from '#billing/cobros'
 import { verComprobante, type ComprobanteVista, type EstadoComprobante } from '#billing/comprobantes'
@@ -116,7 +117,7 @@ export default class AprobarComprobante extends DomainAction<
             .update({
                 estado: 'aprobado',
                 pago_id: pago.id,
-                verificado_por: t.ctx.actor.id,
+                verificado_por: usuarioDelActor(t.ctx.actor),
                 verificado_en: t.trx.knexRawQuery('now()'),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
@@ -124,7 +125,7 @@ export default class AprobarComprobante extends DomainAction<
         await t.registrarCambios(
             { tipo: 'comprobante', id: comprobante.id },
             { estado: comprobante.estado, pago_id: null, verificado_por: null },
-            { estado: 'aprobado', pago_id: pago.id, verificado_por: t.ctx.actor.id },
+            { estado: 'aprobado', pago_id: pago.id, verificado_por: usuarioDelActor(t.ctx.actor) },
         )
         await t.emit('comprobante.aprobado', {
             comprobante_id: comprobante.id,

@@ -4865,7 +4865,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
-        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.",
         "tags": [
           "facturacion"
         ],
@@ -4983,6 +4983,140 @@
           }
         },
         "x-permiso": "facturas.anular",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/facturas/{id}/notas-credito": {
+      "post": {
+        "operationId": "facturasNotaCredito",
+        "summary": "Emitir nota de crédito interna (parcial o total)",
+        "description": "Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "monto",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Nota de crédito emitida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaCreditoEmitida"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.nota_credito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.nota_credito",
         "x-implementado": true
       }
     },
@@ -5756,6 +5890,209 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/asientos/{id}": {
+      "get": {
+        "operationId": "libroVerAsiento",
+        "summary": "Ver un asiento con sus movimientos",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/asientos/{id}/revertir": {
+      "post": {
+        "operationId": "libroRevertirAsiento",
+        "summary": "Revertir un asiento (asiento espejo con motivo)",
+        "description": "Crea el asiento espejo (debe ↔ haber, mismas cuentas y clientes) con reversa_de = :id; nunca edita el original. Fecha: hoy (o la indicada), nunca anterior al original ni en un mes cerrado (un asiento de un mes cerrado se revierte con fecha de hoy). Solo asientos sin documento (cierre_caja, ajuste manual): los de factura, mora, pago, nota_credito, egreso o saldo inicial responden 422 reverso_por_documento (usar anular pago, anular factura…). 422 asiento_revertido si ya se revirtió y asiento_es_reverso si es un reverso; 422 periodo_cerrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha contable del reverso (por defecto hoy). No anterior al original ni en un mes cerrado"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asiento de reverso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.revertir_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.revertir_asiento",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/bancos": {
       "get": {
         "operationId": "libroBancos",
@@ -6518,6 +6855,220 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notas-credito": {
+      "get": {
+        "operationId": "notasCreditoListar",
+        "summary": "Listar notas de crédito",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "factura_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Fecha contable desde (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Fecha contable hasta (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de notas de crédito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NotaCredito"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notas-credito/{id}": {
+      "get": {
+        "operationId": "notasCreditoVer",
+        "summary": "Ver nota de crédito",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nota de crédito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaCredito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
         "x-implementado": true
       }
     },
@@ -13724,6 +14275,19 @@
                 "mora"
               ]
             }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "description": "sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sistema",
+                "importado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -13870,6 +14434,19 @@
               "enum": [
                 "mes",
                 "dia"
+              ]
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "description": "sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sistema",
+                "importado"
               ]
             }
           }
@@ -14286,6 +14863,7 @@
                         "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
+                        "facturas.nota_credito",
                         "facturas.ver",
                         "ip.resolver",
                         "ipv6.crear",
@@ -14479,6 +15057,7 @@
                         "empresa.ver",
                         "facturas.anular",
                         "facturas.generar",
+                        "facturas.nota_credito",
                         "facturas.ver",
                         "ip.resolver",
                         "ipv6.crear",
@@ -18673,6 +19252,7 @@
                             "empresa.ver",
                             "facturas.anular",
                             "facturas.generar",
+                            "facturas.nota_credito",
                             "facturas.ver",
                             "ip.resolver",
                             "ipv6.crear",
@@ -20061,6 +20641,25 @@
             ],
             "minimum": 1,
             "description": "Asiento que este revierte (correcciones por reverso)"
+          },
+          "revertido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento de reverso de este, si ya se revirtió"
+          },
+          "revertible": {
+            "type": "boolean",
+            "description": "Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso)"
+          },
+          "motivo_no_revertible": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible"
           },
           "created_by": {
             "type": [
@@ -22508,7 +23107,12 @@
             "$ref": "#/components/schemas/Dinero"
           },
           "pagado": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo cubierto de la factura: pagos, saldos a favor y notas de crédito"
+          },
+          "acreditado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Parte de pagado que viene de notas de crédito (saldo = total − pagado)"
           },
           "fel_uuid": {
             "type": [
@@ -22572,6 +23176,20 @@
               "null"
             ]
           },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp"
+          },
+          "id_externo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id de la factura en su sistema de origen"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -22608,6 +23226,13 @@
               "reglas_snapshot": {
                 "type": "object",
                 "additionalProperties": true
+              },
+              "notas_credito": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/NotaCredito"
+                },
+                "description": "Notas de crédito de la factura"
               }
             }
           }
@@ -23062,6 +23687,120 @@
           }
         }
       },
+      "NotaCredito": {
+        "type": "object",
+        "required": [
+          "id",
+          "factura_id",
+          "cliente_id",
+          "cliente_nombre",
+          "servicio_id",
+          "fecha",
+          "subtotal",
+          "iva",
+          "monto",
+          "motivo",
+          "asiento_id",
+          "created_by",
+          "created_by_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha contable (Guatemala)"
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "IVA acreditado, proporcional al de la factura"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "subtotal + iva"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento nota_credito (Debe ingresos/IVA, Haber CxC)"
+          },
+          "created_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_by_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NotaCreditoEmitida": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NotaCredito"
+          },
+          {
+            "type": "object",
+            "required": [
+              "factura",
+              "servicios"
+            ],
+            "properties": {
+              "factura": {
+                "$ref": "#/components/schemas/FacturaDetalle",
+                "description": "La factura con su nuevo saldo y estado"
+              },
+              "servicios": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ServicioEvaluado"
+                },
+                "description": "Cómo quedó el servicio de la factura (reactivación inmediata)"
+              }
+            }
+          }
+        ]
+      },
       "PaginaComprobantes": {
         "type": "object",
         "required": [
@@ -23237,6 +23976,20 @@
           "historico": {
             "type": "boolean",
             "description": "Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos"
+          },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Sistema de origen del pago histórico (mikrowisp, smartisp, csv…); null si es de ArgosIsp"
+          },
+          "id_externo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id del pago en su sistema de origen"
           },
           "version": {
             "type": "integer",
@@ -26399,6 +27152,15 @@
                 "cobranza_pct": {
                   "type": "number",
                   "description": "Porcentaje 0–100 con 2 decimales"
+                },
+                "acreditado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "facturado_importado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobrado_importado": {
+                  "$ref": "#/components/schemas/Dinero"
                 }
               }
             }
@@ -26460,6 +27222,36 @@
                 "type": [
                   "number",
                   "null"
+                ]
+              },
+              "acreditado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "facturado_importado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cobrado_importado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },
@@ -26529,6 +27321,12 @@
                 },
                 "neto": {
                   "$ref": "#/components/schemas/Dinero"
+                },
+                "pagos_importados": {
+                  "type": "integer"
+                },
+                "monto_importado": {
+                  "$ref": "#/components/schemas/Dinero"
                 }
               }
             }
@@ -26583,6 +27381,22 @@
                 ]
               },
               "neto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pagos_importados": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto_importado": {
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/Dinero"
@@ -26666,6 +27480,15 @@
                 "iva_anulado": {
                   "$ref": "#/components/schemas/Dinero"
                 },
+                "notas_credito": {
+                  "type": "integer"
+                },
+                "base_acreditada": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva_acreditado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
                 "iva_neto": {
                   "$ref": "#/components/schemas/Dinero"
                 },
@@ -26738,6 +27561,32 @@
                 ]
               },
               "iva_anulado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "notas_credito": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "base_acreditada": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva_acreditado": {
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/Dinero"

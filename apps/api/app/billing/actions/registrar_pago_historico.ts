@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { METODOS_PAGO, type MetodoPago } from '#shared/eventos'
@@ -7,7 +8,7 @@ import { ZONA_NEGOCIO, fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { aplicarAFacturas, bloquearClientes, duenosDeFacturas, facturasPendientes } from '#billing/cobros'
-import { exigirPeriodoAbierto, idExterno } from '#billing/importacion'
+import { claveImportacion, exigirPeriodoAbierto, textoClave } from '#billing/importacion'
 import { verPago, type PagoVista } from '#billing/pagos'
 
 /**
@@ -22,9 +23,9 @@ import { verPago, type PagoVista } from '#billing/pagos'
  * factura queda en Anticipos (saldo a favor).
  *
  * - Entrada con `historico: true` (obligatorio: deja claro en la auditoría que es carga histórica).
- * - Idempotente por `id_externo` (alias `clave_externa`): repetirlo con el mismo cliente, monto y
- *   fecha devuelve el pago ya registrado (`creado: false`); con otros datos → 409
- *   `clave_externa_conflicto`.
+ * - Idempotente por (`origen`, `id_externo`) (alias `clave_externa`): repetirlo con el mismo
+ *   cliente, monto y fecha devuelve el pago ya registrado (`creado: false`); con otros datos → 409
+ *   `clave_externa_conflicto`. El mismo id en otro origen es otro pago.
  * - `fecha` (YYYY-MM-DD, no futura) en un periodo cerrado → 422 `periodo_cerrado`, sin escribir nada.
  * - Aplica a las `facturas` pedidas (en orden) y luego a la más antigua del cliente, como un pago.
  * - No exige caja, cuenta bancaria ni banco de origen; la `referencia` se guarda tal cual y no
@@ -36,6 +37,8 @@ import { verPago, type PagoVista } from '#billing/pagos'
 
 export interface EntradaPagoHistorico {
     historico: true
+    /** sistema de origen (`mikrowisp`, `smartisp`, `csv`…); ver `claveImportacion` */
+    origen?: string
     /** id del pago en el sistema de origen */
     id_externo?: string
     /** nombre anterior de `id_externo` (se acepta igual) */
@@ -64,7 +67,9 @@ export default class RegistrarPagoHistorico extends DomainAction<
     readonly nombre = 'pagos.registrar_historico'
 
     protected async handle(input: EntradaPagoHistorico, t: Transaccion): Promise<ResultadoPagoHistorico> {
-        const clave = idExterno(input)
+        const claveOrigen = claveImportacion(input)
+        const clave = claveOrigen.id_externo
+        const texto = textoClave(claveOrigen)
         const monto = dec(input.monto)
         const errores = []
         if (input.historico !== true) {
@@ -101,6 +106,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
 
         const existente = (await t.trx
             .from('billing.pagos')
+            .where('origen', claveOrigen.origen)
             .where('clave_externa', clave)
             .select('id', 'cliente_id', 'monto', 'created_at')
             .first()) as { id: number; cliente_id: number; monto: string; created_at: Date } | null
@@ -112,7 +118,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
                 fechaPrevia !== fecha
             ) {
                 throw new Conflicto(
-                    `El id_externo ${clave} ya se usó para el pago ${existente.id} (cliente ${existente.cliente_id}, Q${existente.monto}, ${fechaPrevia})`,
+                    `El id_externo ${texto} ya se usó para el pago ${existente.id} (cliente ${existente.cliente_id}, Q${existente.monto}, ${fechaPrevia})`,
                     'clave_externa_conflicto',
                     'Clave externa en uso',
                 )
@@ -121,7 +127,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
             return { ...(await verPago(existente.id, t.trx)), creado: false }
         }
 
-        await exigirPeriodoAbierto(t.trx, fecha, `Pago histórico ${clave}`)
+        await exigirPeriodoAbierto(t.trx, fecha, `Pago histórico ${texto}`)
 
         const referencia = input.referencia?.trim() || null
         // el pago queda "hecho" el día del origen (mediodía en Guatemala: sin saltar de día en UTC)
@@ -137,9 +143,10 @@ export default class RegistrarPagoHistorico extends DomainAction<
                 referencia,
                 estado: 'registrado',
                 historico: true,
+                origen: claveOrigen.origen,
                 clave_externa: clave,
-                nota: input.nota?.trim() || `Pago histórico importado (${clave})`,
-                registrado_por: t.ctx.actor.id,
+                nota: input.nota?.trim() || `Pago histórico importado (${texto})`,
+                registrado_por: usuarioDelActor(t.ctx.actor),
                 created_at: hechoEn,
             })
             .returning('id')) as Array<{ id: number }>
@@ -168,7 +175,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
             {
                 fecha,
                 descripcion:
-                    `Pago histórico ${pagoId} (${clave}) · ${input.metodo}` +
+                    `Pago histórico ${pagoId} (${texto}) · ${input.metodo}` +
                     (referencia ? ` · ref. ${referencia}` : '') +
                     (aplicaciones.length > 0
                         ? ` · facturas ${aplicaciones.map((a) => a.factura_id).join(', ')}`

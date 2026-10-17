@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import type { ContextoAccion } from '#shared/contexto'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -213,7 +214,7 @@ export default class RegistrarComprobante extends DomainAction<
                     canal: input.canal,
                     nota: input.nota?.trim() || null,
                     estado: 'pendiente',
-                    registrado_por: t.ctx.actor.id,
+                    registrado_por: usuarioDelActor(t.ctx.actor),
                 })
                 .returning('id')) as Array<{ id: number }>
             id = fila!.id

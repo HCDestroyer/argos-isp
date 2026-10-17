@@ -4,22 +4,22 @@ Endpoints públicos y del cliente para `apps/portal`. Rutas en `start/routes/por
 
 ## Qué hace
 
-| Endpoint | Acción | Qué devuelve |
-| --- | --- | --- |
-| `GET /api/v1/portal/quien-soy` (público) | `actions/identificar_por_ip.ts` (`portal.quien_soy`) | `QuienSoy`: identificado, ip, nombre parcial ("Juan P."), estado, promesa activa, monto adeudado y facturas vencidas (cantidad y total) |
-| `GET /api/v1/portal/estado` (público) | `actions/consultar_estado_por_ip.ts` (`portal.estado`) | `EstadoPortal`: identificado, estado y monto adeudado. Sin nombre ni IP: la página de corte lo consulta cada 5 s tras un pago o una promesa |
+| Endpoint                                 | Acción                                                 | Qué devuelve                                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/quien-soy` (público) | `actions/identificar_por_ip.ts` (`portal.quien_soy`)   | `QuienSoy`: identificado, ip, nombre parcial ("Juan P."), estado, promesa activa, monto adeudado y facturas vencidas (cantidad y total)     |
+| `GET /api/v1/portal/estado` (público)    | `actions/consultar_estado_por_ip.ts` (`portal.estado`) | `EstadoPortal`: identificado, estado y monto adeudado. Sin nombre ni IP: la página de corte lo consulta cada 5 s tras un pago o una promesa |
 
 ### Acceso por código y portal autenticado (tarea 7)
 
-| Endpoint | Acción / lectura | Qué hace |
-| --- | --- | --- |
-| `POST /api/v1/portal/codigo` (público, límite por IP) | `actions/solicitar_codigo.ts` (`portal.solicitar_codigo`) | Código de 6 dígitos al correo o Telegram **registrado** del cliente, identificado por NIT/CUI, usuario PPPoE o (`por_ip: true`) la IP de origen. 202 `PortalSolicitudCodigo` |
-| `POST /api/v1/portal/verificar` (público, límite por IP) | `actions/verificar_codigo.ts` (`portal.verificar_codigo`) | Verifica y pone la cookie httpOnly `argos_portal`. 200 `PortalSesion`; 422 `codigo_invalido` |
-| `POST /api/v1/portal/salir` | `actions/cerrar_sesion.ts` (`portal.cerrar_sesion`) | Revoca la sesión y borra la cookie |
-| `GET /api/v1/portal/cuenta` | `cuenta.ts` | Contacto, servicios con estado y saldo |
-| `GET /api/v1/portal/facturas`, `/facturas/:id` | `cuenta.ts` | Facturas del cliente (`PortalFactura`, sin datos internos); una ajena responde 404 |
-| `GET /api/v1/portal/pagos`, `/promesas` | `cuenta.ts` | Pagos (con depósitos en verificación) y promesas, solo lectura |
-| `PUT /api/v1/portal/contacto` | `actions/editar_contacto.ts` (`portal.editar_contacto` → `clientes.editar` de A1) | Correo, teléfono, móvil y canal preferido; diff en `audit.cambios`, 409 por `version` |
+| Endpoint                                                 | Acción / lectura                                                                  | Qué hace                                                                                                                                                                     |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/portal/codigo` (público, límite por IP)    | `actions/solicitar_codigo.ts` (`portal.solicitar_codigo`)                         | Código de 6 dígitos al correo o Telegram **registrado** del cliente, identificado por NIT/CUI, usuario PPPoE o (`por_ip: true`) la IP de origen. 202 `PortalSolicitudCodigo` |
+| `POST /api/v1/portal/verificar` (público, límite por IP) | `actions/verificar_codigo.ts` (`portal.verificar_codigo`)                         | Verifica y pone la cookie httpOnly `argos_portal`. 200 `PortalSesion`; 422 `codigo_invalido`                                                                                 |
+| `POST /api/v1/portal/salir`                              | `actions/cerrar_sesion.ts` (`portal.cerrar_sesion`)                               | Revoca la sesión y borra la cookie                                                                                                                                           |
+| `GET /api/v1/portal/cuenta`                              | `cuenta.ts`                                                                       | Contacto, servicios con estado y saldo                                                                                                                                       |
+| `GET /api/v1/portal/facturas`, `/facturas/:id`           | `cuenta.ts`                                                                       | Facturas del cliente (`PortalFactura`, sin datos internos); una ajena responde 404                                                                                           |
+| `GET /api/v1/portal/pagos`, `/promesas`                  | `cuenta.ts`                                                                       | Pagos (con depósitos en verificación) y promesas, solo lectura                                                                                                               |
+| `PUT /api/v1/portal/contacto`                            | `actions/editar_contacto.ts` (`portal.editar_contacto` → `clientes.editar` de A1) | Correo, teléfono, móvil y canal preferido; diff en `audit.cambios`, 409 por `version`                                                                                        |
 
 Reglas:
 
@@ -55,13 +55,13 @@ Reglas:
 
 ### PDF del aviso de cobro y plantillas de documentos (tarea 8)
 
-| Endpoint | Permiso | Qué hace |
-| --- | --- | --- |
-| `GET /api/v1/portal/facturas/:id/pdf` | sesión del portal | PDF de una factura del cliente (ajena: 404) |
-| `GET /api/v1/documentos/aviso-cobro/:facturaId` | `facturas.ver` (con alcance) | El mismo PDF desde el panel |
-| `GET /api/v1/documentos/plantillas/aviso_cobro` | `documentos.ver` | HTML vigente, `version` (0 = de fábrica) y la lista de variables |
-| `PUT /api/v1/documentos/plantillas/aviso_cobro` | `documentos.editar` | Acción `documentos.editar` (`actions/editar_plantilla_documento.ts`): valida, guarda con `version` (409) y diff en `audit.cambios` |
-| `POST /api/v1/documentos/plantillas/aviso_cobro/vista-previa` | `documentos.editar` | PDF con datos de ejemplo, sin guardar |
+| Endpoint                                                      | Permiso                      | Qué hace                                                                                                                           |
+| ------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/facturas/:id/pdf`                         | sesión del portal            | PDF de una factura del cliente (ajena: 404)                                                                                        |
+| `GET /api/v1/documentos/aviso-cobro/:facturaId`               | `facturas.ver` (con alcance) | El mismo PDF desde el panel                                                                                                        |
+| `GET /api/v1/documentos/plantillas/aviso_cobro`               | `documentos.ver`             | HTML vigente, `version` (0 = de fábrica) y la lista de variables                                                                   |
+| `PUT /api/v1/documentos/plantillas/aviso_cobro`               | `documentos.editar`          | Acción `documentos.editar` (`actions/editar_plantilla_documento.ts`): valida, guarda con `version` (409) y diff en `audit.cambios` |
+| `POST /api/v1/documentos/plantillas/aviso_cobro/vista-previa` | `documentos.editar`          | PDF con datos de ejemplo, sin guardar                                                                                              |
 
 El PDF responde `Content-Type: application/pdf` y `Content-Disposition: inline; filename="aviso-cobro-<número>.pdf"`
 (`factura-<serie>-<número>.pdf` cuando la factura tiene `fel_uuid`: el documento pasa a llamarse
@@ -76,24 +76,24 @@ líneas. pdfkit es JavaScript puro y usa las fuentes estándar del PDF (Helvetic
 **Variables** (para el editor de A4; también las devuelve `GET /documentos/plantillas/aviso_cobro`).
 Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemala`.
 
-| Variable | Ejemplo |
-| --- | --- |
-| `{{empresa.nombre}}`, `{{empresa.nit}}`, `{{empresa.direccion}}`, `{{empresa.telefono}}`, `{{empresa.whatsapp}}`, `{{empresa.correo}}`, `{{empresa.horario}}`, `{{empresa.instrucciones_pago}}` | Configuración de empresa (tarea 9) |
-| `{{cliente.nombre}}` | Nombre fiscal o, si no hay, el nombre |
-| `{{cliente.nit}}` | NIT/CUI o `CF` |
-| `{{cliente.direccion}}`, `{{cliente.email}}` | Dirección fiscal (o la del cliente), correo |
-| `{{servicio.plan}}`, `{{servicio.direccion}}` | Plan y dirección de instalación |
-| `{{factura.documento}}` | `Aviso de cobro` o `Factura` (con FEL) |
-| `{{factura.numero}}` | `1203`, o `ABCD1234-1449658872` con FEL |
-| `{{factura.periodo}}` | `octubre 2026` (`Recargo por mora` en una mora) |
-| `{{factura.emitida}}`, `{{factura.vence}}` | `01/10/2026`, `10/10/2026` |
-| `{{factura.estado}}` | `Pendiente`, `Abono parcial`, `Vencida`, `Pagada`, `Anulada` |
-| `{{factura.subtotal}}`, `{{factura.iva}}`, `{{factura.total}}`, `{{factura.pagado}}`, `{{factura.saldo}}` | `Q 1,234.50` |
-| `{{factura.lineas}}` | Tabla de líneas ya armada (concepto, cantidad, precio, total) |
-| `{{#lineas}}…{{/lineas}}` | Para una tabla propia: `concepto`, `cantidad`, `precio_unitario`, `iva`, `total` |
-| `{{#factura.tiene_pagos}}…{{/factura.tiene_pagos}}` | Sección si hay abonos |
-| `{{#factura.fel}}…{{/factura.fel}}`, `{{factura.fel_uuid}}`, `{{factura.fel_serie}}`, `{{factura.fel_numero}}` | Datos FEL (semana 5) |
-| `{{generado}}` | Fecha y hora de generación |
+| Variable                                                                                                                                                                                        | Ejemplo                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `{{empresa.nombre}}`, `{{empresa.nit}}`, `{{empresa.direccion}}`, `{{empresa.telefono}}`, `{{empresa.whatsapp}}`, `{{empresa.correo}}`, `{{empresa.horario}}`, `{{empresa.instrucciones_pago}}` | Configuración de empresa (tarea 9)                                               |
+| `{{cliente.nombre}}`                                                                                                                                                                            | Nombre fiscal o, si no hay, el nombre                                            |
+| `{{cliente.nit}}`                                                                                                                                                                               | NIT/CUI o `CF`                                                                   |
+| `{{cliente.direccion}}`, `{{cliente.email}}`                                                                                                                                                    | Dirección fiscal (o la del cliente), correo                                      |
+| `{{servicio.plan}}`, `{{servicio.direccion}}`                                                                                                                                                   | Plan y dirección de instalación                                                  |
+| `{{factura.documento}}`                                                                                                                                                                         | `Aviso de cobro` o `Factura` (con FEL)                                           |
+| `{{factura.numero}}`                                                                                                                                                                            | `1203`, o `ABCD1234-1449658872` con FEL                                          |
+| `{{factura.periodo}}`                                                                                                                                                                           | `octubre 2026` (`Recargo por mora` en una mora)                                  |
+| `{{factura.emitida}}`, `{{factura.vence}}`                                                                                                                                                      | `01/10/2026`, `10/10/2026`                                                       |
+| `{{factura.estado}}`                                                                                                                                                                            | `Pendiente`, `Abono parcial`, `Vencida`, `Pagada`, `Anulada`                     |
+| `{{factura.subtotal}}`, `{{factura.iva}}`, `{{factura.total}}`, `{{factura.pagado}}`, `{{factura.saldo}}`                                                                                       | `Q 1,234.50`                                                                     |
+| `{{factura.lineas}}`                                                                                                                                                                            | Tabla de líneas ya armada (concepto, cantidad, precio, total)                    |
+| `{{#lineas}}…{{/lineas}}`                                                                                                                                                                       | Para una tabla propia: `concepto`, `cantidad`, `precio_unitario`, `iva`, `total` |
+| `{{#factura.tiene_pagos}}…{{/factura.tiene_pagos}}`                                                                                                                                             | Sección si hay abonos                                                            |
+| `{{#factura.fel}}…{{/factura.fel}}`, `{{factura.fel_uuid}}`, `{{factura.fel_serie}}`, `{{factura.fel_numero}}`                                                                                  | Datos FEL (semana 5)                                                             |
+| `{{generado}}`                                                                                                                                                                                  | Fecha y hora de generación                                                       |
 
 Una variable vacía se oculta con su sección: `{{#empresa.nit}}NIT {{empresa.nit}}{{/empresa.nit}}`.
 Mustache escapa el HTML de cada dato; `{{{ }}}` y `{{& }}` se rechazan (422) para que un dato del
@@ -108,11 +108,11 @@ largas siguen en otra página.
 
 ### Configuración de empresa (tarea 9)
 
-| Endpoint | Permiso | Qué hace |
-| --- | --- | --- |
-| `GET /api/v1/portal/empresa` | público (límite por IP) | `EmpresaPublica`: contacto, horario, instrucciones de pago y `cuentas_deposito` |
-| `GET /api/v1/empresa` | `empresa.ver` | `Empresa` con `version` (0 = nunca se guardó) |
-| `PUT /api/v1/empresa` | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id 1) |
+| Endpoint                     | Permiso                  | Qué hace                                                                                                                                                                                                                                     |
+| ---------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/empresa` | público (límite por IP)  | `EmpresaPublica`: contacto, horario, instrucciones de pago y `cuentas_deposito`                                                                                                                                                              |
+| `GET /api/v1/empresa`        | `empresa.ver`            | `Empresa` con `version` (0 = nunca se guardó)                                                                                                                                                                                                |
+| `PUT /api/v1/empresa`        | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id 1) |
 
 - `core.empresa` es una sola fila (`id = 1`). Sin fila: `nombre` de `NOTIFY_EMPRESA_NOMBRE`, `telefono` de
   `NOTIFY_EMPRESA_TELEFONO`, lo demás vacío. Un campo `null` o vacío se borra (salvo `nombre`).
@@ -129,10 +129,10 @@ largas siguen en otra página.
 
 ### Promesa de pago desde el portal (tarea 4)
 
-| Endpoint | Identifica | Qué hace |
-| --- | --- | --- |
-| `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante), deuda máxima (máximo, vencida, faltante), `pago_previo` (lo que debe pagar antes de prometer) y si requiere aprobación. Cupo del periodo agotado: no disponible |
-| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` (actor `cliente` con la sesión, `sistema` por IP). Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
+| Endpoint                                  | Identifica                               | Qué hace                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`)            | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante), deuda máxima (máximo, vencida, faltante), `pago_previo` (lo que debe pagar antes de prometer) y si requiere aprobación. Cupo del periodo agotado: no disponible |
+| `POST /api/v1/portal/promesas`            | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` (actor `cliente` con la sesión, `sistema` por IP). Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado`                                          |
 
 - **Sin lógica de promesas en el portal.** La decisión, la auditoría (`promesas.crear`, canal `portal`), el
   evento `promesa.creada` y la reactivación son de `CrearPromesaPago`. `promesas.ts` solo identifica el
@@ -150,11 +150,11 @@ largas siguen en otra página.
 
 ### Comprobante de depósito desde el portal (tarea 5)
 
-| Endpoint | Identifica | Qué hace |
-| --- | --- | --- |
-| `GET /api/v1/portal/bancos` | público (límite por IP) | `PortalBanco[]`: bancos de origen activos (`listarBancos()` de A3), solo id y nombre |
+| Endpoint                           | Identifica                               | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/bancos`        | público (límite por IP)                  | `PortalBanco[]`: bancos de origen activos (`listarBancos()` de A3), solo id y nombre                                                                                                                                                                                                                                                                                                                                                              |
 | `POST /api/v1/portal/comprobantes` | IP o sesión (`servicio_id` en el cuerpo) | **multipart**: `metodo` (`deposito`, `transferencia`, `ach`, `remesa`), `cuenta_bancaria_id` (de `cuentas_deposito`), `banco_origen_id` (solo transferencia y ACH), `referencia`, `monto`, `fecha_deposito` (YYYY-MM-DD, no futura), `nota?` y el archivo `archivo` (JPG, PNG, WebP o PDF, 5 MB). Llama `RegistrarComprobante` de A3 (`comprobantes.registrar`) con canal `portal` y actor sistema. 201 `PortalComprobante` (`estado: pendiente`) |
-| `GET /api/v1/portal/comprobantes` | sesión | Comprobantes del cliente de la sesión (`listarComprobantes({ cliente_id })` de A3), con estado y `motivo_rechazo` |
+| `GET /api/v1/portal/comprobantes`  | sesión                                   | Comprobantes del cliente de la sesión (`listarComprobantes({ cliente_id })` de A3), con estado y `motivo_rechazo`                                                                                                                                                                                                                                                                                                                                 |
 
 - **Sin lógica de comprobantes en el portal.** Validación del archivo por contenido, unicidad de la
   referencia, auditoría (el archivo solo con nombre y tamaño), evento `comprobante.recibido` y el
@@ -186,21 +186,21 @@ estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entida
 Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su tabla
 (`notify.telegram_codigos`), el webhook y el canje son de A6; el portal solo pide el código y muestra el estado.
 
-| Ruta | Acción | Qué hace |
-| --- | --- | --- |
-| `GET /api/v1/portal/telegram` (sesión) | `acceso/telegram.ts` (`estadoTelegram`, lectura) | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario |
-| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
-| `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
+| Ruta                                                            | Acción                                                                         | Qué hace                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/telegram` (sesión)                          | `acceso/telegram.ts` (`estadoTelegram`, lectura)                               | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario                                                                                                                                                                 |
+| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado`                                                                                                                                                 |
+| `POST /api/v1/portal/telegram/desvincular` (sesión)             | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`)              | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
 
 ### Pago en línea desde el portal (semana 2)
 
 Contrato en `.claude/integration/contratos/pago-en-linea.md`. El cobro, el webhook firmado, el pago y la
 reactivación son de A3; el portal solo identifica al pagador, elige las facturas y lee el estado.
 
-| Ruta | Acción | Qué hace |
-| --- | --- | --- |
+| Ruta                                                                                | Acción                                                                           | Qué hace                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/v1/portal/pagos/iniciar` (IP o sesión, límite por IP, `Idempotency-Key`) | `CrearCobroPasarela` de A3 (`pasarela.crear_cobro`, canal portal, actor sistema) | Sin `facturas`: las vencidas con saldo del servicio (o todo lo pendiente del servicio). Con `facturas` (sesión): deben ser del cliente (404). 201 `PortalPagoEnLinea` con `url_pago`; 422 `sin_deuda` / `no_identificado` / `facturas.<i>`; 503 `pasarela_no_configurada` en palabras del cliente |
-| `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP) | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3) | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente |
+| `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP)                             | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3)  | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente                                                                                                                  |
 
 `GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
 
@@ -242,10 +242,10 @@ asignaciones vigentes, gana el prefijo más largo y, a igual longitud, la sesió
 `PORTAL_PROXIES_CONFIABLES` usa la cabecera `PORTAL_CABECERA_IP` y la recorre desde la derecha
 saltando proxies confiables. El portal (Nitro) agrega la IP de su socket al final de `X-Forwarded-For`.
 
-| Variable | Ejemplo | Qué es |
-| --- | --- | --- |
-| `PORTAL_PROXIES_CONFIABLES` | `172.16.0.0/12,fd00::/8` | IPs/CIDR del contenedor del portal y de cualquier proxy inverso delante. Vacía = la cabecera se ignora |
-| `PORTAL_CABECERA_IP` | `x-forwarded-for` (defecto) | Cabecera con la IP del cliente |
+| Variable                    | Ejemplo                     | Qué es                                                                                                 |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `PORTAL_PROXIES_CONFIABLES` | `172.16.0.0/12,fd00::/8`    | IPs/CIDR del contenedor del portal y de cualquier proxy inverso delante. Vacía = la cabecera se ignora |
+| `PORTAL_CABECERA_IP`        | `x-forwarded-for` (defecto) | Cabecera con la IP del cliente                                                                         |
 
 Se leen de `process.env` en cada petición; declaradas en `start/env.ts` y `.env.example`.
 
@@ -262,12 +262,12 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 - Si Redis no responde (500 ms), la petición pasa y se registra un aviso: la página de corte no se cae
   por el limitador.
 
-| Variable | Defecto | Qué es |
-| --- | --- | --- |
-| `PORTAL_LIMITE_PETICIONES` | `30` | Peticiones por ventana y por IP; `0` lo apaga |
-| `PORTAL_LIMITE_VENTANA_S` | `60` | Largo de la ventana en segundos |
-| `PORTAL_REDIS_PREFIJO` | `COLAS_PREFIJO` o `argosisp` | Prefijo de las claves del portal en Redis (`redis_portal.ts`): `<prefijo>:portal:limite:<endpoint>:<ip>` y `<prefijo>:portal:auditado:…` |
-| `PORTAL_AUDITORIA_VENTANA_S` | `600` | Ventana de auditoría de las consultas públicas; `0` audita todas |
+| Variable                     | Defecto                      | Qué es                                                                                                                                   |
+| ---------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORTAL_LIMITE_PETICIONES`   | `30`                         | Peticiones por ventana y por IP; `0` lo apaga                                                                                            |
+| `PORTAL_LIMITE_VENTANA_S`    | `60`                         | Largo de la ventana en segundos                                                                                                          |
+| `PORTAL_REDIS_PREFIJO`       | `COLAS_PREFIJO` o `argosisp` | Prefijo de las claves del portal en Redis (`redis_portal.ts`): `<prefijo>:portal:limite:<endpoint>:<ip>` y `<prefijo>:portal:auditado:…` |
+| `PORTAL_AUDITORIA_VENTANA_S` | `600`                        | Ventana de auditoría de las consultas públicas; `0` audita todas                                                                         |
 
 ## Eventos
 

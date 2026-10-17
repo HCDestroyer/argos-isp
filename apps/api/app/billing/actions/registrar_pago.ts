@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import type { MetodoPago } from '#shared/eventos'
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec } from '#ledger/dinero'
@@ -142,7 +143,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 banco_origen_id: bancario.bancoOrigenId,
                 estado: 'registrado',
                 nota: input.nota?.trim() || null,
-                registrado_por: t.ctx.actor.id,
+                registrado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const pagoId = pago!.id
@@ -230,7 +231,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         }
         const cajaId =
             input.caja_id ??
-            (await cajaDelCajero(t.ctx.actor.id, undefined, t.trx)) ??
+            (await cajaDelCajero(usuarioDelActor(t.ctx.actor), undefined, t.trx)) ??
             (await cajaPrincipalId(t.trx))
         if (!cajaId) throw new ReglaNegocio('No hay caja principal activa para pagos en efectivo', 'sin_caja')
         const caja = await t.trx
