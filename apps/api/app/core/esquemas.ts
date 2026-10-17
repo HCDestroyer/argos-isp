@@ -40,6 +40,19 @@ export const Me = definirEsquema('Me', {
             description:
                 'Solo con la sesión del panel por cookie (`GET /me`): valor de `X-CSRF-Token` para POST, PUT y DELETE',
         },
+        expira_en: nulable({
+            ...instante,
+            description:
+                'Solo en `GET /me`: cuándo vence la credencial actual. Con la cookie del panel se renueva sola ' +
+                'mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; ' +
+                'null con tokens de API (no vencen)',
+        }),
+        expira_max_en: nulable({
+            ...instante,
+            description:
+                'Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; ' +
+                'igual a `expira_en` con Bearer de login; null con tokens de API)',
+        }),
     },
 })
 
@@ -50,14 +63,28 @@ export const Sesion = definirEsquema(
 
 export const SesionPanel = definirEsquema(
     'SesionPanel',
-    objeto({
-        usuario: Me,
-        csrf: {
-            type: 'string',
-            description: 'Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión',
+    objeto(
+        {
+            usuario: Me,
+            csrf: {
+                type: 'string',
+                description: 'Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión',
+            },
+            expira_en: nulable({
+                ...instante,
+                description:
+                    'Cuándo vence la sesión si no se usa. Cada petición la renueva hasta `ahora + ' +
+                    'PANEL_SESION_INACTIVIDAD_H` sin pasar de `expira_max_en`',
+            }),
+            expira_max_en: nulable({
+                ...instante,
+                description:
+                    'Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use. ' +
+                    'La API siempre lo manda; opcional en el esquema para no romper clientes ya generados',
+            }),
         },
-        expira_en: nulable({ ...instante, description: 'Cuándo vence la sesión (no se renueva)' }),
-    }),
+        ['expira_max_en'],
+    ),
 )
 
 export const AsignacionRol = definirEsquema(

@@ -125,6 +125,8 @@ const auth: Ruta[] = [
             'cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el ' +
             'cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. ' +
             'Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. ' +
+            'La sesión se renueva sola mientras se usa (`PANEL_SESION_INACTIVIDAD_H`, 12 h) hasta el tope ' +
+            '`PANEL_SESION_MAXIMA_H` (72 h desde el login); vencida, 401 `sesion_expirada`. ' +
             'Contrato: `.claude/integration/contratos/sesion-panel.md`.',
         cuerpo: v.loginValidator,
         limitada: true,
@@ -133,7 +135,7 @@ const auth: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             verificarOrigenLogin(ctx)
             const sesion = await conLimiteLogin(ctx, cuerpo.email, () =>
-                new IniciarSesion().execute(cuerpo, ctx.contextoAccion('panel')),
+                new IniciarSesion().execute({ ...cuerpo, modo: 'cookie' }, ctx.contextoAccion('panel')),
             )
             ponerCookieSesionPanel(ctx, sesion.token, sesion.expiraEn)
             const csrf = csrfDeSesion(sesion.token)
@@ -141,6 +143,7 @@ const auth: Ruta[] = [
                 usuario: { ...sesion.usuario, csrf },
                 csrf,
                 expira_en: sesion.expiraEn?.toISOString() ?? null,
+                expira_max_en: sesion.expiraMaxEn?.toISOString() ?? null,
             }
         },
     }),
@@ -190,8 +193,23 @@ const auth: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Usuario actual con permisos', esquema: Me },
         handler: async (ctx) => {
             const me = await construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx))
-            if (ctx.auth.authenticatedViaGuard !== 'panel') return me
-            return { ...me, csrf: csrfDeSesion(ctx.auth.use('panel').tokenSesion!) }
+            const guard = ctx.auth.authenticatedViaGuard
+            if (guard === 'panel') {
+                const panel = ctx.auth.use('panel')
+                return {
+                    ...me,
+                    csrf: csrfDeSesion(panel.tokenSesion!),
+                    expira_en: panel.expiraEn?.toISOString() ?? null,
+                    expira_max_en: panel.expiraMaxEn?.toISOString() ?? null,
+                }
+            }
+            const expira =
+                guard === 'api' ? (ctx.auth.use('api').user?.currentAccessToken.expiresAt ?? null) : null
+            return {
+                ...me,
+                expira_en: expira?.toISOString() ?? null,
+                expira_max_en: expira?.toISOString() ?? null,
+            }
         },
     }),
 ]

@@ -6,6 +6,9 @@ import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import env from '#start/env'
 
+/** Tabla, tipo y prefijo de los tokens de sesión (también los lee el guard `panel`). */
+export const TOKENS_SESION = { tabla: 'core.auth_access_tokens', tipo: 'sesion', prefijo: 'oat_' } as const
+
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
     uids: ['email'],
     passwordColumnName: 'password',
@@ -44,9 +47,9 @@ export default class Usuario extends compose(BaseModel, AuthFinder) {
 
     /** Sesiones de login (tokens opacos `oat_...`) en `core.auth_access_tokens`. */
     static accessTokens = DbAccessTokensProvider.forModel(Usuario, {
-        table: 'core.auth_access_tokens',
-        type: 'sesion',
-        prefix: 'oat_',
+        table: TOKENS_SESION.tabla,
+        type: TOKENS_SESION.tipo,
+        prefix: TOKENS_SESION.prefijo,
         expiresIn: env.get('ACCESS_TOKEN_EXPIRA') ?? '12h',
     })
 }
