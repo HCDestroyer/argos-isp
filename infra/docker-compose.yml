@@ -88,6 +88,12 @@ x-api-env: &api-env
   PASARELA_PROVEEDOR: ${PASARELA_PROVEEDOR:-}
   PASARELA_FALSA_SECRETO: ${PASARELA_FALSA_SECRETO:-}
   PASARELA_URL_PUBLICA: ${PASARELA_URL_PUBLICA:-${API_PUBLIC_URL:-http://localhost:3333}}
+  # URL con que el cliente abre el portal (la misma del servicio portal): el pago en línea devuelve
+  # al cliente a <PORTAL_URL_PUBLICA>/corte?pago=<id> (A5). Vacía = NOTIFY_PORTAL_URL.
+  PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-}
+  # Orígenes a los que la pasarela puede devolver al cliente (A3; separados por coma). Por defecto,
+  # el del portal: sin él, el cliente no vuelve al portal después de pagar.
+  PASARELA_RETORNO_ORIGENES: ${PASARELA_RETORNO_ORIGENES:-${PORTAL_URL_PUBLICA:-}}
   # Comprobantes de depósito (A3, billing/comprobantes_archivos.ts): fuera de Postgres, en el volumen
   # `comprobantes` (o COMPROBANTES_HOST_DIR) montado solo en api, que los guarda y los sirve
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.

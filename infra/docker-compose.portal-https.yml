@@ -18,6 +18,8 @@ services:
   api:
     environment:
       PORTAL_COOKIE_SEGURA: siempre
+      # El retorno del pago en línea puede volver al portal por HTTP (PORTAL_URL_PUBLICA) o por HTTPS
+      PASARELA_RETORNO_ORIGENES: ${PASARELA_RETORNO_ORIGENES:-${PORTAL_URL_PUBLICA:-http://${PORTAL_DOMINIO:-portal.localhost}},https://${PORTAL_DOMINIO:-portal.localhost}}
 
   portal-proxy:
     image: caddy:2.10.0-alpine
