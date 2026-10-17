@@ -8,7 +8,6 @@ import { definirRuta, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import {
-    ArchivoPdf,
     Empresa,
     EmpresaPublica,
     EstadoPortal,
@@ -97,6 +96,7 @@ import {
     facturasAPagar,
     pagadorDeLaPeticion,
     pagoEnLineaDisponible,
+    urlRetornoPortal,
 } from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
@@ -137,6 +137,15 @@ async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string>
     if (!ip) throw new Error('La conexión no trae una IP de origen válida')
     await limitarPorIp(ctx, endpoint, ip)
     return ip
+}
+
+/**
+ * Contexto de una acción pedida desde el portal: actor `cliente` si la petición trae la sesión (el
+ * cliente se autenticó con su código), actor `sistema` si solo se identificó por la IP de origen
+ * (la IP no autentica a nadie). Canal `portal` en los dos casos.
+ */
+function contextoDelTitular(ctx: HttpContext, titular: { clienteId: number; porSesion: boolean }) {
+    return titular.porSesion ? ctx.contextoCliente(titular.clienteId) : ctx.contextoAccion('portal')
 }
 
 /** Límite por IP y luego la sesión del portal (401 sin ella). */
@@ -260,7 +269,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Cierra la sesión del portal',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
@@ -269,7 +278,7 @@ const autenticadas: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             await new CerrarSesionPortal().execute(
                 { sesionId: sesion.id, clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
             borrarCookieSesion(ctx)
         },
@@ -281,7 +290,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Datos de contacto, servicios y saldo del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Cuenta del cliente', esquema: PortalCuenta },
@@ -294,7 +303,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Facturas (avisos de cobro) del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -309,7 +318,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Detalle de una factura del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Factura con líneas', esquema: PortalFacturaDetalle },
@@ -323,7 +332,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Pagos del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -337,7 +346,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Promesas de pago del cliente de la sesión (solo lectura)',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -354,7 +363,7 @@ const autenticadas: Ruta[] = [
             `${SOBRE_LA_SESION} Acción \`portal.editar_contacto\` (canal portal) sobre \`clientes.editar\`: ` +
             'diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.',
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         versionada: true,
         cuerpo: editarContactoValidator,
@@ -365,7 +374,7 @@ const autenticadas: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new EditarContactoPortal().execute(
                 { ...cuerpo, clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -381,7 +390,7 @@ const telegram: Ruta[] = [
         resumen: 'Estado de la vinculación de Telegram del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} El portal la consulta cada 3 s mientras el código está vigente. ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
@@ -397,7 +406,7 @@ const telegram: Ruta[] = [
             'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
             `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         limitada: true,
         permiso: null,
         respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
@@ -406,7 +415,7 @@ const telegram: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new GenerarCodigoTelegram().execute(
                 { cliente_id: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -419,7 +428,7 @@ const telegram: Ruta[] = [
             `${SOBRE_LA_SESION} Acción \`portal.desvincular_telegram\` sobre \`clientes.desvincular_telegram\`. ` +
             'Si el canal preferido era Telegram pasa a correo. Idempotente.',
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
@@ -428,7 +437,7 @@ const telegram: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new DesvincularTelegramPortal().execute(
                 { clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -442,10 +451,10 @@ const documentos: Ruta[] = [
         resumen: 'PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404. Responde application/pdf.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { params }) => {
             const clienteId = await clienteDeLaSesionLimitada(ctx, 'factura-pdf')
             enviarPdf(ctx, await avisoCobroPdf(Number(params.id), { clienteId }))
@@ -460,7 +469,7 @@ const documentos: Ruta[] = [
             'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.',
         etiqueta: 'documentos',
         permiso: 'facturas.ver',
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { params }) => {
             const id = Number(params.facturaId)
             exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
@@ -513,7 +522,7 @@ const documentos: Ruta[] = [
         permiso: 'documentos.editar',
         parametros: PARAMETRO_TIPO,
         cuerpo: vistaPreviaDocumentoValidator,
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { cuerpo, params }) => {
             tipoDocumento(params.tipo)
             const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaDeEjemplo())
@@ -554,7 +563,8 @@ const promesas: Ruta[] = [
         operacion: 'portalSolicitarPromesa',
         resumen: 'El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)',
         descripcion:
-            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa ' +
+            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, ' +
+            '`sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa ' +
             'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
             '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
             '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
@@ -568,16 +578,16 @@ const promesas: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: PortalPromesaSolicitada },
         handler: async (ctx, { cuerpo }) => {
             const ip = await ipDelCliente(ctx, 'promesas')
-            const servicioId = await servicioDeLaPeticion(ctx, ip, cuerpo.servicio_id)
+            const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             try {
                 const promesa = await new CrearPromesaPago().execute(
                     {
-                        servicio_id: servicioId,
+                        servicio_id: titular.servicioId,
                         vence_en: venceAlFinalDelDia(cuerpo.vence_el),
                         monto: cuerpo.monto,
                         canal: 'portal',
                     },
-                    ctx.contextoAccion('portal'),
+                    contextoDelTitular(ctx, titular),
                 )
                 return promesaParaCliente(promesa)
             } catch (error) {
@@ -601,8 +611,9 @@ const pagosEnLinea: Ruta[] = [
             'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
             '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
             'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
-            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a ' +
-            `\`/corte?pago=<id>\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al ' +
+            'cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). ' +
+            `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
@@ -615,8 +626,15 @@ const pagosEnLinea: Ruta[] = [
             const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
             const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
             try {
+                // Actor sistema aun con la sesión: `CrearCobroPasarela` guarda `actor.id` en
+                // `creado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
                 const cobro = await new CrearCobroPasarela().execute(
-                    { cliente_id: pagador.clienteId, servicio_id: pagador.servicioId, facturas },
+                    {
+                        cliente_id: pagador.clienteId,
+                        servicio_id: pagador.servicioId,
+                        facturas,
+                        url_retorno: urlRetornoPortal(),
+                    },
                     ctx.contextoAccion('portal'),
                 )
                 return cobroParaCliente(cobro)
@@ -722,8 +740,7 @@ const comprobantes: Ruta[] = [
         operacion: 'portalSubirComprobante',
         resumen: 'El cliente sube el comprobante de un depósito, transferencia, ACH o remesa',
         descripcion:
-            '**`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o ' +
-            'PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` ' +
+            '`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` ' +
             '(`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que ' +
             'el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente ' +
             '(`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. ' +
@@ -734,12 +751,20 @@ const comprobantes: Ruta[] = [
         idempotente: true,
         permiso: null,
         cuerpo: subirComprobanteValidator,
+        multipart: {
+            archivos: {
+                archivo:
+                    'Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido',
+            },
+        },
         respuesta: { status: 201, descripcion: 'Comprobante recibido', esquema: PortalComprobante },
         handler: async (ctx, { cuerpo }) => {
             const ip = await ipDelCliente(ctx, 'comprobantes')
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             const archivo = await archivoDeLaPeticion(ctx)
             try {
+                // Actor sistema aun con la sesión: `RegistrarComprobante` guarda `actor.id` en
+                // `registrado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
                 const comprobante = await new RegistrarComprobante().execute(
                     {
                         cliente_id: titular.clienteId,
@@ -769,7 +794,7 @@ const comprobantes: Ruta[] = [
         resumen: 'Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)',
         descripcion: `${SOBRE_LA_SESION} Incluye el motivo cuando se rechazó.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,

@@ -19,6 +19,12 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 - Un solo relay activo a la vez (lock en Redis `<COLAS_PREFIJO>:lock:eventos-relay` con dueño y renovación, regla 6).
 - Implementación (A1, tarea 10): `apps/api/app/shared/relay_outbox.ts`, comando `node ace eventos:relay` (que además consume el grupo `aaa-cache`; `--sin-aaa-cache` lo apaga). El orden es el de `id` dentro de cada lote; una transacción que confirma tarde puede publicar un `id` menor después de uno mayor.
 
+## Campos agregados a payloads del catálogo
+
+| Evento | Campo | Desde | Valor |
+| --- | --- | --- | --- |
+| `sesion.terminada` | `motivo` (texto o null) | semana 3 (A2) | `causa_fin` de la sesión: `Acct-Terminate-Cause` del NAS (`User-Request`, `Lost-Carrier`…), `NAS-Reboot` (Accounting-On/Off), `Sesion-Reemplazada` (otro Start del mismo usuario) o `sin_interim` (cron de sesiones colgadas: sin Stop ni Interim-Update en N intervalos). Un consumidor que no lo lea no cambia. Si después llega un Interim de una sesión cerrada por `sin_interim`, se reabre y se emite otro `sesion.iniciada`; si llega su Stop, se corrige `fin`/causa sin repetir `sesion.terminada` |
+
 ## Eventos fuera de la tabla de `CLAUDE.md`
 
 El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` + `EVENTOS`). Eventos agregados después de la tabla de `CLAUDE.md` (pendiente de que el líder los pase a esa tabla):

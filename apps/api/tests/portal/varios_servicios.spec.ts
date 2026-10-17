@@ -1,7 +1,12 @@
 import { test } from '@japa/runner'
 import { estado, unico } from '#tests/ayudas'
-import { EnviadorFalso, crearServicio, crearSesion, sesionDirecta } from '#tests/portal/ayudas_portal'
-import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
+import {
+    EnviadorFalso,
+    crearServicio,
+    crearSesion,
+    sesionDirecta,
+    usarEnviadorCodigo,
+} from '#tests/portal/ayudas_portal'
 
 /**
  * Piloto (semana 3, tarea 2): un cliente con varios servicios. Desde la IP, cada servicio se ve

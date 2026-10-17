@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import type { EstadoServicio } from '#shared/eventos'
+import { usuarioDelActor } from '#shared/contexto'
 import CambiarEstadoServicio, { type EstadoOperativo } from '#core/actions/cambiar_estado_servicio'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 
@@ -74,7 +75,7 @@ export abstract class TransicionManual extends DomainAction<EntradaTransicionMan
                 suspension_manual: poner,
                 suspension_manual_motivo: poner ? input.motivo : null,
                 suspension_manual_en: poner ? t.trx.knexRawQuery('now()') : null,
-                suspension_manual_por: poner ? t.ctx.actor.id : null,
+                suspension_manual_por: poner ? usuarioDelActor(t.ctx.actor) : null,
             } as Record<string, unknown>)
     }
 }

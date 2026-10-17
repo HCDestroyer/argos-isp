@@ -29,6 +29,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'sesiones.actualizar': 'Sesión PPPoE actualizada',
     'sesiones.terminar': 'Sesión PPPoE terminada',
     'sesiones.cerrar_nas': 'Sesiones del router cerradas',
+    'sesiones.cerrar_colgadas': 'Sesiones sin accounting cerradas',
     'facturas.emitir': 'Aviso de cobro emitido',
     'facturas.vencer': 'Aviso de cobro vencido',
     'facturas.vencer_pendientes': 'Avisos de cobro vencidos',
@@ -112,6 +113,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.cambiar_control': 'Modo de colas aplicado en el router',
     'routeros.reconciliar': 'Router reconciliado',
     'routers.cambiar_control_velocidad': 'Modo de colas del router cambiado',
+    'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
     'sesiones.desconectar': 'Desconexión de sesión solicitada',
 }

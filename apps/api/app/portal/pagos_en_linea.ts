@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
+import logger from '@adonisjs/core/services/logger'
 import { NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
@@ -18,6 +19,8 @@ import { titularDeLaPeticion } from '#portal/comprobantes'
  * - `facturasAPagar`: qué se cobra. Por defecto las facturas **vencidas** con saldo del servicio
  *   (lo que `/corte` muestra como vencido); si no hay vencidas, todo lo pendiente del servicio.
  *   Con `facturas` concretas (solo con sesión), deben ser del cliente (404 si no).
+ * - `urlRetornoPortal`: adonde la pasarela devuelve al cliente (`/corte?pago={cobro_id}`; el
+ *   proveedor agrega `estado=pagado|fallido`). El portal lo muestra, pero la verdad es el webhook.
  * - `cobroParaCliente`: la vista sin datos internos (sin cliente, comisión ni proveedor).
  * - `cobroDeLaPeticion`: `GET /portal/pagos/en-linea/:id` solo responde si el cobro es del cliente
  *   de la sesión o del servicio de la IP de origen (404 si no).
@@ -45,6 +48,24 @@ export function cobroParaCliente(cobro: CobroPasarelaVista): PagoEnLineaPortal {
     }
 }
 
+/**
+ * `url_retorno` de `CrearCobroPasarela`: `<PORTAL_URL_PUBLICA>/corte?pago={cobro_id}` (A3 reemplaza
+ * `{cobro_id}` y valida el origen contra `PASARELA_RETORNO_ORIGENES`). Sin `PORTAL_URL_PUBLICA`, la
+ * de `NOTIFY_PORTAL_URL`; sin ninguna, null: el cliente vuelve con "Atrás" (el portal deja la URL en
+ * `/corte?pago=<id>` antes de salir).
+ */
+export function urlRetornoPortal(entorno: NodeJS.ProcessEnv = process.env): string | null {
+    const texto = (entorno.PORTAL_URL_PUBLICA || entorno.NOTIFY_PORTAL_URL || '').trim()
+    if (!texto) return null
+    let base: URL
+    try {
+        base = new URL(texto)
+    } catch {
+        return null
+    }
+    return `${base.origin}${base.pathname.replace(/\/+$/, '')}/corte?pago={cobro_id}`
+}
+
 /** Hay pasarela configurada (`PASARELA_PROVEEDOR`, o la falsa fuera de producción). */
 export function pagoEnLineaDisponible(): boolean {
     return proveedorConfigurado() !== null
@@ -63,10 +84,10 @@ export async function pagadorDeLaPeticion(
     ctx: HttpContext,
     ip: string,
     entrada: EntradaIniciarPago,
-): Promise<{ clienteId: number; servicioId: number | null }> {
+): Promise<{ clienteId: number; servicioId: number | null; porSesion: boolean }> {
     if (entrada.facturas && entrada.facturas.length > 0 && entrada.servicio_id === undefined) {
         const sesion = await exigirSesionPortal(ctx)
-        return { clienteId: sesion.clienteId, servicioId: null }
+        return { clienteId: sesion.clienteId, servicioId: null, porSesion: true }
     }
     return titularDeLaPeticion(ctx, ip, entrada.servicio_id)
 }
@@ -146,13 +167,18 @@ export class SinDeuda extends ReglaNegocio {
 /** Errores de `CrearCobroPasarela` en palabras del cliente (sin ids internos ni variables de entorno). */
 export function errorPagoParaCliente(error: unknown): unknown {
     if (!(error instanceof Problema)) return error
-    if (error.code === 'E_PASARELA_NO_CONFIGURADA') {
-        return new Problema(
+    const noDisponible = () =>
+        new Problema(
             503,
             'pasarela_no_configurada',
             'Pago en línea no disponible',
             'El pago en línea no está disponible en este momento. Paga por depósito o en nuestra oficina.',
         )
+    if (error.code === 'E_PASARELA_NO_CONFIGURADA') return noDisponible()
+    // url_retorno rechazada: PORTAL_URL_PUBLICA fuera de PASARELA_RETORNO_ORIGENES (configuración)
+    if (error instanceof ValidacionFallida && error.errores?.some((e) => e.field === 'url_retorno')) {
+        logger.error({ errores: error.errores }, 'La pasarela rechazó la URL de retorno del portal')
+        return noDisponible()
     }
     if (error.code === 'E_SIN_DEUDA') return new SinDeuda()
     if (error instanceof ValidacionFallida) {

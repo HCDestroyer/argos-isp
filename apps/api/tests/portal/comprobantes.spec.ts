@@ -11,8 +11,7 @@ import {
     estadoServicio,
     generar,
 } from '#tests/billing/ayudas_billing'
-import { EnviadorFalso, cookieDeSesion, nitAleatorio } from '#tests/portal/ayudas_portal'
-import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
+import { EnviadorFalso, cookieDeSesion, nitAleatorio, usarEnviadorCodigo } from '#tests/portal/ayudas_portal'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import RechazarComprobante from '#billing/actions/rechazar_comprobante'

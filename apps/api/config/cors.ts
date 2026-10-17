@@ -1,15 +1,14 @@
-import env from '#start/env'
-import app from '@adonisjs/core/services/app'
 import { defineConfig } from '@adonisjs/cors'
+import { origenPermitido } from '#core/auth/origenes'
 
-const origenes = (env.get('CORS_ORIGINS') ?? '')
-    .split(',')
-    .map((origen) => origen.trim())
-    .filter(Boolean)
-
+/**
+ * CORS con credenciales (cookie de sesión del panel) solo para los orígenes permitidos de
+ * `app/core/auth/origenes.ts` (`CORS_ORIGINS`; sin lista, localhost en dev y ninguno en
+ * producción). Un origen no permitido no recibe `Access-Control-Allow-Origin`.
+ */
 export default defineConfig({
     enabled: true,
-    origin: origenes.length > 0 ? origenes : !app.inProduction,
+    origin: (origen) => origenPermitido(origen),
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
     headers: true,
     exposeHeaders: ['x-request-id', 'idempotent-replayed'],

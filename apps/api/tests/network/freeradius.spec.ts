@@ -550,6 +550,7 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
             acct_session_id: acct,
             ipv4: s.ipv4,
             prefijos_v6: [s.enlace, s.delegado],
+            motivo: 'User-Request',
         })
         const acciones = await db
             .from('audit.acciones')
