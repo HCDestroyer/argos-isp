@@ -1,24 +1,31 @@
 import { readFile } from 'node:fs/promises'
 import { Decimal } from 'decimal.js'
-import type { FilaCsv } from '#importacion/csv'
-import { leerDumpMysql, type TablaSql } from '#importacion/mysql_dump'
+import { leerDumpMysql } from '#importacion/mysql_dump'
 import {
     normalizarFuente,
     type Entidad,
     type FilasPorEntidad,
-    type FuenteMikrowisp,
-} from '#importacion/fuente'
+    type FuenteCanonica,
+} from '#importacion/canonico'
+import {
+    filasCanonicas,
+    tablasDelEsquema,
+    texto,
+    type DefTabla,
+    type FilaOrigen,
+} from '#importacion/origenes/esquema_sql'
 
 /**
- * Lee un volcado SQL de la base de Mikrowisp (`mysqldump`) y lo lleva a las mismas filas que los
- * CSV del importador; la validación y la normalización son las de `fuente.ts`.
+ * Adaptador de origen `mikrowisp`: lee un volcado SQL de la base de Mikrowisp (`mysqldump`) y lo
+ * traduce al formato canónico (`canonico.ts`). No decide nada: la validación es la del formato
+ * canónico y las reglas de negocio, las del importador.
  *
  * **Esquema supuesto.** Todavía no tenemos la copia de la base real del ISP (pendiente del PM en
  * `.claude/integration/a6.md`). Las tablas y columnas de abajo son las que usa la API pública de
  * Mikrowisp (`usuarios`, `tblservicios` con `idperfil`, `nodo`, `pppuser`, `ppppass`; `facturas`
  * con `idcliente`, `emitido`, `vencimiento`, `total`, `estado`; `operaciones` con `nfactura` y
  * `cobrado`) más lo que hace falta para el resto. Todo el conocimiento del esquema vive en
- * `ESQUEMA` y en las funciones `de*` de este archivo: cuando llegue el volcado real, se ajusta
+ * `ESQUEMA` y en `fuenteDesdeDump` de este archivo: cuando llegue el volcado real, se ajusta
  * aquí y el resto del importador no cambia. El fixture `scripts/importacion/mikrowisp-sintetico.sql`
  * sigue este esquema.
  */
@@ -81,54 +88,52 @@ export const ESQUEMA = {
         columnas: ['id', 'nfactura', 'idcliente', 'cobrado', 'fecha_pago', 'forma_pago'],
         opcional: true,
     },
-} as const
+} as const satisfies Record<string, DefTabla>
 
-type ClaveEsquema = keyof typeof ESQUEMA
-
-/** Fila del origen ya con los nombres de columna de los CSV (undefined = la columna no vino). */
-type Fila = Record<string, string | null | undefined>
-
-export async function leerDumpMikrowisp(archivo: string): Promise<FuenteMikrowisp> {
+export async function leerDumpMikrowisp(archivo: string): Promise<FuenteCanonica> {
     return fuenteDesdeDump(await readFile(archivo, 'utf8'), archivo.split('/').at(-1) ?? archivo)
 }
 
 /** Igual que `leerDumpMikrowisp` con el texto del volcado (pruebas). */
-export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikrowisp {
-    const tablas = leerDumpMysql(texto)
-    const tabla = (clave: ClaveEsquema): TablaSql => {
-        const def = ESQUEMA[clave]
-        const t = tablas.get(def.tabla)
-        if (!t) {
-            if ('opcional' in def && def.opcional) return { columnas: [...def.columnas], filas: [] }
-            throw new Error(`${nombre}: falta la tabla ${def.tabla} (esquema supuesto en mikrowisp_sql.ts)`)
-        }
-        const faltan = def.columnas.filter((c) => !t.columnas.includes(c))
-        if (faltan.length > 0) {
-            throw new Error(`${nombre}: a la tabla ${def.tabla} le faltan las columnas ${faltan.join(', ')}`)
-        }
-        return t
-    }
+export function fuenteDesdeDump(contenido: string, nombre = 'dump.sql'): FuenteCanonica {
+    const { filas, duenosFacturas } = filasDesdeDump(contenido, nombre)
+    const fuente = normalizarFuente(filas)
+    fuente.duenosFacturas = duenosFacturas
+    return fuente
+}
 
-    const zonas = new Map(tabla('zonas').filas.map((z) => [texto_(z.id), texto_(z.nombre)]))
-    const facturasSql = tabla('facturas').filas
-    const operaciones = tabla('operaciones').filas
-    const usuarios = tabla('usuarios').filas
+/**
+ * La traducción sola: filas con las columnas canónicas, sin validar (así se escriben como CSV
+ * con `escribirCsv`, p. ej. el juego `scripts/importacion/sintetico-csv/`).
+ */
+export function filasDesdeDump(
+    contenido: string,
+    nombre = 'dump.sql',
+): { filas: FilasPorEntidad; duenosFacturas: Map<string, string> } {
+    const t = tablasDelEsquema(leerDumpMysql(contenido), ESQUEMA, {
+        nombre,
+        origen: 'mikrowisp',
+        archivo: 'apps/api/app/importacion/origenes/mikrowisp.ts',
+    })
+
+    const zonas = new Map(t.zonas.filas.map((z) => [texto(z.id), texto(z.nombre)]))
+    const usuarios = t.usuarios.filas
 
     const pagadoPorFactura = new Map<string, Decimal>()
-    for (const op of operaciones) {
-        const f = texto_(op.nfactura)
+    for (const op of t.operaciones.filas) {
+        const f = texto(op.nfactura)
         if (!f || f === '0') continue
         pagadoPorFactura.set(f, (pagadoPorFactura.get(f) ?? new Decimal(0)).plus(montoSeguro(op.cobrado)))
     }
 
     // Facturas: las anuladas no se exportan; las pagadas van con pagado = total (pendiente 0).
-    const facturas: Fila[] = []
+    const facturas: FilaOrigen[] = []
     const pendientePorCliente = new Map<string, Decimal>()
     const duenosFacturas = new Map<string, string>()
-    for (const f of facturasSql) {
-        const id = texto_(f.id)
-        duenosFacturas.set(id, texto_(f.idcliente))
-        const estado = texto_(f.estado).toLowerCase()
+    for (const f of t.facturas.filas) {
+        const id = texto(f.id)
+        duenosFacturas.set(id, texto(f.idcliente))
+        const estado = texto(f.estado).toLowerCase()
         if (estado.startsWith('anulad')) continue
         const total = montoSeguro(f.total)
         const pagado = estado === 'pagado' ? total : Decimal.min(total, pagadoPorFactura.get(id) ?? 0)
@@ -144,7 +149,7 @@ export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikro
         })
         const pendiente = total.minus(pagado)
         if (pendiente.gt(0)) {
-            const cliente = texto_(f.idcliente)
+            const cliente = texto(f.idcliente)
             pendientePorCliente.set(
                 cliente,
                 (pendientePorCliente.get(cliente) ?? new Decimal(0)).plus(pendiente),
@@ -154,32 +159,32 @@ export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikro
 
     // Saldo del origen: lo pendiente de sus facturas menos su saldo a favor. Solo se exporta
     // cuando hay saldo a favor; si no, el importador usa la suma de sus facturas pendientes.
-    const saldos: Fila[] = []
+    const saldos: FilaOrigen[] = []
     for (const u of usuarios) {
         const favor = montoSeguro(u.saldo)
         if (favor.isZero()) continue
-        const cliente = texto_(u.id)
+        const cliente = texto(u.id)
         const saldo = (pendientePorCliente.get(cliente) ?? new Decimal(0)).minus(favor)
         saldos.push({ cliente_id: cliente, saldo: saldo.toFixed(2) })
     }
 
-    const entidades: Record<Entidad, Fila[]> = {
-        routers: tabla('routers').filas.map((r) => ({
+    const entidades: Record<Entidad, FilaOrigen[]> = {
+        routers: t.routers.filas.map((r) => ({
             id: r.id,
             nombre: r.nombre,
             host: r.ip,
-            nas_ip: texto_(r.ip_radius) || r.ip,
+            nas_ip: texto(r.ip_radius) || r.ip,
             api_usuario: r.usuario,
             api_password: r.clave,
             radius_secret: r.secret_radius,
         })),
-        redes: tabla('redes').filas.map((r) => ({
+        redes: t.redes.filas.map((r) => ({
             router_id: r.router,
             cidr: r.red && r.cidr ? `${r.red}/${r.cidr}` : null,
             gateway: r.gateway,
             tipo: r.tipo,
         })),
-        planes: tabla('perfiles').filas.map((p) => {
+        planes: t.perfiles.filas.map((p) => {
             const [subida, bajada] = velocidades(p.velocidad)
             return {
                 id: p.id,
@@ -199,9 +204,9 @@ export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikro
             telefono: u.telefono,
             movil: u.movil,
             direccion: u.direccion_principal,
-            zona: u.zona ? (zonas.get(texto_(u.zona)) ?? null) : null,
+            zona: u.zona ? (zonas.get(texto(u.zona)) ?? null) : null,
         })),
-        servicios: tabla('servicios').filas.map((s) => ({
+        servicios: t.servicios.filas.map((s) => ({
             id: s.id,
             cliente_id: s.idcliente,
             router_id: s.nodo,
@@ -219,7 +224,7 @@ export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikro
         })),
         facturas,
         saldos,
-        pagos: operaciones.map((o) => ({
+        pagos: t.operaciones.filas.map((o) => ({
             id: o.id,
             cliente_id: o.idcliente,
             factura_id: o.nfactura,
@@ -229,41 +234,27 @@ export function fuenteDesdeDump(texto: string, nombre = 'dump.sql'): FuenteMikro
         })),
     }
 
-    const origen: Record<Entidad, string> = {
-        routers: ESQUEMA.routers.tabla,
-        redes: ESQUEMA.redes.tabla,
-        planes: ESQUEMA.perfiles.tabla,
-        clientes: ESQUEMA.usuarios.tabla,
-        servicios: ESQUEMA.servicios.tabla,
-        facturas: ESQUEMA.facturas.tabla,
-        saldos: `${ESQUEMA.usuarios.tabla}.saldo`,
-        pagos: ESQUEMA.operaciones.tabla,
-    }
-    const filas = {} as FilasPorEntidad
-    for (const entidad of Object.keys(entidades) as Entidad[]) {
-        filas[entidad] = {
-            origen: `${nombre}:${origen[entidad]}`,
-            // `linea` = número de fila dentro de la tabla (1 = la primera).
-            filas: entidades[entidad].map((v, i): FilaCsv => ({ linea: i + 1, valores: aTexto(v) })),
-        }
-    }
-    const fuente = normalizarFuente(filas)
-    fuente.duenosFacturas = duenosFacturas
-    return fuente
-}
-
-function texto_(v: string | null | undefined): string {
-    return (v ?? '').trim()
-}
-
-function aTexto(fila: Fila): Record<string, string> {
-    return Object.fromEntries(Object.entries(fila).map(([k, v]) => [k, v ?? '']))
+    const filas = filasCanonicas(
+        entidades,
+        {
+            routers: ESQUEMA.routers.tabla,
+            redes: ESQUEMA.redes.tabla,
+            planes: ESQUEMA.perfiles.tabla,
+            clientes: ESQUEMA.usuarios.tabla,
+            servicios: ESQUEMA.servicios.tabla,
+            facturas: ESQUEMA.facturas.tabla,
+            saldos: `${ESQUEMA.usuarios.tabla}.saldo`,
+            pagos: ESQUEMA.operaciones.tabla,
+        },
+        nombre,
+    )
+    return { filas, duenosFacturas }
 }
 
 /** Monto del origen para sumar (lo inválido cuenta 0; la validación de la fila lo reporta). */
-function montoSeguro(v: string | null | undefined): Decimal {
+export function montoSeguro(v: string | null | undefined): Decimal {
     try {
-        const d = new Decimal(texto_(v).replace(/,/g, '') || '0')
+        const d = new Decimal(texto(v).replace(/,/g, '') || '0')
         return d.isFinite() ? d : new Decimal(0)
     } catch {
         return new Decimal(0)
@@ -272,7 +263,7 @@ function montoSeguro(v: string | null | undefined): Decimal {
 
 /** `5M/10M` (max-limit de MikroTik: subida/bajada) → ['5M', '10M']; `10M` → ['10M', '10M']. */
 function velocidades(v: string | null | undefined): [string | null, string | null] {
-    const valor = texto_(v)
+    const valor = texto(v)
     if (!valor) return [null, null]
     const [subida, bajada] = valor.split('/').map((x) => x.trim())
     return [subida ?? null, bajada ?? subida ?? null]

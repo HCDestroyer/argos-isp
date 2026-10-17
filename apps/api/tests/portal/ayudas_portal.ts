@@ -1,7 +1,10 @@
 import db from '@adonisjs/lucid/services/db'
 import type { ApiResponse } from '@japa/api-client'
 import { unico } from '#tests/ayudas'
-import type { CanalCodigo, EnviadorCodigo, MensajeCodigo } from '#portal/acceso/envio_codigo'
+import type { CanalCodigo } from '#portal/actions/solicitar_codigo'
+import type { Canal, EstadoEntrega, ResultadoEnvio } from '#notify/canales/canal'
+import { ErrorCanal } from '#notify/canales/canal'
+import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { generarToken, hashToken } from '#portal/acceso/codigos'
 
 /**
@@ -135,20 +138,58 @@ export async function crearSesion(
     })
 }
 
-/** Enviador de códigos falso: guarda los mensajes en lugar de mandarlos. */
-export class EnviadorFalso implements EnviadorCodigo {
+export interface MensajeCodigo {
+    canal: CanalCodigo
+    destino: string
+    asunto: string | null
+    cuerpo: string
+}
+
+/**
+ * Canales de notify falsos (correo y Telegram) para el código de acceso: el portal envía con
+ * `EnviarMensajeDirecto` de A6, que usa el registro de canales de notify. Guarda los mensajes ya
+ * renderizados (con el código) en lugar de mandarlos. `canales` decide cuáles están configurados;
+ * `fallar` hace que el canal lance (`ErrorCanal`).
+ */
+export class EnviadorFalso {
     mensajes: MensajeCodigo[] = []
     fallar = false
+    #canales: CanalCodigo[] = []
 
-    constructor(public canales: CanalCodigo[] = ['correo', 'telegram']) {}
-
-    disponibles(): CanalCodigo[] {
-        return this.canales
+    constructor(canales: CanalCodigo[] = ['correo', 'telegram']) {
+        this.canales = canales
     }
 
-    async enviar(mensaje: MensajeCodigo): Promise<void> {
-        if (this.fallar) throw new Error('SMTP caído (prueba)')
-        this.mensajes.push(mensaje)
+    get canales(): CanalCodigo[] {
+        return this.#canales
+    }
+
+    /** Registra en notify solo estos canales (los demás quedan sin configurar). */
+    set canales(lista: CanalCodigo[]) {
+        this.#canales = lista
+        this.registrar()
+    }
+
+    registrar(): void {
+        for (const nombre of ['correo', 'telegram'] as const) {
+            registrarCanal(nombre, this.#canales.includes(nombre) ? this.#canal(nombre) : null)
+        }
+    }
+
+    #canal(nombre: CanalCodigo): Canal {
+        return {
+            nombre,
+            enviar: async (
+                destino: string,
+                asunto: string | null,
+                cuerpo: string,
+            ): Promise<ResultadoEnvio> => {
+                if (this.fallar) throw new ErrorCanal(nombre, 'SMTP caído (prueba)', false)
+                this.mensajes.push({ canal: nombre, destino, asunto, cuerpo })
+                return { id: `falso-${this.mensajes.length}` }
+            },
+            estado: async (): Promise<EstadoEntrega> => 'enviado',
+        }
     }
 
     /** Código de 6 dígitos del último mensaje. */
@@ -158,6 +199,15 @@ export class EnviadorFalso implements EnviadorCodigo {
         if (!codigo) throw new Error('No se envió ningún código')
         return codigo
     }
+}
+
+/**
+ * Pone los canales falsos de `enviador` en el registro de notify; con `undefined` vuelve a los del
+ * entorno (`reiniciarCanales`).
+ */
+export function usarEnviadorCodigo(enviador: EnviadorFalso | undefined): void {
+    if (enviador) enviador.registrar()
+    else reiniciarCanales()
 }
 
 /** `argos_portal=<token>` de las cabeceras `Set-Cookie` de una respuesta. */

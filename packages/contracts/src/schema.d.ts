@@ -1561,7 +1561,7 @@ export interface paths {
         put?: never;
         /**
          * El cliente sube el comprobante de un depósito, transferencia, ACH o remesa
-         * @description **`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description `multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalSubirComprobante"];
         delete?: never;
@@ -1761,7 +1761,7 @@ export interface paths {
         put?: never;
         /**
          * Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor
-         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a `/corte?pago=<id>`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
          */
         post: operations["portalIniciarPago"];
         delete?: never;
@@ -1785,7 +1785,7 @@ export interface paths {
         put?: never;
         /**
          * El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)
-         * @description Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalSolicitarPromesa"];
         delete?: never;
@@ -7012,7 +7012,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
+                    "application/pdf": string;
                 };
             };
             /** @description No autenticado */
@@ -7191,7 +7191,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
+                    "application/pdf": string;
                 };
             };
             /** @description No autenticado */
@@ -11132,6 +11132,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Datos inválidos */
             422: {
                 headers: {
@@ -11164,7 +11173,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
+                "multipart/form-data": {
                     /** @enum {string} */
                     metodo: "deposito" | "transferencia" | "ach" | "remesa";
                     /** @description id de una de `cuentas_deposito` (GET /portal/empresa) */
@@ -11182,6 +11191,11 @@ export interface operations {
                     nota?: string | null;
                     /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
                     servicio_id?: number;
+                    /**
+                     * Format: binary
+                     * @description Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido
+                     */
+                    archivo: string;
                 };
             };
         };
@@ -11255,6 +11269,15 @@ export interface operations {
                     "application/json": components["schemas"]["PortalContacto"];
                 };
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Conflicto de versión */
             409: {
                 headers: {
@@ -11300,6 +11323,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalCuenta"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
@@ -11397,6 +11429,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Datos inválidos */
             422: {
                 headers: {
@@ -11437,6 +11478,15 @@ export interface operations {
                     "application/json": components["schemas"]["PortalFacturaDetalle"];
                 };
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description No encontrado */
             404: {
                 headers: {
@@ -11474,7 +11524,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
+                    "application/pdf": string;
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No encontrado */
@@ -11521,6 +11580,15 @@ export interface operations {
                         data: components["schemas"]["PortalPago"][];
                         nextCursor: string | null;
                     };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Datos inválidos */
@@ -11666,6 +11734,15 @@ export interface operations {
                         data: components["schemas"]["PortalPromesa"][];
                         nextCursor: string | null;
                     };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Datos inválidos */
@@ -11838,6 +11915,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
             429: {
                 headers: {
@@ -11865,6 +11951,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalTelegram"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
@@ -11896,6 +11991,15 @@ export interface operations {
                     "application/json": components["schemas"]["PortalTelegram"];
                 };
             };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
             429: {
                 headers: {
@@ -11923,6 +12027,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalVinculoTelegram"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */

@@ -1,0 +1,3 @@
+# Certificado y llave del portal (PORTAL_TLS_DIR): nunca al repositorio
+*
+!.gitignore

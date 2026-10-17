@@ -39,6 +39,7 @@ interface Intento {
  * 2. Si el código no existe, venció, se usó, fue reemplazado o agotó intentos → 422
  *    `codigo_invalido` (auditado como error). Igual si no coincide.
  * 3. Si coincide: marca el código usado y crea la sesión (token opaco; solo se guarda su hash).
+ *    La acción queda auditada con actor `cliente` (`t.identificarActor`).
  *    El token lo pone la ruta en una cookie httpOnly; nunca va en el cuerpo de la respuesta.
  */
 export default class VerificarCodigoPortal extends DomainAction<
@@ -88,6 +89,10 @@ export default class VerificarCodigoPortal extends DomainAction<
                 restantes,
             )
         }
+
+        // Ya autenticado: la fila de la acción (y lo que escriba después) queda con actor `cliente`,
+        // como `auth.login` con el usuario. Un código fallido queda con actor `sistema`.
+        t.identificarActor({ tipo: 'cliente', id: intento.cliente_id })
 
         const ahora = DateTime.utc()
         await t.trx.from('core.portal_codigos').where('id', intento.id).update({ usado_en: ahora.toJSDate() })

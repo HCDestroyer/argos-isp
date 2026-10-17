@@ -106,3 +106,14 @@ groups:
         for: 2m
         annotations:
           summary: 'coa no consume el grupo coa de argos:eventos: los cortes y reactivaciones no llegan al router'
+
+      # Cron de sesiones colgadas (A2, sesiones-worker): un NAS con sesiones abiertas que no manda
+      # accounting (nas_silenciosos de la última corrida) durante más de 30 min. Gauge pedido a A2
+      # en .claude/integration/a6.md: 1 por NAS silencioso, sección `sesiones` de /metrics de la API.
+      - alert: NasSinAccounting
+        expr: max by (nas_ip) (argosisp_sesiones_nas_silencioso) > 0
+        for: 30m
+        labels:
+          severidad: aviso
+        annotations:
+          summary: 'NAS {{ $labels.nas_ip }}: sesiones abiertas sin accounting hace más de 30 min (no se cierran solas; revisar /radius y accounting del router)'

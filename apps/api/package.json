@@ -21,7 +21,8 @@
     "migrate": "node ace migration:run",
     "seed": "node ace db:seed",
     "openapi:generate": "node ace openapi:generate",
-    "importar": "node ace importar:mikrowisp"
+    "importar": "node ace importar",
+    "importar:plantillas": "node ace importar:plantillas"
   },
   "imports": {
     "#shared/*": "./app/shared/*.js",
@@ -33,6 +34,7 @@
     "#notify/*": "./app/notify/*.js",
     "#importacion/*": "./app/importacion/*.js",
     "#monitoreo/*": "./app/monitoreo/*.js",
+    "#operacion/*": "./app/operacion/*.js",
     "#exceptions/*": "./app/exceptions/*.js",
     "#middleware/*": "./app/middleware/*.js",
     "#commands/*": "./commands/*.js",

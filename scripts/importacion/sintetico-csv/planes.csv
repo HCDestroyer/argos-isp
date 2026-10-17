@@ -1,0 +1,3 @@
+﻿id,nombre,precio,bajada,subida,bajada_limitada,subida_limitada,perfil_ppp,pool_ipv4,equivale_a
+1,MW Residencial 10M,150.00,10M,5M,,,default,,
+2,MW Empresarial 50M,600.00,50M,25M,,,,,

@@ -1,0 +1,48 @@
+# Proxy del portal del cliente (servicio `portal-proxy`, infra/docker-compose.portal-https.yml).
+# infra/proxy/README.md, "Portal por HTTPS".
+#
+# - HTTPS en PORTAL_DOMINIO (certificado configurable con PORTAL_TLS) con HSTS: /entrar y /cuenta
+#   (la cookie de sesión `Secure`) y, de paso, todo el portal.
+# - HTTP sigue sirviendo todo lo demás: /corte llega por el dst-nat de TCP/80 de los suspendidos con
+#   cualquier Host y el portal cautivo no puede ir por HTTPS. Solo /entrar y /cuenta en el dominio
+#   del portal se redirigen a HTTPS.
+# - IP real del cliente: Caddy recibe la conexión con la IP de origen (puertos publicados por
+#   iptables, sin userland-proxy) y la pone en X-Forwarded-For. Sin `trusted_proxies`, descarta el
+#   X-Forwarded-For que mande el cliente. El portal agrega la IP de Caddy (red de compose, que la API
+#   tiene en PORTAL_PROXIES_CONFIABLES) y la API toma la del cliente.
+
+{
+	# Sin la redirección automática HTTP → HTTPS de Caddy: /corte debe responder por HTTP.
+	auto_https disable_redirects
+	http_port {$PORTAL_PROXY_HTTP_PUERTO:80}
+	https_port {$PORTAL_PROXY_HTTPS_PUERTO:443}
+}
+
+(portal) {
+	reverse_proxy {$PORTAL_UPSTREAM:portal:3001} {
+		# Las respuestas del portal ya traen sus cabeceras de seguridad (server/middleware/0-seguridad.ts).
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+# HTTPS del portal. PORTAL_TLS: `internal` (CA propia de Caddy, laboratorio), la ruta del certificado
+# y la llave (`/certs/portal.crt /certs/portal.key`, montados desde PORTAL_TLS_DIR) o un correo para
+# Let's Encrypt (solo si el dominio es público y el 80 es alcanzable desde internet).
+{$PORTAL_DOMINIO:portal.localhost} {
+	tls {$PORTAL_TLS:internal}
+	# max-age en segundos. Empezar corto (300) al estrenar el certificado y subirlo a un año
+	# (31536000) cuando todo funcione: con HSTS el navegador ya no acepta el portal sin un
+	# certificado válido. Sin includeSubDomains ni preload.
+	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:31536000}"
+	import portal
+}
+
+# HTTP: cualquier Host (dst-nat de los suspendidos, sondas de portal cautivo, /corte).
+http:// {
+	@seguro {
+		host {$PORTAL_DOMINIO:portal.localhost}
+		path /entrar /entrar/* /cuenta /cuenta/*
+	}
+	redir @seguro https://{host}{uri} 308
+	import portal
+}

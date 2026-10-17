@@ -1,14 +1,18 @@
-import { readFile } from 'node:fs/promises'
 import { isIPv4 } from 'node:net'
-import { join } from 'node:path'
 import { Decimal } from 'decimal.js'
-import { leerCsv, type FilaCsv } from '#importacion/csv'
+import type { FilaCsv } from '#importacion/csv'
 
 /**
- * Formato de entrada del importador: un directorio con un CSV por entidad, exportado de la base
- * MySQL de Mikrowisp (ver README del módulo). Los `id` y las referencias (`cliente_id`,
- * `router_id`, `plan_id`) son los ids de Mikrowisp. Este archivo lee, normaliza y valida el
- * formato; las reglas de negocio (NIT, IPs, duplicados) las aplica el importador.
+ * **Formato canónico** del importador: lo que todo origen (Mikrowisp, SmartISP, CSV de cualquier
+ * sistema) entrega al núcleo. Un adaptador de origen (`origenes/*.ts`) solo traduce sus tablas o
+ * archivos a filas con las columnas de `COLUMNAS` (una tabla por entidad, todo como texto);
+ * `normalizarFuente` las valida y las convierte en `FuenteCanonica` (tipos de abajo), y el
+ * importador (`importador.ts`) aplica las reglas de negocio (NIT, IPs, duplicados, saldos) igual
+ * para todos.
+ *
+ * Los `id` y las referencias (`cliente_id`, `router_id`, `plan_id`, ...) son los ids del sistema
+ * de origen: junto con el nombre del origen (`mikrowisp`, `smartisp`, `csv` o el `--sistema` que
+ * se indique) forman la clave de idempotencia (`core.ids_externos`, `<origen>:factura:<id>`, ...).
  */
 
 export type EstadoOrigen = 'activo' | 'suspendido' | 'retirado'
@@ -84,14 +88,16 @@ export interface ServicioOrigen {
     estado: EstadoOrigen
 }
 
-/** Factura pendiente en Mikrowisp (lo que el cliente aún debe de ella). */
+/** Factura del origen (no anulada): lo que el cliente aún debe de ella. */
 export interface FacturaOrigen {
     id: string
     cliente_id: string
-    /** servicio de Mikrowisp; si falta y el cliente tiene un solo servicio, se usa ese */
+    /** servicio del origen; si falta y el cliente tiene un solo servicio, se usa ese */
     servicio_id: string | null
     /** primer día del periodo (YYYY-MM-DD) */
     periodo: string
+    /** total original, IVA incluido, con 2 decimales (modo con historial: se importa por este) */
+    total: string
     /** lo pendiente (total − pagado), IVA incluido, con 2 decimales */
     pendiente: string
     vence: string | null
@@ -99,9 +105,9 @@ export interface FacturaOrigen {
 }
 
 /**
- * Pago registrado en Mikrowisp (historial). El pendiente de cada factura ya descuenta lo pagado;
- * los pagos sirven para el reporte (pagos de un cliente a facturas de otro) y, cuando A3 publique
- * la acción de pago histórico, para el historial del estado de cuenta.
+ * Pago registrado en el origen. El pendiente de cada factura ya descuenta lo pagado. El importador
+ * los registra como pagos históricos (A3) y, para su cliente y los dueños de las facturas que
+ * cubren, importa esas facturas por su total (modo B de `contratos/importacion.md`).
  */
 export interface PagoOrigen {
     id: string
@@ -114,7 +120,7 @@ export interface PagoOrigen {
     metodo: string | null
 }
 
-/** Saldo del cliente en Mikrowisp al exportar: positivo = debe, negativo = a favor. */
+/** Saldo del cliente en el origen al exportar: positivo = debe, negativo = a favor. */
 export interface SaldoOrigen {
     linea: number
     cliente_id: string
@@ -123,6 +129,7 @@ export interface SaldoOrigen {
 
 /** Problema de formato de una fila: la fila se omite o el campo se descarta (`aviso`). */
 export interface ProblemaFila {
+    /** archivo o tabla del origen (`servicios.csv`, `dump.sql:tblservicios`) */
     archivo: string
     linea: number
     id: string | null
@@ -131,7 +138,8 @@ export interface ProblemaFila {
     aviso: boolean
 }
 
-export interface FuenteMikrowisp {
+/** Lo que un adaptador de origen entrega al importador, ya validado. */
+export interface FuenteCanonica {
     routers: RouterOrigen[]
     redes: RedOrigen[]
     planes: PlanOrigen[]
@@ -142,26 +150,148 @@ export interface FuenteMikrowisp {
     pagos: PagoOrigen[]
     problemas: ProblemaFila[]
     /**
-     * Datos del origen que no son filas (solo los da el lector del volcado SQL): dueño de cada
-     * factura, incluidas las ya pagadas o anuladas, para reconocer pagos a facturas de otro cliente.
+     * Dueño de cada factura del origen, incluidas las pagadas o anuladas que no vienen en
+     * `facturas` (solo si el origen lo sabe): para reconocer pagos a facturas de otro cliente.
      */
     duenosFacturas?: Map<string, string>
 }
 
-export const ARCHIVOS = {
-    routers: 'routers.csv',
-    redes: 'redes.csv',
-    planes: 'planes.csv',
-    clientes: 'clientes.csv',
-    servicios: 'servicios.csv',
-    facturas: 'facturas.csv',
-    saldos: 'saldos.csv',
-    pagos: 'pagos.csv',
-} as const
+export const ENTIDADES = [
+    'routers',
+    'redes',
+    'planes',
+    'clientes',
+    'servicios',
+    'facturas',
+    'saldos',
+    'pagos',
+] as const
 
-export type Entidad = keyof typeof ARCHIVOS
+export type Entidad = (typeof ENTIDADES)[number]
 
-/** Filas ya leídas por entidad (de los CSV o del volcado SQL) y el nombre con que se reportan. */
+/** Entidades que un origen puede no traer (sin ellas no hay redes, deuda ni historial). */
+export const OPCIONALES: readonly Entidad[] = ['redes', 'facturas', 'saldos', 'pagos']
+
+/** Columna del formato canónico, para validar, documentar y generar las plantillas CSV. */
+export interface Columna {
+    nombre: string
+    /** `si`: siempre; `condicional`: según otra columna (ver `descripcion`); `no`: puede ir vacía */
+    obligatoria: 'si' | 'condicional' | 'no'
+    descripcion: string
+    /** valor de la fila de ejemplo de la plantilla */
+    ejemplo: string
+}
+
+const col = (
+    nombre: string,
+    obligatoria: Columna['obligatoria'],
+    descripcion: string,
+    ejemplo: string,
+): Columna => ({ nombre, obligatoria, descripcion, ejemplo })
+
+/**
+ * Columnas de cada entidad, en el orden de la plantilla. Es la única definición del formato:
+ * `normalizarFuente` lee estas columnas, `generarPlantillas` (origen `csv`) escribe los
+ * encabezados y la fila de ejemplo, y el LEEME de las plantillas sale de las descripciones.
+ */
+export const COLUMNAS: Record<Entidad, Columna[]> = {
+    routers: [
+        col('id', 'si', 'Id del router en el sistema de origen', 'R1'),
+        col('nombre', 'si', 'Nombre del router', 'Torre Norte'),
+        col('host', 'si', 'IP o nombre con que se alcanza su API REST', '10.0.0.1'),
+        col('nas_ip', 'si', 'IPv4 con la que el router habla RADIUS', '10.0.0.1'),
+        col('api_usuario', 'no', 'Usuario de la API de RouterOS', 'argos'),
+        col('api_password', 'no', 'Clave de la API de RouterOS', 'clave-api'),
+        col('radius_secret', 'no', 'Secreto RADIUS del router', 'secreto-radius'),
+    ],
+    redes: [
+        col('router_id', 'si', 'Router (id del origen) al que pertenece la red', 'R1'),
+        col('cidr', 'si', 'Red IPv4 a.b.c.d/nn', '100.64.10.0/24'),
+        col('gateway', 'no', 'Puerta de enlace de la red', '100.64.10.1'),
+        col('tipo', 'no', '`estatico` (por defecto) o `pool`', 'estatico'),
+    ],
+    planes: [
+        col('id', 'si', 'Id del plan en el origen', 'P1'),
+        col('nombre', 'si', 'Nombre del plan', 'Residencial 10M'),
+        col('precio', 'si', 'Precio mensual con IVA: `150.00`, `Q 1,250.50`', '150.00'),
+        col('bajada', 'si', 'Velocidad de bajada: kbps (`10000`) o con unidad (`512k`, `10M`, `1G`)', '10M'),
+        col('subida', 'si', 'Velocidad de subida, mismo formato', '5M'),
+        col(
+            'bajada_limitada',
+            'no',
+            'Bajada en estado limitado (por defecto 512k o la normal si es menor)',
+            '',
+        ),
+        col('subida_limitada', 'no', 'Subida en estado limitado (mismo defecto)', ''),
+        col('perfil_ppp', 'no', 'Perfil PPP del router', 'default'),
+        col('pool_ipv4', 'no', 'Pool IPv4 del router', ''),
+        col('equivale_a', 'no', 'Nombre de un plan de ArgosIsp al que se mapea en lugar de crear uno', ''),
+    ],
+    clientes: [
+        col('id', 'si', 'Id del cliente en el origen', 'C1'),
+        col('nombre', 'si', 'Nombre o razón social', 'Ana López'),
+        col('tipo', 'no', '`persona` (por defecto) o `empresa`', 'persona'),
+        col('nit', 'no', 'NIT, CUI o `CF`', 'CF'),
+        col('nombre_fiscal', 'no', 'Nombre para la factura', ''),
+        col('direccion_fiscal', 'no', 'Dirección para la factura', ''),
+        col('email', 'no', 'Correo (se descarta con aviso si no es válido)', 'ana@example.com'),
+        col('telefono', 'no', 'Teléfono', '22223333'),
+        col('movil', 'no', 'Celular', '55554444'),
+        col('direccion', 'no', 'Dirección de instalación', 'Zona 1, Guatemala'),
+        col('coordenadas', 'no', '`lat,lng`', '14.6349,-90.5069'),
+        col('zona', 'no', 'Nombre de la zona (se crea si no existe)', 'Centro'),
+    ],
+    servicios: [
+        col('id', 'si', 'Id del servicio en el origen', 'S1'),
+        col('cliente_id', 'si', 'Cliente (id del origen)', 'C1'),
+        col('router_id', 'si', 'Router (id del origen)', 'R1'),
+        col('plan_id', 'si', 'Plan (id del origen); vacío o `0` = sin plan (no se importa)', 'P1'),
+        col(
+            'tipo_conexion',
+            'no',
+            '`pppoe` (por defecto), `ip_estatica` o `dhcp_fija` (también `ppp`, `estatica`, `static`, `dhcp`, `lease`)',
+            'pppoe',
+        ),
+        col('user_ppp', 'condicional', 'Usuario PPPoE; obligatorio en `pppoe`', 'ana.lopez'),
+        col('pass_ppp', 'no', 'Clave PPPoE (se guarda cifrada)', 'clave-ppp'),
+        col('ip', 'condicional', 'IPv4 fija; obligatoria en `ip_estatica`. Vacía: ArgosIsp asigna una', ''),
+        col('mac', 'condicional', 'MAC del equipo; obligatoria en `dhcp_fija`', ''),
+        col('amarre_ip_mac', 'no', '`si` / `no`: ARP estático (solo sin PPPoE)', 'no'),
+        col('direccion', 'no', 'Dirección del servicio', ''),
+        col('coordenadas', 'no', '`lat,lng`', ''),
+        col('fecha_instalacion', 'no', '`2024-03-15`, `2024-03-15 10:00:00` o `15/03/2024`', '2024-03-15'),
+        col(
+            'estado',
+            'no',
+            '`activo` (por defecto), `suspendido` (cortado, moroso) o `retirado` (cancelado, baja: no se importa)',
+            'activo',
+        ),
+    ],
+    facturas: [
+        col('id', 'si', 'Id de la factura en el origen', 'F1'),
+        col('cliente_id', 'si', 'Cliente dueño (id del origen)', 'C1'),
+        col('servicio_id', 'no', 'Servicio (id del origen); vacío: el único servicio del cliente', 'S1'),
+        col('periodo', 'si', 'Mes que cobra: `2026-08`, `08/2026` o `2026-08-01`', '2026-09'),
+        col('total', 'si', 'Total con IVA', '150.00'),
+        col('pagado', 'no', 'Lo ya pagado; vacío: la suma de sus pagos en pagos.csv', '50.00'),
+        col('vence', 'no', 'Fecha de vencimiento', '2026-09-10'),
+        col('concepto', 'no', 'Descripción', 'Internet septiembre 2026'),
+    ],
+    saldos: [
+        col('cliente_id', 'si', 'Cliente (id del origen)', 'C1'),
+        col('saldo', 'si', 'Saldo al exportar: `150.00` debe, `-20.00` a favor', '100.00'),
+    ],
+    pagos: [
+        col('id', 'si', 'Id del pago en el origen', 'G1'),
+        col('cliente_id', 'si', 'Cliente que pagó (id del origen)', 'C1'),
+        col('factura_id', 'no', 'Factura que pagó (puede ser de otro cliente)', 'F1'),
+        col('monto', 'si', 'Monto pagado', '50.00'),
+        col('fecha', 'no', 'Fecha del pago', '2026-09-05'),
+        col('metodo', 'no', 'Forma de pago del origen (efectivo, depósito, transferencia...)', 'efectivo'),
+    ],
+}
+
+/** Filas ya leídas por entidad (de los CSV o de un volcado) y el nombre con que se reportan. */
 export type FilasPorEntidad = Record<Entidad, { origen: string; filas: FilaCsv[] }>
 
 /** Velocidad limitada por defecto (kbps) cuando el plan no la trae: Mikrowisp no la tiene. */
@@ -170,40 +300,10 @@ export const LIMITADA_KBPS = 512
 class FilaInvalida extends Error {}
 
 /**
- * Lee y valida el directorio exportado. `redes.csv`, `facturas.csv`, `saldos.csv` y `pagos.csv`
- * son opcionales; los demás son obligatorios.
+ * Valida y normaliza las filas de cada entidad (columnas de `COLUMNAS`). Lo llaman todos los
+ * adaptadores de origen después de traducir sus datos.
  */
-export async function leerDirectorio(directorio: string): Promise<FuenteMikrowisp> {
-    const opcionales: Entidad[] = ['redes', 'facturas', 'saldos', 'pagos']
-    const filas = {} as FilasPorEntidad
-    for (const [entidad, archivo] of Object.entries(ARCHIVOS) as Array<[Entidad, string]>) {
-        let texto: string
-        try {
-            texto = await readFile(join(directorio, archivo), 'utf8')
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-                if (opcionales.includes(entidad)) {
-                    filas[entidad] = { origen: archivo, filas: [] }
-                    continue
-                }
-                throw new Error(`Falta ${archivo} en ${directorio}`, { cause: error })
-            }
-            throw error
-        }
-        try {
-            filas[entidad] = { origen: archivo, filas: leerCsv(texto) }
-        } catch (error) {
-            throw new Error(`${archivo}: ${(error as Error).message}`, { cause: error })
-        }
-    }
-    return normalizarFuente(filas)
-}
-
-/**
- * Valida y normaliza las filas de cada entidad (mismas columnas que los CSV, ver README). Lo usan
- * el lector de CSV y el del volcado SQL de Mikrowisp (`mikrowisp_sql.ts`).
- */
-export function normalizarFuente(entrada: FilasPorEntidad): FuenteMikrowisp {
+export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
     const problemas: ProblemaFila[] = []
     const leer = (entidad: Entidad) => entrada[entidad]
 
@@ -312,6 +412,7 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteMikrowisp {
             cliente_id: f.requerido('cliente_id'),
             servicio_id: f.opcional('servicio_id'),
             periodo: f.periodo('periodo'),
+            total,
             pendiente: pendiente.toFixed(2),
             vence: f.fecha('vence'),
             concepto: f.opcional('concepto'),

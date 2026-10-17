@@ -6,9 +6,8 @@ import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico } from '#tests/ayudas'
 import { crearRouterFila } from '#tests/core/fabricas'
 import { escenario, estadoServicio, generar } from '#tests/billing/ayudas_billing'
-import { EnviadorFalso, cookieDeSesion, nitAleatorio } from '#tests/portal/ayudas_portal'
+import { EnviadorFalso, cookieDeSesion, nitAleatorio, usarEnviadorCodigo } from '#tests/portal/ayudas_portal'
 import { aTexto, dec } from '#ledger/dinero'
-import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
 import { esCorregible, fechaLegible, motivoParaCliente, venceAlFinalDelDia } from '#portal/promesas'
 import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import VencerFacturas from '#billing/actions/vencer_facturas'
@@ -189,7 +188,12 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             201,
         )
         assert.equal(promesa.body().resultado, 'rechazada')
-        assert.include(promesa.body().motivo, 'saldo vencido es mayor que el permitido')
+        // el límite de la regla que falló (resultado_evaluacion.reglas.at(-1).limite) va en el mensaje
+        assert.equal(
+            promesa.body().motivo,
+            `Para pedir una promesa de pago tu saldo vencido debe ser de Q100.00 o menos (hoy es Q${s.deuda}). ` +
+                'Abona la diferencia o comunícate con nosotros para acordar una fecha de pago.',
+        )
     })
 
     test('condiciones: cupo del periodo agotado → no disponible con el motivo', async ({
@@ -442,6 +446,17 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             201,
         )
         assert.equal(creada.body().resultado, 'aprobada')
+        // Con la sesión, actor `cliente`; nunca un id de cliente en `aprobada_por` (core.usuarios).
+        const auditoria = await db
+            .from('audit.acciones')
+            .where('accion', 'promesas.crear')
+            .where('entidad_tipo', 'promesa')
+            .where('entidad_id', creada.body().id)
+            .firstOrFail()
+        assert.include(auditoria, { actor_tipo: 'cliente', canal: 'portal', resultado: 'ok' })
+        assert.equal(Number(auditoria.actor_id), s.clienteId)
+        const fila = await db.from('billing.promesas').where('id', creada.body().id).firstOrFail()
+        assert.isNull(fila.aprobada_por)
         assert.equal(await estadoServicio(s.servicioId), 'activo')
         assert.equal(await estadoServicio(ajeno.servicioId), 'suspendido')
 
@@ -484,6 +499,31 @@ test.group('Portal: motivo de la promesa en palabras del cliente', () => {
                 ),
                 'Tuviste una promesa sin cumplir hace poco. Podrás solicitar otra a partir del 12 de noviembre.',
             ],
+            [
+                evaluacion('deuda_maxima', '300.00', '450.5'),
+                'Para pedir una promesa de pago tu saldo vencido debe ser de Q300.00 o menos (hoy es Q450.50). ' +
+                    'Abona la diferencia o comunícate con nosotros para acordar una fecha de pago.',
+            ],
+            [
+                evaluacion('antiguedad_minima_dias', 60, 12),
+                'Las promesas de pago están disponibles cuando tu servicio cumple 60 días. ' +
+                    'Comunícate con nosotros para acordar una fecha de pago.',
+            ],
+            [
+                evaluacion('cumplimiento_minimo_pct', 80, 50),
+                'Para pedir una promesa desde aquí necesitas haber cumplido al menos el 80% de tus promesas ' +
+                    'anteriores. Comunícate con nosotros para acordar una fecha de pago.',
+            ],
+            [
+                evaluacion('max_por_periodo', 1, 1),
+                'Ya usaste la promesa de pago disponible para este periodo. ' +
+                    'Comunícate con nosotros para acordar una fecha de pago.',
+            ],
+            [
+                evaluacion('max_por_periodo', 2, 2),
+                'Ya usaste las 2 promesas de pago disponibles para este periodo. ' +
+                    'Comunícate con nosotros para acordar una fecha de pago.',
+            ],
         ]
         for (const [entrada, texto] of casos) assert.equal(motivoParaCliente(entrada), texto)
 
@@ -500,6 +540,19 @@ test.group('Portal: motivo de la promesa en palabras del cliente', () => {
             assert.notInclude(texto, regla)
             assert.notInclude(texto, 'motivo interno')
         }
+        // El límite es el de la última regla evaluada (la que detuvo la evaluación), no el de otra.
+        const conPrevias = {
+            ...evaluacion('plazo_max_dias', 5),
+            reglas: [
+                { regla: 'habilitadas', ok: true, limite: true, valor: null, detalle: '', origen: 'general' },
+                { regla: 'plazo_max_dias', ok: false, limite: 5, valor: 9, detalle: '', origen: 'portal' },
+            ],
+        } as unknown as ResultadoEvaluacion
+        assert.equal(
+            motivoParaCliente(conPrevias),
+            'La fecha de pago debe estar dentro de los próximos 5 días.',
+        )
+
         // Una regla nueva de A3 cae en su motivo (ya legible), no en el código.
         assert.equal(motivoParaCliente(evaluacion('regla_futura', null)), 'motivo interno de regla_futura')
         assert.equal(fechaLegible('2026-01-31'), '31 de enero')
