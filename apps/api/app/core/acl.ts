@@ -2,6 +2,11 @@ import db from '@adonisjs/lucid/services/db'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import type Usuario from '#core/models/usuario'
 import { Prohibido } from '#shared/errores'
+import {
+    alcanceEmpresasDeUsuario,
+    empresasDelUsuario,
+    type EmpresaResumenVista,
+} from '#core/alcance_empresas'
 
 /**
  * ACL: permisos efectivos y alcance por router, zona o caja.
@@ -52,6 +57,12 @@ export interface Me {
     email: string
     roles: string[]
     permisos: string[]
+    /** multiempresa: ve todas las empresas y los consolidados */
+    alcance_global: boolean
+    /** multiempresa: empresas activas que puede operar (selector del panel) */
+    empresas: EmpresaResumenVista[]
+    /** multiempresa: empresa activa (en `GET /me`, la de `X-Empresa-Id`); sin ella, la única o null */
+    empresa_activa_id: number | null
 }
 
 export async function permisosDeUsuario(usuarioId: number, token?: AlcancesToken | null): Promise<string[]> {
@@ -189,9 +200,19 @@ export function filtrarPorAlcance<Q extends Consulta>(
 }
 
 export async function construirMe(usuario: Usuario, token?: AlcancesToken | null): Promise<Me> {
-    const [roles, permisos] = await Promise.all([
+    const [roles, permisos, alcance] = await Promise.all([
         rolesDeUsuario(usuario.id),
         permisosDeUsuario(usuario.id, token),
+        alcanceEmpresasDeUsuario(usuario.id),
     ])
-    return { id: usuario.id, nombre: usuario.nombre, email: usuario.email, roles, permisos }
+    return {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        roles,
+        permisos,
+        alcance_global: alcance.alcanceGlobal,
+        empresas: await empresasDelUsuario(alcance),
+        empresa_activa_id: alcance.empresas.length === 1 ? alcance.empresas[0]! : null,
+    }
 }

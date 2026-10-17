@@ -23,6 +23,7 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 
 | Evento | Campo | Desde | Valor |
 | --- | --- | --- | --- |
+| `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` | `empresa_id` (entero) | 2026-10-17 (A1, multiempresa) | Empresa (NIT) del servicio en el momento del evento (`core.servicios.empresa_id`; `contratos/multiempresa.md`). Siempre presente desde esa fecha; los eventos anteriores no lo traen (era la empresa 1). Un consumidor que no lo lea no cambia |
 | `sesion.terminada` | `motivo` (texto o null) | semana 3 (A2) | `causa_fin` de la sesión: `Acct-Terminate-Cause` del NAS (`User-Request`, `Lost-Carrier`…), `NAS-Reboot` (Accounting-On/Off), `Sesion-Reemplazada` (otro Start del mismo usuario) o `sin_interim` (cron de sesiones colgadas: sin Stop ni Interim-Update en N intervalos). Un consumidor que no lo lea no cambia. Si después llega un Interim de una sesión cerrada por `sin_interim`, se reabre y se emite otro `sesion.iniciada`; si llega su Stop, se corrige `fin`/causa sin repetir `sesion.terminada` |
 
 ## Eventos fuera de la tabla de `CLAUDE.md`
@@ -73,13 +74,14 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 
 ## Payloads del núcleo (A1)
 
-`servicio.config_cambiada`: `{ servicio_id, campos[] }`. Valores de `campos`:
+`servicio.config_cambiada`: `{ servicio_id, empresa_id, campos[], empresa_anterior_id? }`. Valores de `campos`:
 
 | Campo | Cuándo |
 | --- | --- |
 | `plan`, `router`, `ips`, `prefijo_v6` | Cambió el plan, el router, la IPv4 o los prefijos/modo IPv6 (desde el día 2) |
 | `tipo_conexion` | Semana 2 (WISP, `contratos/routeros.md`): el servicio pasó entre `pppoe`, `ip_estatica` y `dhcp_fija`. El dispatcher limpia en el router lo del tipo anterior. Al dejar `pppoe`, `aaa:user:<user_ppp viejo>` queda con lápida |
 | `mac`, `amarre_ip_mac` | Semana 2: cambió la MAC (lease de `dhcp_fija`, ARP) o el amarre IP-MAC |
+| `empresa` | Multiempresa (2026-10-17): `servicios.cambiar_empresa` pasó el servicio a otra empresa; `empresa_id` es la nueva y `empresa_anterior_id` la de antes (solo en este caso). No cambia nada en la red; las facturas siguientes salen con el NIT nuevo |
 
 Eventos de velocidad (semana 2, `contratos/velocidad.md`). Decisión de A1: eventos propios por plan y por router en vez de un `servicio.config_cambiada` por cada servicio afectado (un plan con 500 servicios serían 500 eventos, y A2 recalcula por plan y router, no por servicio):
 

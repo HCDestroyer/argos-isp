@@ -2,13 +2,15 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 
 /**
- * Configuración de la empresa (`core.empresa`, una fila): la editan en el panel
- * (`PUT /empresa`, acción `empresa.editar`) y la leen `/corte`, el portal, el código de acceso y
- * los documentos (`{{empresa.*}}`).
+ * Configuración de la empresa: la editan en el panel (`PUT /empresa`, acción `empresa.editar`) y
+ * la leen `/corte`, el portal, el código de acceso y los documentos (`{{empresa.*}}`).
  *
- * Sin fila (nadie la ha guardado) se usan los valores por defecto: `nombre` de
- * `NOTIFY_EMPRESA_NOMBRE` (o "ArgosIsp"), `telefono` de `NOTIFY_EMPRESA_TELEFONO` y lo demás
- * vacío, con `version = 0`.
+ * Multiempresa (A1, `contratos/multiempresa.md`): los datos viven en `core.empresas`. Esta vista
+ * conserva los nombres de siempre (`nombre` = `nombre_comercial`, `direccion` =
+ * `direccion_fiscal`) y lee la empresa 1 (la principal) salvo que se pase otra.
+ *
+ * Con `version = 0` (la empresa 1 nunca se guardó) se usan los valores por defecto: `nombre` de
+ * `NOTIFY_EMPRESA_NOMBRE` (o "ArgosIsp"), `telefono` de `NOTIFY_EMPRESA_TELEFONO` y lo demás vacío.
  */
 
 export const CAMPOS_EMPRESA = [
@@ -55,18 +57,39 @@ export function empresaPorDefecto(entorno: NodeJS.ProcessEnv = process.env): Emp
     }
 }
 
-export async function verEmpresa(cliente: QueryClientContract = db.connection()): Promise<EmpresaVista> {
+/** Columna de `core.empresas` de cada campo de la vista. */
+export const COLUMNA_EMPRESA: Record<(typeof CAMPOS_EMPRESA)[number], string> = {
+    nombre: 'nombre_comercial',
+    nit: 'nit',
+    direccion: 'direccion_fiscal',
+    telefono: 'telefono',
+    telefono_alterno: 'telefono_alterno',
+    whatsapp: 'whatsapp',
+    correo: 'correo',
+    horario: 'horario',
+    instrucciones_pago: 'instrucciones_pago',
+}
+
+/**
+ * Datos de la empresa `empresaId` (por defecto la 1, la principal). Una empresa que no existe
+ * devuelve los valores por defecto (como la empresa 1 sin guardar).
+ */
+export async function verEmpresa(
+    cliente: QueryClientContract = db.connection(),
+    empresaId: number = 1,
+): Promise<EmpresaVista> {
     const fila = (await cliente
-        .from('core.empresa')
-        .where('id', 1)
-        .select(...CAMPOS_EMPRESA, 'version')
+        .from('core.empresas')
+        .where('id', empresaId)
+        .select(...CAMPOS_EMPRESA.map((campo) => `${COLUMNA_EMPRESA[campo]} as ${campo}`), 'version')
         .first()) as EmpresaVista | null
-    return fila ? { ...fila, version: Number(fila.version) } : empresaPorDefecto()
+    if (!fila || Number(fila.version) === 0) return empresaPorDefecto()
+    return { ...fila, version: Number(fila.version) }
 }
 
 /** Datos de la empresa sin `version` (documentos y mensajes). */
-export async function leerEmpresa(cliente?: QueryClientContract): Promise<DatosEmpresa> {
-    return sinVersion(await verEmpresa(cliente))
+export async function leerEmpresa(cliente?: QueryClientContract, empresaId?: number): Promise<DatosEmpresa> {
+    return sinVersion(await verEmpresa(cliente, empresaId))
 }
 
 export function sinVersion(empresa: EmpresaVista): DatosEmpresa {

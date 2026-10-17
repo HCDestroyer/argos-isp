@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
 
 /**
@@ -36,6 +37,8 @@ export interface RouterVista {
     interfaz_clientes: string | null
     /** @deprecated derivado de `control_velocidad` (`arbol_pcq` → `pcq`) */
     modo_velocidad: 'simple' | 'pcq'
+    /** empresa por defecto de los servicios nuevos (multiempresa) */
+    empresa_sugerida_id: number | null
     activo: boolean
     version: number
     created_at: string
@@ -71,19 +74,39 @@ const COLUMNAS_ROUTER = [
     'dhcp_servidor',
     'interfaz_clientes',
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
+    'empresa_sugerida_id',
     'activo',
     'version',
     'created_at',
     'updated_at',
 ]
 
+/**
+ * Multiempresa: un router es infraestructura compartida. Con `empresas` (filtro de
+ * `empresasDeLaLista`) salen los routers sin empresa sugerida, los sugeridos para esas empresas y
+ * los que tienen servicios de ellas. null = todos.
+ */
 export async function listarRouters(
     filtros: OpcionesPaginacion & { activo?: boolean },
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Promise<Pagina<RouterVista>> {
     const consulta = db.from('network.routers').select(COLUMNAS_ROUTER)
     if (filtros.activo !== undefined) consulta.where('activo', filtros.activo)
     filtrarPorAlcance(consulta, alcance, { router: (q, ids) => q.whereIn('id', ids) })
+    filtrarPorEmpresa(consulta, empresas, (q, ids) =>
+        q.where((w) =>
+            w
+                .whereNull('network.routers.empresa_sugerida_id')
+                .orWhereIn('network.routers.empresa_sugerida_id', ids)
+                .orWhereExists((s) =>
+                    s
+                        .from('core.servicios as s_em')
+                        .whereRaw('s_em.router_id = network.routers.id')
+                        .whereIn('s_em.empresa_id', ids),
+                ),
+        ),
+    )
     return paginar<RouterVista>(consulta, filtros)
 }
 

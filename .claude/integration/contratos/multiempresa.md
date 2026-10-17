@@ -100,3 +100,51 @@ Correo (SMTP) y Telegram se configuran **desde el panel**, no con variables de e
 ## Migración
 
 Los datos existentes pasan a la empresa 1. Ninguna prueba ni pantalla existente debe cambiar de comportamiento con una sola empresa. Con una sola empresa, el selector no aparece.
+
+## Implementación del núcleo (A1, 17 de octubre)
+
+Lo que A1 ya cumple y cómo usarlo desde los otros módulos. Las desviaciones del texto de arriba están al final, con su motivo.
+
+### Contexto de la petición
+
+- Middleware `empresa` (`apps/api/app/middleware/empresa_middleware.ts`) en **toda ruta con sesión**, después de `auth` y antes de `autorizar`:
+  - `X-Empresa-Id: <id>` → debe ser una empresa activa del alcance del usuario; si no, 403 `empresa_no_permitida`. Un valor que no es un id, 400.
+  - Sin cabecera → la única empresa del usuario; con varias, ninguna.
+  - Deja `ctx.empresa: EmpresaPeticion` = `{ activa, empresas, permitidas, alcanceGlobal, accesoTotal }` (`permitidas: null` = alcance global).
+- `ctx.contextoAccion()` lleva `empresaId` (la activa o null) y `empresasPermitidas` (null = todas). Fuera de HTTP (crons, workers, consola) no vienen: sin restricción y sin empresa activa.
+- `DomainAction` escribe `audit.acciones.empresa_id`: la que la acción fije con `t.fijarEmpresa(id)` (la del servicio, la de la factura…) o, si no, la activa del contexto.
+
+### Helpers
+
+| Helper | Dónde | Para qué |
+| --- | --- | --- |
+| `empresasDeLaLista(ctx.empresa, query.empresas)` | `#shared/empresa_activa` | Empresas por las que filtrar una lista: `[activa]`; sin activa, las del alcance (`null` con global); `empresas=todas` → `null` (consolidado) o 403 si no tiene acceso a todas |
+| `filtrarPorEmpresa(q, empresas, (q, ids) => q.whereIn('x.empresa_id', ids))` | `#shared/empresa_activa` | Aplica lo anterior (con `null` no filtra) |
+| `empresasConsulta()` | `#shared/validadores` | Campo `empresas` (`todas`) del validador de query, para el OpenAPI |
+| `exigirAccesoEmpresa(ctx, id)` / `tieneAccesoEmpresa` | `#shared/empresa_activa` | 403 `empresa_no_permitida` si el actor no tiene esa empresa |
+| `exigirEmpresaActivaDelContexto(ctx)` | `#shared/empresa_activa` | La activa o 422 `empresa_requerida` |
+| `resolverEmpresaActiva(ctx, trx)` | `#core/empresas` | Para lo que no depende de un servicio (cajas, egresos, cuentas, asientos manuales): la activa o, sin ella (crons, pruebas), la única empresa activa; 422/403 |
+| `empresaDeServicio(servicioId, trx)` | `#core/empresas` | La empresa de un servicio (facturas, pagos, promesas) |
+| `exigirServicio(ctx, id)` / `exigirCliente(ctx, id)` | `#core/acceso_empresa` | Alcance (router/zona) y empresa de un recurso concreto en una ruta |
+| `leerEmpresa(trx, empresaId)` / `verEmpresa` | `#portal/empresa` | Datos de marca con los nombres de siempre (`nombre`, `direccion`…); la 1 por defecto |
+| `variablesEmpresa(trx, empresaId?)` | `#notify/variables` | `{{empresa.*}}`; `construirVariables` ya toma `empresa_id` del payload o la del servicio |
+
+### Reglas que implementa
+
+- **Servicio nuevo**: `empresa_id` explícito > `empresa_sugerida_id` de la zona del cliente > la del router > la empresa activa (o la única activa) > 422 `empresa_requerida`. El actor necesita acceso a la elegida (403). Un `INSERT` directo sin `empresa_id` toma la única empresa activa (trigger `core.servicios_empresa_por_defecto`); con varias, falla.
+- **`servicios.cambiar_empresa`** (`POST /servicios/:id/cambiar-empresa`, con `version`): solo sin saldo pendiente (422 `servicio_con_saldo`); acceso a las dos empresas. Emite `servicio.config_cambiada` con `campos: ['empresa']` y `empresa_anterior_id`.
+- **Listas del núcleo**: servicios por `empresa_id`; clientes con algún servicio en la empresa **o sin servicios** (un cliente recién creado lo ven todas); routers sin empresa sugerida, sugeridos para la empresa o con servicios de ella.
+- **Un recurso concreto** se abre si es de cualquier empresa del alcance del usuario, no solo de la activa (los enlaces directos funcionan); si no, 403.
+- **Usuarios**: los existentes y los que crea alguien con alcance global quedan con alcance global; los que crea alguien acotado quedan en su empresa activa (o en las suyas). `PUT /usuarios/:id/empresas` (`usuarios.asignar_empresas`): sin global, al menos una empresa activa; nadie reparte lo que no tiene.
+- **Desactivar una empresa**: nunca la 1; no con servicios sin retirar (422 `empresa_con_servicios`). Su NIT queda libre.
+
+### Desviaciones de este contrato y motivo
+
+- `created_at` y `updated_at` en lugar de `creado_en` y `actualizado_en`: es la convención de todas las tablas, y `actualizarConVersion` y el diff de auditoría dependen de esos nombres.
+- El logo son tres columnas: `logo` (ruta en el almacenamiento, nunca sale en la API), `logo_tipo` y `logo_etag` (sha256). La API expone `logo_url` (`/api/v1/empresas/:id/logo?v=…`, pública). El archivo vive en el almacenamiento de los comprobantes (`COMPROBANTES_DIR/logos/empresas/<id>/…`), así usa el mismo volumen respaldado.
+- `core.empresas` conserva `telefono_alterno`, `whatsapp`, `horario` e `instrucciones_pago` de la antigua `core.empresa` (los usan el portal y los avisos).
+- La empresa 1 puede quedar con `version = 0` y sin NIT si nunca se guardó: así `GET /empresa` y los textos siguen devolviendo los valores por defecto del entorno, como antes. Las empresas nuevas exigen NIT válido, razón social y nombre comercial.
+- `regimen_isr` es un enumerado: `sujeto_pagos_trimestrales`, `retencion_definitiva` o `pequeno_contribuyente` (para elegir las frases de FEL). `codigo_establecimiento` es entero.
+- Esquemas OpenAPI `EmpresaGrupo` (la empresa completa) y `EmpresaResumen` (la de `GET /me`): el nombre `Empresa` ya era del portal (A5). En `Me`, `alcance_global`, `empresas` y `empresa_activa_id` son opcionales en el OpenAPI para no romper fixtures, pero `GET /me` siempre los envía.
+- Permisos extra: `empresas.ver` y `empresas.cambiar_logo` (subir el logo es una acción propia, con su auditoría).
+- Una lista sin empresa activa (usuario con varias empresas y sin `X-Empresa-Id`) no responde 422: muestra la unión de las empresas del usuario (todas con alcance global). El 422 `empresa_requerida` queda para las altas que la necesitan.

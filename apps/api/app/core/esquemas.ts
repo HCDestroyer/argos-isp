@@ -19,6 +19,7 @@ import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
 import { ReglasPromesa } from '#billing/esquemas'
 import { PlanEfectivo } from '#network/esquemas'
 import { TIPOS_ACTOR } from '#shared/contexto'
+import { REGIMENES_ISR } from '#core/empresas'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -53,6 +54,21 @@ export const Me = definirEsquema('Me', {
                 'Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; ' +
                 'igual a `expira_en` con Bearer de login; null con tokens de API)',
         }),
+        alcance_global: {
+            type: 'boolean',
+            description: 'Multiempresa: ve y opera todas las empresas y los consolidados (`?empresas=todas`)',
+        },
+        empresas: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/EmpresaResumen' },
+            description:
+                'Multiempresa: empresas activas que el usuario puede operar (selector). Con una sola, el selector no aparece',
+        },
+        empresa_activa_id: {
+            type: ['integer', 'null'],
+            description:
+                'Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió',
+        },
     },
 })
 
@@ -99,14 +115,25 @@ export const AsignacionRol = definirEsquema(
 
 export const Usuario = definirEsquema(
     'Usuario',
-    objeto({
-        id,
-        nombre: texto,
-        email: { type: 'string', format: 'email' },
-        activo: booleano,
-        roles: lista(AsignacionRol),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            nombre: texto,
+            email: { type: 'string', format: 'email' },
+            activo: booleano,
+            roles: lista(AsignacionRol),
+            alcance_global: {
+                ...booleano,
+                description: 'Ve y opera todas las empresas (multiempresa); siempre presente',
+            },
+            empresas: {
+                ...lista(id),
+                description: 'Empresas asignadas (vacía con alcance global); siempre presente',
+            },
+            ...auditable,
+        },
+        ['alcance_global', 'empresas'],
+    ),
 )
 
 export const Rol = definirEsquema(
@@ -134,7 +161,18 @@ export const TokenApiCreado = definirEsquema(
     objeto({ token: { type: 'string', description: 'Se muestra una sola vez' }, datos: TokenApi }),
 )
 
-export const Zona = definirEsquema('Zona', objeto({ id, nombre: texto, ...auditable }))
+export const Zona = definirEsquema(
+    'Zona',
+    objeto({
+        id,
+        nombre: texto,
+        empresa_sugerida_id: {
+            ...nulable(id),
+            description: 'Empresa por defecto de los servicios nuevos de clientes de esta zona',
+        },
+        ...auditable,
+    }),
+)
 
 export const Cliente = definirEsquema(
     'Cliente',
@@ -225,6 +263,7 @@ export const Servicio = definirEsquema(
     objeto({
         id,
         cliente_id: id,
+        empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
         router_id: id,
         plan_id: id,
         plantilla_facturacion_id: nulable(id),
@@ -424,4 +463,53 @@ export const AaaServicio = definirEsquema(
             ],
         },
     }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Empresas (multiempresa)
+|--------------------------------------------------------------------------
+*/
+
+export const EmpresaGrupo = definirEsquema(
+    'EmpresaGrupo',
+    objeto({
+        id,
+        nit: nulable(texto),
+        razon_social: nulable(texto),
+        nombre_comercial: texto,
+        direccion_fiscal: nulable(texto),
+        municipio: nulable(texto),
+        departamento: nulable(texto),
+        telefono: nulable(texto),
+        telefono_alterno: nulable(texto),
+        whatsapp: nulable(texto),
+        correo: nulable(texto),
+        sitio_web: nulable(texto),
+        horario: nulable(texto),
+        instrucciones_pago: nulable(texto),
+        color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
+        regimen_isr: nulable(enumerado(REGIMENES_ISR)),
+        codigo_establecimiento: nulable(entero),
+        logo_url: {
+            ...nulable(texto),
+            description: 'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
+        },
+        logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
+        activa: booleano,
+        principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+        version: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
+        },
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+/** Empresa en `GET /me` (selector de empresa). */
+export const EmpresaResumen = definirEsquema(
+    'EmpresaResumen',
+    objeto({ id, nombre_comercial: texto, nit: nulable(texto), logo_url: nulable(texto) }),
 )

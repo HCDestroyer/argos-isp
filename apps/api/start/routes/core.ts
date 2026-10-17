@@ -6,8 +6,11 @@
 | Solo validan y llaman acciones. Las que no tienen `handler` responden 501.
 |
 */
+import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
-import { definirRuta, type Ruta } from '#shared/rutas'
+import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
+import { empresasDeLaLista, exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
 import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
@@ -22,6 +25,7 @@ import {
 import CerrarSesion from '#core/actions/cerrar_sesion'
 import CrearUsuario from '#core/actions/crear_usuario'
 import EditarUsuario from '#core/actions/editar_usuario'
+import AsignarEmpresasUsuario from '#core/actions/asignar_empresas_usuario'
 import CrearRol from '#core/actions/crear_rol'
 import EditarRol from '#core/actions/editar_rol'
 import CrearTokenApi from '#core/actions/crear_token_api'
@@ -33,13 +37,14 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
 import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
 import DesconectarServicio from '#network/sesiones/actions/desconectar_servicio'
-import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
+import { listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
 import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
@@ -67,6 +72,12 @@ import { resolverIp } from '#network/consultas/ip'
 import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
+import CrearEmpresa from '#core/actions/crear_empresa'
+import EditarEmpresaGrupo from '#core/actions/editar_empresa'
+import DesactivarEmpresa from '#core/actions/desactivar_empresa'
+import CambiarLogoEmpresa from '#core/actions/cambiar_logo_empresa'
+import { filaEmpresa, listarEmpresas, verEmpresaCompleta } from '#core/empresas'
+import { TAMANO_MAXIMO_LOGO, leerArchivoLogo } from '#core/logos'
 import {
     AaaServicio,
     AccionAuditoria,
@@ -75,6 +86,7 @@ import {
     ConfiguracionEfectivaServicio,
     DependientePago,
     CredencialesPpp,
+    EmpresaGrupo,
     Me,
     Permiso,
     ResolucionIp,
@@ -193,6 +205,8 @@ const auth: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Usuario actual con permisos', esquema: Me },
         handler: async (ctx) => {
             const me = await construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx))
+            // la empresa activa de esta petición (`X-Empresa-Id` o la única del usuario)
+            me.empresa_activa_id = ctx.empresa?.activa ?? me.empresa_activa_id
             const guard = ctx.auth.authenticatedViaGuard
             if (guard === 'panel') {
                 const panel = ctx.auth.use('panel')
@@ -259,6 +273,22 @@ const usuarios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Usuario actualizado', esquema: Usuario },
         handler: (ctx, { cuerpo, params }) =>
             new EditarUsuario().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/usuarios/:id/empresas',
+        operacion: 'usuariosAsignarEmpresas',
+        resumen: 'Definir las empresas del usuario o su alcance global',
+        descripcion:
+            'Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global ' +
+            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).',
+        etiqueta: 'acl',
+        permiso: 'usuarios.asignar_empresas',
+        cuerpo: v.asignarEmpresasUsuarioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Usuario con su alcance por empresa', esquema: Usuario },
+        handler: (ctx, { cuerpo, params }) =>
+            new AsignarEmpresasUsuario().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',
@@ -350,7 +380,8 @@ const clientes: Ruta[] = [
         permiso: 'clientes.ver',
         query: v.listarClientesValidator,
         respuesta: { status: 200, descripcion: 'Página de clientes', esquema: pagina(Cliente) },
-        handler: (ctx, { query }) => buscarClientes(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            buscarClientes(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -377,7 +408,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente', esquema: Cliente },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return verCliente(id)
         },
     }),
@@ -393,7 +424,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente actualizado', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             if (cuerpo.zona_id !== undefined) exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
             return new EditarCliente().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
@@ -412,7 +443,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente con el chat vinculado', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new VincularTelegramCliente().execute(
                 { id, chat_id: cuerpo.chat_id },
                 ctx.contextoAccion(),
@@ -430,7 +461,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente sin chat de Telegram', esquema: Cliente },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
         },
     }),
@@ -451,7 +482,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente con su responsable de pago', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             // el responsable también debe estar en el alcance; si no existe, la acción responde 422
             const delResponsable = await dimensionesDeCliente(cuerpo.responsable_id).catch((e: unknown) => {
                 if (e instanceof NoEncontrado) return null
@@ -473,7 +504,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente sin responsable de pago', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new QuitarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
@@ -491,7 +522,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de dependientes', esquema: pagina(DependientePago) },
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return listarDependientes(id, query, ctx.alcance)
         },
     }),
@@ -558,7 +589,7 @@ function accionServicio(
         handler: ejecutar
             ? async (ctx, { cuerpo, params }) => {
                   const id = Number(params.id)
-                  exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+                  await exigirServicio(ctx, id)
                   return ejecutar({ id, motivo: cuerpo.motivo }, ctx)
               }
             : undefined,
@@ -575,7 +606,8 @@ const servicios: Ruta[] = [
         permiso: 'servicios.ver',
         query: v.listarServiciosValidator,
         respuesta: { status: 200, descripcion: 'Página de servicios', esquema: pagina(Servicio) },
-        handler: (ctx, { query }) => listarServicios(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarServicios(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -604,7 +636,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Servicio', esquema: Servicio },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return verServicio(id)
         },
     }),
@@ -622,7 +654,7 @@ const servicios: Ruta[] = [
         },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return configuracionEfectivaPublica(id)
         },
     }),
@@ -640,7 +672,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de tramos', esquema: pagina(TramoAsignacion) },
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return listarTramos(id, query)
         },
     }),
@@ -656,7 +688,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Servicio actualizado', esquema: Servicio },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             if (cuerpo.router_id !== undefined) exigirAlcance(ctx.alcance, { router: [cuerpo.router_id] })
             return new EditarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
@@ -706,8 +738,29 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Credenciales PPPoE', esquema: CredencialesPpp },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return new VerCredencialesServicio().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/cambiar-empresa',
+        operacion: 'serviciosCambiarEmpresa',
+        resumen: 'Pasar el servicio a otra empresa (NIT)',
+        descripcion:
+            'Solo sin saldo pendiente (422 `servicio_con_saldo`). Hace falta acceso a las dos empresas ' +
+            '(403 `empresa_no_permitida`); la nueva debe estar activa. Emite `servicio.config_cambiada` ' +
+            'con `campos: [empresa]`. Misma empresa: 200 sin cambios.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.cambiar_empresa',
+        cuerpo: v.cambiarEmpresaServicioValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Servicio en su nueva empresa', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new CambiarEmpresaServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
     accionServicio(
@@ -720,6 +773,160 @@ const servicios: Ruta[] = [
             return verServicio(entrada.id)
         },
     ),
+]
+
+/** Archivo `logo` del multipart (vacío si no viene); 422 antes de leerlo si pesa más de 512 KB. */
+async function logoDeLaPeticion(ctx: HttpContext): Promise<Uint8Array> {
+    const archivos = ctx.request.files('logo')
+    if (archivos.length > 1) {
+        throw new ValidacionFallida([{ field: 'logo', rule: 'unico', message: 'Más de un archivo' }])
+    }
+    const archivo = archivos[0]
+    if (!archivo?.tmpPath) return new Uint8Array()
+    if (archivo.size > TAMANO_MAXIMO_LOGO) {
+        throw new ValidacionFallida([
+            {
+                field: 'logo',
+                rule: 'tamano',
+                message: `El logo pesa ${Math.ceil(archivo.size / 1024)} KB; el máximo es 512 KB`,
+            },
+        ])
+    }
+    return readFile(archivo.tmpPath)
+}
+
+const empresas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas',
+        operacion: 'empresasListar',
+        resumen: 'Empresas (NIT) de la instalación',
+        descripcion:
+            'La principal (id 1) primero; sin alcance global, solo las del usuario. Contrato: ' +
+            '`.claude/integration/contratos/multiempresa.md`.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.ver',
+        query: v.listarEmpresasValidator,
+        respuesta: { status: 200, descripcion: 'Empresas', esquema: { type: 'array', items: EmpresaGrupo } },
+        handler: (ctx, { query }) =>
+            listarEmpresas({ ids: ctx.empresa?.permitidas ?? null, soloActivas: query.activas === true }),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas',
+        operacion: 'empresasCrear',
+        resumen: 'Crear empresa (NIT)',
+        descripcion: '409 `nit_duplicado` si otra empresa activa tiene el mismo NIT. El logo se sube aparte.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.crear',
+        cuerpo: v.crearEmpresaValidator,
+        idempotente: true,
+        respuesta: { status: 201, descripcion: 'Empresa creada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo }) => new CrearEmpresa().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas/:id',
+        operacion: 'empresasVer',
+        resumen: 'Ver empresa',
+        etiqueta: 'empresas',
+        permiso: 'empresas.ver',
+        respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaGrupo },
+        handler: (ctx, { params }) => {
+            exigirAccesoEmpresa(ctx.contextoAccion(), Number(params.id))
+            return verEmpresaCompleta(Number(params.id))
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/empresas/:id',
+        operacion: 'empresasEditar',
+        resumen: 'Editar datos fiscales y de contacto de la empresa',
+        etiqueta: 'empresas',
+        permiso: 'empresas.editar',
+        cuerpo: v.editarEmpresaValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Empresa actualizada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarEmpresaGrupo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas/:id/desactivar',
+        operacion: 'empresasDesactivar',
+        resumen: 'Desactivar empresa (no se borra)',
+        descripcion:
+            '422 `empresa_principal` (la 1 no se desactiva), `empresa_inactiva` o `empresa_con_servicios` ' +
+            '(primero se mueven sus servicios con `POST /servicios/:id/cambiar-empresa`).',
+        etiqueta: 'empresas',
+        permiso: 'empresas.desactivar',
+        cuerpo: v.desactivarEmpresaValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Empresa desactivada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo, params }) =>
+            new DesactivarEmpresa().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas/:id/logo',
+        operacion: 'empresasCambiarLogo',
+        resumen: 'Subir o quitar el logo de la empresa',
+        descripcion:
+            '`multipart/form-data` con el archivo `logo`: PNG o SVG de hasta 512 KB. El tipo se decide por ' +
+            'el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni ' +
+            'referencias externas; con DOCTYPE, entidades o mal formado, 422 en `logo`. `quitar=true` sin ' +
+            'archivo lo quita.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.cambiar_logo',
+        cuerpo: v.cambiarLogoEmpresaValidator,
+        multipart: {
+            archivos: { logo: 'PNG o SVG, hasta 512 KB' },
+            archivosOpcionales: ['logo'],
+        },
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Empresa con su logo', esquema: EmpresaGrupo },
+        handler: async (ctx, { cuerpo, params }) => {
+            const contenido = cuerpo.quitar ? new Uint8Array() : await logoDeLaPeticion(ctx)
+            return new CambiarLogoEmpresa().execute(
+                { id: Number(params.id), version: cuerpo.version, contenido, quitar: cuerpo.quitar === true },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas/:id/logo',
+        operacion: 'empresasLogo',
+        resumen: 'Logo de la empresa (público, con ETag)',
+        descripcion:
+            'Sin login: lo usan el portal, los correos y los PDF. `Content-Type` image/png o image/svg+xml, ' +
+            '`ETag` y `Cache-Control`; con `If-None-Match` igual responde 304. 404 si la empresa no tiene logo.',
+        etiqueta: 'empresas',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Imagen del logo', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            const empresa = await filaEmpresa(Number(params.id))
+            if (!empresa.logo || !empresa.logo_tipo || !empresa.logo_etag) {
+                throw new NoEncontrado('La empresa no tiene logo')
+            }
+            ctx.response.header('ETag', `"${empresa.logo_etag}"`)
+            ctx.response.header('Cache-Control', 'public, max-age=300')
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            if (etagCoincide(ctx, empresa.logo_etag)) return sinCambios()
+            const contenido = await leerArchivoLogo(empresa.logo)
+            ctx.response.header('Content-Type', empresa.logo_tipo)
+            if (empresa.logo_tipo === 'image/svg+xml') {
+                // defensa extra: aunque esté saneado, un SVG abierto directo no ejecuta nada
+                ctx.response.header(
+                    'Content-Security-Policy',
+                    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                )
+            }
+            return contenido
+        },
+    }),
 ]
 
 const bitacora: Ruta[] = [
@@ -763,7 +970,7 @@ const ip: Ruta[] = [
         handler: async (ctx, { params }) => {
             const resolucion = await resolverIp(decodeURIComponent(String(params.ip)))
             if (!resolucion) throw new NoEncontrado(`Ningún servicio tiene la IP ${String(params.ip)}`)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(resolucion.servicio_id))
+            await exigirServicio(ctx, resolucion.servicio_id)
             return resolucion
         },
     }),
@@ -834,4 +1041,4 @@ const interno: Ruta[] = [
     }),
 ]
 
-export default [...auth, ...usuarios, ...clientes, ...servicios, ...bitacora, ...ip, ...interno]
+export default [...auth, ...usuarios, ...empresas, ...clientes, ...servicios, ...bitacora, ...ip, ...interno]

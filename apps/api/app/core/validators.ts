@@ -2,6 +2,8 @@ import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import {
     coordenadas,
+    empresaSugerida,
+    empresasConsulta,
     fechaIso,
     dinero,
     idEntidad,
@@ -15,6 +17,7 @@ import { NOMBRES_PERMISOS } from '#core/permisos'
 import { CANALES } from '#shared/contexto'
 import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
+import { REGIMENES_ISR } from '#core/empresas'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -75,6 +78,7 @@ export const editarClienteValidator = vine.compile(
 export const listarClientesValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,
+        empresas: empresasConsulta(),
         q: vine
             .string()
             .trim()
@@ -132,11 +136,18 @@ export const vincularTelegramValidator = vine.compile(
 )
 
 export const crearZonaValidator = vine.compile(
-    vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100) }),
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        empresa_sugerida_id: empresaSugerida(),
+    }),
 )
 
 export const editarZonaValidator = vine.compile(
-    vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100), version: versionEsperada() }),
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        empresa_sugerida_id: empresaSugerida(),
+        version: versionEsperada(),
+    }),
 )
 
 /**
@@ -188,6 +199,10 @@ const amarreIpMac = () =>
 export const crearServicioValidator = vine.compile(
     vine.object({
         cliente_id: idEntidad(),
+        empresa_id: idEntidad().optional().meta({
+            description:
+                'Empresa (NIT) que factura el servicio. Sin ella: la sugerida de la zona del cliente, la del router o la empresa activa (X-Empresa-Id); 422 empresa_requerida si no se puede deducir',
+        }),
         router_id: idEntidad(),
         plan_id: idEntidad(),
         tipo_conexion: tipoConexion().optional().meta({ description: 'Por defecto pppoe' }),
@@ -274,6 +289,7 @@ export const editarServicioValidator = vine.compile(
 export const listarServiciosValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,
+        empresas: empresasConsulta(),
         q: vine
             .string()
             .trim()
@@ -295,6 +311,14 @@ export const listarServiciosValidator = vine.compile(
 
 /** suspender, reactivar, limitar, quitar-limite, retirar, desconectar */
 export const motivoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const cambiarEmpresaServicioValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().meta({ description: 'Empresa (NIT) nueva del servicio' }),
+        version: versionEsperada(),
+        motivo: motivo(),
+    }),
+)
 
 /*
 |--------------------------------------------------------------------------
@@ -374,6 +398,20 @@ export const crearTokenValidator = vine.compile(
 
 export const listarPaginadoValidator = vine.compile(vine.object({ ...reglasPaginacion }))
 
+export const asignarEmpresasUsuarioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        alcance_global: vine
+            .boolean()
+            .meta({ description: 'true = todas las empresas y los consolidados; la lista se ignora' }),
+        empresas: vine
+            .array(idEntidad())
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Empresas que puede operar sin alcance global (al menos una)' }),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Bitácora
@@ -442,5 +480,115 @@ export const aaaServiciosLoteValidator = vine.compile(
             .optional()
             .meta({ description: 'Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten' }),
         ...reglasPaginacion,
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Empresas (multiempresa: `contratos/multiempresa.md`)
+|--------------------------------------------------------------------------
+*/
+
+/** Texto opcional de la empresa: `null` o vacío lo borra. */
+const textoEmpresa = (maximo: number) => vine.string().trim().maxLength(maximo).nullable().optional()
+
+const telefonoEmpresa = () =>
+    vine
+        .string()
+        .trim()
+        .maxLength(30)
+        .regex(/^\+?[\d\s()-]{7,30}$/)
+        .nullable()
+        .optional()
+
+const camposEmpresa = {
+    direccion_fiscal: textoEmpresa(300),
+    municipio: textoEmpresa(100),
+    departamento: textoEmpresa(100),
+    telefono: telefonoEmpresa(),
+    telefono_alterno: telefonoEmpresa(),
+    whatsapp: telefonoEmpresa(),
+    correo: vine.string().trim().email().maxLength(200).nullable().optional(),
+    sitio_web: vine
+        .string()
+        .trim()
+        .maxLength(300)
+        .url({ require_protocol: true, protocols: ['http', 'https'] })
+        .nullable()
+        .optional(),
+    horario: textoEmpresa(200),
+    instrucciones_pago: textoEmpresa(1000),
+    color_marca: vine
+        .string()
+        .trim()
+        .regex(/^#[0-9A-Fa-f]{6}$/)
+        .nullable()
+        .optional()
+        .meta({ description: 'Color de marca `#RRGGBB`, solo para el PDF y el correo' }),
+    regimen_isr: vine
+        .enum(REGIMENES_ISR)
+        .nullable()
+        .optional()
+        .meta({ description: 'Régimen de ISR para las frases de FEL' }),
+    codigo_establecimiento: vine
+        .number()
+        .withoutDecimals()
+        .min(1)
+        .max(999999)
+        .nullable()
+        .optional()
+        .meta({ description: 'Código de establecimiento en la SAT (FEL)' }),
+}
+
+const nitEmpresa = () =>
+    vine
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^(\d{13}|\d{1,12}-?[0-9K])$/)
+        .meta({
+            description: 'NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas',
+        })
+
+export const crearEmpresaValidator = vine.compile(
+    vine.object({
+        nit: nitEmpresa(),
+        razon_social: vine.string().trim().minLength(1).maxLength(200),
+        nombre_comercial: vine.string().trim().minLength(1).maxLength(200),
+        ...camposEmpresa,
+    }),
+)
+
+export const editarEmpresaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(0).meta({
+            description: 'version leída (0 si la empresa 1 nunca se guardó); si cambió responde 409',
+        }),
+        nit: nitEmpresa().nullable().optional(),
+        razon_social: textoEmpresa(200),
+        nombre_comercial: vine.string().trim().minLength(1).maxLength(200).optional(),
+        ...camposEmpresa,
+    }),
+)
+
+export const desactivarEmpresaValidator = vine.compile(
+    vine.object({ version: versionEsperada(), motivo: motivo() }),
+)
+
+/** Campos del multipart de `POST /empresas/:id/logo` (el archivo va en `logo`). */
+export const cambiarLogoEmpresaValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída de la empresa; si cambió responde 409' }),
+        quitar: vine.boolean().optional().meta({ description: 'true = quitar el logo actual (sin archivo)' }),
+    }),
+)
+
+export const listarEmpresasValidator = vine.compile(
+    vine.object({
+        activas: vine.boolean().optional().meta({ description: 'Solo las activas (true) o todas (omitido)' }),
     }),
 )

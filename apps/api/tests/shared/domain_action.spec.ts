@@ -22,6 +22,7 @@ class CrearZonaPrueba extends DomainAction<{ nombre: string; pass_ppp: string; f
         })
         await t.emit('servicio.estado_cambiado', {
             servicio_id: id,
+            empresa_id: 1,
             de: 'activo',
             a: 'suspendido',
             motivo: 'prueba',
@@ -96,6 +97,7 @@ test.group('DomainAction', () => {
         assert.equal(eventos[0].evento, 'servicio.estado_cambiado')
         assert.deepEqual(eventos[0].payload, {
             servicio_id: id,
+            empresa_id: 1,
             de: 'activo',
             a: 'suspendido',
             motivo: 'prueba',
