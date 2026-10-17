@@ -9344,14 +9344,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description En la práctica 303 al retorno (ver descripción) */
-            200: {
+            /** @description Al retorno del cobro o a la página de la pasarela */
+            303: {
                 headers: {
+                    /** @description URL de destino de la redirección */
+                    Location: string;
                     [name: string]: unknown;
                 };
-                content: {
-                    "text/html": string;
-                };
+                content?: never;
             };
             /** @description No encontrado */
             404: {

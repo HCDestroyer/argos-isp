@@ -8238,13 +8238,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "En la práctica 303 al retorno (ver descripción)",
-            "content": {
-              "text/html": {
+          "303": {
+            "description": "Al retorno del cobro o a la página de la pasarela",
+            "headers": {
+              "Location": {
+                "description": "URL de destino de la redirección",
+                "required": true,
                 "schema": {
                   "type": "string",
-                  "format": "binary"
+                  "format": "uri-reference"
                 }
               }
             }
