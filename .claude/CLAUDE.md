@@ -136,6 +136,13 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 - **Contratos entre módulos por escrito.** Formatos, nombres de claves y payloads compartidos viven en `.claude/integration/contratos/`. Se cambian en la misma PR que el código que los cumple.
 - **Datos de demostración por la API.** `pnpm demo:datos` carga clientes, routers, planes y servicios pasando por las acciones (auditoría y eventos incluidos). Úsalo para probar pantallas contra el backend real antes de entregar.
 
+### 13. Multiempresa
+
+- Una instalación atiende varias empresas (NIT). Contrato completo: `.claude/integration/contratos/multiempresa.md`.
+- Todo lo de un servicio y todo lo financiero lleva `empresa_id`; un asiento, un pago o una caja nunca mezclan empresas.
+- Las consultas se filtran por la empresa activa (`ctx.empresaId`, cabecera `X-Empresa-Id`) y el alcance del usuario; el consolidado solo con alcance global.
+- Con una sola empresa el sistema se comporta igual que antes: ninguna prueba ni pantalla cambia.
+
 ## Catálogo de eventos (nombre, payload mínimo)
 
 | Evento | Emite | Payload |
