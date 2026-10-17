@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { actualizarConVersion } from '#shared/version'
 import { auditableRouter, columnasRouter, type DatosRouter } from '#network/actions/crear_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
+import { exigirEmpresaActiva } from '#core/empresas'
 
 export interface EntradaEditarRouter extends DatosRouter {
     id: number
@@ -21,6 +22,9 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         const { id, version, ...datos } = input
         t.fijarEntidad('router', id)
         const antes = await verRouter(id, t.trx)
+        if (datos.empresa_sugerida_id && datos.empresa_sugerida_id !== antes.empresa_sugerida_id) {
+            await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
+        }
         await actualizarConVersion(t.trx, 'network.routers', id, version, columnasRouter(datos))
         const despues = await verRouter(id, t.trx)
 

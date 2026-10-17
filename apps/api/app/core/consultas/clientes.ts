@@ -250,19 +250,14 @@ export async function dimensionesDeCliente(
     return { zona: [fila.zona_id], router: routers.map((r) => r.router_id) }
 }
 
+const COLUMNAS_ZONA = ['id', 'nombre', 'empresa_sugerida_id', 'version', 'created_at', 'updated_at']
+
 export async function listarZonas() {
-    return db
-        .from('core.zonas')
-        .orderBy('nombre')
-        .select('id', 'nombre', 'version', 'created_at', 'updated_at')
+    return db.from('core.zonas').orderBy('nombre').select(COLUMNAS_ZONA)
 }
 
 export async function verZona(id: number, cliente: QueryClientContract = db.connection()) {
-    const fila = await cliente
-        .from('core.zonas')
-        .where('id', id)
-        .select('id', 'nombre', 'version', 'created_at', 'updated_at')
-        .first()
+    const fila = await cliente.from('core.zonas').where('id', id).select(COLUMNAS_ZONA).first()
     if (!fila) throw new NoEncontrado(`La zona ${id} no existe`)
-    return fila as { id: number; nombre: string; version: number }
+    return fila as { id: number; nombre: string; empresa_sugerida_id: number | null; version: number }
 }

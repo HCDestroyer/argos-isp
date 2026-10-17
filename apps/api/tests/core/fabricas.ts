@@ -102,3 +102,17 @@ export async function crearEscenarioRouter() {
     ])
     return { routerId, base, raiz }
 }
+
+/** Empresa activa (fila directa, NIT único por corrida). Desactívalas al terminar: `soloEmpresaPrincipal()`. */
+export function crearEmpresaFila(datos: Record<string, unknown> = {}): Promise<number> {
+    const nombre = unico('Empresa')
+    return insertar('core.empresas', {
+        nit: unico('NIT')
+            .replace(/[^0-9A-Z]/gi, '')
+            .slice(-12)
+            .toUpperCase(),
+        razon_social: `${nombre}, S.A.`,
+        nombre_comercial: nombre,
+        ...datos,
+    })
+}

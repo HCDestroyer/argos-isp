@@ -2,14 +2,17 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { verZona } from '#core/consultas/clientes'
+import { exigirEmpresaActiva } from '#core/empresas'
 
 export interface EntradaEditarZona {
     id: number
     version: number
     nombre: string
+    /** `null` la quita; ausente no la cambia */
+    empresa_sugerida_id?: number | null
 }
 
-/** Renombra una zona (control optimista por `version`). */
+/** Renombra una zona o cambia su empresa sugerida (control optimista por `version`). */
 export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<ReturnType<typeof verZona>>> {
     readonly nombre = 'zonas.editar'
 
@@ -22,7 +25,14 @@ export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<
             .whereNot('id', input.id)
             .first()
         if (repetida) throw new Conflicto(`Ya existe la zona ${input.nombre}`, 'zona_duplicada')
-        await actualizarConVersion(t.trx, 'core.zonas', input.id, input.version, { nombre: input.nombre })
+        const cambios: Record<string, unknown> = { nombre: input.nombre }
+        if (input.empresa_sugerida_id !== undefined) {
+            if (input.empresa_sugerida_id && input.empresa_sugerida_id !== antes.empresa_sugerida_id) {
+                await exigirEmpresaActiva(t.trx, input.empresa_sugerida_id, 'empresa_sugerida_id')
+            }
+            cambios.empresa_sugerida_id = input.empresa_sugerida_id
+        }
+        await actualizarConVersion(t.trx, 'core.zonas', input.id, input.version, cambios)
         const despues = await verZona(input.id, t.trx)
         await t.registrarCambios({ tipo: 'zona', id: input.id }, antes, despues)
         return despues

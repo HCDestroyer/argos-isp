@@ -25,12 +25,17 @@ Contrato: `.claude/integration/contratos/multiempresa.md`. Varios NIT en una ins
 - `nit` normalizado (sin guion, mayúsculas, módulo 11) y único entre las empresas activas (409 `nit_duplicado`). Una empresa nunca se borra; la principal no se desactiva.
 - Logo: `POST /empresas/:id/logo` (multipart `logo`, con `version`): PNG por firma o SVG saneado con lista blanca (`svg.ts`: fuera scripts, `on*`, `style`, `foreignObject`, `<image>`, `<a>` y toda referencia externa; DOCTYPE, entidades o CDATA → 422), hasta 512 KB. Archivo en el almacenamiento de comprobantes (`COMPROBANTES_DIR/logos/empresas/<id>/<uuid>`, `logos.ts`); la fila guarda ruta, tipo y ETag (sha256). `GET /empresas/:id/logo` es público, con `ETag`, `Cache-Control` y 304; el SVG sale con CSP `default-src 'none'; sandbox`.
 
-| Acción               | Permiso                  | Eventos |
-| -------------------- | ------------------------ | ------- |
-| `CrearEmpresa`       | `empresas.crear`         | —       |
-| `EditarEmpresa`      | `empresas.editar`        | —       |
-| `DesactivarEmpresa`  | `empresas.desactivar`    | —       |
-| `CambiarLogoEmpresa` | `empresas.cambiar_logo`  | —       |
+- Empresa del servicio (`core.servicios.empresa_id NOT NULL`, los existentes en la 1). Al crear (`resolverEmpresaServicio` de `empresas.ts`): `empresa_id` explícito > `empresa_sugerida_id` de la zona del cliente > la del router > la empresa activa del contexto (o la única activa) > 422 `empresa_requerida`; el actor necesita acceso (403 `empresa_no_permitida`). Un INSERT directo sin `empresa_id` toma la única empresa activa (trigger `servicios_empresa_por_defecto`); con varias, falla. `PUT /servicios/:id` no la cambia: solo `servicios.cambiar_empresa` (sin saldo pendiente, `saldo_servicio.ts` provisional hasta que A3 exponga la suya).
+- Los eventos de servicio y `asignacion.cambiada` llevan `empresa_id` (`contratos/eventos.md`).
+- Una empresa con servicios sin retirar no se desactiva (422 `empresa_con_servicios`).
+
+| Acción                   | Permiso                     | Eventos                                                          |
+| ------------------------ | --------------------------- | ---------------------------------------------------------------- |
+| `CrearEmpresa`           | `empresas.crear`            | —                                                                |
+| `EditarEmpresa`          | `empresas.editar`           | —                                                                |
+| `DesactivarEmpresa`      | `empresas.desactivar`       | —                                                                |
+| `CambiarLogoEmpresa`     | `empresas.cambiar_logo`     | —                                                                |
+| `CambiarEmpresaServicio` | `servicios.cambiar_empresa` | `servicio.config_cambiada` (`campos: [empresa]`, `empresa_anterior_id`) |
 
 ## Clientes y zonas
 

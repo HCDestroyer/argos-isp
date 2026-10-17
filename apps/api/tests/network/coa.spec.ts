@@ -413,7 +413,7 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             insertarEvento(
                 trx,
                 'servicio.config_cambiada',
-                { servicio_id: e.servicioId, campos: ['prefijo_v6'] },
+                { servicio_id: e.servicioId, empresa_id: 1, campos: ['prefijo_v6'] },
                 null,
             ),
         )

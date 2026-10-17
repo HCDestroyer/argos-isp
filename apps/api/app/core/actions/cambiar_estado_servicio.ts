@@ -50,9 +50,10 @@ export default class CambiarEstadoServicio extends DomainAction<
             .from('core.servicios')
             .where('id', input.servicioId)
             .forUpdate()
-            .select('estado')
-            .first()) as { estado: EstadoServicio } | null
+            .select('estado', 'empresa_id')
+            .first()) as { estado: EstadoServicio; empresa_id: number } | null
         if (!fila) throw new NoEncontrado(`El servicio ${input.servicioId} no existe`)
+        t.fijarEmpresa(Number(fila.empresa_id))
         if (fila.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado y no cambia de estado', 'servicio_retirado')
         }
@@ -73,6 +74,7 @@ export default class CambiarEstadoServicio extends DomainAction<
         await t.registrarCambios({ tipo: 'servicio', id: input.servicioId }, antes, despues)
         await t.emit('servicio.estado_cambiado', {
             servicio_id: input.servicioId,
+            empresa_id: Number(fila.empresa_id),
             de: fila.estado,
             a: input.nuevo,
             motivo: input.motivo,

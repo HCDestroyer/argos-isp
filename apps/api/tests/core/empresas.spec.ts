@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { sanearSvg, SvgInvalido } from '#core/svg'
 
 /**
@@ -29,7 +29,9 @@ const PNG = Buffer.from(
     'base64',
 )
 
-test.group('Empresas: core.empresas', () => {
+test.group('Empresas: core.empresas', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('la empresa 1 existe tras la migración y es la principal', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
         const lista = await estado(client.get('/api/v1/empresas').bearerToken(token), 200)
@@ -157,7 +159,9 @@ test.group('Empresas: core.empresas', () => {
     })
 })
 
-test.group('Empresas: logo', () => {
+test.group('Empresas: logo', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('PNG: se sube, se sirve con ETag, 304 con If-None-Match y se quita', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
         const creada = await estado(

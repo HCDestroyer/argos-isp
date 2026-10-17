@@ -2,6 +2,7 @@ import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import {
     coordenadas,
+    empresaSugerida,
     fechaIso,
     dinero,
     idEntidad,
@@ -133,11 +134,18 @@ export const vincularTelegramValidator = vine.compile(
 )
 
 export const crearZonaValidator = vine.compile(
-    vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100) }),
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        empresa_sugerida_id: empresaSugerida(),
+    }),
 )
 
 export const editarZonaValidator = vine.compile(
-    vine.object({ nombre: vine.string().trim().minLength(2).maxLength(100), version: versionEsperada() }),
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        empresa_sugerida_id: empresaSugerida(),
+        version: versionEsperada(),
+    }),
 )
 
 /**
@@ -189,6 +197,10 @@ const amarreIpMac = () =>
 export const crearServicioValidator = vine.compile(
     vine.object({
         cliente_id: idEntidad(),
+        empresa_id: idEntidad().optional().meta({
+            description:
+                'Empresa (NIT) que factura el servicio. Sin ella: la sugerida de la zona del cliente, la del router o la empresa activa (X-Empresa-Id); 422 empresa_requerida si no se puede deducir',
+        }),
         router_id: idEntidad(),
         plan_id: idEntidad(),
         tipo_conexion: tipoConexion().optional().meta({ description: 'Por defecto pppoe' }),
@@ -296,6 +308,14 @@ export const listarServiciosValidator = vine.compile(
 
 /** suspender, reactivar, limitar, quitar-limite, retirar, desconectar */
 export const motivoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const cambiarEmpresaServicioValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().meta({ description: 'Empresa (NIT) nueva del servicio' }),
+        version: versionEsperada(),
+        motivo: motivo(),
+    }),
+)
 
 /*
 |--------------------------------------------------------------------------

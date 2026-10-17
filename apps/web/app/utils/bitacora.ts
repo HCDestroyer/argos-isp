@@ -23,6 +23,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.retirar': 'Servicio retirado',
     'servicios.desconectar': 'Sesión PPPoE desconectada',
     'servicios.ver_credenciales': 'Credenciales PPPoE consultadas',
+    'servicios.cambiar_empresa': 'Servicio pasado a otra empresa',
     'servicios.evaluar_estado': 'Estado del servicio evaluado',
     'servicios.corte': 'Corte automático ejecutado',
     'sesiones.iniciar': 'Sesión PPPoE iniciada',

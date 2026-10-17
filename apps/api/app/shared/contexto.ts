@@ -43,6 +43,11 @@ export interface ContextoAccion {
      * deducir del servicio responden 422 `empresa_requerida` (`exigirEmpresaActivaDelContexto`).
      */
     empresaId?: number | null
+    /**
+     * Empresas a las que el actor tiene acceso. null/ausente = todas (alcance global, sistema).
+     * Las acciones lo revisan con `exigirAccesoEmpresa` (`#shared/empresa_activa`).
+     */
+    empresasPermitidas?: number[] | null
 }
 
 /** Contexto para crons, workers y consola. */

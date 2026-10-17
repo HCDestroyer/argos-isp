@@ -1,6 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
+import type { ContextoAccion } from '#shared/contexto'
+import { EmpresaRequerida, exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { normalizarNitCui } from '#core/nit_cui'
 import { PREFIJO_API } from '#shared/rutas'
 
@@ -203,4 +205,67 @@ export async function empresaDeServicio(
     } | null
     if (!fila) throw new NoEncontrado(`El servicio ${servicioId} no existe`)
     return Number(fila.empresa_id)
+}
+
+/**
+ * Empresa activa para crear algo que no depende de un servicio: la del contexto
+ * (`X-Empresa-Id` o la única del usuario) o, sin ella (crons, consola, pruebas), la única empresa
+ * activa de la instalación. 422 `empresa_requerida` si hay varias y no se eligió; 403
+ * `empresa_no_permitida` si el actor no tiene acceso.
+ */
+export async function resolverEmpresaActiva(
+    ctx: ContextoAccion,
+    cliente: QueryClientContract = db.connection(),
+): Promise<number> {
+    const id = ctx.empresaId ?? (await unicaEmpresaActiva(cliente))
+    if (id === null) throw new EmpresaRequerida()
+    exigirAccesoEmpresa(ctx, id)
+    return id
+}
+
+/** Empresa sugerida activa de una fila (`empresa_sugerida_id`), o null. */
+async function sugerida(
+    cliente: QueryClientContract,
+    tabla: string,
+    id: number | null,
+): Promise<number | null> {
+    if (id === null) return null
+    const fila = (await cliente
+        .from(`${tabla} as t`)
+        .join('core.empresas as e', 'e.id', 't.empresa_sugerida_id')
+        .where('t.id', id)
+        .where('e.activa', true)
+        .select('e.id')
+        .first()) as { id: number } | null
+    return fila ? Number(fila.id) : null
+}
+
+/**
+ * Empresa de un servicio nuevo (`contratos/multiempresa.md`), en este orden:
+ * 1. la explícita (`empresa_id`; 422 si no existe o está desactivada);
+ * 2. la sugerida de la zona del cliente;
+ * 3. la sugerida del router;
+ * 4. la empresa activa del contexto o, sin ella, la única empresa activa.
+ * Sin ninguna: 422 `empresa_requerida`. El actor debe tener acceso a la elegida (403).
+ */
+export async function resolverEmpresaServicio(
+    cliente: QueryClientContract,
+    ctx: ContextoAccion,
+    datos: { empresa_id?: number | null; zona_id: number | null; router_id: number },
+): Promise<number> {
+    let id: number | null = null
+    if (datos.empresa_id) {
+        await exigirEmpresaActiva(cliente, datos.empresa_id)
+        id = datos.empresa_id
+    }
+    id ??= await sugerida(cliente, 'core.zonas', datos.zona_id)
+    id ??= await sugerida(cliente, 'network.routers', datos.router_id)
+    id ??= ctx.empresaId ?? (await unicaEmpresaActiva(cliente))
+    if (id === null) {
+        throw new EmpresaRequerida(
+            'No se pudo deducir la empresa del servicio: indica empresa_id, define la empresa sugerida de la zona o del router, o elige la empresa activa (X-Empresa-Id)',
+        )
+    }
+    exigirAccesoEmpresa(ctx, id)
+    return id
 }

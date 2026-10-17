@@ -1,6 +1,15 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { cidrV4, dinero, idEntidad, instanteIso, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
+import {
+    cidrV4,
+    dinero,
+    empresaSugerida,
+    idEntidad,
+    instanteIso,
+    ipv4,
+    prefijoV6,
+    versionEsperada,
+} from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
@@ -82,6 +91,7 @@ const camposRouter = {
         .meta({ description: 'Se guarda cifrado' }),
     nas_ip: ipv4(),
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
+    empresa_sugerida_id: empresaSugerida(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -104,6 +114,7 @@ export const editarRouterValidator = vine.compile(
         radius_secret: vine.string().maxLength(200).nullable().optional(),
         nas_ip: ipv4().optional(),
         modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
+        empresa_sugerida_id: empresaSugerida(),
         capacidad_bajada_kbps: capacidad(),
         capacidad_subida_kbps: capacidad(),
         ...camposConexionApi,

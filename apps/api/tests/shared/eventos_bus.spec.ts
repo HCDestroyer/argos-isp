@@ -82,6 +82,7 @@ test.group('Bus de eventos · relay del outbox', (group) => {
         assert.equal(mio.evento, 'servicio.estado_cambiado')
         assert.deepEqual(mio.payload, {
             servicio_id: servicioId,
+            empresa_id: 1,
             de: 'activo',
             a: 'suspendido',
             motivo: 'bus',

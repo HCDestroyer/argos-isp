@@ -15820,6 +15820,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.cambiar_empresa",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -16019,6 +16020,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.cambiar_empresa",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -16292,6 +16294,14 @@
                       "radius",
                       "api"
                     ]
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "control_velocidad": {
                     "type": "string",
@@ -16568,6 +16578,14 @@
                       "radius",
                       "api"
                     ]
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "capacidad_bajada_kbps": {
                     "type": [
@@ -17892,6 +17910,11 @@
                     "type": "integer",
                     "minimum": 1
                   },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) que factura el servicio. Sin ella: la sugerida de la zona del cliente, la del router o la empresa activa (X-Empresa-Id); 422 empresa_requerida si no se puede deducir"
+                  },
                   "router_id": {
                     "type": "integer",
                     "minimum": 1
@@ -18760,6 +18783,143 @@
           }
         },
         "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/cambiar-empresa": {
+      "post": {
+        "operationId": "serviciosCambiarEmpresa",
+        "summary": "Pasar el servicio a otra empresa (NIT)",
+        "description": "Solo sin saldo pendiente (422 `servicio_con_saldo`). Hace falta acceso a las dos empresas (403 `empresa_no_permitida`); la nueva debe estar activa. Emite `servicio.config_cambiada` con `campos: [empresa]`. Misma empresa: 200 sin cambios.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) nueva del servicio"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "empresa_id",
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio en su nueva empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_empresa; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_empresa",
         "x-implementado": true
       }
     },
@@ -20219,6 +20379,7 @@
                             "routers.editar",
                             "routers.marcar_migrado",
                             "routers.ver",
+                            "servicios.cambiar_empresa",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
@@ -20948,6 +21109,14 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 100
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   }
                 },
                 "required": [
@@ -21041,6 +21210,14 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 100
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "version": {
                     "type": "integer",
@@ -29472,6 +29649,7 @@
           "dhcp_servidor",
           "interfaz_clientes",
           "modo_velocidad",
+          "empresa_sugerida_id",
           "activo",
           "version",
           "created_at",
@@ -29573,6 +29751,14 @@
             "deprecated": true,
             "description": "Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad"
           },
+          "empresa_sugerida_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa por defecto de los servicios nuevos del router (después de la de la zona)"
+          },
           "activo": {
             "type": "boolean"
           },
@@ -29596,6 +29782,7 @@
         "required": [
           "id",
           "cliente_id",
+          "empresa_id",
           "router_id",
           "plan_id",
           "plantilla_facturacion_id",
@@ -29634,6 +29821,11 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) que factura el servicio"
           },
           "router_id": {
             "type": "integer",
@@ -30753,6 +30945,7 @@
         "required": [
           "id",
           "nombre",
+          "empresa_sugerida_id",
           "version",
           "created_at",
           "updated_at"
@@ -30764,6 +30957,14 @@
           },
           "nombre": {
             "type": "string"
+          },
+          "empresa_sugerida_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa por defecto de los servicios nuevos de clientes de esta zona"
           },
           "version": {
             "type": "integer",

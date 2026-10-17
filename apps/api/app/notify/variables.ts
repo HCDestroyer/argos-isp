@@ -109,12 +109,31 @@ export async function cargarDestinatario(
  * `portal_url` (`NOTIFY_PORTAL_URL`). Los campos vacíos van como `''` para que las secciones
  * Mustache (`{{#empresa.telefono}}`) no se muestren.
  */
-export async function variablesEmpresa(cliente: QueryClientContract): Promise<Variables> {
-    const empresa = await verEmpresa(cliente)
+export async function variablesEmpresa(cliente: QueryClientContract, empresaId?: number): Promise<Variables> {
+    const empresa = await verEmpresa(cliente, empresaId)
     const variables: Variables = {}
     for (const campo of CAMPOS_EMPRESA) variables[campo] = empresa[campo] ?? ''
     variables.portal_url = env.get('NOTIFY_PORTAL_URL') ?? ''
     return variables
+}
+
+/**
+ * Empresa del evento (multiempresa, A1): `empresa_id` del payload (eventos de servicio y, cuando A3
+ * lo agregue, los financieros) o la del servicio del payload; sin ninguno, la principal.
+ */
+async function empresaDelEvento(cliente: QueryClientContract, payload: Payload): Promise<number | undefined> {
+    const directa = entero(payload.empresa_id)
+    if (directa) return directa
+    const servicioId = entero(payload.servicio_id)
+    if (!servicioId) return undefined
+    const fila = (await cliente
+        .from('core.servicios')
+        .where('id', servicioId)
+        .select('empresa_id')
+        .first()) as {
+        empresa_id: number
+    } | null
+    return fila ? Number(fila.empresa_id) : undefined
 }
 
 /** Variables de una factura: del payload, completadas con la fila de `billing.facturas` si existe. */
@@ -302,7 +321,7 @@ export async function construirVariables(
 ): Promise<Variables> {
     const variables: Variables = {
         evento,
-        empresa: await variablesEmpresa(cliente),
+        empresa: await variablesEmpresa(cliente, await empresaDelEvento(cliente, payload)),
         cliente: {
             id: destinatario.clienteId,
             nombre: destinatario.nombre,

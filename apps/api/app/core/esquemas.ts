@@ -135,7 +135,18 @@ export const TokenApiCreado = definirEsquema(
     objeto({ token: { type: 'string', description: 'Se muestra una sola vez' }, datos: TokenApi }),
 )
 
-export const Zona = definirEsquema('Zona', objeto({ id, nombre: texto, ...auditable }))
+export const Zona = definirEsquema(
+    'Zona',
+    objeto({
+        id,
+        nombre: texto,
+        empresa_sugerida_id: {
+            ...nulable(id),
+            description: 'Empresa por defecto de los servicios nuevos de clientes de esta zona',
+        },
+        ...auditable,
+    }),
+)
 
 export const Cliente = definirEsquema(
     'Cliente',
@@ -226,6 +237,7 @@ export const Servicio = definirEsquema(
     objeto({
         id,
         cliente_id: id,
+        empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
         router_id: id,
         plan_id: id,
         plantilla_facturacion_id: nulable(id),

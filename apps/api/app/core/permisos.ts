@@ -28,6 +28,7 @@ export const PERMISOS = {
     'servicios.retirar': 'Retirar servicios',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
+    'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',

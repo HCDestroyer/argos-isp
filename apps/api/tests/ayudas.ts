@@ -74,3 +74,12 @@ export async function restablecerEmpresaPrincipal() {
         version: 0,
     })
 }
+
+/**
+ * Desactiva todas las empresas salvo la 1. Las pruebas de multiempresa lo llaman al terminar: con
+ * una sola empresa activa, el resto de la suite se comporta como siempre (servicios sin
+ * `empresa_id` van a la única activa).
+ */
+export async function soloEmpresaPrincipal() {
+    await db.from('core.empresas').whereNot('id', 1).where('activa', true).update({ activa: false })
+}

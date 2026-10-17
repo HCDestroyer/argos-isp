@@ -86,10 +86,17 @@ interface PayloadSesion {
 }
 
 export interface CatalogoEventos {
-    // núcleo (A1)
-    'servicio.creado': { servicio_id: number; cliente_id: number; router_id: number; plan_id: number }
+    // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
+    'servicio.creado': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+        plan_id: number
+    }
     'servicio.estado_cambiado': {
         servicio_id: number
+        empresa_id: number
         de: EstadoServicio
         a: EstadoServicio
         motivo: string
@@ -97,10 +104,16 @@ export interface CatalogoEventos {
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
      * recalcula el estado deseado del servicio y limpia lo del tipo anterior.
+     * `empresa` (multiempresa): el servicio pasó a otra empresa (`servicios.cambiar_empresa`);
+     * `empresa_anterior_id` solo viene en ese caso. No cambia nada en la red.
      */
     'servicio.config_cambiada': {
         servicio_id: number
-        campos: Array<'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac'>
+        empresa_id: number
+        campos: Array<
+            'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac' | 'empresa'
+        >
+        empresa_anterior_id?: number
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
@@ -129,6 +142,7 @@ export interface CatalogoEventos {
     }
     'asignacion.cambiada': {
         servicio_id: number
+        empresa_id: number
         ipv4: string[]
         prefijo_enlace_v6: string | null
         prefijo_delegado_v6: string | null

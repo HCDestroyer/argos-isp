@@ -24,6 +24,8 @@ export type TipoConexion = (typeof TIPOS_CONEXION)[number]
 export interface ServicioVista {
     id: number
     cliente_id: number
+    /** empresa (NIT) que factura el servicio (`core.empresas`) */
+    empresa_id: number
     router_id: number
     plan_id: number
     plantilla_facturacion_id: number | null
@@ -62,6 +64,7 @@ function columnas(cliente: QueryClientContract) {
     return [
         's.id',
         's.cliente_id',
+        's.empresa_id',
         's.router_id',
         's.plan_id',
         's.plantilla_facturacion_id',

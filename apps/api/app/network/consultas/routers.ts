@@ -36,6 +36,8 @@ export interface RouterVista {
     interfaz_clientes: string | null
     /** @deprecated derivado de `control_velocidad` (`arbol_pcq` → `pcq`) */
     modo_velocidad: 'simple' | 'pcq'
+    /** empresa por defecto de los servicios nuevos (multiempresa) */
+    empresa_sugerida_id: number | null
     activo: boolean
     version: number
     created_at: string
@@ -71,6 +73,7 @@ const COLUMNAS_ROUTER = [
     'dhcp_servidor',
     'interfaz_clientes',
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
+    'empresa_sugerida_id',
     'activo',
     'version',
     'created_at',

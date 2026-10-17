@@ -55,3 +55,20 @@ export const coordenadas = () =>
         .trim()
         .regex(/^-?\d+(\.\d+)?, ?-?\d+(\.\d+)?$/)
         .meta({ description: 'Latitud y longitud: "14.6349,-90.5069"' })
+
+/** Empresa sugerida para los servicios nuevos (zona o router); `null` la quita. */
+export const empresaSugerida = () =>
+    vine.number().withoutDecimals().min(1).nullable().optional().meta({
+        description:
+            'Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)',
+    })
+
+/** `?empresas=todas`: modo consolidado de las listas (solo alcance global o acceso a todas). */
+export const empresasConsulta = () =>
+    vine
+        .enum(['todas'] as const)
+        .optional()
+        .meta({
+            description:
+                'todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa',
+        })

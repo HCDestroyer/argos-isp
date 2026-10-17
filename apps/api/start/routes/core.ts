@@ -34,6 +34,7 @@ import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
+import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
@@ -716,6 +717,27 @@ const servicios: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
             return new VerCredencialesServicio().execute({ id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/cambiar-empresa',
+        operacion: 'serviciosCambiarEmpresa',
+        resumen: 'Pasar el servicio a otra empresa (NIT)',
+        descripcion:
+            'Solo sin saldo pendiente (422 `servicio_con_saldo`). Hace falta acceso a las dos empresas ' +
+            '(403 `empresa_no_permitida`); la nueva debe estar activa. Emite `servicio.config_cambiada` ' +
+            'con `campos: [empresa]`. Misma empresa: 200 sin cambios.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.cambiar_empresa',
+        cuerpo: v.cambiarEmpresaServicioValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Servicio en su nueva empresa', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            return new CambiarEmpresaServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
     accionServicio(
