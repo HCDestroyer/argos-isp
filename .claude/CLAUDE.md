@@ -166,6 +166,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
+| `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 
