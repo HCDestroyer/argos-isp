@@ -11,6 +11,7 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { errorDe, prepararEmpresas, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { CIERRE_UNICO, INMUTABLES, MUTABLES, comoClasificar } from '#tests/contabilidad/clasificacion_tablas'
 import {
     afirmarLibro,
     compararFotoLibro,
@@ -23,42 +24,23 @@ import {
  * Auditor contable · invariantes 1 (cuadre), 2 (inmutabilidad) y 10 (montos) sobre la base real.
  */
 
-/** Tablas que guardan hechos contables o de auditoría: la base rechaza UPDATE, DELETE y TRUNCATE. */
-const INMUTABLES = [
-    'ledger.asientos',
-    'ledger.movimientos',
-    'ledger.cierres_mensuales',
-    'ledger.reaperturas_mensuales',
-    'ledger.egresos',
-    'ledger.egresos_anulaciones',
-    'audit.acciones',
-    'audit.cambios',
-    'audit.red',
-    'audit.outbox',
-] as const
-
-/** Documentos de billing que la regla 4 también declara inmutables (trigger y REVOKE). */
-const DOCUMENTOS_INMUTABLES = ['billing.notas_credito', 'billing.cobros'] as const
-
-/**
- * Tablas de `ledger` que la aplicación sí actualiza, con el motivo. Son datos maestros o de estado
- * (con `version` y `audit.cambios`), no hechos contables: el dinero está en `ledger.movimientos`.
- * Una tabla nueva en `ledger` o `audit` que no esté en ninguna lista hace fallar la prueba: hay
- * que decidir si es inmutable.
- */
-const MUTABLES: Record<string, string> = {
-    'ledger.cuentas': 'plan de cuentas: renombrar o desactivar (nunca con movimientos se borra: FK)',
-    'ledger.cajas': 'catálogo de cajas (nombre, cajero, activa)',
-    'ledger.bancos': 'catálogo de bancos del libro',
-    'ledger.egresos_categorias': 'catálogo de categorías de egreso',
-    'ledger.cajas_turnos':
-        'el turno se abre con INSERT y se cierra con UPDATE (hallazgo H3: el turno cerrado sigue editable)',
+/** La tabla existe en la base (las del contrato aparecen con su fase). */
+async function existe(tabla: string): Promise<boolean> {
+    const fila = await db.rawQuery(`SELECT to_regclass(?) IS NOT NULL AS existe`, [tabla])
+    return Boolean(fila.rows[0]?.existe)
 }
 
-/** Primera fila de una tabla (por id) o null. */
-async function primerId(tabla: string): Promise<number | null> {
-    const fila = await db.from(tabla).min('id as id').first()
-    return fila?.id === null || fila?.id === undefined ? null : Number(fila.id)
+/** Primera columna de la tabla (para un UPDATE que no cambia nada) y si tiene filas. */
+async function primeraFila(tabla: string): Promise<{ columna: string } | null> {
+    const [esquema, nombre] = tabla.split('.') as [string, string]
+    const columnas = await db.rawQuery(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = ?
+          ORDER BY ordinal_position LIMIT 1`,
+        [esquema, nombre],
+    )
+    const filas = await db.rawQuery(`SELECT 1 FROM ${tabla} LIMIT 1`)
+    if (filas.rows.length === 0) return null
+    return { columna: tabla === 'audit.outbox' ? 'payload' : String(columnas.rows[0].column_name) }
 }
 
 /**
@@ -165,7 +147,9 @@ test.group('Auditor contable · libro (1, 2, 10)', (group) => {
         const rolApp = await db.rawQuery(`SELECT 1 FROM pg_roles WHERE rolname = 'argosisp_app'`)
         const hayRol = rolApp.rows.length > 0
         const aceptadas: string[] = []
-        for (const tabla of [...INMUTABLES, ...DOCUMENTOS_INMUTABLES]) {
+        for (const tabla of Object.keys(INMUTABLES)) {
+            // las del contrato que aún no existen se revisan cuando su migración las cree
+            if (!(await existe(tabla))) continue
             const [esquema, nombre] = tabla.split('.') as [string, string]
             // trigger BEFORE UPDATE y DELETE por fila (frena también al dueño de las tablas)
             const triggers = await db.rawQuery(
@@ -178,13 +162,13 @@ test.group('Auditor contable · libro (1, 2, 10)', (group) => {
             if (!eventos.includes('UPDATE') || !eventos.includes('DELETE')) {
                 aceptadas.push(`${tabla}: sin trigger BEFORE UPDATE/DELETE`)
             }
-            const id = await primerId(tabla)
-            if (id !== null) {
-                const columna = tabla === 'audit.outbox' ? 'payload' : 'id'
-                const valor = tabla === 'audit.outbox' ? `'{}'::jsonb` : 'id'
+            const fila = await primeraFila(tabla)
+            if (fila) {
+                const valor = tabla === 'audit.outbox' ? `'{}'::jsonb` : fila.columna
+                const unaFila = `ctid = (SELECT ctid FROM ${tabla} LIMIT 1)`
                 for (const sql of [
-                    `UPDATE ${tabla} SET ${columna} = ${valor} WHERE id = ${id}`,
-                    `DELETE FROM ${tabla} WHERE id = ${id}`,
+                    `UPDATE ${tabla} SET ${fila.columna} = ${valor} WHERE ${unaFila}`,
+                    `DELETE FROM ${tabla} WHERE ${unaFila}`,
                 ]) {
                     if ((await intentar(sql)) === null) aceptadas.push(sql)
                 }
@@ -201,6 +185,19 @@ test.group('Auditor contable · libro (1, 2, 10)', (group) => {
                 }
             }
         }
+        for (const tabla of Object.keys(CIERRE_UNICO)) {
+            if (!(await existe(tabla))) continue
+            const [esquema, nombre] = tabla.split('.') as [string, string]
+            const triggers = await db.rawQuery(
+                `SELECT count(*)::int AS n FROM information_schema.triggers
+                  WHERE event_object_schema = ? AND event_object_table = ? AND action_timing = 'BEFORE'
+                    AND event_manipulation = 'UPDATE'`,
+                [esquema, nombre],
+            )
+            if (Number(triggers.rows[0].n) === 0) {
+                aceptadas.push(`${tabla}: sin trigger que congele la fila cerrada`)
+            }
+        }
         assert.deepEqual(aceptadas, [], 'la base aceptó modificar filas inmutables')
 
         // toda tabla de ledger y audit está clasificada
@@ -211,8 +208,12 @@ test.group('Auditor contable · libro (1, 2, 10)', (group) => {
              ORDER BY 1`)
         const sinClasificar = (tablas.rows as Array<{ tabla: string }>)
             .map((f) => f.tabla)
-            .filter((t) => !(INMUTABLES as readonly string[]).includes(t) && !(t in MUTABLES))
-        assert.deepEqual(sinClasificar, [], 'tablas de ledger/audit sin decidir si son inmutables')
+            .filter((t) => !(t in INMUTABLES) && !(t in MUTABLES) && !(t in CIERRE_UNICO))
+        assert.deepEqual(
+            sinClasificar.map(comoClasificar),
+            [],
+            'Tablas de ledger/audit sin clasificar (registro: tests/contabilidad/clasificacion_tablas.ts)',
+        )
     })
 
     test('2. los reversos son asientos nuevos: anular no toca los asientos originales', async ({
@@ -252,7 +253,7 @@ test.group('Auditor contable · libro (1, 2, 10)', (group) => {
         assert,
     }) => {
         const raiz = app.makePath('app')
-        const permitidos = new Set([...Object.keys(MUTABLES), 'audit.outbox'])
+        const permitidos = new Set([...Object.keys(MUTABLES), ...Object.keys(CIERRE_UNICO), 'audit.outbox'])
         const hallados: string[] = []
         for (const archivo of await archivos(raiz)) {
             const texto = await readFile(archivo, 'utf8')
