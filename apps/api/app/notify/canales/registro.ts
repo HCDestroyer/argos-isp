@@ -1,62 +1,60 @@
-import env from '#start/env'
 import type { CanalNotificacion } from '#shared/eventos'
 import type { Canal } from '#notify/canales/canal'
-import { CanalCorreo } from '#notify/canales/correo'
-import { CanalTelegram } from '#notify/canales/telegram'
+import {
+    configPara,
+    configParaSync,
+    disponibilidad,
+    quitarSustitutos,
+    sustituirCanal,
+    type Disponibilidad,
+    type UsoCanal,
+} from '#notify/configuracion'
 
 /**
- * Registro de canales disponibles. Se arma una vez desde el entorno:
- *  - correo si hay `SMTP_HOST`
- *  - telegram si hay `TELEGRAM_BOT_TOKEN`
- *  - whatsapp: sin adaptador todavía (los clientes con esa preferencia caen a correo)
+ * Canales disponibles según la configuración del panel (`notify/configuracion.ts`): global o de
+ * la empresa, con sus interruptores. Sin configuración guardada, el entorno (`SMTP_HOST`,
+ * `TELEGRAM_BOT_TOKEN`). WhatsApp aún no tiene adaptador.
  *
- * Las pruebas reemplazan canales con `registrarCanal` y vuelven al entorno con `reiniciarCanales`.
+ * Las pruebas reemplazan el transporte con `registrarCanal` (los interruptores siguen aplicando)
+ * y lo devuelven a la configuración con `reiniciarCanales`.
  */
-let canales: Map<CanalNotificacion, Canal> | undefined
 
-function desdeEntorno(): Map<CanalNotificacion, Canal> {
-    const mapa = new Map<CanalNotificacion, Canal>()
-    const host = env.get('SMTP_HOST')
-    if (host) {
-        mapa.set(
-            'correo',
-            new CanalCorreo({
-                host,
-                port: env.get('SMTP_PORT') ?? 1025,
-                secure: env.get('SMTP_SECURE') ?? false,
-                user: env.get('SMTP_USER') || undefined,
-                password: env.get('SMTP_PASSWORD') || undefined,
-                remitente: env.get('MAIL_FROM') ?? 'ArgosIsp <no-responder@argosisp.local>',
-            }),
-        )
-    }
-    const token = env.get('TELEGRAM_BOT_TOKEN')
-    if (token) {
-        mapa.set('telegram', new CanalTelegram({ token, apiRoot: env.get('TELEGRAM_API_ROOT') || undefined }))
-    }
-    return mapa
+/** Canal listo para usar con la configuración de `empresaId` (o la global), o por qué no lo hay. */
+export async function resolverCanal(
+    nombre: CanalNotificacion,
+    opciones: { empresaId?: number | null; uso?: UsoCanal } = {},
+): Promise<Disponibilidad> {
+    return disponibilidad(await configPara(opciones.empresaId), nombre, opciones.uso)
 }
 
-function registro(): Map<CanalNotificacion, Canal> {
-    canales ??= desdeEntorno()
-    return canales
+/** Canal encendido y configurado para avisos a clientes, o `undefined`. */
+export async function obtenerCanalPara(
+    nombre: CanalNotificacion,
+    empresaId?: number | null,
+): Promise<Canal | undefined> {
+    const resuelto = await resolverCanal(nombre, { empresaId })
+    return resuelto.canal ?? undefined
 }
 
+/**
+ * Versión síncrona con la última configuración cargada en el proceso (la global). Para el código
+ * que no puede esperar; lo nuevo debe usar `resolverCanal`.
+ */
 export function obtenerCanal(nombre: CanalNotificacion): Canal | undefined {
-    return registro().get(nombre)
+    return disponibilidad(configParaSync(null), nombre).canal ?? undefined
 }
 
+/** El canal está configurado y encendido para avisos a clientes (configuración global). */
 export function canalDisponible(nombre: CanalNotificacion): boolean {
-    return registro().has(nombre)
+    return obtenerCanal(nombre) !== undefined
 }
 
-/** Reemplaza (o quita, con `null`) un canal. Para pruebas y para el arranque del worker. */
+/** Reemplaza (o quita, con `null`) el transporte de un canal. Para pruebas. */
 export function registrarCanal(nombre: CanalNotificacion, canal: Canal | null) {
-    if (canal) registro().set(nombre, canal)
-    else registro().delete(nombre)
+    sustituirCanal(nombre, canal)
 }
 
-/** Vuelve a construir los canales desde el entorno en el próximo uso. */
+/** Vuelve a usar los transportes de la configuración. */
 export function reiniciarCanales() {
-    canales = undefined
+    quitarSustitutos()
 }

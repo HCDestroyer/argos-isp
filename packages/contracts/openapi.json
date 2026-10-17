@@ -7072,6 +7072,890 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/configuracion": {
+      "get": {
+        "operationId": "notificacionesConfiguracionVer",
+        "summary": "Configuración global de los canales de notificación (correo y Telegram)",
+        "description": "Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). Sin configuración guardada (`origen: entorno`) muestra lo que rige: las variables de entorno.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración global",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionNotificaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "notificacionesConfiguracionGuardar",
+        "summary": "Guardar la configuración global de los canales (servidor, credenciales, interruptores)",
+        "description": "Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). `version: 0` la crea si no existe. Emite `notificaciones.config_cambiada`: el worker la recarga sin reiniciarse.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída; 0 si todavía no hay configuración guardada. 409 si cambió"
+                  },
+                  "correo": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "Interruptor del canal correo",
+                        "type": "boolean"
+                      },
+                      "host": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 255,
+                        "pattern": "^[^\\s/]*$",
+                        "description": "Servidor SMTP (nombre o IP). Vacío o null lo quita"
+                      },
+                      "puerto": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 65535
+                      },
+                      "tls": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "starttls",
+                          "tls",
+                          "ninguno"
+                        ],
+                        "description": "`auto`: STARTTLS si el servidor lo ofrece; `starttls`: lo exige; `tls`: TLS desde el inicio (465); `ninguno`: sin cifrar"
+                      },
+                      "usuario": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 255
+                      },
+                      "password": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 500,
+                        "description": "Contraseña SMTP. Omitida: se conserva; null: se borra; texto: se reemplaza"
+                      },
+                      "remitente": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "email",
+                        "maxLength": 255,
+                        "description": "Dirección del remitente (no-responder@dominio)"
+                      },
+                      "nombre_visible": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100,
+                        "description": "Nombre visible del remitente"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "telegram": {
+                    "type": "object",
+                    "properties": {
+                      "clientes_activo": {
+                        "description": "Interruptor de Telegram a clientes",
+                        "type": "boolean"
+                      },
+                      "alertas_activo": {
+                        "description": "Interruptor de las alertas por Telegram al chat del equipo",
+                        "type": "boolean"
+                      },
+                      "token": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{3,20}:[A-Za-z0-9_-]{20,100}$",
+                        "description": "Token del bot (@BotFather). Omitido: se conserva; null: se borra; texto: se reemplaza"
+                      },
+                      "bot_nombre": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^@?[A-Za-z0-9_]{5,32}$",
+                        "description": "Usuario del bot, sin @ (arma los enlaces t.me)"
+                      },
+                      "chat_equipo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^(-?\\d{1,20}|@[A-Za-z0-9_]{5,32})$",
+                        "description": "Chat del equipo para alertas (id numérico o @canal)"
+                      },
+                      "webhook_secreto": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^[A-Za-z0-9_-]{16,256}$",
+                        "description": "Secreto del webhook (16 a 256 caracteres A-Z a-z 0-9 _ -). Omitido: se conserva o se genera si hay token; null: se borra"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "avisos": {
+                    "type": "object",
+                    "properties": {
+                      "factura": {
+                        "type": "boolean"
+                      },
+                      "vencimiento": {
+                        "type": "boolean"
+                      },
+                      "recordatorio": {
+                        "type": "boolean"
+                      },
+                      "corte": {
+                        "type": "boolean"
+                      },
+                      "pago": {
+                        "type": "boolean"
+                      },
+                      "promesa": {
+                        "type": "boolean"
+                      },
+                      "comprobante": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionNotificaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/configuracion/empresas": {
+      "get": {
+        "operationId": "notificacionesConfiguracionEmpresasListar",
+        "summary": "Empresas con configuración de canales guardada (propia o marcada para heredar)",
+        "description": "Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4).",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuraciones por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfiguracionNotificaciones"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/configuracion/empresas/{empresaId}": {
+      "get": {
+        "operationId": "notificacionesConfiguracionEmpresaVer",
+        "summary": "Configuración de canales de una empresa (o `hereda` si no tiene la suya)",
+        "description": "Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4).",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración de la empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionNotificaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "notificacionesConfiguracionEmpresaGuardar",
+        "summary": "Guardar la configuración de canales de una empresa (o volver a heredar la global)",
+        "description": "Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). `version: 0` la crea si no existe.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída; 0 si todavía no hay configuración guardada. 409 si cambió"
+                  },
+                  "hereda": {
+                    "description": "true: usa la configuración global (por defecto en una empresa nueva)",
+                    "type": "boolean"
+                  },
+                  "correo": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "Interruptor del canal correo",
+                        "type": "boolean"
+                      },
+                      "host": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 255,
+                        "pattern": "^[^\\s/]*$",
+                        "description": "Servidor SMTP (nombre o IP). Vacío o null lo quita"
+                      },
+                      "puerto": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 65535
+                      },
+                      "tls": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "starttls",
+                          "tls",
+                          "ninguno"
+                        ],
+                        "description": "`auto`: STARTTLS si el servidor lo ofrece; `starttls`: lo exige; `tls`: TLS desde el inicio (465); `ninguno`: sin cifrar"
+                      },
+                      "usuario": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 255
+                      },
+                      "password": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 500,
+                        "description": "Contraseña SMTP. Omitida: se conserva; null: se borra; texto: se reemplaza"
+                      },
+                      "remitente": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "email",
+                        "maxLength": 255,
+                        "description": "Dirección del remitente (no-responder@dominio)"
+                      },
+                      "nombre_visible": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100,
+                        "description": "Nombre visible del remitente"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "telegram": {
+                    "type": "object",
+                    "properties": {
+                      "clientes_activo": {
+                        "description": "Interruptor de Telegram a clientes",
+                        "type": "boolean"
+                      },
+                      "alertas_activo": {
+                        "description": "Interruptor de las alertas por Telegram al chat del equipo",
+                        "type": "boolean"
+                      },
+                      "token": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{3,20}:[A-Za-z0-9_-]{20,100}$",
+                        "description": "Token del bot (@BotFather). Omitido: se conserva; null: se borra; texto: se reemplaza"
+                      },
+                      "bot_nombre": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^@?[A-Za-z0-9_]{5,32}$",
+                        "description": "Usuario del bot, sin @ (arma los enlaces t.me)"
+                      },
+                      "chat_equipo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^(-?\\d{1,20}|@[A-Za-z0-9_]{5,32})$",
+                        "description": "Chat del equipo para alertas (id numérico o @canal)"
+                      },
+                      "webhook_secreto": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^[A-Za-z0-9_-]{16,256}$",
+                        "description": "Secreto del webhook (16 a 256 caracteres A-Z a-z 0-9 _ -). Omitido: se conserva o se genera si hay token; null: se borra"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "avisos": {
+                    "type": "object",
+                    "properties": {
+                      "factura": {
+                        "type": "boolean"
+                      },
+                      "vencimiento": {
+                        "type": "boolean"
+                      },
+                      "recordatorio": {
+                        "type": "boolean"
+                      },
+                      "corte": {
+                        "type": "boolean"
+                      },
+                      "pago": {
+                        "type": "boolean"
+                      },
+                      "promesa": {
+                        "type": "boolean"
+                      },
+                      "comprobante": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionNotificaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/configuracion/empresas/{empresaId}/probar": {
+      "post": {
+        "operationId": "notificacionesConfiguracionEmpresaProbar",
+        "summary": "Enviar una prueba con la configuración de la empresa (o la global si hereda)",
+        "description": "Igual que `POST /notificaciones/configuracion/probar`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram"
+                    ]
+                  },
+                  "destino": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255,
+                    "description": "Correo destino (obligatorio en correo) o chat de Telegram (por defecto, el del equipo)"
+                  }
+                },
+                "required": [
+                  "canal"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPruebaCanal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/configuracion/probar": {
+      "post": {
+        "operationId": "notificacionesConfiguracionProbar",
+        "summary": "Enviar una prueba por correo o Telegram con la configuración global guardada",
+        "description": "No mira los interruptores. Responde 200 aunque falle: `estado: fallido` y `error` con el mensaje real del servidor SMTP o de la Bot API. Queda en `notify.envios`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram"
+                    ]
+                  },
+                  "destino": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255,
+                    "description": "Correo destino (obligatorio en correo) o chat de Telegram (por defecto, el del equipo)"
+                  }
+                },
+                "required": [
+                  "canal"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPruebaCanal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.probar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/envios": {
       "get": {
         "operationId": "notificacionesEnviosListar",
@@ -7149,7 +8033,8 @@
               "enum": [
                 "encolado",
                 "enviado",
-                "fallido"
+                "fallido",
+                "omitido"
               ]
             }
           }
@@ -14873,7 +15758,9 @@
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "notificaciones.configurar",
                         "notificaciones.editar",
+                        "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -15067,7 +15954,9 @@
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "notificaciones.configurar",
                         "notificaciones.editar",
+                        "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
                         "pagos.registrar",
@@ -19005,7 +19894,7 @@
       "post": {
         "operationId": "telegramWebhook",
         "summary": "Webhook del bot de Telegram (lo llama Telegram, no el panel)",
-        "description": "Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.",
+        "description": "Bot de la configuración global (ruta anterior a `/telegram/webhook/:bot`). Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = el secreto del webhook global (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.",
         "tags": [
           "notificaciones"
         ],
@@ -19069,6 +19958,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TelegramWebhookRespuesta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/telegram/webhook/{bot}": {
+      "post": {
+        "operationId": "telegramWebhookBot",
+        "summary": "Webhook de un bot de Telegram por su id (lo llama Telegram, no el panel)",
+        "description": "Una URL por bot: `:bot` es el id público del bot (parte numérica del token, `telegram.bot_id` de la configuración). Autenticado con `X-Telegram-Bot-Api-Secret-Token` = el secreto del webhook de ese bot (401 si falta, no coincide o el bot no está configurado). Responde por el mismo bot. Mismos comandos que `POST /telegram/webhook`.",
+        "tags": [
+          "notificaciones"
+        ],
+        "parameters": [
+          {
+            "name": "bot",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,20}$",
+              "description": "Id del bot"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "update_id": {
+                    "type": "integer"
+                  },
+                  "message": {
+                    "type": "object",
+                    "properties": {
+                      "message_id": {
+                        "type": "integer"
+                      },
+                      "chat": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "maxLength": 20
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "message_id",
+                      "chat"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "update_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Actualización procesada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramWebhookRespuesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -19262,7 +20259,9 @@
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
+                            "notificaciones.configurar",
                             "notificaciones.editar",
+                            "notificaciones.probar",
                             "notificaciones.ver",
                             "pagos.anular",
                             "pagos.registrar",
@@ -21991,6 +22990,247 @@
           }
         }
       },
+      "ConfiguracionNotificaciones": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "hereda",
+          "origen",
+          "sembrada_desde_entorno",
+          "correo",
+          "telegram",
+          "avisos",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null: todavía no hay configuración guardada"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null: configuración global"
+          },
+          "hereda": {
+            "type": "boolean",
+            "description": "Solo empresas: usa la configuración global. La global siempre es false"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "guardada",
+              "entorno",
+              "sin_configurar"
+            ],
+            "description": "`guardada`: fila del panel. `entorno`: global sin guardar, rigen las variables de entorno. `sin_configurar`: empresa sin fila (hereda la global)"
+          },
+          "sembrada_desde_entorno": {
+            "type": "boolean"
+          },
+          "correo": {
+            "type": "object",
+            "required": [
+              "activo",
+              "host",
+              "puerto",
+              "tls",
+              "usuario",
+              "password",
+              "remitente",
+              "nombre_visible"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean"
+              },
+              "host": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "puerto": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tls": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "starttls",
+                  "tls",
+                  "ninguno"
+                ]
+              },
+              "usuario": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "password": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "***",
+                  null
+                ],
+                "description": "`***` si hay uno guardado, null si no. Nunca se devuelve el valor"
+              },
+              "remitente": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "nombre_visible": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "telegram": {
+            "type": "object",
+            "required": [
+              "clientes_activo",
+              "alertas_activo",
+              "token",
+              "bot_id",
+              "bot_nombre",
+              "chat_equipo",
+              "webhook_secreto",
+              "webhook_ruta"
+            ],
+            "properties": {
+              "clientes_activo": {
+                "type": "boolean"
+              },
+              "alertas_activo": {
+                "type": "boolean"
+              },
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "***",
+                  null
+                ],
+                "description": "`***` si hay uno guardado, null si no. Nunca se devuelve el valor"
+              },
+              "bot_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Id público del bot (parte numérica del token)"
+              },
+              "bot_nombre": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "chat_equipo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "webhook_secreto": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "***",
+                  null
+                ],
+                "description": "`***` si hay uno guardado, null si no. Nunca se devuelve el valor"
+              },
+              "webhook_ruta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Ruta del webhook de este bot: `/api/v1/telegram/webhook/<bot_id>`"
+              }
+            }
+          },
+          "avisos": {
+            "type": "object",
+            "required": [
+              "factura",
+              "vencimiento",
+              "recordatorio",
+              "corte",
+              "pago",
+              "promesa",
+              "comprobante"
+            ],
+            "properties": {
+              "factura": {
+                "type": "boolean"
+              },
+              "vencimiento": {
+                "type": "boolean"
+              },
+              "recordatorio": {
+                "type": "boolean"
+              },
+              "corte": {
+                "type": "boolean"
+              },
+              "pago": {
+                "type": "boolean"
+              },
+              "promesa": {
+                "type": "boolean"
+              },
+              "comprobante": {
+                "type": "boolean"
+              }
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Control optimista: envíala al guardar (0 = sin guardar)"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "CredencialesPpp": {
         "type": "object",
         "required": [
@@ -22633,6 +23873,8 @@
           "cuerpo",
           "estado",
           "error",
+          "motivo",
+          "empresa_id",
           "intentos",
           "proveedor_id",
           "fallback_de",
@@ -22687,7 +23929,8 @@
             "enum": [
               "encolado",
               "enviado",
-              "fallido"
+              "fallido",
+              "omitido"
             ]
           },
           "error": {
@@ -22695,6 +23938,21 @@
               "string",
               "null"
             ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué quedó `omitido` (canal o tipo de aviso apagado en la configuración)"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa cuya configuración se aplicó (null = global)"
           },
           "intentos": {
             "type": "integer"
@@ -27907,6 +29165,48 @@
           "errores": {
             "type": "integer",
             "description": "Servicios que no se pudieron facturar (ver log)"
+          }
+        }
+      },
+      "ResultadoPruebaCanal": {
+        "type": "object",
+        "required": [
+          "estado",
+          "error",
+          "destino",
+          "origen",
+          "envio_id"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "enviado",
+              "fallido"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error real del servidor SMTP o de la Bot API"
+          },
+          "destino": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "global",
+              "empresa",
+              "entorno"
+            ],
+            "description": "Configuración con la que se probó"
+          },
+          "envio_id": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       },

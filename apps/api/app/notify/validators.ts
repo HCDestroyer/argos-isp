@@ -35,7 +35,7 @@ export const listarEnviosValidator = vine.compile(
         cliente_id: idEntidad().optional(),
         evento: vine.string().trim().maxLength(100).optional(),
         canal: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
-        estado: vine.enum(['encolado', 'enviado', 'fallido'] as const).optional(),
+        estado: vine.enum(['encolado', 'enviado', 'fallido', 'omitido'] as const).optional(),
     }),
 )
 
@@ -73,5 +73,137 @@ export const telegramActualizacionValidator = vine.compile(
                 text: vine.string().maxLength(4096).optional(),
             })
             .optional(),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Configuración de canales (correo y Telegram) desde el panel
+|--------------------------------------------------------------------------
+*/
+
+/** Token de @BotFather: `<id numérico>:<35 caracteres>`. */
+const TOKEN_BOT = /^\d{3,20}:[A-Za-z0-9_-]{20,100}$/
+/** Lo que Telegram acepta como `secret_token`. */
+const SECRETO_WEBHOOK = /^[A-Za-z0-9_-]{16,256}$/
+
+const correoConfig = () =>
+    vine
+        .object({
+            activo: vine.boolean().optional().meta({ description: 'Interruptor del canal correo' }),
+            host: vine
+                .string()
+                .trim()
+                .maxLength(255)
+                .regex(/^[^\s/]*$/)
+                .nullable()
+                .optional()
+                .meta({ description: 'Servidor SMTP (nombre o IP). Vacío o null lo quita' }),
+            puerto: vine.number().withoutDecimals().range([1, 65535]).nullable().optional(),
+            tls: vine
+                .enum(['auto', 'starttls', 'tls', 'ninguno'] as const)
+                .optional()
+                .meta({
+                    description:
+                        '`auto`: STARTTLS si el servidor lo ofrece; `starttls`: lo exige; `tls`: TLS desde el inicio (465); `ninguno`: sin cifrar',
+                }),
+            usuario: vine.string().trim().maxLength(255).nullable().optional(),
+            password: vine.string().maxLength(500).notIn(['***']).nullable().optional().meta({
+                description: 'Contraseña SMTP. Omitida: se conserva; null: se borra; texto: se reemplaza',
+            }),
+            remitente: vine.string().trim().email().maxLength(255).nullable().optional().meta({
+                description: 'Dirección del remitente (no-responder@dominio)',
+            }),
+            nombre_visible: vine.string().trim().maxLength(100).nullable().optional().meta({
+                description: 'Nombre visible del remitente',
+            }),
+        })
+        .optional()
+
+const telegramConfig = () =>
+    vine
+        .object({
+            clientes_activo: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Interruptor de Telegram a clientes' }),
+            alertas_activo: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Interruptor de las alertas por Telegram al chat del equipo' }),
+            token: vine.string().trim().regex(TOKEN_BOT).nullable().optional().meta({
+                description:
+                    'Token del bot (@BotFather). Omitido: se conserva; null: se borra; texto: se reemplaza',
+            }),
+            bot_nombre: vine
+                .string()
+                .trim()
+                .regex(/^@?[A-Za-z0-9_]{5,32}$/)
+                .nullable()
+                .optional()
+                .meta({ description: 'Usuario del bot, sin @ (arma los enlaces t.me)' }),
+            chat_equipo: vine
+                .string()
+                .trim()
+                .regex(/^(-?\d{1,20}|@[A-Za-z0-9_]{5,32})$/)
+                .nullable()
+                .optional()
+                .meta({ description: 'Chat del equipo para alertas (id numérico o @canal)' }),
+            webhook_secreto: vine.string().trim().regex(SECRETO_WEBHOOK).nullable().optional().meta({
+                description:
+                    'Secreto del webhook (16 a 256 caracteres A-Z a-z 0-9 _ -). Omitido: se conserva o se genera si hay token; null: se borra',
+            }),
+        })
+        .optional()
+
+const avisosConfig = () =>
+    vine
+        .object({
+            factura: vine.boolean().optional(),
+            vencimiento: vine.boolean().optional(),
+            recordatorio: vine.boolean().optional(),
+            corte: vine.boolean().optional(),
+            pago: vine.boolean().optional(),
+            promesa: vine.boolean().optional(),
+            comprobante: vine.boolean().optional(),
+        })
+        .optional()
+
+const versionConfig = () =>
+    vine
+        .number()
+        .withoutDecimals()
+        .min(0)
+        .meta({ description: 'version leída; 0 si todavía no hay configuración guardada. 409 si cambió' })
+
+export const configurarNotificacionesGlobalValidator = vine.compile(
+    vine.object({
+        version: versionConfig(),
+        correo: correoConfig(),
+        telegram: telegramConfig(),
+        avisos: avisosConfig(),
+    }),
+)
+
+export const configurarNotificacionesEmpresaValidator = vine.compile(
+    vine.object({
+        version: versionConfig(),
+        hereda: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: usa la configuración global (por defecto en una empresa nueva)' }),
+        correo: correoConfig(),
+        telegram: telegramConfig(),
+        avisos: avisosConfig(),
+    }),
+)
+
+export const probarCanalValidator = vine.compile(
+    vine.object({
+        canal: vine.enum(['correo', 'telegram'] as const),
+        destino: vine.string().trim().maxLength(255).nullable().optional().meta({
+            description:
+                'Correo destino (obligatorio en correo) o chat de Telegram (por defecto, el del equipo)',
+        }),
     }),
 )

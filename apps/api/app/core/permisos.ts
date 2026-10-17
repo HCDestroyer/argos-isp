@@ -82,6 +82,10 @@ export const PERMISOS = {
 
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
+    'notificaciones.configurar':
+        'Configurar los canales de notificación (correo SMTP, bot de Telegram, interruptores); solo admin',
+    'notificaciones.probar':
+        'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
 
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
