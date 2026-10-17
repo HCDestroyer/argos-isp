@@ -34,6 +34,7 @@
     "#notify/*": "./app/notify/*.js",
     "#importacion/*": "./app/importacion/*.js",
     "#monitoreo/*": "./app/monitoreo/*.js",
+    "#operacion/*": "./app/operacion/*.js",
     "#exceptions/*": "./app/exceptions/*.js",
     "#middleware/*": "./app/middleware/*.js",
     "#commands/*": "./commands/*.js",

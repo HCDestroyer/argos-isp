@@ -42,6 +42,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'tokens.revocar': 'Token de API revocado',
     'routers.crear': 'Router creado',
     'routers.editar': 'Router editado',
+    'routers.exportar_secrets_emergencia': 'Secrets PPPoE de emergencia exportados',
     'redes.crear': 'Red IPv4 creada',
     'planes.crear': 'Plan creado',
     'planes.editar': 'Plan editado',

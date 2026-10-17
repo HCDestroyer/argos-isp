@@ -17,6 +17,7 @@
         "demo:datos": "node scripts/demo/datos.mjs",
         "importar": "pnpm --filter @argosisp/api importar",
         "importar:plantillas": "pnpm --filter @argosisp/api importar:plantillas",
+        "emergencia:secrets-ppp": "pnpm --filter @argosisp/api exec node ace emergencia:secrets-ppp",
         "aaa:verificar-router": "pnpm --filter @argosisp/api exec node ace aaa:verificar-router",
         "aaa:carga": "AAA_CARGA=1 pnpm --filter @argosisp/api exec node ace test --files tests/network/carga_radius.spec.ts"
     },
