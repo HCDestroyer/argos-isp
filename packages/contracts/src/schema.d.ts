@@ -1775,7 +1775,7 @@ export interface paths {
         };
         /**
          * Verificar la cadena de hash del libro (una sección por empresa)
-         * @description Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.
+         * @description Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` y número de sello en `desde_sello`–`hasta_sello` (sin rango, todos). Un sello posterior al cierre de un mes con un asiento de ese mes es una ruptura `asiento_en_mes_cerrado`. Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.
          */
         get: operations["libroIntegridad"];
         put?: never;
@@ -5300,7 +5300,7 @@ export interface components {
                 sello: number;
                 asiento_id: number | null;
                 /** @enum {string} */
-                motivo: "hash_distinto" | "encadenamiento" | "sello_faltante" | "asiento_inexistente" | "cierre_distinto";
+                motivo: "hash_distinto" | "encadenamiento" | "sello_faltante" | "asiento_inexistente" | "cierre_distinto" | "asiento_en_mes_cerrado";
                 /** @description Valor guardado (hash, sello o hash del cierre) */
                 esperado: string;
                 /** @description Valor recalculado o encontrado */
@@ -14109,6 +14109,10 @@ export interface operations {
                 desde?: string;
                 /** @description Hasta este día (inclusive) */
                 hasta?: string;
+                /** @description Recalcula el hash de los sellos desde este número (inclusive) */
+                desde_sello?: number;
+                /** @description Hasta este sello */
+                hasta_sello?: number;
             };
             header?: never;
             path?: never;

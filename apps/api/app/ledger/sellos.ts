@@ -215,7 +215,12 @@ export async function sellarPendientes(
 }
 
 export type MotivoRuptura =
-    'hash_distinto' | 'encadenamiento' | 'sello_faltante' | 'asiento_inexistente' | 'cierre_distinto'
+    | 'hash_distinto'
+    | 'encadenamiento'
+    | 'sello_faltante'
+    | 'asiento_inexistente'
+    | 'cierre_distinto'
+    | 'asiento_en_mes_cerrado'
 
 export interface RupturaCadena {
     sello: number
@@ -243,8 +248,44 @@ export interface IntegridadEmpresa {
 }
 
 export interface RangoIntegridad {
+    /** fecha contable del asiento (YYYY-MM-DD) */
     desde?: string | null
     hasta?: string | null
+    /** número de sello (inclusive) */
+    desde_sello?: number | null
+    hasta_sello?: number | null
+}
+
+/**
+ * Sellos posteriores al cierre vigente de un mes que traen un asiento con fecha de ese mes
+ * (hallazgo H10 del auditor): el cierre sella todo el mes y guarda `ultimo_sello`, así que un sello
+ * mayor con fecha del mes es un asiento **insertado** después de cerrarlo (como DBA, saltándose los
+ * triggers). El primero de la empresa, o los de `sellos` si se dan.
+ */
+export async function sellosEnMesCerrado(
+    cliente: QueryClientContract,
+    empresaId: number,
+    sellos?: number[],
+): Promise<Array<{ sello: number; asiento_id: number; periodo: string; ultimo_sello: number }>> {
+    if (sellos && sellos.length === 0) return []
+    const { rows } = (await cliente.rawQuery(
+        `SELECT s.sello, s.asiento_id, to_char(c.periodo, 'YYYY-MM') AS periodo, c.ultimo_sello
+           FROM ledger.asientos_sellos s
+           JOIN ledger.asientos a ON a.id = s.asiento_id
+           JOIN ledger.cierres_mensuales c
+             ON c.empresa_id = s.empresa_id AND c.periodo = date_trunc('month', a.fecha)::date
+          WHERE s.empresa_id = ? AND c.ultimo_sello IS NOT NULL AND s.sello > c.ultimo_sello
+            AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales r WHERE r.cierre_id = c.id)
+            ${sellos ? 'AND s.sello = ANY(?::int[])' : ''}
+          ORDER BY s.sello`,
+        sellos ? [empresaId, sellos] : [empresaId],
+    )) as { rows: Array<{ sello: number; asiento_id: number; periodo: string; ultimo_sello: number }> }
+    return rows.map((r) => ({
+        sello: Number(r.sello),
+        asiento_id: Number(r.asiento_id),
+        periodo: r.periodo,
+        ultimo_sello: Number(r.ultimo_sello),
+    }))
 }
 
 const LOTE_VERIFICACION = 1000
@@ -262,6 +303,8 @@ export async function verificarCadena(
 ): Promise<IntegridadEmpresa> {
     const desde = rango.desde ?? null
     const hasta = rango.hasta ?? null
+    const desdeSelloRango = rango.desde_sello ?? null
+    const hastaSelloRango = rango.hasta_sello ?? null
     const salida: IntegridadEmpresa = {
         empresa_id: empresaId,
         version: VERSION_SELLO,
@@ -298,7 +341,12 @@ export async function verificarCadena(
         )) as { rows: Array<SelloFila & { fecha: string | null; existe: number | null }> }
         if (rows.length === 0) break
         const enRango = rows.filter(
-            (r) => r.fecha !== null && (!desde || r.fecha >= desde) && (!hasta || r.fecha <= hasta),
+            (r) =>
+                r.fecha !== null &&
+                (!desde || r.fecha >= desde) &&
+                (!hasta || r.fecha <= hasta) &&
+                (!desdeSelloRango || Number(r.sello) >= desdeSelloRango) &&
+                (!hastaSelloRango || Number(r.sello) <= hastaSelloRango),
         )
         const canonicos = await asientosCanonicos(
             cliente,
@@ -365,6 +413,23 @@ export async function verificarCadena(
         // todos los asientos desaparecieron: el primer y el último hash son los de la cadena
         salida.primer_sello = 1
         salida.ultimo_sello = selloEsperado - 1
+    }
+
+    // ningún sello posterior al cierre de un mes trae un asiento de ese mes (H10)
+    const enMesCerrado = await sellosEnMesCerrado(cliente, empresaId)
+    const insertado = enMesCerrado.find(
+        (x) =>
+            (!desdeSelloRango || x.sello >= desdeSelloRango) &&
+            (!hastaSelloRango || x.sello <= hastaSelloRango),
+    )
+    if (insertado) {
+        romper({
+            sello: insertado.sello,
+            asiento_id: insertado.asiento_id,
+            motivo: 'asiento_en_mes_cerrado',
+            esperado: `sello <= ${insertado.ultimo_sello} (cierre de ${insertado.periodo})`,
+            obtenido: String(insertado.sello),
+        })
     }
 
     // el último hash guardado al cerrar cada mes debe seguir en la cadena
