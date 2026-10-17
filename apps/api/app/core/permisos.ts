@@ -98,6 +98,7 @@ export const PERMISOS = {
     'usuarios.ver': 'Ver usuarios',
     'usuarios.crear': 'Crear usuarios',
     'usuarios.editar': 'Editar usuarios y sus roles',
+    'usuarios.asignar_empresas': 'Definir en qué empresas (NIT) trabaja un usuario o darle alcance global',
     'roles.ver': 'Ver roles y permisos',
     'roles.crear': 'Crear roles',
     'roles.editar': 'Editar roles y sus permisos',

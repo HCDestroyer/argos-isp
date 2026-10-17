@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
+import { empresasAsignadas } from '#core/alcance_empresas'
 
 /**
  * Lecturas del ACL: usuarios con sus roles, roles con sus permisos, catálogo y tokens de API.
@@ -21,6 +22,10 @@ export interface UsuarioVista {
     email: string
     activo: boolean
     roles: AsignacionRolVista[]
+    /** ve y opera todas las empresas (multiempresa) */
+    alcance_global: boolean
+    /** empresas asignadas (`core.usuarios_empresas`); vacía con alcance global */
+    empresas: number[]
     version: number
     created_at: string
     updated_at: string
@@ -46,7 +51,16 @@ export interface TokenApiVista {
     created_at: string
 }
 
-const COLUMNAS_USUARIO = ['id', 'nombre', 'email', 'activo', 'version', 'created_at', 'updated_at']
+const COLUMNAS_USUARIO = [
+    'id',
+    'nombre',
+    'email',
+    'activo',
+    'alcance_global',
+    'version',
+    'created_at',
+    'updated_at',
+]
 const COLUMNAS_TOKEN = ['id', 'usuario_id', 'nombre', 'alcances', 'ultimo_uso', 'revocado_en', 'created_at']
 
 async function asignacionesDe(
@@ -76,16 +90,19 @@ async function asignacionesDe(
 }
 
 export async function listarUsuarios(opciones: OpcionesPaginacion): Promise<Pagina<UsuarioVista>> {
-    const pagina = await paginar<Omit<UsuarioVista, 'roles'>>(
+    const pagina = await paginar<Omit<UsuarioVista, 'roles' | 'empresas'>>(
         db.from('core.usuarios').select(COLUMNAS_USUARIO),
         opciones,
     )
-    const roles = await asignacionesDe(
-        db.connection(),
-        pagina.data.map((u) => u.id),
-    )
+    const ids = pagina.data.map((u) => u.id)
+    const roles = await asignacionesDe(db.connection(), ids)
+    const empresas = await empresasAsignadas(ids)
     return {
-        data: pagina.data.map((u) => ({ ...u, roles: roles.get(u.id) ?? [] })),
+        data: pagina.data.map((u) => ({
+            ...u,
+            roles: roles.get(u.id) ?? [],
+            empresas: empresas.get(u.id) ?? [],
+        })),
         nextCursor: pagina.nextCursor,
     }
 }
@@ -95,10 +112,11 @@ export async function verUsuario(id: number, cliente: QueryClientContract = db.c
         .from('core.usuarios')
         .where('id', id)
         .select(COLUMNAS_USUARIO)
-        .first()) as Omit<UsuarioVista, 'roles'> | null
+        .first()) as Omit<UsuarioVista, 'roles' | 'empresas'> | null
     if (!fila) throw new NoEncontrado(`El usuario ${id} no existe`)
     const roles = await asignacionesDe(cliente, [id])
-    return { ...fila, roles: roles.get(id) ?? [] } satisfies UsuarioVista
+    const empresas = await empresasAsignadas([id], cliente)
+    return { ...fila, roles: roles.get(id) ?? [], empresas: empresas.get(id) ?? [] } satisfies UsuarioVista
 }
 
 export async function listarRoles(cliente: QueryClientContract = db.connection()): Promise<RolVista[]> {

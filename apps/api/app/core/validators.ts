@@ -395,6 +395,20 @@ export const crearTokenValidator = vine.compile(
 
 export const listarPaginadoValidator = vine.compile(vine.object({ ...reglasPaginacion }))
 
+export const asignarEmpresasUsuarioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        alcance_global: vine
+            .boolean()
+            .meta({ description: 'true = todas las empresas y los consolidados; la lista se ignora' }),
+        empresas: vine
+            .array(idEntidad())
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Empresas que puede operar sin alcance global (al menos una)' }),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Bitácora

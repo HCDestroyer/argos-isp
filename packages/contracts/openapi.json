@@ -15836,6 +15836,7 @@
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
+                        "usuarios.asignar_empresas",
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
@@ -16036,6 +16037,7 @@
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
+                        "usuarios.asignar_empresas",
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
@@ -20395,6 +20397,7 @@
                             "tokens.crear",
                             "tokens.revocar",
                             "tokens.ver",
+                            "usuarios.asignar_empresas",
                             "usuarios.crear",
                             "usuarios.editar",
                             "usuarios.ver",
@@ -21028,6 +21031,134 @@
           }
         },
         "x-permiso": "usuarios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/usuarios/{id}/empresas": {
+      "put": {
+        "operationId": "usuariosAsignarEmpresas",
+        "summary": "Definir las empresas del usuario o su alcance global",
+        "description": "Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).",
+        "tags": [
+          "acl"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "alcance_global": {
+                    "description": "true = todas las empresas y los consolidados; la lista se ignora",
+                    "type": "boolean"
+                  },
+                  "empresas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 100,
+                    "description": "Empresas que puede operar sin alcance global (al menos una)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "alcance_global"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuario con su alcance por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usuario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso usuarios.asignar_empresas; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "usuarios.asignar_empresas",
         "x-implementado": true
       }
     },
@@ -24865,6 +24996,24 @@
             ],
             "format": "date-time",
             "description": "Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
+          },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "Multiempresa: ve y opera todas las empresas y los consolidados (`?empresas=todas`)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmpresaResumen"
+            },
+            "description": "Multiempresa: empresas activas que el usuario puede operar (selector). Con una sola, el selector no aparece"
+          },
+          "empresa_activa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió"
           }
         }
       },
@@ -30660,6 +30809,18 @@
             "items": {
               "$ref": "#/components/schemas/AsignacionRol"
             }
+          },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "Ve y opera todas las empresas (multiempresa); siempre presente"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Empresas asignadas (vacía con alcance global); siempre presente"
           },
           "version": {
             "type": "integer",

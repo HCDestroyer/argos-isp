@@ -54,6 +54,21 @@ export const Me = definirEsquema('Me', {
                 'Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; ' +
                 'igual a `expira_en` con Bearer de login; null con tokens de API)',
         }),
+        alcance_global: {
+            type: 'boolean',
+            description: 'Multiempresa: ve y opera todas las empresas y los consolidados (`?empresas=todas`)',
+        },
+        empresas: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/EmpresaResumen' },
+            description:
+                'Multiempresa: empresas activas que el usuario puede operar (selector). Con una sola, el selector no aparece',
+        },
+        empresa_activa_id: {
+            type: ['integer', 'null'],
+            description:
+                'Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió',
+        },
     },
 })
 
@@ -100,14 +115,25 @@ export const AsignacionRol = definirEsquema(
 
 export const Usuario = definirEsquema(
     'Usuario',
-    objeto({
-        id,
-        nombre: texto,
-        email: { type: 'string', format: 'email' },
-        activo: booleano,
-        roles: lista(AsignacionRol),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            nombre: texto,
+            email: { type: 'string', format: 'email' },
+            activo: booleano,
+            roles: lista(AsignacionRol),
+            alcance_global: {
+                ...booleano,
+                description: 'Ve y opera todas las empresas (multiempresa); siempre presente',
+            },
+            empresas: {
+                ...lista(id),
+                description: 'Empresas asignadas (vacía con alcance global); siempre presente',
+            },
+            ...auditable,
+        },
+        ['alcance_global', 'empresas'],
+    ),
 )
 
 export const Rol = definirEsquema(

@@ -38,6 +38,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'libro.revertir_asiento': 'Asiento contable revertido',
     'usuarios.crear': 'Usuario creado',
     'usuarios.editar': 'Usuario editado',
+    'usuarios.asignar_empresas': 'Empresas del usuario asignadas',
     'roles.crear': 'Rol creado',
     'roles.editar': 'Rol editado',
     'tokens.crear': 'Token de API creado',

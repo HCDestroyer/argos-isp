@@ -23,6 +23,7 @@ import {
 import CerrarSesion from '#core/actions/cerrar_sesion'
 import CrearUsuario from '#core/actions/crear_usuario'
 import EditarUsuario from '#core/actions/editar_usuario'
+import AsignarEmpresasUsuario from '#core/actions/asignar_empresas_usuario'
 import CrearRol from '#core/actions/crear_rol'
 import EditarRol from '#core/actions/editar_rol'
 import CrearTokenApi from '#core/actions/crear_token_api'
@@ -268,6 +269,22 @@ const usuarios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Usuario actualizado', esquema: Usuario },
         handler: (ctx, { cuerpo, params }) =>
             new EditarUsuario().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/usuarios/:id/empresas',
+        operacion: 'usuariosAsignarEmpresas',
+        resumen: 'Definir las empresas del usuario o su alcance global',
+        descripcion:
+            'Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global ' +
+            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).',
+        etiqueta: 'acl',
+        permiso: 'usuarios.asignar_empresas',
+        cuerpo: v.asignarEmpresasUsuarioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Usuario con su alcance por empresa', esquema: Usuario },
+        handler: (ctx, { cuerpo, params }) =>
+            new AsignarEmpresasUsuario().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'get',

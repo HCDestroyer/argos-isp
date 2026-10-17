@@ -28,6 +28,7 @@ Contrato: `.claude/integration/contratos/multiempresa.md`. Varios NIT en una ins
 - Empresa del servicio (`core.servicios.empresa_id NOT NULL`, los existentes en la 1). Al crear (`resolverEmpresaServicio` de `empresas.ts`): `empresa_id` explícito > `empresa_sugerida_id` de la zona del cliente > la del router > la empresa activa del contexto (o la única activa) > 422 `empresa_requerida`; el actor necesita acceso (403 `empresa_no_permitida`). Un INSERT directo sin `empresa_id` toma la única empresa activa (trigger `servicios_empresa_por_defecto`); con varias, falla. `PUT /servicios/:id` no la cambia: solo `servicios.cambiar_empresa` (sin saldo pendiente, `saldo_servicio.ts` provisional hasta que A3 exponga la suya).
 - Los eventos de servicio y `asignacion.cambiada` llevan `empresa_id` (`contratos/eventos.md`).
 - Una empresa con servicios sin retirar no se desactiva (422 `empresa_con_servicios`).
+- Alcance de los usuarios (`alcance_empresas.ts`): `core.usuarios.alcance_global` (todas las empresas y los consolidados; los usuarios existentes y los que crea alguien con alcance global) o `core.usuarios_empresas` (lista de empresas). `PUT /usuarios/:id/empresas` (`usuarios.asignar_empresas`, con `version`): sin global hace falta al menos una empresa activa; quien asigna solo reparte su alcance (403). Un usuario creado por alguien acotado queda acotado a su empresa activa. `GET /me` (y el login) traen `alcance_global` y `empresas[]` (`id`, `nombre_comercial`, `nit`, `logo_url`); `GET /usuarios` trae `alcance_global` y `empresas` (ids).
 
 | Acción                   | Permiso                     | Eventos                                                          |
 | ------------------------ | --------------------------- | ---------------------------------------------------------------- |
@@ -36,6 +37,7 @@ Contrato: `.claude/integration/contratos/multiempresa.md`. Varios NIT en una ins
 | `DesactivarEmpresa`      | `empresas.desactivar`       | —                                                                |
 | `CambiarLogoEmpresa`     | `empresas.cambiar_logo`     | —                                                                |
 | `CambiarEmpresaServicio` | `servicios.cambiar_empresa` | `servicio.config_cambiada` (`campos: [empresa]`, `empresa_anterior_id`) |
+| `AsignarEmpresasUsuario` | `usuarios.asignar_empresas` | —                                                                |
 
 ## Clientes y zonas
 
