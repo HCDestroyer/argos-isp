@@ -5,7 +5,7 @@ import { verificarVersion } from '#shared/version'
 import type { EstadoServicio } from '#shared/eventos'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { exigirEmpresaActiva } from '#core/empresas'
-import { saldoPendienteServicio } from '#core/saldo_servicio'
+import { saldoPendienteServicio } from '#billing/facturas'
 
 export interface EntradaCambiarEmpresaServicio {
     id: number
