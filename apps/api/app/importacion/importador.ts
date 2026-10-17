@@ -84,6 +84,20 @@ export interface OpcionesImportacion {
     idsExternos?: IdsExternos
     /** transacción externa (pruebas): no se confirma ni se revierte aquí */
     trx?: TransactionClientContract
+    /**
+     * Empresa (`core.empresas`) a la que se asigna todo lo importado (`--empresa=<id|nit>`):
+     * servicios (y con ellos sus facturas, pagos y promesas), la empresa sugerida de las zonas y
+     * routers nuevos, la auditoría y el archivo del origen. Sin ella: la única empresa activa; con
+     * varias, la corrida falla antes de tocar nada (`EmpresaImportacionRequerida`).
+     */
+    empresa?: number | string | null
+    /**
+     * Tablas del origen que no se guardan en el archivo (`--excluir-tablas=radacct,logs`): no se
+     * archivan ni se cuentan en el cuadre por tabla, y el reporte las lista. Solo tablas que no
+     * llevan nada a ArgosIsp (las que el adaptador vincula a clientes, servicios, facturas… no se
+     * pueden excluir). El volcado original queda como respaldo.
+     */
+    excluirTablas?: string[]
 }
 
 export const PENDIENTE = [
@@ -109,15 +123,33 @@ export async function importar(
         )
     }
     const requestId = `importacion-${opciones.sistema}-${randomUUID()}`
-    const ctx: ContextoAccion = { actor: { tipo: 'sistema', id: null }, canal: 'consola', requestId }
     const inicio = new Date().toISOString()
+    const excluidas = tablasExcluidas(fuente, opciones.excluirTablas ?? [])
 
     // Con transacción externa (pruebas) se trabaja en un savepoint de ella.
     const trx = opciones.trx ? await opciones.trx.transaction() : await db.transaction()
     let reporte: ReporteImportacion
     try {
+        const empresa = await resolverEmpresaImportacion(trx, opciones.empresa)
+        // La empresa de la corrida es la "empresa activa": la auditoría la registra y las acciones
+        // que no dependen de un servicio (A3) la toman de aquí.
+        const ctx: ContextoAccion = {
+            actor: { tipo: 'sistema', id: null },
+            canal: 'consola',
+            requestId,
+            empresaId: empresa.id,
+        }
         const ids = opciones.idsExternos ?? (await idsExternosDe(trx, opciones.sistema))
-        const importador = new Importador(fuente, opciones, ctx, trx, ids, await admiteTipoConexion(trx))
+        const importador = new Importador(
+            fuente,
+            opciones,
+            ctx,
+            trx,
+            ids,
+            await admiteTipoConexion(trx),
+            empresa,
+            excluidas,
+        )
         await importador.ejecutar()
         reporte = importador.reporte
         if (opciones.dryRun) {
@@ -133,6 +165,109 @@ export async function importar(
     reporte.inicio = inicio
     reporte.fin = new Date().toISOString()
     return reporte
+}
+
+export interface EmpresaImportacion {
+    id: number
+    nombre: string
+    nit: string | null
+}
+
+/** La corrida no sabe a qué empresa asignar lo importado (o la indicada no sirve). */
+export class EmpresaImportacionRequerida extends Error {}
+
+/**
+ * Empresa de la corrida: `--empresa=<id|nit>` (primero por id; si no, por NIT normalizado) o, sin
+ * ella, la única empresa activa. Con varias activas y sin `--empresa`, falla con la lista.
+ */
+export async function resolverEmpresaImportacion(
+    trx: TransactionClientContract,
+    valor: number | string | null | undefined,
+): Promise<EmpresaImportacion> {
+    type Fila = { id: number; nombre_comercial: string; nit: string | null; activa: boolean }
+    const columnas = ['id', 'nombre_comercial', 'nit', 'activa']
+    const aEmpresa = (f: Fila): EmpresaImportacion => ({
+        id: Number(f.id),
+        nombre: f.nombre_comercial,
+        nit: f.nit,
+    })
+    const texto = valor === null || valor === undefined ? '' : String(valor).trim()
+    if (!texto) {
+        const activas = (await trx
+            .from('core.empresas')
+            .where('activa', true)
+            .orderBy('id')
+            .select(columnas)) as Fila[]
+        if (activas.length === 1) return aEmpresa(activas[0]!)
+        if (activas.length === 0) {
+            throw new EmpresaImportacionRequerida('No hay ninguna empresa activa en core.empresas')
+        }
+        const lista = activas
+            .map((e) => `${e.id} (${e.nombre_comercial}${e.nit ? `, NIT ${e.nit}` : ''})`)
+            .join(', ')
+        throw new EmpresaImportacionRequerida(
+            `Hay ${activas.length} empresas activas: ${lista}. Indica a cuál se asigna lo importado con --empresa=<id|nit>.`,
+        )
+    }
+    let fila: Fila | null = null
+    if (/^\d+$/.test(texto) && Number(texto) <= 2_147_483_647) {
+        fila = (await trx
+            .from('core.empresas')
+            .where('id', Number(texto))
+            .select(columnas)
+            .first()) as Fila | null
+    }
+    if (!fila) {
+        const nit = texto.replace(/[\s-]/g, '').toUpperCase()
+        fila = (await trx
+            .from('core.empresas')
+            .whereRaw(`upper(replace(replace(coalesce(nit, ''), '-', ''), ' ', '')) = ?`, [nit])
+            .orderBy([
+                { column: 'activa', order: 'desc' },
+                { column: 'id', order: 'asc' },
+            ])
+            .select(columnas)
+            .first()) as Fila | null
+    }
+    if (!fila) {
+        throw new EmpresaImportacionRequerida(`--empresa=${texto}: no hay ninguna empresa con ese id o NIT`)
+    }
+    if (!fila.activa) {
+        throw new EmpresaImportacionRequerida(
+            `--empresa=${texto}: la empresa ${fila.id} (${fila.nombre_comercial}) está desactivada`,
+        )
+    }
+    return aEmpresa(fila)
+}
+
+export interface TablaExcluida {
+    tabla: string
+    filas: number
+}
+
+/**
+ * Valida `--excluir-tablas` contra el archivo del origen: cada tabla debe estar en el volcado y no
+ * llevar nada a ArgosIsp (sin filas vinculadas a una entidad). Lanza con el motivo.
+ */
+export function tablasExcluidas(fuente: FuenteCanonica, nombres: string[]): TablaExcluida[] {
+    const pedidas = [...new Set(nombres.map((n) => n.trim().toLowerCase()).filter(Boolean))]
+    if (pedidas.length === 0) return []
+    if (!fuente.archivo) {
+        throw new Error('--excluir-tablas solo aplica a los volcados SQL (el origen csv no tiene archivo)')
+    }
+    const vinculadas = new Set([...fuente.archivo.vinculos.keys()].map((clave) => clave.split('#')[0]!))
+    const salida: TablaExcluida[] = []
+    for (const nombre of pedidas) {
+        const tabla = fuente.archivo.tablas.find((t) => t.tabla === nombre)
+        if (!tabla) throw new Error(`--excluir-tablas: la tabla ${nombre} no está en el volcado`)
+        if (vinculadas.has(nombre)) {
+            throw new Error(
+                `--excluir-tablas: ${nombre} no se puede excluir; sus filas se importan a ArgosIsp (solo se excluyen tablas que quedan solo en el archivo, como radacct o los logs)`,
+            )
+        }
+        salida.push({ tabla: nombre, filas: tabla.filas.length })
+    }
+    return salida
 }
 
 /** Igual que la restricción de `core.ids_externos.sistema`. */
@@ -185,6 +320,8 @@ class Importador {
         private readonly trx: TransactionClientContract,
         private readonly ids: IdsExternos,
         private readonly tipoConexion: boolean,
+        private readonly empresa: EmpresaImportacion,
+        private readonly excluidas: TablaExcluida[],
     ) {
         this.sistema = opciones.sistema
         this.#carga = opciones.carga ?? cargaFinancieraA3
@@ -218,6 +355,8 @@ class Importador {
             fin: '',
             origen: opciones.sistema,
             fuente: opciones.fuente ?? null,
+            empresa: { id: empresa.id, nombre: empresa.nombre, nit: empresa.nit },
+            tablas_excluidas: excluidas,
             resumen: {
                 routers: conteoVacio(fuente.routers.length),
                 redes: conteoVacio(fuente.redes.length),
@@ -278,6 +417,7 @@ class Importador {
                 facturas_saldadas_en_origen: [],
                 promesas_no_importadas: [],
                 saldos_distintos: [],
+                servicios_otra_empresa: [],
             },
             formato: fuente.problemas,
             errores: [],
@@ -326,9 +466,14 @@ class Importador {
      */
     async archivar() {
         if (!this.fuente.archivo) return
+        const excluir = new Set(this.excluidas.map((t) => t.tabla))
         this.reporte.tablas = await archivarYCuadrar({
             sistema: this.sistema,
-            archivo: this.fuente.archivo,
+            archivo: {
+                ...this.fuente.archivo,
+                tablas: this.fuente.archivo.tablas.filter((t) => !excluir.has(t.tabla)),
+            },
+            empresaId: this.empresa.id,
             resultados: this.#resultados,
             problemas: this.fuente.problemas,
             ctx: this.ctx,
@@ -438,6 +583,7 @@ class Importador {
                         api_usuario: r.api_usuario,
                         api_password: r.api_password,
                         radius_secret: r.radius_secret,
+                        empresa_sugerida_id: this.empresa.id,
                     }),
                     this.ctx,
                     { trx: this.trx },
@@ -610,7 +756,9 @@ class Importador {
                 continue
             }
             const creada = await this.#accion('zona', nombre, 'zonas.crear', () =>
-                new CrearZona().execute({ nombre }, this.ctx, { trx: this.trx }),
+                new CrearZona().execute({ nombre, empresa_sugerida_id: this.empresa.id }, this.ctx, {
+                    trx: this.trx,
+                }),
             )
             if (creada) {
                 this.#zonas.set(nombre, creada.id)
@@ -785,11 +933,20 @@ class Importador {
                 ? ((await this.trx
                       .from('core.servicios')
                       .where('id', porId)
-                      .select('id', 'cliente_id')
-                      .first()) as { id: number; cliente_id: number } | null)
+                      .select('id', 'cliente_id', 'empresa_id')
+                      .first()) as { id: number; cliente_id: number; empresa_id: number } | null)
                 : await this.#servicioExistente(s, clienteId)
             if (existente) {
                 if (Number(existente.cliente_id) === clienteId) {
+                    if (Number(existente.empresa_id) !== this.empresa.id) {
+                        // Ya importado en otra empresa: no se mueve (servicios.cambiar_empresa es
+                        // una acción explícita del panel); el reporte lo avisa.
+                        d.servicios_otra_empresa.push({
+                            servicio_origen: s.id,
+                            servicio_id: Number(existente.id),
+                            empresa_id: Number(existente.empresa_id),
+                        })
+                    }
                     conteo.existentes++
                     this.#servicios.set(s.id, Number(existente.id))
                     if (s.ip) ipTomada.set(s.ip, s.id)
@@ -831,6 +988,7 @@ class Importador {
                 direccion: s.direccion,
                 coordenadas: s.coordenadas,
                 fecha_instalacion: s.fecha_instalacion,
+                empresa_id: this.empresa.id,
                 ipv4: s.ip ?? undefined,
                 ipv6_modo: this.opciones.ipv6 === 'plan' ? undefined : 'ninguno',
             }
@@ -872,13 +1030,13 @@ class Importador {
     async #servicioExistente(
         s: ServicioOrigen,
         clienteId: number,
-    ): Promise<{ id: number; cliente_id: number } | null> {
+    ): Promise<{ id: number; cliente_id: number; empresa_id: number } | null> {
         if (s.tipo_conexion === 'pppoe') {
             return (await this.trx
                 .from('core.servicios')
                 .whereRaw('lower(user_ppp) = lower(?)', [s.user_ppp ?? ''])
-                .select('id', 'cliente_id')
-                .first()) as { id: number; cliente_id: number } | null
+                .select('id', 'cliente_id', 'empresa_id')
+                .first()) as { id: number; cliente_id: number; empresa_id: number } | null
         }
         if (s.ip) {
             // Solo si es del mismo cliente; si es de otro, #ipDisponible lo reporta como IP en uso.
@@ -888,16 +1046,16 @@ class Importador {
                 .whereRaw('a.ip = ?::inet', [s.ip])
                 .whereNull('a.fin')
                 .where('sv.cliente_id', clienteId)
-                .select('sv.id', 'sv.cliente_id')
-                .first()) as { id: number; cliente_id: number } | null
+                .select('sv.id', 'sv.cliente_id', 'sv.empresa_id')
+                .first()) as { id: number; cliente_id: number; empresa_id: number } | null
         }
         return (await this.trx
             .from('core.servicios')
             .whereRaw('mac = ?::macaddr', [s.mac ?? ''])
             .where('cliente_id', clienteId)
             .whereNot('estado', 'retirado')
-            .select('id', 'cliente_id')
-            .first()) as { id: number; cliente_id: number } | null
+            .select('id', 'cliente_id', 'empresa_id')
+            .first()) as { id: number; cliente_id: number; empresa_id: number } | null
     }
 
     /**

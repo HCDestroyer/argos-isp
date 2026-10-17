@@ -103,7 +103,7 @@ onMounted(cargar)
 
                 <template v-else>
                     <section
-                        class="flex flex-col gap-3 rounded-lg border border-default bg-default p-4"
+                        class="flex flex-col gap-3 surface-card p-4"
                         aria-labelledby="titulo-servicios"
                         data-prueba="tablero-servicios"
                     >
@@ -128,7 +128,10 @@ onMounted(cargar)
                                     class="flex flex-col gap-1.5 rounded-md p-2 hover:bg-elevated/60"
                                     :data-prueba="`servicios-${item.estado}`"
                                 >
-                                    <span class="text-2xl font-semibold tabular-nums text-highlighted">{{ item.cantidad.toLocaleString('es-GT') }}</span>
+                                    <NumeroVivo
+                                        :valor="item.cantidad.toLocaleString('es-GT')"
+                                        class="text-2xl font-semibold tracking-[-0.02em] text-highlighted"
+                                    />
                                     <UBadge
                                         :label="item.etiqueta"
                                         :color="ESTADOS_SERVICIO[item.estado].color"
@@ -192,7 +195,7 @@ onMounted(cargar)
 
                     <div class="grid gap-4 lg:grid-cols-2">
                         <section
-                            class="flex min-w-0 flex-col gap-2 rounded-lg border border-default bg-default p-4"
+                            class="flex min-w-0 flex-col gap-2 surface-card p-4"
                             aria-labelledby="titulo-montos"
                             data-prueba="grafica-montos"
                         >
@@ -208,6 +211,7 @@ onMounted(cargar)
                                 :categorias="series.categorias"
                                 :categorias-largas="series.categoriasLargas"
                                 :series="series.montos"
+                                :hallazgo="hallazgoMontos(resumen)"
                             />
                             <UEmpty
                                 v-else
@@ -217,7 +221,7 @@ onMounted(cargar)
                             />
                         </section>
                         <section
-                            class="flex min-w-0 flex-col gap-2 rounded-lg border border-default bg-default p-4"
+                            class="flex min-w-0 flex-col gap-2 surface-card p-4"
                             aria-labelledby="titulo-conteos"
                             data-prueba="grafica-conteos"
                         >
@@ -233,6 +237,7 @@ onMounted(cargar)
                                 :categorias="series.categorias"
                                 :categorias-largas="series.categoriasLargas"
                                 :series="series.conteos"
+                                :hallazgo="hallazgoConteos(resumen)"
                                 formato="entero"
                             />
                             <UEmpty

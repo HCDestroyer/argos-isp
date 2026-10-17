@@ -18,6 +18,7 @@ import {
 } from '#notify/avisos_pago'
 import { cargarDestinatario, construirVariables, resolverCliente } from '#notify/variables'
 import { configPara, empresaDelEvento } from '#notify/configuracion'
+import { chatTelegramPara } from '#notify/telegram/vinculos'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -55,8 +56,9 @@ interface Aviso {
  * - Sin plantilla activa para el evento: no hace nada (el evento no se notifica).
  * - Hay plantilla pero el cliente no tiene destino en ningún canal: registra un envío `fallido`
  *   ("sin destino") para que se vea en el panel y emite `notificacion.enviada` con estado fallido.
- * - Configuración (`configuracion.ts`): la de la empresa del evento si tiene la suya, si no la
- *   global. Un canal o un tipo de aviso apagado no se envía: queda un envío `omitido` con el
+ * - Configuración (`configuracion.ts`): la de la empresa del evento (`empresaDelEvento`) si tiene
+ *   la suya, si no la global. Telegram sale por el bot de esa configuración y solo si el cliente
+ *   lo tiene vinculado (`telegram/vinculos.ts`); si no, el aviso va por los demás canales. Un canal o un tipo de aviso apagado no se envía: queda un envío `omitido` con el
  *   motivo (sin `notificacion.enviada`).
  * - `pago.registrado` (`avisos_pago.ts`): el pagador recibe un solo aviso por pago. Si el pago
  *   salió de aprobar un comprobante, el aviso es el de `comprobante.aprobado` y aquí se omite.
@@ -130,6 +132,8 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
 
         const empresaId = await empresaDelEvento(t.trx, aviso.payload)
         const config = await configPara(empresaId)
+        // Telegram por empresa: el chat que el bot de esta configuración tiene vinculado (o ninguno)
+        destinatario.telegramChatId = await chatTelegramPara(t.trx, aviso.clienteId, config)
         const variables = await construirVariables(t.trx, aviso.evento, aviso.payload, destinatario, ahora)
         const elegidos = elegirCanales(destinatario, plantillas, config, aviso.evento)
 

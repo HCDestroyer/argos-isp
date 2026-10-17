@@ -88,7 +88,7 @@ function periodo(facturaId: number): string {
 
 <template>
     <article
-        class="recibo-ticket flex flex-col gap-3 rounded-lg border border-default bg-default p-4 text-sm"
+        class="recibo-ticket flex flex-col gap-3 surface-card p-4 text-sm"
         aria-label="Recibo de pago"
     >
         <header class="flex flex-col items-center gap-0.5 text-center">
@@ -283,7 +283,7 @@ function periodo(facturaId: number): string {
 
     html,
     body {
-        background: #fff !important;
+        background: var(--argos-papel) !important;
     }
 
     body * {
@@ -293,9 +293,9 @@ function periodo(facturaId: number): string {
     .recibo-ticket,
     .recibo-ticket * {
         visibility: visible !important;
-        color: #000 !important;
-        background: #fff !important;
-        border-color: #000 !important;
+        color: var(--argos-tinta-papel) !important;
+        background: var(--argos-papel) !important;
+        border-color: var(--argos-tinta-papel) !important;
     }
 
     .recibo-ticket {

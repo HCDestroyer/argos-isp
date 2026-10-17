@@ -218,6 +218,7 @@ onMounted(cargar)
                         :to="`/servicios/nuevo?cliente=${cliente.id}`"
                         icon="i-lucide-plus"
                         label="Nuevo servicio"
+                        class="glow-brand"
                     />
                     <UButton
                         v-if="puede('clientes.editar')"
@@ -247,7 +248,7 @@ onMounted(cargar)
                 v-if="pestana === 'datos'"
                 class="flex flex-col gap-8"
             >
-                <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <dl class="surface-card grid gap-x-8 gap-y-5 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
                     <DatoFicha
                         etiqueta="Teléfono"
                         :valor="cliente.telefono"
@@ -325,7 +326,7 @@ onMounted(cargar)
                     :title="consumidorFinal ? 'Consumidor final' : 'Sin NIT registrado'"
                     description="Los avisos de cobro salen a nombre de Consumidor Final (CF)."
                 />
-                <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                <dl class="surface-card grid gap-x-8 gap-y-5 p-4 sm:grid-cols-2 sm:p-6">
                     <DatoFicha
                         etiqueta="NIT / CUI"
                         :valor="cliente.nit_cui"

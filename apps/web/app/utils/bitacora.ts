@@ -106,6 +106,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'notificaciones.vigilar_crons': 'Revisión de tareas automáticas',
     'notificaciones.configurar': 'Configuración de notificaciones (correo y Telegram) guardada',
     'notificaciones.probar': 'Prueba de envío de notificaciones',
+    'notificaciones.telegram_desvincular': 'Telegram desvinculado de un bot',
     'notificaciones.sembrar_configuracion': 'Configuración de notificaciones tomada del entorno',
     'pasarela.crear_cobro': 'Cobro en línea creado',
     'pasarela.procesar_webhook': 'Aviso de la pasarela de pago procesado',

@@ -390,7 +390,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                 </section>
 
                 <section
-                    class="flex flex-col gap-3 rounded-lg border border-default p-4"
+                    class="flex flex-col gap-3 surface-card p-4"
                     aria-label="Vista previa del rate-limit"
                     :aria-busy="cargandoVistaPrevia"
                     data-prueba="vista-rate-limit"

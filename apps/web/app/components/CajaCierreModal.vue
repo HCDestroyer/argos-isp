@@ -140,6 +140,7 @@ async function enviar(evento: FormSubmitEvent<DatosCierreFormulario>) {
                             <UBadge
                                 v-if="diferencia"
                                 :label="etiquetaDiferencia(diferencia)"
+                                :icon="iconoDiferencia(diferencia)"
                                 :color="colorDiferencia(diferencia)"
                                 variant="subtle"
                             />

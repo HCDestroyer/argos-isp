@@ -562,19 +562,21 @@ function columnaExiste(cliente: QueryClientContract, schema: string, tabla: stri
     return existe
 }
 
-/**
- * Empresa cuya configuración se aplica a un aviso: `empresa_id` del payload (los eventos lo
- * traen desde multiempresa) o, si no viene, la de la factura o el servicio del evento cuando esas
- * tablas ya tienen `empresa_id`. `null` = la global.
- */
-export async function empresaDelEvento(
-    cliente: QueryClientContract,
-    payload: Record<string, unknown>,
-): Promise<number | null> {
-    const directa = entero(payload.empresa_id)
-    if (directa) return directa
-    const facturaId = entero(payload.factura_id)
-    if (facturaId && (await columnaExiste(cliente, 'billing', 'facturas', 'empresa_id'))) {
+/** Empresa de un servicio (`core.servicios.empresa_id`), o null si no existe. */
+async function empresaDeServicio(cliente: QueryClientContract, servicioId: number): Promise<number | null> {
+    const fila = (await cliente
+        .from('core.servicios')
+        .where('id', servicioId)
+        .select('empresa_id')
+        .first()) as {
+        empresa_id: number | null
+    } | null
+    return fila?.empresa_id ? Number(fila.empresa_id) : null
+}
+
+/** Empresa de una factura: su `empresa_id` (cuando A3 lo agregue) o la de su servicio. */
+async function empresaDeFactura(cliente: QueryClientContract, facturaId: number): Promise<number | null> {
+    if (await columnaExiste(cliente, 'billing', 'facturas', 'empresa_id')) {
         const fila = await cliente
             .from('billing.facturas')
             .where('id', facturaId)
@@ -582,10 +584,71 @@ export async function empresaDelEvento(
             .first()
         if (fila?.empresa_id) return Number(fila.empresa_id)
     }
+    const fila = (await cliente
+        .from('billing.facturas')
+        .where('id', facturaId)
+        .select('servicio_id')
+        .first()) as {
+        servicio_id: number | null
+    } | null
+    return fila?.servicio_id ? empresaDeServicio(cliente, Number(fila.servicio_id)) : null
+}
+
+/**
+ * Empresa del evento (`contratos/multiempresa.md`: `{{empresa.*}}` y la configuración de canales
+ * salen de la empresa del servicio o de la factura del evento), en este orden:
+ *
+ * 1. `empresa_id` del payload (los eventos de servicio y financieros lo traen);
+ * 2. la de la factura (`factura_id` o la primera de `facturas[]`): su `empresa_id` o la de su servicio;
+ * 3. la del servicio (`servicio_id`);
+ * 4. la del servicio de la promesa (`promesa_id`);
+ * 5. la de la primera factura que pagó el pago (`pago_id`, también en `comprobante.*`).
+ *
+ * `null` = no se pudo deducir: la configuración global y, en las plantillas, la empresa principal.
+ */
+export async function empresaDelEvento(
+    cliente: QueryClientContract,
+    payload: Record<string, unknown>,
+): Promise<number | null> {
+    const directa = entero(payload.empresa_id)
+    if (directa) return directa
+    const facturas = Array.isArray(payload.facturas) ? payload.facturas : []
+    const facturaId = entero(payload.factura_id) ?? entero(facturas[0])
+    if (facturaId) {
+        const empresa = await empresaDeFactura(cliente, facturaId)
+        if (empresa) return empresa
+    }
     const servicioId = entero(payload.servicio_id)
-    if (servicioId && (await columnaExiste(cliente, 'core', 'servicios', 'empresa_id'))) {
-        const fila = await cliente.from('core.servicios').where('id', servicioId).select('empresa_id').first()
-        if (fila?.empresa_id) return Number(fila.empresa_id)
+    if (servicioId) {
+        const empresa = await empresaDeServicio(cliente, servicioId)
+        if (empresa) return empresa
+    }
+    const promesaId = entero(payload.promesa_id)
+    if (promesaId) {
+        const fila = (await cliente
+            .from('billing.promesas')
+            .where('id', promesaId)
+            .select('servicio_id')
+            .first()) as {
+            servicio_id: number | null
+        } | null
+        if (fila?.servicio_id) {
+            const empresa = await empresaDeServicio(cliente, Number(fila.servicio_id))
+            if (empresa) return empresa
+        }
+    }
+    const pagoId = entero(payload.pago_id)
+    if (pagoId) {
+        const fila = (await cliente
+            .from('billing.pagos_aplicaciones')
+            .where('pago_id', pagoId)
+            .orderBy('id', 'asc')
+            .select('factura_id')
+            .first()) as { factura_id: number } | null
+        if (fila) {
+            const empresa = await empresaDeFactura(cliente, Number(fila.factura_id))
+            if (empresa) return empresa
+        }
     }
     return null
 }

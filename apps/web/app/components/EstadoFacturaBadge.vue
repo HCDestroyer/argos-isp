@@ -13,6 +13,7 @@ withDefaults(defineProps<{
 <template>
     <UBadge
         :label="ESTADOS_FACTURA[estado].etiqueta"
+        :icon="ESTADOS_FACTURA[estado].icono"
         :color="ESTADOS_FACTURA[estado].color"
         variant="subtle"
         :size="size"

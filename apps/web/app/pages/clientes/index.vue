@@ -142,6 +142,7 @@ onMounted(async () => {
                 to="/clientes/nuevo"
                 icon="i-lucide-user-plus"
                 label="Nuevo cliente"
+                class="glow-brand"
                 :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo cliente"
             />
@@ -234,7 +235,7 @@ onMounted(async () => {
             <div
                 id="filtros-clientes"
                 :class="panelAbierto ? 'grid' : 'hidden sm:grid'"
-                class="gap-3 rounded-lg border border-default p-3 sm:grid-cols-2 lg:grid-cols-4"
+                class="gap-3 surface-card p-3 sm:grid-cols-2 lg:grid-cols-4"
                 role="group"
                 aria-label="Filtros de clientes"
             >
