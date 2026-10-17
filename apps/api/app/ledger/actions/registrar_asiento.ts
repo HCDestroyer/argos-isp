@@ -9,6 +9,7 @@ import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
 import { CUADRICULAS_GT } from '#fiscal/l10n/gt/impuestos'
+import { diarioDeAsiento, numerarAsiento } from '#ledger/diarios'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -18,6 +19,10 @@ import { CUADRICULAS_GT } from '#fiscal/l10n/gt/impuestos'
  * verificar: triggers de periodo cerrado, cuenta imputable/activa, auxiliar por cliente y el
  * constraint trigger de cuadre. El cuadre se fuerza **dentro** de la acción con
  * `SET CONSTRAINTS ... IMMEDIATE`, así un descuadre nunca se pierde en un COMMIT silencioso.
+ *
+ * Numeración (§10.7 de localización fiscal): en la misma transacción el asiento recibe su diario
+ * (derivado del origen y de las cuentas que toca, o el de `diario`) y el siguiente número de ese
+ * diario en el año de su fecha (`ledger.asientos_numeros`, sin huecos: ver `#ledger/diarios`).
  */
 
 export const ORIGENES_ASIENTO = [
@@ -60,6 +65,8 @@ export interface EntradaAsiento {
     origen_id?: number | null
     /** id del asiento que este revierte (lo usa `RevertirAsiento`) */
     reversa_de?: number | null
+    /** código del diario (`VEN`, `CAJ-3`…); por defecto se deriva del origen y las cuentas */
+    diario?: string | null
     movimientos: LineaAsiento[]
 }
 
@@ -83,6 +90,9 @@ export interface AsientoRegistrado {
     origen_tipo: OrigenAsiento
     origen_id: number | null
     reversa_de: number | null
+    /** diario y número guardados al registrar (`ledger.asientos_numeros`) */
+    diario: string
+    numero: number
     created_by: number | null
     total: string
     movimientos: MovimientoRegistrado[]
@@ -190,6 +200,15 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
 
         t.fijarEntidad('asiento', asiento!.id)
 
+        const diario = await diarioDeAsiento(
+            t.trx,
+            empresaId,
+            input.origen_tipo,
+            lineas.map((l) => l.cuenta.id),
+            input.diario,
+        )
+        const numero = await numerarAsiento(t.trx, asiento!.id, empresaId, fecha, diario)
+
         const porId = new Map(lineas.map((l) => [l.cuenta.id, l.cuenta]))
         return {
             id: asiento!.id,
@@ -199,6 +218,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             origen_tipo: input.origen_tipo,
             origen_id: origenId,
             reversa_de: input.reversa_de ?? null,
+            diario: diario.codigo,
+            numero,
             created_by: asiento!.created_by,
             total: aTexto(total),
             movimientos: filas

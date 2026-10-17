@@ -4,6 +4,7 @@ import { Conflicto, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
+import { asignarPartidas } from '#ledger/diarios'
 import { periodoCerrado, periodoDe, resumenDelMes, verCierre, type CierreVista } from '#ledger/cierres'
 
 /**
@@ -19,6 +20,9 @@ import { periodoCerrado, periodoDe, resumenDelMes, verCierre, type CierreVista }
  * - Por empresa (multiempresa): cierra el libro de `empresa_id` (por defecto la activa); los demás
  *   libros siguen abiertos.
  * - Guarda el resumen del mes (asientos, debe, haber y movimiento por cuenta).
+ * - Asigna la partida del Libro Diario a los asientos del mes que aún no la tienen
+ *   (`ledger.asientos_partidas`, correlativo por empresa y año en orden `(fecha, numero)`). Un mes
+ *   reabierto conserva sus partidas: nunca se renumera.
  */
 
 export interface EntradaCerrarPeriodo {
@@ -68,6 +72,7 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
             })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('cierre_mensual', fila!.id)
+        await asignarPartidas(t.trx, empresaId, periodo, fila!.id)
         return verCierre(fila!.id, t.trx)
     }
 }

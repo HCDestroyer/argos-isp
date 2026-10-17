@@ -26828,6 +26828,27 @@
             "minimum": 1,
             "description": "Asiento de reverso de este, si ya se revirtió"
           },
+          "diario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>)"
+          },
+          "numero": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Número del asiento en su diario y año, guardado al registrar; nunca cambia"
+          },
+          "partida": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Partida del Libro Diario (correlativo por empresa y año), asignada al cerrar el mes; null mientras el mes esté abierto"
+          },
           "revertible": {
             "type": "boolean",
             "description": "Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso)"

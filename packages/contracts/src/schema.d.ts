@@ -3726,6 +3726,12 @@ export interface components {
             reversa_de: number | null;
             /** @description Asiento de reverso de este, si ya se revirtió */
             revertido_por?: number | null;
+            /** @description Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>) */
+            diario?: string | null;
+            /** @description Número del asiento en su diario y año, guardado al registrar; nunca cambia */
+            numero?: number | null;
+            /** @description Partida del Libro Diario (correlativo por empresa y año), asignada al cerrar el mes; null mientras el mes esté abierto */
+            partida?: number | null;
             /** @description Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso) */
             revertible?: boolean;
             /** @description Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible */

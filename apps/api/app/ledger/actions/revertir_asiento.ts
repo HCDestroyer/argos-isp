@@ -116,6 +116,14 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             cliente_id: number | null
         }>
 
+        // el reverso va al mismo diario que su original (con el número que le toque hoy)
+        const diario = (await t.trx
+            .from('ledger.asientos_numeros as n')
+            .join('ledger.diarios as d', 'd.id', 'n.diario_id')
+            .where('n.asiento_id', original.id)
+            .select('d.codigo')
+            .first()) as { codigo: string } | null
+
         return new RegistrarAsiento().execute(
             {
                 empresa_id: Number(original.empresa_id),
@@ -124,6 +132,7 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
                 origen_tipo: original.origen_tipo,
                 origen_id: original.origen_id,
                 reversa_de: original.id,
+                diario: diario?.codigo ?? null,
                 movimientos: movimientos.map((m) => ({
                     cuenta: m.cuenta_id,
                     debe: m.haber,
