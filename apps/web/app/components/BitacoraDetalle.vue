@@ -67,6 +67,11 @@ const ruta = computed(() => (props.accion ? rutaEntidad(props.accion.entidad_tip
                         </ULink>
                     </DatoFicha>
                     <DatoFicha
+                        etiqueta="Empresa"
+                        :valor="accion.empresa_nombre ?? 'Del grupo (sin empresa)'"
+                        data-prueba="empresa-accion"
+                    />
+                    <DatoFicha
                         etiqueta="Request ID"
                         :valor="accion.request_id"
                         mono

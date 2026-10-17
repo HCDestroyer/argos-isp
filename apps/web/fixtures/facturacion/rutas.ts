@@ -9,6 +9,7 @@ import {
     cuerpoObjeto,
     datosInvalidos,
     deLaEmpresa,
+    empresaDeAccion,
     empresaActivaDe,
     idDe,
     noEncontrado,
@@ -281,8 +282,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
             resultado: 'ok',
             error: null,
             request_id: `req-fixture-${id}`,
-            empresa_id: 1,
-            empresa_nombre: 'ArgosIsp',
+            ...empresaDeAccion({ tipo: 'servicio', id: servicio.id }, null),
             created_at: momento,
         })
         evaluados.push({ ...base, estado: 'activo', cambiado: true, motivo: 'sin facturas vencidas' })

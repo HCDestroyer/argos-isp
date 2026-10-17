@@ -116,6 +116,42 @@ export function conIdempotencia(manejador: ManejadorFixture): ManejadorFixture {
     }
 }
 
+/** Documentos con empresa, para saber de qué empresa es una acción. */
+function documentosDe(tipo: string): readonly { id: number, empresa_id?: number | null }[] | null {
+    switch (tipo) {
+        case 'servicio': return bd.servicios
+        case 'factura': return bd.facturas
+        case 'pago': return bd.pagos
+        case 'caja': return bd.cajas
+        case 'promesa': return bd.promesas
+        case 'comprobante': return bd.comprobantes
+        case 'egreso': return bd.egresos
+        case 'cuenta_bancaria': return bd.cuentasBancarias
+        case 'asiento': return bd.asientos
+        case 'nota_credito': return bd.notasCredito
+        default: return null
+    }
+}
+
+/**
+ * Empresa de una acción como `DomainAction` (A1): la del documento, o la activa de quien la hizo;
+ * `null` si no es de ninguna (clientes y usuarios son del grupo).
+ */
+export function empresaDeAccion(entidad: { tipo: string, id: number }, solicitud: SolicitudFixture | null): { empresa_id: number | null, empresa_nombre: string | null } {
+    let empresaId: number | null
+    if (entidad.tipo === 'cliente' || entidad.tipo === 'usuario') {
+        empresaId = null
+    }
+    else if (entidad.tipo === 'empresa') {
+        empresaId = entidad.id
+    }
+    else {
+        const documento = documentosDe(entidad.tipo)?.find(d => d.id === entidad.id)
+        empresaId = documento?.empresa_id ?? (solicitud ? empresaActivaDe(solicitud) : null)
+    }
+    return { empresa_id: empresaId, empresa_nombre: bd.empresas.find(e => e.id === empresaId)?.nombre_comercial ?? null }
+}
+
 /** Escribe en la bitácora de fixtures lo que haría `DomainAction`. */
 export function registrarAccion(solicitud: SolicitudFixture, accion: string, entidad: { tipo: string, id: number }, entrada: unknown): void {
     const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
@@ -134,9 +170,7 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
-        // Como la API con una sola empresa: la empresa activa es la 1.
-        empresa_id: 1,
-        empresa_nombre: 'ArgosIsp',
+        ...empresaDeAccion(entidad, solicitud),
         created_at: ahora(),
     })
 }

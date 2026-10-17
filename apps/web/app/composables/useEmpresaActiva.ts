@@ -12,6 +12,7 @@ const PREFIJO = 'argos_empresa_activa:'
  * el plugin `empresa` lo agrega; una prueba la compara con el OpenAPI.
  */
 export const LISTAS_CONSOLIDABLES: readonly string[] = [
+    '/api/v1/bitacora/acciones',
     '/api/v1/cajas',
     '/api/v1/clientes',
     '/api/v1/comprobantes',

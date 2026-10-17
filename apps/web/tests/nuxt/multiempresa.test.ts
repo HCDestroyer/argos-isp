@@ -185,6 +185,16 @@ describe('multiempresa · acciones contra la API (fixtures)', () => {
         expect(dos.ok && dos.data.empresas).toEqual([1, 2])
     })
 
+    it('bitácora: con una empresa, sus acciones y las del grupo (empresa_id null); con Todas, todas', async () => {
+        const todas = await useBitacora().acciones({ limit: 200 })
+        const empresasTodas = new Set(todas.ok ? todas.data.data.map(a => a.empresa_id) : [])
+        expect(empresasTodas).toEqual(new Set([null, 1, 2]))
+        useEmpresaActiva().elegir(2)
+        const sur = await useBitacora().acciones({ limit: 200 })
+        expect(sur.ok && sur.data.data.every(a => a.empresa_id === null || a.empresa_id === 2)).toBe(true)
+        expect(sur.ok && sur.data.data.find(a => a.empresa_id === 2)?.empresa_nombre).toBe('Fibra del Sur')
+    })
+
     it('zonas: la empresa sugerida se guarda con la versión (409 con una vieja)', async () => {
         const leida = bd.zonas.find(z => z.id === 1)?.version ?? 0
         const editada = await useZonas().editar(1, { nombre: 'Centro', empresa_sugerida_id: 2, version: leida })
