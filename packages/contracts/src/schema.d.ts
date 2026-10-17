@@ -1825,7 +1825,7 @@ export interface paths {
         put?: never;
         /**
          * El cliente sube el comprobante de un depósito, transferencia, ACH o remesa
-         * @description `multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description `multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalSubirComprobante"];
         delete?: never;
@@ -2045,7 +2045,7 @@ export interface paths {
         put?: never;
         /**
          * Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor
-         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
+         * @description Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.
          */
         post: operations["portalIniciarPago"];
         delete?: never;
@@ -2189,7 +2189,7 @@ export interface paths {
         put?: never;
         /**
          * Genera el código de un solo uso y el enlace al bot para vincular Telegram
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior de ese bot. Con `empresa_id` (una de `GET /portal/telegram` → `empresas`), el bot de esa empresa; 404 si el cliente no tiene servicios en ella. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.
          */
         post: operations["portalVincularTelegram"];
         delete?: never;
@@ -4677,6 +4677,17 @@ export interface components {
             monto_adeudado: components["schemas"]["Dinero"];
             /** @description Empresa con más servicios sin retirar (encabezado, título y manifiesto) */
             empresa_principal: components["schemas"]["PortalMarcaEmpresa"];
+            /** @description Una sección por empresa con facturas, movimientos o anticipos del cliente (estado de cuenta de A3): cada NIT cobra lo suyo. La principal del cliente primero; luego por id */
+            empresas: components["schemas"]["PortalCuentaEmpresa"][];
+        };
+        PortalCuentaEmpresa: {
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            /** @description Saldo del cliente con esta empresa (auxiliar CxC de su libro; positivo = debe) */
+            saldo: components["schemas"]["Dinero"];
+            /** @description Anticipos del cliente en esta empresa */
+            saldo_a_favor: components["schemas"]["Dinero"];
+            /** @description Emitidas, parciales y vencidas de esta empresa, la más antigua primero */
+            facturas_pendientes: components["schemas"]["PortalFacturaPendiente"][];
         };
         PortalFactura: {
             id: number;
@@ -4720,6 +4731,21 @@ export interface components {
             precio_unitario: components["schemas"]["Dinero"];
             iva: components["schemas"]["Dinero"];
             total: components["schemas"]["Dinero"];
+        };
+        PortalFacturaPendiente: {
+            id: number;
+            /** @description Serie-número FEL si está certificada; si no, número del aviso */
+            numero: string;
+            servicio_id: number | null;
+            /** Format: date */
+            vence_en: string;
+            /** @enum {string} */
+            estado: "emitida" | "parcial" | "vencida";
+            /** @description Vencida o con fecha de vencimiento anterior a hoy (Guatemala) */
+            vencida: boolean;
+            total: components["schemas"]["Dinero"];
+            /** @description total - pagado */
+            saldo: components["schemas"]["Dinero"];
         };
         PortalMarcaEmpresa: {
             id: number;
@@ -4827,10 +4853,21 @@ export interface components {
         PortalTelegram: {
             /** @description El cliente tiene un chat de Telegram vinculado */
             vinculado: boolean;
-            /** @description Hay bot configurado: se puede pedir un enlace */
+            /** @description Hay bot global configurado: se puede pedir un enlace */
             disponible: boolean;
-            /** @description Usuario del bot sin @ */
+            /** @description Usuario del bot global sin @ */
             bot: string | null;
+            /** @description Una por empresa con servicios vigentes del cliente (vinculación por bot, `contratos/telegram.md` "Varios bots"). Con varias, el portal muestra una tarjeta por empresa */
+            empresas: components["schemas"]["PortalTelegramEmpresa"][];
+        };
+        PortalTelegramEmpresa: {
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            /** @description La empresa tiene bot (el suyo o el global): se pide el código con su `empresa_id` */
+            disponible: boolean;
+            /** @description Usuario del bot de la empresa sin @ */
+            bot: string | null;
+            /** @description El bot de esta empresa ya le puede escribir al cliente */
+            vinculado: boolean;
         };
         PortalVinculoTelegram: {
             /** @description Código de un solo uso (10 caracteres A-Z 2-9) para escribir `/start <código>` a mano */
@@ -4841,6 +4878,8 @@ export interface components {
             bot: string;
             /** Format: date-time */
             vence_en: string;
+            /** @description Empresa cuyo bot se vincula (null = el bot global) */
+            empresa_id: number | null;
         };
         Problem: {
             type: string;
@@ -14112,7 +14151,14 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa (de un servicio del cliente) cuyo bot se vincula. Sin ella: la única empresa de sus servicios o, con varias, el bot global */
+                    empresa_id?: number;
+                };
+            };
+        };
         responses: {
             /** @description Enlace al bot */
             201: {
@@ -14125,6 +14171,15 @@ export interface operations {
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -198,10 +198,12 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
             const empresa = await leer(client.get(url))
             return (empresa.cuentas_deposito as Array<{ id: number }>).map((c) => c.id)
         }
-        // Las cuentas aún no llevan empresa (A3): son de la principal, no de Norte ni de Sur.
+        const deSur = await cuentaBancariaPrueba('Banrural', e.sur)
+        // Cada cuenta es de su empresa (`billing.cuentas_bancarias.empresa_id`): nunca se cruzan.
         assert.include(await ids('/api/v1/portal/empresa?empresa_id=1'), cuenta.id)
-        assert.notInclude(await ids(`/api/v1/portal/empresa?empresa_id=${e.norte}`), cuenta.id)
-        assert.notInclude(await ids(`/api/v1/portal/empresa?empresa_id=${e.sur}`), cuenta.id)
+        assert.notInclude(await ids('/api/v1/portal/empresa?empresa_id=1'), deSur.id)
+        assert.deepEqual(await ids(`/api/v1/portal/empresa?empresa_id=${e.norte}`), [])
+        assert.deepEqual(await ids(`/api/v1/portal/empresa?empresa_id=${e.sur}`), [deSur.id])
     })
 
     test('logo por el portal: PNG con ETag, 304 con If-None-Match y 404 sin logo', async ({

@@ -10,6 +10,9 @@ import { configAcceso, describirDestino, generarCodigo, hashCodigo } from '#port
 import { leerEmpresa } from '#portal/empresa'
 import { canalDisponible } from '#notify/canales/registro'
 import EnviarMensajeDirecto from '#notify/actions/enviar_mensaje_directo'
+import { configPara } from '#notify/configuracion'
+import { chatTelegramPara, telegramPorEmpresa } from '#notify/telegram/vinculos'
+import { empresaDelServicio, empresaPrincipalDelCliente } from '#portal/marca'
 
 /** Canales por los que puede ir el código: los destinos que `core.clientes` guarda. */
 export type CanalCodigo = 'correo' | 'telegram'
@@ -105,7 +108,20 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
             throw new DemasiadasPeticiones(Math.max(1, Math.ceil(libera.diffNow('seconds').seconds)))
         }
 
-        const destino = elegirDestino(cliente, canalesDisponibles())
+        // Multiempresa: el código sale con la marca y la configuración de canales de una empresa del
+        // cliente (la del servicio de la IP o su principal) y, por Telegram, por un bot que el
+        // cliente inició (`contratos/telegram.md`, "Varios bots").
+        const preferida =
+            (resolucion ? await empresaDelServicio(resolucion.servicio_id, t.trx) : null) ??
+            (await empresaPrincipalDelCliente(clienteId, t.trx))
+        const telegram = cliente.telegram_chat_id
+            ? await botParaElCodigo(t.trx, clienteId, preferida, cliente.telegram_chat_id)
+            : null
+        const destino = elegirDestino(
+            { ...cliente, telegram_chat_id: telegram?.chat ?? null },
+            canalesDisponibles(),
+        )
+        const empresaId = destino?.canal === 'telegram' && telegram ? telegram.empresaId : preferida
         if (!destino) {
             if (!porIp) return ciega
             throw new ReglaNegocio(
@@ -137,7 +153,8 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
 
         const minutos = Math.round(config.codigoVigenciaS / 60)
         // El nombre va como texto de la plantilla Mustache: sin llaves.
-        const datosEmpresa = await leerEmpresa(t.trx)
+        t.fijarEmpresa(empresaId)
+        const datosEmpresa = await leerEmpresa(t.trx, empresaId)
         const empresa = datosEmpresa.nombre.replace(/[{}]/g, '')
         let envio
         try {
@@ -153,6 +170,7 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
                         `Tu código para entrar al portal de ${empresa} es {{secreto}}.\n` +
                         `Vence en ${minutos} minutos. Si no lo pediste, ignora este mensaje: nadie puede entrar sin él.`,
                     secreto: codigo,
+                    empresa_id: empresaId,
                 },
                 t.ctx,
             )
@@ -165,6 +183,29 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
 
         return { ...ciega, destino: porIp ? destinoMascarado : null }
     }
+}
+
+/**
+ * Bot por el que puede ir el código por Telegram: el de la empresa preferida si ya le escribe al
+ * cliente; si no, el de otra empresa del cliente vinculada; con el chat del vínculo con ese bot.
+ * Si ningún bot de sus empresas lo tiene, el código no va por Telegram (null).
+ */
+async function botParaElCodigo(
+    trx: TransactionClientContract,
+    clienteId: number,
+    preferida: number,
+    general: string,
+): Promise<{ empresaId: number; chat: string } | null> {
+    const porEmpresa = await telegramPorEmpresa(clienteId, trx)
+    // Sin servicios vigentes o sin ningún bot configurado no hay bot que elegir: el chat general
+    // (la disponibilidad del canal decide), como antes de los bots por empresa.
+    if (porEmpresa.every((e) => e.bot_id === null)) return { empresaId: preferida, chat: general }
+    const elegida =
+        porEmpresa.find((e) => e.vinculado && e.empresa_id === preferida) ??
+        porEmpresa.find((e) => e.vinculado)
+    if (!elegida) return null
+    const chat = await chatTelegramPara(trx, clienteId, await configPara(elegida.empresa_id))
+    return chat ? { empresaId: elegida.empresa_id, chat } : null
 }
 
 /** 503: el canal no aceptó el mensaje. La transacción se revierte (el código no queda). */

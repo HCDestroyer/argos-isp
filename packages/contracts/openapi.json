@@ -13684,7 +13684,7 @@
       "post": {
         "operationId": "portalSubirComprobante",
         "summary": "El cliente sube el comprobante de un depósito, transferencia, ACH o remesa",
-        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -14546,7 +14546,7 @@
       "post": {
         "operationId": "portalIniciarPago",
         "summary": "Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor",
-        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
         "tags": [
           "portal"
         ],
@@ -15064,7 +15064,7 @@
       "post": {
         "operationId": "portalVincularTelegram",
         "summary": "Genera el código de un solo uso y el enlace al bot para vincular Telegram",
-        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Llama `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior de ese bot. Con `empresa_id` (una de `GET /portal/telegram` → `empresas`), el bot de esa empresa; 404 si el cliente no tiene servicios en ella. 503 `telegram_no_configurado` sin bot. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato con el bot en `.claude/integration/contratos/telegram.md`.",
         "tags": [
           "portal"
         ],
@@ -15073,6 +15073,25 @@
             "portal": []
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (de un servicio del cliente) cuyo bot se vincula. Sin ella: la única empresa de sus servicios o, con varias, el bot global"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Enlace al bot",
@@ -15086,6 +15105,16 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29432,7 +29461,8 @@
           "cliente",
           "servicios",
           "monto_adeudado",
-          "empresa_principal"
+          "empresa_principal",
+          "empresas"
         ],
         "properties": {
           "cliente": {
@@ -29451,6 +29481,42 @@
           "empresa_principal": {
             "$ref": "#/components/schemas/PortalMarcaEmpresa",
             "description": "Empresa con más servicios sin retirar (encabezado, título y manifiesto)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalCuentaEmpresa"
+            },
+            "description": "Una sección por empresa con facturas, movimientos o anticipos del cliente (estado de cuenta de A3): cada NIT cobra lo suyo. La principal del cliente primero; luego por id"
+          }
+        }
+      },
+      "PortalCuentaEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa",
+          "saldo",
+          "saldo_a_favor",
+          "facturas_pendientes"
+        ],
+        "properties": {
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo del cliente con esta empresa (auxiliar CxC de su libro; positivo = debe)"
+          },
+          "saldo_a_favor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Anticipos del cliente en esta empresa"
+          },
+          "facturas_pendientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalFacturaPendiente"
+            },
+            "description": "Emitidas, parciales y vencidas de esta empresa, la más antigua primero"
           }
         }
       },
@@ -29615,6 +29681,59 @@
           },
           "total": {
             "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "PortalFacturaPendiente": {
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "servicio_id",
+          "vence_en",
+          "estado",
+          "vencida",
+          "total",
+          "saldo"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string",
+            "description": "Serie-número FEL si está certificada; si no, número del aviso"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "emitida",
+              "parcial",
+              "vencida"
+            ]
+          },
+          "vencida": {
+            "type": "boolean",
+            "description": "Vencida o con fecha de vencimiento anterior a hoy (Guatemala)"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "total - pagado"
           }
         }
       },
@@ -30007,7 +30126,8 @@
         "required": [
           "vinculado",
           "disponible",
-          "bot"
+          "bot",
+          "empresas"
         ],
         "properties": {
           "vinculado": {
@@ -30016,14 +30136,50 @@
           },
           "disponible": {
             "type": "boolean",
-            "description": "Hay bot configurado: se puede pedir un enlace"
+            "description": "Hay bot global configurado: se puede pedir un enlace"
           },
           "bot": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Usuario del bot sin @"
+            "description": "Usuario del bot global sin @"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalTelegramEmpresa"
+            },
+            "description": "Una por empresa con servicios vigentes del cliente (vinculación por bot, `contratos/telegram.md` \"Varios bots\"). Con varias, el portal muestra una tarjeta por empresa"
+          }
+        }
+      },
+      "PortalTelegramEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa",
+          "disponible",
+          "bot",
+          "vinculado"
+        ],
+        "properties": {
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa"
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "La empresa tiene bot (el suyo o el global): se pide el código con su `empresa_id`"
+          },
+          "bot": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Usuario del bot de la empresa sin @"
+          },
+          "vinculado": {
+            "type": "boolean",
+            "description": "El bot de esta empresa ya le puede escribir al cliente"
           }
         }
       },
@@ -30033,7 +30189,8 @@
           "codigo",
           "enlace",
           "bot",
-          "vence_en"
+          "vence_en",
+          "empresa_id"
         ],
         "properties": {
           "codigo": {
@@ -30051,6 +30208,14 @@
           "vence_en": {
             "type": "string",
             "format": "date-time"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa cuyo bot se vincula (null = el bot global)"
           }
         }
       },

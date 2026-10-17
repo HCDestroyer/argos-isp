@@ -179,8 +179,7 @@ export async function variablesAvisoCobro(
     const saldo = fila.estado === 'anulada' ? new D(0) : D.max(total.minus(pagado), 0)
     const id = Number(fila.id)
 
-    // Multiempresa: la empresa de la factura (`SQL_EMPRESA_FACTURA`, hoy la de su servicio; punto de
-    // cambio a `billing.facturas.empresa_id` anotado en `#portal/marca`).
+    // Multiempresa: la empresa que emitió la factura (`billing.facturas.empresa_id`).
     const empresaId = Number(fila.empresa_id)
     return {
         empresa: await empresaDocumento(empresaId, cliente),

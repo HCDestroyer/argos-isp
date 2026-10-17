@@ -6,6 +6,8 @@ import { D, aTexto, dec } from '#ledger/dinero'
 import { saldoDelServicio, type EstadoServicio } from '#portal/consultas'
 import type { MetodoPago } from '#shared/eventos'
 import { EMPRESA_PRINCIPAL } from '#core/empresas'
+import { estadoCuenta } from '#billing/estado_cuenta'
+import { DateTime } from 'luxon'
 import {
     SQL_EMPRESA_FACTURA,
     empresaPrincipalDelCliente,
@@ -48,11 +50,32 @@ export interface ServicioPortal {
     empresa: MarcaEmpresa
 }
 
+/** Espejo del schema `PortalFacturaPendiente`. */
+export interface FacturaPendientePortal {
+    id: number
+    numero: string
+    servicio_id: number | null
+    vence_en: string
+    estado: 'emitida' | 'parcial' | 'vencida'
+    vencida: boolean
+    total: string
+    saldo: string
+}
+
+/** Espejo del schema `PortalCuentaEmpresa`: lo del cliente con UNA empresa (su NIT cobra lo suyo). */
+export interface CuentaEmpresaPortal {
+    empresa: MarcaEmpresa
+    saldo: string
+    saldo_a_favor: string
+    facturas_pendientes: FacturaPendientePortal[]
+}
+
 export interface CuentaPortal {
     cliente: ContactoPortal
     servicios: ServicioPortal[]
     monto_adeudado: string
     empresa_principal: MarcaEmpresa
+    empresas: CuentaEmpresaPortal[]
 }
 
 export type DocumentoFactura = 'aviso_cobro' | 'factura'
@@ -166,7 +189,45 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
         servicios,
         monto_adeudado: aTexto(total),
         empresa_principal: marcas.get(principal) ?? (await marcaDeEmpresa(principal)),
+        empresas: await cuentaPorEmpresa(clienteId, principal),
     }
+}
+
+/**
+ * Saldo y facturas del cliente por empresa (multiempresa): las secciones de `estadoCuenta` de A3
+ * (solo lectura: el auxiliar CxC de cada libro, sus anticipos y sus facturas pendientes) con la
+ * marca del portal. La principal del cliente primero; las demás, por id.
+ */
+export async function cuentaPorEmpresa(clienteId: number, principal: number): Promise<CuentaEmpresaPortal[]> {
+    const estado = await estadoCuenta(clienteId)
+    const marcas = await marcasDeEmpresas(estado.empresas.map((e) => e.empresa_id))
+    const hoy = DateTime.now().setZone('America/Guatemala').toISODate()!
+    const secciones: CuentaEmpresaPortal[] = []
+    for (const seccion of estado.empresas) {
+        secciones.push({
+            empresa: marcas.get(seccion.empresa_id) ?? (await marcaDeEmpresa(seccion.empresa_id)),
+            saldo: aTexto(seccion.saldo),
+            saldo_a_favor: aTexto(seccion.saldo_a_favor),
+            facturas_pendientes: seccion.facturas_pendientes.map((f) => {
+                const id = Number(f.id)
+                return {
+                    id,
+                    numero: numeroFactura({ ...f, id }),
+                    servicio_id: f.servicio_id === null ? null : Number(f.servicio_id),
+                    vence_en: f.vence_en,
+                    estado: f.estado as FacturaPendientePortal['estado'],
+                    vencida: f.estado === 'vencida' || f.vence_en < hoy,
+                    total: aTexto(f.total),
+                    saldo: aTexto(D.max(dec(f.total).minus(dec(f.pagado)), 0)),
+                }
+            }),
+        })
+    }
+    return secciones.sort(
+        (a, b) =>
+            Number(b.empresa.id === principal) - Number(a.empresa.id === principal) ||
+            a.empresa.id - b.empresa.id,
+    )
 }
 
 function columnasFacturaPortal(cliente: QueryClientContract) {
@@ -221,7 +282,7 @@ export async function facturasPortal(
     clienteId: number,
     opciones: OpcionesPaginacion,
 ): Promise<Pagina<FacturaPortal>> {
-    // con su servicio: la empresa de la factura sale de ahí (`SQL_EMPRESA_FACTURA`)
+    // la empresa de cada factura es la que la emitió (`SQL_EMPRESA_FACTURA`)
     const consulta = db
         .from('billing.facturas as f')
         .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')

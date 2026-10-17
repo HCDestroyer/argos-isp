@@ -196,6 +196,24 @@ export function errorComprobanteParaCliente(error: unknown): unknown {
             'Referencia duplicada',
         )
     }
+    if (error.code === 'E_CUENTA_DE_OTRA_EMPRESA') {
+        // Multiempresa: el depósito va a una cuenta de la empresa que factura el servicio (no se
+        // cruzan dineros entre NIT). El detalle de A3 nombra ids internos: aquí no se dicen.
+        return new Problema(
+            422,
+            'cuenta_de_otra_empresa',
+            'Cuenta de otra empresa',
+            'Esa cuenta es de otra empresa, no de la que te factura este servicio. Elige una de las ' +
+                'cuentas que aparecen para tu servicio; si ya depositaste ahí, comunícate con nosotros.',
+            [
+                {
+                    field: 'cuenta_bancaria_id',
+                    message: 'Esa cuenta es de otra empresa. Elige una de las cuentas de tu servicio.',
+                    rule: 'cuenta_de_otra_empresa',
+                },
+            ],
+        )
+    }
     if (error instanceof ValidacionFallida) {
         const errores = (error.errores ?? []).filter((e) => CAMPOS_FORMULARIO.has(e.field))
         if (errores.length === 0) {

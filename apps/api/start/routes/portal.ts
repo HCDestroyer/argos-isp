@@ -43,6 +43,7 @@ import {
     solicitarPromesaValidator,
     subirComprobanteValidator,
     verificarCodigoValidator,
+    vincularTelegramValidator,
 } from '#portal/validators'
 import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
 import { DemasiadasPeticiones, limitarPorIp } from '#portal/limite_peticiones'
@@ -410,20 +411,34 @@ const telegram: Ruta[] = [
         resumen: 'Genera el código de un solo uso y el enlace al bot para vincular Telegram',
         descripcion:
             `${SOBRE_LA_SESION} Llama \`GenerarCodigoTelegram\` de A6 (\`notificaciones.telegram_codigo\`, canal ` +
-            'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
+            'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior de ese ' +
+            'bot. Con `empresa_id` (una de `GET /portal/telegram` → `empresas`), el bot de esa empresa; 404 si ' +
+            'el cliente no tiene servicios en ella. 503 ' +
             `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
         seguridad: 'portal',
         limitada: true,
         permiso: null,
+        cuerpo: vincularTelegramValidator,
         respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
-        handler: async (ctx) => {
+        handler: async (ctx, { cuerpo }) => {
             await ipDelCliente(ctx, 'telegram-vincular')
             const sesion = await exigirSesionPortal(ctx)
-            return new GenerarCodigoTelegram().execute(
-                { cliente_id: sesion.clienteId },
-                ctx.contextoCliente(sesion.clienteId),
-            )
+            try {
+                return await new GenerarCodigoTelegram().execute(
+                    { cliente_id: sesion.clienteId, empresa_id: cuerpo.empresa_id ?? null },
+                    ctx.contextoCliente(sesion.clienteId),
+                )
+            } catch (error) {
+                // Una empresa en la que el cliente no tiene servicios: como un recurso ajeno.
+                if (
+                    error instanceof ValidacionFallida &&
+                    error.errores?.some((e) => e.rule === 'servicio_en_empresa')
+                ) {
+                    throw new NoEncontrado('No tienes servicios con esa empresa')
+                }
+                throw error
+            }
         },
     }),
     definirRuta({
@@ -618,7 +633,9 @@ const pagosEnLinea: Ruta[] = [
             'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
             '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
             'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
-            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al ' +
+            'ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 ' +
+            '`pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). ' +
+            '503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al ' +
             'cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). ' +
             `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
         etiqueta: 'portal',
@@ -821,7 +838,8 @@ const comprobantes: Ruta[] = [
             '`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` ' +
             '(`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que ' +
             'el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente ' +
-            '(`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. ' +
+            '(`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo ' +
+            '`cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. ' +
             `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
