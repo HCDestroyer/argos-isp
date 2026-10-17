@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
- * Resultado de la evaluación de una promesa (`resultado_evaluacion`): decisión (aprobada,
- * rechazada, pendiente), qué regla decidió y por qué, y cada verificación que hizo la API.
+ * Resultado de la evaluación de una promesa (`resultado_evaluacion`, `Schema<'EvaluacionPromesa'>`
+ * de A3): decisión, la regla que decidió (null si se aprobó), el motivo, las reglas revisadas en
+ * orden (terminan en la que decidió) con lo medido y el límite, la deuda, el historial y, si los
+ * hay, la aprobación y el cierre. Sin evaluación solo se ve la decisión que da el estado.
  */
 const props = withDefaults(defineProps<{
     promesa: Promesa
@@ -11,12 +13,20 @@ const props = withDefaults(defineProps<{
     compacta: false,
 })
 
-const evaluacion = computed(() => leerEvaluacion(props.promesa))
-const decision = computed(() => (evaluacion.value.decision ? DECISIONES[evaluacion.value.decision] : null))
-/** Lo último que pasó: cierre (rechazo o cancelación por un supervisor) o aprobación manual. */
-const ultimo = computed(() => evaluacion.value.otros.find(o => o.clave === 'cierre' && !o.mono)
-    ?? evaluacion.value.otros.find(o => o.clave === 'aprobacion' && !o.mono)
-    ?? null)
+const lectura = computed(() => leerEvaluacion(props.promesa))
+const evaluacion = computed(() => lectura.value.evaluacion)
+const decision = computed(() => (lectura.value.decision ? DECISIONES[lectura.value.decision] : null))
+const ultimo = computed(() => ultimoPaso(evaluacion.value))
+const datos = computed(() => (evaluacion.value ? datosEvaluacion(evaluacion.value) : []))
+
+function limiteDe(regla: ReglaEvaluada): string | null {
+    const valor = textoValorRegla(regla.valor)
+    const limite = textoValorRegla(regla.limite)
+    if (valor === null && limite === null) {
+        return null
+    }
+    return [valor !== null ? `medido ${valor}` : null, limite !== null ? `límite ${limite}` : null].filter(Boolean).join(' · ')
+}
 </script>
 
 <template>
@@ -29,17 +39,17 @@ const ultimo = computed(() => evaluacion.value.otros.find(o => o.clave === 'cier
             v-if="ultimo"
             class="line-clamp-2 text-xs whitespace-normal text-highlighted"
             data-prueba="ultimo-paso"
-        >{{ ultimo.clave === 'aprobacion' ? 'Aprobada' : 'Cierre' }}: {{ ultimo.valor }}</span>
+        >{{ ultimo }}</span>
         <span
-            v-if="evaluacion.regla"
+            v-if="evaluacion?.regla"
             class="truncate text-xs text-muted"
         >{{ etiquetaRegla(evaluacion.regla) }}</span>
         <span
-            v-if="evaluacion.motivo"
+            v-if="evaluacion"
             class="line-clamp-2 text-xs whitespace-normal text-muted"
         >{{ evaluacion.motivo }}</span>
         <span
-            v-if="!evaluacion.regla && !evaluacion.motivo"
+            v-else
             class="text-xs text-dimmed"
         >Sin detalle de la evaluación</span>
     </div>
@@ -60,58 +70,63 @@ const ultimo = computed(() => evaluacion.value.otros.find(o => o.clave === 'cier
                 data-prueba="decision"
             />
             <span
-                v-if="evaluacion.regla"
+                v-if="evaluacion?.regla"
                 class="text-sm text-highlighted"
                 data-prueba="regla"
             >
                 Regla: <strong>{{ etiquetaRegla(evaluacion.regla) }}</strong>{{ ' ' }}<span class="font-mono text-xs text-muted">({{ evaluacion.regla }})</span>
             </span>
         </div>
+
+        <template v-if="evaluacion">
+            <p
+                class="text-sm text-default"
+                data-prueba="motivo-evaluacion"
+            >
+                {{ evaluacion.motivo }}
+            </p>
+
+            <ul
+                v-if="evaluacion.reglas.length"
+                class="flex flex-col gap-1.5"
+                aria-label="Reglas revisadas"
+                data-prueba="reglas-evaluadas"
+            >
+                <li
+                    v-for="regla in evaluacion.reglas"
+                    :key="regla.regla"
+                    class="flex items-start gap-2 text-sm"
+                    :data-regla="regla.regla"
+                >
+                    <UIcon
+                        :name="regla.ok ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
+                        class="mt-0.5 size-4 shrink-0"
+                        :class="regla.ok ? 'text-success' : 'text-error'"
+                    />
+                    <span class="flex min-w-0 flex-col">
+                        <span>{{ etiquetaRegla(regla.regla) }}: <span class="text-muted">{{ regla.detalle }}</span></span>
+                        <span
+                            v-if="limiteDe(regla) || etiquetaOrigenRegla(regla.origen)"
+                            class="text-xs text-dimmed"
+                        >{{ [limiteDe(regla), etiquetaOrigenRegla(regla.origen)].filter(Boolean).join(' · ') }}</span>
+                    </span>
+                </li>
+            </ul>
+
+            <dl class="grid gap-2 sm:grid-cols-2">
+                <DatoFicha
+                    v-for="dato in datos"
+                    :key="dato.clave"
+                    :etiqueta="dato.etiqueta"
+                    :valor="dato.valor"
+                />
+            </dl>
+        </template>
         <p
-            v-if="evaluacion.motivo"
-            class="text-sm text-default"
-            data-prueba="motivo-evaluacion"
-        >
-            {{ evaluacion.motivo }}
-        </p>
-        <p
-            v-if="!evaluacion.regla && !evaluacion.motivo && !evaluacion.verificaciones.length"
+            v-else
             class="text-sm text-muted"
         >
             La API no devolvió el detalle de la evaluación.
         </p>
-
-        <ul
-            v-if="evaluacion.verificaciones.length"
-            class="flex flex-col gap-1.5"
-        >
-            <li
-                v-for="verificacion in evaluacion.verificaciones"
-                :key="verificacion.regla"
-                class="flex items-start gap-2 text-sm"
-            >
-                <UIcon
-                    :name="verificacion.cumple ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
-                    class="mt-0.5 size-4 shrink-0"
-                    :class="verificacion.cumple ? 'text-success' : 'text-error'"
-                />
-                <span>
-                    {{ etiquetaRegla(verificacion.regla) }}<template v-if="verificacion.detalle">: <span class="text-muted">{{ verificacion.detalle }}</span></template>
-                </span>
-            </li>
-        </ul>
-
-        <dl
-            v-if="evaluacion.otros.length"
-            class="grid gap-2 sm:grid-cols-2"
-        >
-            <DatoFicha
-                v-for="otro in evaluacion.otros"
-                :key="otro.clave"
-                :etiqueta="otro.etiqueta"
-                :valor="otro.valor"
-                :mono="otro.mono"
-            />
-        </dl>
     </section>
 </template>
