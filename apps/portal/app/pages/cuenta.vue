@@ -208,6 +208,8 @@ async function salir() {
                     label="Cómo reactivar mi servicio"
                     icon="i-lucide-wifi"
                     to="/corte"
+                    color="neutral"
+                    variant="outline"
                     class="mt-3"
                     block
                 />
