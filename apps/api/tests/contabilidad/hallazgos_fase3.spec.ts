@@ -10,7 +10,9 @@ import VencerFactura from '#billing/actions/vencer_factura'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import { controlFelFalso } from '#fiscal/fel/falso'
 import { dec } from '#ledger/dinero'
-import { errorDe, sacarDeLaColaFel, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
+import { dteParaEnviar, verDte } from '#fiscal/fel/dte'
+import { errorDe, lineas, sacarDeLaColaFel, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import {
     IVA_DEBITO,
@@ -62,18 +64,20 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
         await soloEmpresaPrincipal()
     })
 
-    test('H5 · un aviso con nota interna se certifica por el total bruto: el DTE declara más IVA que 2.1.02', async ({
+    test('H5 · el DTE de un aviso con notas internas se certifica por el neto y la reclasificación lleva su IVA exacto', async ({
         assert,
     }) => {
-        // Producto: app/fiscal/actions/solicitar_certificacion.ts (iva = factura.iva) y app/fiscal/fel/dte.ts
-        // (dteParaEnviar: todas las líneas de la factura) frente a app/billing/fel_facturas.ts (reclasificarIva
-        // lleva a 2.1.02 solo lo que queda en 2.1.11 después de las notas internas). El DTE certificado dice
-        // IVA 24.00 y el libro solo reconoce 21.43 de débito fiscal; si después se acredita el resto con NCRE,
-        // el libro de ventas queda con 2.57 de IVA de una factura acreditada al 100 % y 2.1.02 en cero.
+        // Decisión del líder: el DTE de un aviso se certifica por bruto − notas internas vivas al certificar, y la
+        // reclasificación 2.1.11 / 2.1.02 lleva exactamente el IVA del DTE. Producto hoy: el DTE va por el bruto
+        // (app/fiscal/actions/solicitar_certificacion.ts: total/iva de la factura; app/fiscal/fel/dte.ts:
+        // dteParaEnviar con todas las líneas) mientras reclasificarIva (app/billing/fel_facturas.ts) lleva lo que
+        // queda en 2.1.11: el DTE declara IVA 24.00 y 2.1.02 reconoce 21.43.
         const e = await empresasFel('obligatoria')
+
+        // cobrado: aviso 224.00 con nota interna de 24.00 (IVA 2.57) y pago de 200.00
         const s = await servicioFel(e, 'pagar', '224.00', await crearClienteFila(datosNit()))
         const f = s.facturas[0]!
-        await new EmitirNotaCredito().execute(
+        const interna = await new EmitirNotaCredito().execute(
             { factura_id: f.id, monto: '24.00', motivo: 'descuento' },
             e.ctx,
         )
@@ -84,10 +88,41 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
         await cola(e)
         const [dte] = await dtesDe('factura', f.id)
         assert.equal(dte!.estado, 'certificado')
-        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
-        // libro de ventas (DTE) = débito fiscal del mayor
-        assert.equal(await saldo(e.B, IVA_DEBITO), await ivaDeDteCertificados(e.B), 'IVA del DTE ≠ 2.1.02')
-    }).fails('H5: el DTE del aviso lleva el IVA bruto (24.00) y la reclasificación solo 21.43')
+        const ivaNeto = dec(f.iva).minus(interna.iva).toFixed(2)
+        assert.equal(dte!.total, '200.00')
+        assert.equal(dte!.iva, ivaNeto)
+        // lo que se envía al certificador también es el neto
+        const envio = await dteParaEnviar(db.connection(), await verDte(Number(dte!.id)))
+        const sumaLineas = envio.lineas.reduce((t, l) => t.plus(l.total), dec('0')).toFixed(2)
+        assert.equal(sumaLineas, '200.00')
+        assert.equal(envio.total, '200.00')
+        assert.equal(envio.iva, ivaNeto)
+        assert.deepEqual(await lineas('reclasificacion', Number(dte!.id)), [
+            [IVA_POR_CERTIFICAR, ivaNeto, '0.00'],
+            [IVA_DEBITO, '0.00', ivaNeto],
+        ])
+        assert.equal(await saldo(e.B, IVA_DEBITO), await ivaDeDteCertificados(e.B), 'IVA de los DTE ≠ 2.1.02')
+
+        // a mano antes de cobrar y acreditado el resto con NCRE: libro de ventas y 2.1.02 en cero
+        const t = await servicioFel(e, 'pagar', '224.00', await crearClienteFila(datosNit()), e.C)
+        const g = t.facturas[0]!
+        await new EmitirNotaCredito().execute(
+            { factura_id: g.id, monto: '22.40', motivo: 'descuento' },
+            e.ctx,
+        )
+        await new SolicitarCertificacion().execute({ factura_id: g.id }, e.ctx)
+        await cola(e)
+        await new EmitirNotaCredito().execute({ factura_id: g.id, monto: '201.60', motivo: 'baja' }, e.ctx)
+        await cola(e)
+        assert.equal(await saldo(e.C, IVA_DEBITO), '0.00')
+        assert.equal(
+            await ivaDeDteCertificados(e.C),
+            '0.00',
+            'el libro de ventas deja IVA de una factura acreditada al 100 %',
+        )
+
+        assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
+    }).fails('H5: el DTE del aviso lleva el bruto (IVA 24.00) y la reclasificación solo 21.43')
 
     test('H6 · un pago registrado mientras la anulación del DTE está pendiente deja el DTE anulado en la SAT y vivo en el libro', async ({
         assert,
