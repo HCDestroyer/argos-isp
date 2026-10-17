@@ -134,6 +134,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue'] },
     'PromesaAprobarModal.vue': { permisos: ['promesas.aprobar'], desde: ['pages/promesas/index.vue'] },
+    'ReciboCobro.vue': { permisos: ['pagos.ver'], desde: ['pages/cobro/index.vue'] },
     'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id].vue'] },
     'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
     'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },

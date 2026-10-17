@@ -128,6 +128,28 @@ const erroresSinCampo = computed(() => (problemaPago.value?.status === 422
     ? (problemaPago.value.errors ?? []).filter(e => !CAMPOS_COBRO.has(e.field))
     : []))
 
+/**
+ * Cobro en efectivo de facturas de una empresa en la que el cajero no tiene caja abierta (422
+ * `caja_no_abierta`, A3). Se nombra la empresa y se ofrece abrir la caja.
+ */
+const { empresas: empresasUsuario } = useEmpresaActiva()
+const sinCaja = computed(() => {
+    const id = problemaPago.value ? empresaSinCaja(problemaPago.value) : null
+    if (id === null) {
+        return null
+    }
+    const nombre = empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? `la empresa ${id}`
+    return { id, nombre }
+})
+
+/** Cobro repartido: un pago por empresa con el mismo `cobro_id` (solo efectivo). */
+const pagosDelCobro = computed<Pago[]>(() => (pago.value ? (pago.value.pagos?.length ? pago.value.pagos : [pago.value]) : []))
+const cobroRepartido = computed(() => (pago.value?.cobro_id ?? null) !== null && pagosDelCobro.value.length > 1)
+function nombreDeEmpresa(id: number | undefined): string {
+    return empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? (id ? `Empresa ${id}` : 'Empresa sin identificar')
+}
+const totalCobrado = computed(() => pagosDelCobro.value.reduce((suma, p) => suma.plus(p.monto), new Decimal(0)))
+
 /** Los selectores de Nuxt UI usan `undefined` para "sin elegir"; el esquema, `null`. */
 const bancoOrigen = computed<number | undefined>({
     get: () => estado.banco_origen_id ?? undefined,
@@ -445,6 +467,9 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         if (duplicada) {
             formulario.value?.setErrors([{ name: 'referencia', message: 'Ya está registrada en otro pago con este método y cuenta. Revisa el número.' }])
         }
+        if (codigoProblema(resultado.problema) === 'cuenta_de_otra_empresa') {
+            formulario.value?.setErrors([{ name: 'cuenta_bancaria_id', message: 'Esta cuenta es de otra empresa que las facturas marcadas. Elige una cuenta de la misma empresa.' }])
+        }
         return
     }
 
@@ -457,7 +482,7 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
     const reactivadosAhora = seguimiento.reactivados.value.length
     toast.add({
         title: 'Pago registrado',
-        description: `${formatearQuetzales(resultado.data.monto)} · ${cliente.value.nombre}${reactivadosAhora ? ` · ${reactivadosAhora === 1 ? 'servicio reactivado' : `${reactivadosAhora} servicios reactivados`}` : ''}`,
+        description: `${formatearQuetzales(totalCobrado.value)}${cobroRepartido.value ? ` en ${pagosDelCobro.value.length} empresas` : ''} · ${cliente.value.nombre}${reactivadosAhora ? ` · ${reactivadosAhora === 1 ? 'servicio reactivado' : `${reactivadosAhora} servicios reactivados`}` : ''}`,
         icon: 'i-lucide-badge-check',
         color: 'success',
     })
@@ -964,7 +989,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 v-if="cliente && pago"
                 class="flex flex-col gap-3"
             >
+                <section
+                    v-if="cobroRepartido"
+                    class="surface-card flex flex-col gap-2 p-4"
+                    aria-label="Pagos por empresa"
+                    data-prueba="pagos-por-empresa"
+                >
+                    <p class="text-sm text-muted">
+                        El cobro se repartió en un pago por empresa; cada uno va a la caja de su empresa.
+                    </p>
+                    <ul class="flex flex-col gap-1 text-sm">
+                        <li
+                            v-for="parte in pagosDelCobro"
+                            :key="parte.id"
+                            class="flex justify-between gap-3"
+                        >
+                            <span>
+                                <span class="font-medium text-highlighted">{{ nombreDeEmpresa(parte.empresa_id) }}</span>
+                                <span class="text-muted"> · Pago #{{ parte.id }}</span>
+                            </span>
+                            <span class="tabular-nums">{{ formatearQuetzales(parte.monto) }}</span>
+                        </li>
+                    </ul>
+                    <p class="flex justify-between gap-3 font-semibold text-highlighted">
+                        <span>Total cobrado</span>
+                        <span class="tabular-nums">{{ formatearQuetzales(totalCobrado) }}</span>
+                    </p>
+                </section>
+                <ReciboCobro
+                    v-if="cobroRepartido && pago.cobro_id && puede('pagos.ver')"
+                    :cobro-id="pago.cobro_id"
+                    :cliente="cliente"
+                    :cajero="usuario?.nombre ?? null"
+                />
                 <ReciboPago
+                    v-else
                     :pago="pago"
                     :cliente="cliente"
                     :facturas="facturasAntes"
@@ -1256,6 +1315,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     <ProblemaAlerta
                         v-else-if="problemaPago && problemaPago.status !== 422"
                         :problema="problemaPago"
+                    />
+                    <UAlert
+                        v-else-if="sinCaja"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-lock"
+                        :title="`No tienes caja abierta en ${sinCaja.nombre}`"
+                        description="Las facturas marcadas incluyen avisos de esa empresa y el efectivo va a su propia caja. Abre un turno en una caja de esa empresa y vuelve a registrar el cobro."
+                        :actions="puede('cajas.abrir') ? [{ label: 'Abrir caja', icon: 'i-lucide-lock-open', to: '/caja', color: 'warning', variant: 'solid' }] : []"
+                        data-prueba="caja-no-abierta"
                     />
                     <UAlert
                         v-else-if="problemaPago"
