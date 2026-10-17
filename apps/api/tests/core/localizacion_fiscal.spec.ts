@@ -8,6 +8,7 @@ import {
     verificadorNit,
 } from '#core/nit_cui'
 import {
+    instaladorLocalizacion,
     registrarInstaladorLocalizacion,
     type InstalacionLocalizacion,
     type InstaladorLocalizacion,
@@ -363,8 +364,13 @@ test.group('Localización fiscal: clientes por la API', () => {
 })
 
 test.group('Localización fiscal: país de la empresa', (group) => {
+    // las pruebas registran instaladores falsos; al terminar se deja el que había (el de fiscal)
+    let instaladorPrevio: InstaladorLocalizacion | null = null
+    group.setup(() => {
+        instaladorPrevio = instaladorLocalizacion()
+    })
     group.each.teardown(async () => {
-        registrarInstaladorLocalizacion(null)
+        registrarInstaladorLocalizacion(instaladorPrevio)
         await soloEmpresaPrincipal()
     })
 
