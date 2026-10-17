@@ -28,6 +28,8 @@ const BASE: Accion = {
     resultado: 'ok',
     error: null,
     request_id: 'req-1',
+    empresa_id: 1,
+    empresa_nombre: 'ArgosIsp',
     created_at: '2026-10-11T14:00:00Z',
 }
 

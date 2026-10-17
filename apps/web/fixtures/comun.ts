@@ -134,6 +134,9 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
+        // Como la API con una sola empresa: la empresa activa es la 1.
+        empresa_id: 1,
+        empresa_nombre: 'ArgosIsp',
         created_at: ahora(),
     })
 }

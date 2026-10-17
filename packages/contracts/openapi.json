@@ -455,6 +455,18 @@
                 "consola"
               ]
             }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -23607,6 +23619,8 @@
           "resultado",
           "error",
           "request_id",
+          "empresa_id",
+          "empresa_nombre",
           "created_at"
         ],
         "properties": {
@@ -23676,6 +23690,20 @@
               "string",
               "null"
             ]
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Empresa (NIT) de lo que se hizo, o la empresa activa de quien lo hizo; null si no es de ninguna (login, usuarios, clientes, sistema)"
+          },
+          "empresa_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre comercial de esa empresa (null sin empresa)"
           },
           "created_at": {
             "type": "string",

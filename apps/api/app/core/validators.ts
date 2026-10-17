@@ -436,6 +436,7 @@ export const listarAccionesValidator = vine.compile(
             .enum(CANALES)
             .optional()
             .meta({ description: 'Oculta las acciones de este canal (p. ej. portal)' }),
+        empresas: empresasConsulta(),
     }),
 )
 

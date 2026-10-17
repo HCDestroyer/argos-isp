@@ -10,13 +10,16 @@ function mas(fecha: string, horas: number): string {
 
 let siguiente = 1
 
-function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre'>>): Accion {
+function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre' | 'empresa_id' | 'empresa_nombre'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre'>>): Accion {
     const id = siguiente++
     return {
         id,
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
+        // Como la API con una sola empresa: la empresa activa es la 1.
+        empresa_id: 1,
+        empresa_nombre: 'ArgosIsp',
         // Como la API: nombre del usuario; `null` para el sistema.
         actor_nombre: datos.actor_id === 1 ? 'Ana Administradora' : null,
         ...datos,
