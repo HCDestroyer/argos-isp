@@ -95,8 +95,8 @@ describe('semana 2 · cola de comprobantes', () => {
         simularFalla('GET /api/v1/comprobantes', 500)
         await api.actualizarContador()
         expect(api.contador.value).toBeNull()
-        expect(textoContador({ cantidad: 100, hayMas: true })).toBe('100+')
-        expect(textoContador({ cantidad: 0, hayMas: false })).toBeUndefined()
+        expect(textoContador(150)).toBe('99+')
+        expect(textoContador(0)).toBeUndefined()
     })
 
     it('facturas por defecto: las del servicio del comprobante, la más antigua primero', async () => {

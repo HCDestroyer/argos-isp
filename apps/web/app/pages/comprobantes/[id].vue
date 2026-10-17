@@ -174,7 +174,7 @@ onMounted(cargar)
                 variant="subtle"
                 icon="i-lucide-badge-check"
                 title="Comprobante aprobado"
-                :description="`Revisado el ${formatearFechaHora(comprobante.verificado_en)}${comprobante.verificado_por ? ` por el usuario #${comprobante.verificado_por}` : ''}.`"
+                :description="`${textoRevision(comprobante) ?? 'Revisado'}.`"
                 :actions="comprobante.pago_id && puede('pagos.ver') ? [{ label: `Ver pago #${comprobante.pago_id}`, to: `/pagos/${comprobante.pago_id}`, icon: 'i-lucide-banknote', color: 'success', variant: 'outline' }] : undefined"
                 data-prueba="comprobante-aprobado"
             />
@@ -185,7 +185,7 @@ onMounted(cargar)
                 variant="subtle"
                 icon="i-lucide-circle-x"
                 title="Comprobante rechazado"
-                :description="[comprobante.motivo_rechazo, comprobante.verificado_en ? formatearFechaHora(comprobante.verificado_en) : null].filter(Boolean).join(' · ')"
+                :description="[comprobante.motivo_rechazo, textoRevision(comprobante)].filter(Boolean).join(' · ')"
                 data-prueba="comprobante-rechazado"
             />
 

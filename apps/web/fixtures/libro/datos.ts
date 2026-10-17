@@ -158,3 +158,12 @@ export function cuadra(asiento: Asiento): boolean {
     const haber = asiento.movimientos.reduce((suma, m) => suma.plus(m.haber), new Decimal(0))
     return debe.equals(haber)
 }
+
+/**
+ * `GET /libro/bancos` (A3): cuentas bancarias contables de `ledger.bancos`. El principal es la
+ * cuenta 1.1.02.01 (la de los egresos con `banco` sin `banco_id`); el número va enmascarado.
+ */
+export const bancosLibro: Schema<'BancoLibro'>[] = [
+    { id: 1, nombre: 'Banco principal', banco_id: null, banco: null, numero_enmascarado: null, cuenta_id: 6, cuenta_codigo: '1.1.02.01', cuenta_nombre: 'Banco principal' },
+    { id: 2, nombre: 'Banco Industrial · Monetaria', banco_id: 2, banco: 'Banco Industrial', numero_enmascarado: '******3456', cuenta_id: 16, cuenta_codigo: '1.1.02.02', cuenta_nombre: 'Banco Industrial · Monetaria (****3456)' },
+]

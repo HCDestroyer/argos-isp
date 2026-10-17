@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { conPermiso, datosInvalidos, noEncontrado, numeroQuery, paginar } from '../comun'
+import { bancosLibro } from './datos'
 
 type Cuenta = Schema<'Cuenta'>
 type LineaMayor = Schema<'LineaMayor'>
@@ -21,6 +22,9 @@ function fechaValida(valor: string | null): boolean {
 }
 
 export const rutasLibro: RutasFixture = {
+    /** Como `GET /libro/bancos` (A3, `egresos.ver`). */
+    'GET /api/v1/libro/bancos': conPermiso('egresos.ver', () => ({ status: 200, cuerpo: bancosLibro })),
+
     'GET /api/v1/libro/cuentas': conPermiso('libro.ver', () => ({
         status: 200,
         cuerpo: [...bd.cuentas].sort((a, b) => a.codigo.localeCompare(b.codigo)),

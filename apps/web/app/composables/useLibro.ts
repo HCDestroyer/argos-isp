@@ -9,6 +9,7 @@ export type OrigenAsiento = Asiento['origen_tipo']
 export type FiltrosDiario = Omit<NonNullable<paths['/api/v1/libro/diario']['get']['parameters']['query']>, 'cursor'>
 export type FiltrosMayor = Omit<paths['/api/v1/libro/mayor']['get']['parameters']['query'], 'cursor'>
 export type CierrePeriodo = Schema<'CierrePeriodo'>
+export type BancoLibro = Schema<'BancoLibro'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
 export function useLibro() {
@@ -89,5 +90,13 @@ export function useLibro() {
         }))
     }
 
-    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo }
+    /**
+     * `GET /libro/bancos` (`egresos.ver`): cuentas bancarias contables de `ledger.bancos`; su `id`
+     * es el `banco_id` de un egreso con método `banco`. El número viene enmascarado.
+     */
+    function bancos(): Promise<Resultado<BancoLibro[]>> {
+        return resolver(api.GET('/api/v1/libro/bancos'))
+    }
+
+    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos }
 }

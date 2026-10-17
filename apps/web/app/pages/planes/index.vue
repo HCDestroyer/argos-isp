@@ -2,9 +2,10 @@
 import type { TableColumn } from '@nuxt/ui'
 
 /**
- * Planes (A1): lista con su modelo de velocidad y el rate-limit resultante, alta
- * (`planes.crear`) y edición (`planes.editar`) con vista previa. La implementación por router
- * con excepciones queda para la tarea 7 completa.
+ * Planes (A1): lista con su modelo de velocidad, alta (`planes.crear`) y edición
+ * (`planes.editar`) con la vista previa del rate-limit que calcula la API
+ * (`POST /planes/vista-previa`). El rate-limit de cada plan en un router se ve en Routers ·
+ * Velocidad (`PlanEfectivo.rate_limit`). La implementación por router queda para la tarea 7.
  */
 definePageMeta({ permiso: 'planes.ver' })
 
@@ -19,7 +20,7 @@ const columnas: TableColumn<Plan>[] = [
     { accessorKey: 'nombre', header: 'Plan', meta: { class: { td: 'whitespace-normal' } } },
     { id: 'velocidad', header: 'Bajada / subida', meta: SOLO_ANCHO },
     { id: 'modelo', header: 'Reuso · garantía · prioridad', meta: SOLO_ESCRITORIO },
-    { id: 'rate_limit', header: 'Rate-limit (activo)', meta: SOLO_ESCRITORIO },
+    { id: 'limitada', header: 'Limitado', meta: SOLO_ESCRITORIO },
     { accessorKey: 'precio', header: 'Precio', meta: { class: { th: 'text-right', td: 'text-right' } } },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
@@ -33,7 +34,7 @@ function abrir(plan: Plan | null) {
 }
 
 function alGuardar(plan: Plan) {
-    toast.add({ title: editando.value ? `${plan.nombre} actualizado` : `${plan.nombre} creado`, description: rateLimitServicio(velocidadDePlan(plan), 'activo'), icon: 'i-lucide-circle-check', color: 'success' })
+    toast.add({ title: editando.value ? `${plan.nombre} actualizado` : `${plan.nombre} creado`, description: `${velocidad(plan)} · ${modelo(plan)}`, icon: 'i-lucide-circle-check', color: 'success' })
     void lista.recargar()
 }
 
@@ -42,8 +43,11 @@ function velocidad(plan: Plan): string {
 }
 
 function modelo(plan: Plan): string {
-    const v = velocidadDePlan(plan)
-    return `1:${v.reuso} · ${garantizadoEfectivoPct(v)} % · prioridad ${v.prioridad}${v.rafaga_bajada_kbps || v.rafaga_subida_kbps ? ' · con ráfaga' : ''}`
+    return resumenVelocidadPlan(plan)
+}
+
+function limitada(plan: Plan): string {
+    return `${formatearVelocidad(plan.bajada_limitada_kbps)} / ${formatearVelocidad(plan.subida_limitada_kbps)}`
 }
 
 onMounted(() => void lista.recargar())
@@ -113,8 +117,8 @@ onMounted(() => void lista.recargar())
                     <template #modelo-cell="{ row }">
                         <span class="text-sm">{{ modelo(row.original) }}</span>
                     </template>
-                    <template #rate_limit-cell="{ row }">
-                        <span class="font-mono text-xs">{{ rateLimitServicio(velocidadDePlan(row.original), 'activo') }}</span>
+                    <template #limitada-cell="{ row }">
+                        <span class="whitespace-nowrap text-sm text-muted">{{ limitada(row.original) }}</span>
                     </template>
                     <template #precio-cell="{ row }">
                         <span class="whitespace-nowrap tabular-nums">{{ formatearQuetzales(row.original.precio) }}</span>

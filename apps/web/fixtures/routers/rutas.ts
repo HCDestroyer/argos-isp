@@ -1,7 +1,8 @@
-import type { Schema } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
+import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
 import { vistaPreviaControl } from './vistaPrevia'
 
 function existeRouter(id: number | null): boolean {
@@ -26,6 +27,34 @@ function efectivo(plan: Schema<'Plan'>, routerId: number): Schema<'PlanEfectivo'
     }
 }
 
+const API_URL = /^https?:\/\/[^\s/]+(:\d{1,5})?\/?$/
+
+/** Como `camposConexionApi` (A1): los cinco campos de conexión, opcionales y nulables. */
+function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['errors']> {
+    const errores: NonNullable<Problem['errors']> = []
+    const texto = (campo: string, maximo: number, patron?: RegExp, mensaje = 'Formato inválido') => {
+        const valor = cuerpo[campo]
+        if (valor === undefined || valor === null) {
+            return
+        }
+        if (typeof valor !== 'string' || valor.trim().length < 1 || valor.trim().length > maximo) {
+            errores.push({ field: campo, message: `Debe tener entre 1 y ${maximo} caracteres`, rule: 'maxLength' })
+            return
+        }
+        if (patron && !patron.test(valor.trim())) {
+            errores.push({ field: campo, message: mensaje, rule: 'regex' })
+        }
+    }
+    texto('api_url', 300, API_URL, 'Debe ser https://host o https://host:puerto')
+    texto('api_ca', 20_000, /^-----BEGIN CERTIFICATE-----/, 'Debe ser un certificado PEM')
+    texto('dhcp_servidor', 100)
+    texto('interfaz_clientes', 100)
+    if (cuerpo.api_tls_verificar !== undefined && typeof cuerpo.api_tls_verificar !== 'boolean') {
+        errores.push({ field: 'api_tls_verificar', message: 'Debe ser verdadero o falso', rule: 'boolean' })
+    }
+    return errores
+}
+
 function capacidadValida(valor: unknown): boolean {
     return valor === null || valor === undefined || (typeof valor === 'number' && Number.isInteger(valor) && valor >= 1 && valor <= 100_000_000)
 }
@@ -42,7 +71,7 @@ export const rutasRouters: RutasFixture = {
         return router ? { status: 200, cuerpo: router } : noEncontrado('el router')
     }),
 
-    /** Como `EditarRouter` (A1): ya no cambia el modo de colas; sí la capacidad. 409 por versión. */
+    /** Como `EditarRouter` (A1): ya no cambia el modo de colas; sí la capacidad y la conexión. 409 por versión. */
     'PUT /api/v1/routers/:id': conPermiso('routers.editar', (solicitud) => {
         const router = bd.routers.find(r => r.id === idDe(solicitud))
         if (!router) {
@@ -52,20 +81,31 @@ export const rutasRouters: RutasFixture = {
         if (cuerpo.version !== router.version) {
             return versionCambiada()
         }
-        const errores = (['capacidad_bajada_kbps', 'capacidad_subida_kbps'] as const)
+        const errores: NonNullable<Problem['errors']> = (['capacidad_bajada_kbps', 'capacidad_subida_kbps'] as const)
             .filter(campo => !capacidadValida(cuerpo[campo]))
             .map(campo => ({ field: campo, message: 'Debe ser un entero entre 1 y 100000000', rule: 'range' }))
+        errores.push(...erroresConexion(cuerpo))
         if (errores.length) {
             return datosInvalidos(errores)
         }
         const capacidad = (campo: 'capacidad_bajada_kbps' | 'capacidad_subida_kbps') => (campo in cuerpo ? (cuerpo[campo] as number | null) : router[campo] ?? null)
+        const conexion = <K extends 'api_url' | 'api_tls_verificar' | 'api_ca' | 'dhcp_servidor' | 'interfaz_clientes'>(campo: K): Schema<'Router'>[K] => {
+            const valor = campo in cuerpo ? cuerpo[campo] : router[campo]
+            return (typeof valor === 'string' ? valor.trim() : valor) as Schema<'Router'>[K]
+        }
         Object.assign(router, {
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
+            api_url: conexion('api_url'),
+            api_tls_verificar: conexion('api_tls_verificar'),
+            api_ca: conexion('api_ca'),
+            dhcp_servidor: conexion('dhcp_servidor'),
+            interfaz_clientes: conexion('interfaz_clientes'),
             version: router.version + 1,
             updated_at: ahora(),
         })
-        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, cuerpo)
+        // Como la API: la CA se audita como `***`.
+        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, typeof cuerpo.api_ca === 'string' ? { ...cuerpo, api_ca: '***' } : cuerpo)
         return { status: 200, cuerpo: router }
     }),
 

@@ -44,8 +44,8 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/
 /**
  * Espejo de `registrarEgresoValidator` y de `RegistrarEgreso`: monto string > 0 con hasta 2
  * decimales; fecha opcional y no futura (día de Guatemala); la caja es obligatoria con `caja` y
- * la cuenta con `cuenta_bancaria`; con `banco` sale del banco principal del libro (`banco_id` no
- * se manda: la API no lista los bancos del libro). Proveedor
+ * la cuenta con `cuenta_bancaria`; con `banco` se elige uno de `GET /libro/bancos` (vacío: el
+ * banco principal, como la API sin `banco_id`). Proveedor
  * hasta 150, descripción hasta 500 y comprobante hasta 100.
  */
 export function esquemaEgreso(hoy: string) {
@@ -61,6 +61,7 @@ export function esquemaEgreso(hoy: string) {
             .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha del egreso no puede ser futura'),
         caja_id: z.number().int().positive().nullable(),
+        banco_id: z.number().int().positive().nullable(),
         cuenta_bancaria_id: z.number().int().positive().nullable(),
         proveedor: z.string().trim().max(150, 'Máximo 150 caracteres'),
         descripcion: z.string().trim().max(500, 'Máximo 500 caracteres'),
@@ -79,7 +80,7 @@ export type EntradaEgreso = z.input<ReturnType<typeof esquemaEgreso>>
 export type SalidaEgreso = z.output<ReturnType<typeof esquemaEgreso>>
 
 export function entradaEgresoVacia(): EntradaEgreso {
-    return { categoria: 'otros', monto: '', metodo: 'caja', fecha: '', caja_id: null, cuenta_bancaria_id: null, proveedor: '', descripcion: '', comprobante: '' }
+    return { categoria: 'otros', monto: '', metodo: 'caja', fecha: '', caja_id: null, banco_id: null, cuenta_bancaria_id: null, proveedor: '', descripcion: '', comprobante: '' }
 }
 
 /**
@@ -93,6 +94,9 @@ export function cuerpoEgreso(datos: SalidaEgreso): CuerpoEgreso {
     }
     if (datos.metodo === 'caja') {
         cuerpo.caja_id = datos.caja_id
+    }
+    if (datos.metodo === 'banco' && datos.banco_id !== null) {
+        cuerpo.banco_id = datos.banco_id
     }
     if (datos.metodo === 'cuenta_bancaria') {
         cuerpo.cuenta_bancaria_id = datos.cuenta_bancaria_id

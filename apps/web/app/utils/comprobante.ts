@@ -1,6 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import type { BadgeProps } from '@nuxt/ui'
 import * as z from 'zod'
+import { formatearFechaHora } from './formato'
 
 type Comprobante = Schema<'Comprobante'>
 type Estado = Comprobante['estado']
@@ -14,6 +15,23 @@ export const ESTADOS_COMPROBANTE: Record<Estado, { etiqueta: string, plural: str
 export const CANALES_COMPROBANTE: Record<Comprobante['canal'], string> = {
     portal: 'Portal del cliente',
     panel: 'Panel',
+}
+
+/** Quién lo aprobó o rechazó: su nombre (`verificado_por_nombre`), o `usuario #N` si no vino. */
+export function revisadoPor(comprobante: Pick<Comprobante, 'verificado_por' | 'verificado_por_nombre'>): string | null {
+    if (comprobante.verificado_por_nombre) {
+        return comprobante.verificado_por_nombre
+    }
+    return comprobante.verificado_por ? `usuario #${comprobante.verificado_por}` : null
+}
+
+/** Texto de la revisión: `Revisado el 16/10/2026 10:30 por Ana Administradora`. */
+export function textoRevision(comprobante: Pick<Comprobante, 'verificado_en' | 'verificado_por' | 'verificado_por_nombre'>): string | null {
+    if (!comprobante.verificado_en) {
+        return null
+    }
+    const quien = revisadoPor(comprobante)
+    return `Revisado el ${formatearFechaHora(comprobante.verificado_en)}${quien ? ` por ${quien}` : ''}`
 }
 
 export function esEstadoComprobante(valor: unknown): valor is Estado {

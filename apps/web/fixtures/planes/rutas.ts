@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, versionCambiada } from '../comun'
+import { validarVelocidad, velocidadDePlan, vistaPreviaVelocidad } from './velocidad'
 
 type Plan = Schema<'Plan'>
 type Errores = NonNullable<Problem['errors']>
@@ -92,6 +93,43 @@ export const rutasPlanes: RutasFixture = {
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
 
+    /** Como `POST /planes/vista-previa` (A1): no guarda; 422 por campo con las reglas de crear. */
+    'POST /api/v1/planes/vista-previa': conPermiso('planes.ver', (solicitud) => {
+        const cuerpo = cuerpoObjeto(solicitud)
+        const momento = ahora()
+        const base: Plan = {
+            id: 0,
+            nombre: 'Vista previa',
+            precio: '0.00',
+            bajada_kbps: 0,
+            subida_kbps: 0,
+            bajada_limitada_kbps: 0,
+            subida_limitada_kbps: 0,
+            reuso: 1,
+            garantizado_pct: null,
+            rafaga_bajada_kbps: null,
+            rafaga_subida_kbps: null,
+            rafaga_umbral_pct: 75,
+            rafaga_segundos: 16,
+            prioridad: 8,
+            dual_stack: 'ambos',
+            tamano_prefijo_delegado: 56,
+            global: true,
+            activo: true,
+            version: 1,
+            created_at: momento,
+            updated_at: momento,
+        }
+        const plan = planDe(cuerpo, base)
+        const errores = validar(plan)
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        const activos = typeof cuerpo.activos === 'number' ? cuerpo.activos : 1
+        const override = typeof cuerpo.rate_limit_override === 'string' ? cuerpo.rate_limit_override : null
+        return { status: 200, cuerpo: vistaPreviaVelocidad(velocidadDePlan(plan), activos, override) }
+    }),
+
     'GET /api/v1/planes/:id': conPermiso('planes.ver', (solicitud) => {
         const plan = bd.planes.find(p => p.id === idDe(solicitud))
         return plan ? { status: 200, cuerpo: plan } : noEncontrado('el plan')
@@ -107,7 +145,13 @@ export const rutasPlanes: RutasFixture = {
             subida_kbps: 0,
             bajada_limitada_kbps: 0,
             subida_limitada_kbps: 0,
-            ...VELOCIDAD_POR_DEFECTO,
+            reuso: 1,
+            garantizado_pct: null,
+            rafaga_bajada_kbps: null,
+            rafaga_subida_kbps: null,
+            rafaga_umbral_pct: 75,
+            rafaga_segundos: 16,
+            prioridad: 8,
             dual_stack: 'ambos',
             tamano_prefijo_delegado: 56,
             global: true,

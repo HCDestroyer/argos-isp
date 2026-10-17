@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { bancosLibro } from '../libro/datos'
 import { categoriasEgreso } from './datos'
 
 type Egreso = Schema<'Egreso'>
@@ -120,6 +121,11 @@ export const rutasEgresos: RutasFixture = {
         if (metodo === 'caja' && !caja) {
             errores.push({ field: 'caja_id', message: 'La caja es obligatoria', rule: 'required' })
         }
+        // Con `banco`: el de `ledger.bancos` pedido o, sin `banco_id`, el principal (id 1).
+        const banco = metodo === 'banco' ? bancosLibro.find(b => b.id === (cuerpo.banco_id ?? 1)) : undefined
+        if (metodo === 'banco' && !banco) {
+            errores.push({ field: 'banco_id', message: 'El banco no existe en el libro', rule: 'exists' })
+        }
         const cuenta = metodo === 'cuenta_bancaria' ? bd.cuentasBancarias.find(c => c.id === cuerpo.cuenta_bancaria_id) : undefined
         if (metodo === 'cuenta_bancaria' && !cuenta) {
             errores.push({ field: 'cuenta_bancaria_id', message: 'La cuenta bancaria es obligatoria', rule: 'required' })
@@ -146,8 +152,8 @@ export const rutasEgresos: RutasFixture = {
             caja_id: caja?.id ?? null,
             caja_nombre: caja?.nombre ?? null,
             turno_id: caja?.turno_abierto_id ?? null,
-            banco_id: metodo === 'banco' ? 1 : null,
-            banco_nombre: metodo === 'banco' ? 'Banco principal' : null,
+            banco_id: banco?.id ?? null,
+            banco_nombre: banco?.nombre ?? null,
             cuenta_bancaria_id: cuenta?.id ?? null,
             cuenta_bancaria_nombre: cuenta ? `${cuenta.banco_nombre} · ${cuenta.alias}` : null,
             asiento_id: siguienteId(bd.asientos),

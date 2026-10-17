@@ -4,8 +4,8 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Alta y edición de un plan con su modelo de velocidad (`contratos/velocidad.md`): reuso 1:N,
- * garantía (CIR), ráfaga y prioridad, con la vista previa del `Mikrotik-Rate-Limit` calculada con
- * la misma regla que `network/velocidad.ts`. Los 422 de la API se muestran junto a cada campo.
+ * garantía (CIR), ráfaga y prioridad, con la vista previa del `Mikrotik-Rate-Limit` que calcula la
+ * API (`POST /planes/vista-previa`). Los 422 al guardar se muestran junto a cada campo.
  */
 const props = withDefaults(defineProps<{
     /** Plan a editar; sin él, alta. */
@@ -40,17 +40,66 @@ const itemsDualStack: SelectItem[] = [
 ]
 const itemsPrefijo: SelectItem[] = [64, 56, 48].map(n => ({ label: `/${n}`, value: n }))
 
-/** Números completos: sin ellos no hay vista previa (nunca se inventa una cadena). */
-const velocidadCompleta = computed<VelocidadPlan | null>(() => {
-    const v = velocidadDeFormulario(estado)
-    const enteros = [v.bajada_kbps, v.subida_kbps, v.bajada_limitada_kbps, v.subida_limitada_kbps, v.reuso, v.rafaga_umbral_pct, v.rafaga_segundos, v.prioridad]
-    return enteros.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) ? v : null
-})
-const erroresVelocidad = computed(() => (velocidadCompleta.value ? validarVelocidad(velocidadCompleta.value) : []))
-const vistaActivo = computed(() => (velocidadCompleta.value ? rateLimitServicio(velocidadCompleta.value, 'activo') : null))
-const vistaLimitado = computed(() => (velocidadCompleta.value ? rateLimitServicio(velocidadCompleta.value, 'limitado') : null))
-const padre = computed(() => (velocidadCompleta.value ? limitesPadrePlan(velocidadCompleta.value, activosEjemplo.value ?? 1) : null))
-const garantiaAuto = computed(() => garantizadoEfectivoPct({ reuso: estado.reuso || 1, garantizado_pct: null }))
+/*
+ * Vista previa del rate-limit: la calcula la API (`POST /planes/vista-previa`) 400 ms después del
+ * último cambio. Solo se muestra la respuesta de la última petición; con 422 se ven las reglas que
+ * fallan y con cualquier otro error, el aviso con "Reintentar". Nunca se muestra una cadena
+ * calculada en el panel.
+ */
+const ESPERA_VISTA_PREVIA_MS = 400
+const vistaPrevia = shallowRef<VistaPreviaVelocidad | null>(null)
+const erroresVistaPrevia = ref<string[]>([])
+const problemaVistaPrevia = ref<Problem | null>(null)
+const cargandoVistaPrevia = ref(false)
+const cuerpoVista = computed(() => cuerpoVistaPrevia(estado, activosEjemplo.value))
+let temporizadorVista: ReturnType<typeof setTimeout> | undefined
+let solicitudVista = 0
+
+async function pedirVistaPrevia() {
+    const cuerpo = cuerpoVista.value
+    const actual = ++solicitudVista
+    if (!cuerpo) {
+        vistaPrevia.value = null
+        erroresVistaPrevia.value = []
+        problemaVistaPrevia.value = null
+        cargandoVistaPrevia.value = false
+        return
+    }
+    cargandoVistaPrevia.value = true
+    const resultado = await usePlanes().vistaPrevia(cuerpo)
+    if (actual !== solicitudVista) {
+        return
+    }
+    cargandoVistaPrevia.value = false
+    if (resultado.ok) {
+        vistaPrevia.value = resultado.data
+        erroresVistaPrevia.value = []
+        problemaVistaPrevia.value = null
+        return
+    }
+    vistaPrevia.value = null
+    const porCampo = resultado.problema.status === 422 ? (resultado.problema.errors ?? []).map(e => e.message) : []
+    erroresVistaPrevia.value = porCampo
+    problemaVistaPrevia.value = porCampo.length ? null : resultado.problema
+}
+
+watch(cuerpoVista, () => {
+    clearTimeout(temporizadorVista)
+    if (!abierto.value) {
+        return
+    }
+    cargandoVistaPrevia.value = cuerpoVista.value !== null
+    temporizadorVista = setTimeout(() => void pedirVistaPrevia(), ESPERA_VISTA_PREVIA_MS)
+}, { deep: true })
+
+watch(abierto, (valor) => {
+    clearTimeout(temporizadorVista)
+    if (valor) {
+        void pedirVistaPrevia()
+    }
+}, { immediate: true })
+
+onBeforeUnmount(() => clearTimeout(temporizadorVista))
 
 function ayudaKbps(valor: number | null | undefined): string | undefined {
     return typeof valor === 'number' && valor > 0 ? formatearVelocidad(valor) : undefined
@@ -224,7 +273,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                         <UFormField
                             label="Garantizado (CIR)"
                             name="garantizado_pct"
-                            :help="estado.garantia_automatica ? `Automático: 100 / reuso = ${garantiaAuto} %` : `Máximo ${garantiaAuto} % con reuso 1:${estado.reuso}.`"
+                            :help="estado.garantia_automatica ? `Automático: 100 / reuso${vistaPrevia ? ` = ${vistaPrevia.garantizado_pct_efectivo} %` : ''}` : `Hasta 100 / ${estado.reuso || 'reuso'} % con reuso 1:${estado.reuso || 'N'}.`"
                         >
                             <div class="flex flex-col gap-2">
                                 <USwitch
@@ -343,30 +392,54 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                 <section
                     class="flex flex-col gap-3 rounded-lg border border-default p-4"
                     aria-label="Vista previa del rate-limit"
+                    :aria-busy="cargandoVistaPrevia"
                     data-prueba="vista-rate-limit"
                 >
-                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <h3 class="text-sm font-medium text-highlighted">
                             Vista previa del rate-limit
                         </h3>
-                        <span class="text-xs text-muted">Misma regla que la API (network/velocidad.ts)</span>
+                        <span class="flex items-center gap-1.5 text-xs text-muted">
+                            <UIcon
+                                v-if="cargandoVistaPrevia"
+                                name="i-lucide-loader-circle"
+                                class="size-3.5 animate-spin"
+                            />
+                            Calculada por la API, sin guardar
+                        </span>
                     </div>
                     <p
-                        v-if="!vistaActivo"
+                        v-if="!cuerpoVista"
                         class="text-sm text-muted"
                     >
                         Completa las velocidades para ver la cadena.
                     </p>
+                    <UAlert
+                        v-else-if="erroresVistaPrevia.length"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-triangle-alert"
+                        title="La API rechaza estos valores"
+                        :description="erroresVistaPrevia.join(' · ')"
+                        data-prueba="vista-rate-limit-errores"
+                    />
+                    <ProblemaAlerta
+                        v-else-if="problemaVistaPrevia"
+                        :problema="problemaVistaPrevia"
+                        :reintentar="pedirVistaPrevia"
+                        :reintentando="cargandoVistaPrevia"
+                    />
+                    <p
+                        v-else-if="!vistaPrevia"
+                        class="text-sm text-muted"
+                    >
+                        Calculando…
+                    </p>
                     <template v-else>
-                        <UAlert
-                            v-if="erroresVelocidad.length"
-                            color="warning"
-                            variant="subtle"
-                            icon="i-lucide-triangle-alert"
-                            title="La API rechazaría estos valores"
-                            :description="erroresVelocidad.map(e => e.message).join(' · ')"
-                        />
-                        <dl class="flex flex-col gap-2 text-sm">
+                        <dl
+                            class="flex flex-col gap-2 text-sm"
+                            :class="{ 'opacity-60': cargandoVistaPrevia }"
+                        >
                             <div>
                                 <dt class="text-xs text-muted">
                                     Activo
@@ -375,7 +448,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                     class="font-mono break-all text-highlighted"
                                     data-prueba="rate-limit-activo"
                                 >
-                                    {{ vistaActivo }}
+                                    {{ vistaPrevia.rate_limit }}
                                 </dd>
                             </div>
                             <div>
@@ -386,13 +459,13 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                     class="font-mono break-all"
                                     data-prueba="rate-limit-limitado"
                                 >
-                                    {{ vistaLimitado }}
+                                    {{ vistaPrevia.rate_limit_limitado }}
                                 </dd>
                             </div>
                         </dl>
                         <ul class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
                             <li
-                                v-for="parte in partesRateLimit(vistaActivo)"
+                                v-for="parte in partesRateLimit(vistaPrevia.rate_limit)"
                                 :key="parte.etiqueta"
                                 class="flex flex-col"
                             >
@@ -400,23 +473,27 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                 <span class="font-mono">{{ parte.valor }}</span>
                             </li>
                         </ul>
-                        <div
-                            v-if="padre"
-                            class="flex flex-wrap items-center gap-2 border-t border-default pt-3 text-xs text-muted"
-                        >
-                            <span>Cola padre del plan con</span>
-                            <UInputNumber
-                                v-model="activosEjemplo"
-                                :min="1"
-                                size="xs"
-                                :format-options="{ useGrouping: false }"
-                                :step-snapping="false"
-                                class="w-24"
-                                aria-label="Servicios activos de ejemplo"
-                            />
-                            <span>activos: max-limit <strong class="font-mono text-default">{{ padre.max_limit }}</strong> · limit-at <strong class="font-mono text-default">{{ padre.limit_at }}</strong></span>
-                        </div>
                     </template>
+                    <div
+                        v-if="cuerpoVista"
+                        class="flex flex-wrap items-center gap-2 border-t border-default pt-3 text-xs text-muted"
+                    >
+                        <span>Cola padre del plan con</span>
+                        <UInputNumber
+                            v-model="activosEjemplo"
+                            :min="1"
+                            size="xs"
+                            :format-options="{ useGrouping: false }"
+                            :step-snapping="false"
+                            class="w-24"
+                            aria-label="Servicios activos de ejemplo"
+                        />
+                        <span
+                            v-if="vistaPrevia"
+                            data-prueba="vista-padre"
+                        >activos: max-limit <strong class="font-mono text-default">{{ vistaPrevia.padre.max_limit }}</strong> · limit-at <strong class="font-mono text-default">{{ vistaPrevia.padre.limit_at }}</strong></span>
+                        <span v-else>activos</span>
+                    </div>
                 </section>
 
                 <section class="grid gap-4 sm:grid-cols-2">

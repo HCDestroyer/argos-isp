@@ -31,5 +31,14 @@ export function usePlanes() {
         return resolver(api.PUT('/api/v1/planes/{id}', { params: { path: { id } }, body: cambios }))
     }
 
-    return { listar, ver, crear, editar }
+    /**
+     * `POST /planes/vista-previa` (`planes.ver`): el rate-limit activo y limitado y la cola padre
+     * con `activos` servicios, calculados por la API con la misma función que usan aaa y el
+     * dispatcher. No guarda nada; 422 por campo con las reglas de crear el plan.
+     */
+    function vistaPrevia(datos: DatosVistaPreviaPlan): Promise<Resultado<VistaPreviaVelocidad>> {
+        return resolver(api.POST('/api/v1/planes/vista-previa', { body: datos }))
+    }
+
+    return { listar, ver, crear, editar, vistaPrevia }
 }

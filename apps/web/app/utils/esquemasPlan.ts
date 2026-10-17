@@ -21,9 +21,11 @@ function opcional(min: number, max: number, mensaje: string) {
 }
 
 /**
- * Espejo de `crearPlanValidator` / `editarPlanValidator` (A1) más las reglas cruzadas de
- * `validarVelocidad` (las mismas que la API devuelve como 422 por campo). La garantía y la ráfaga
- * se activan con un interruptor: apagadas viajan como `null` (garantía = 100 / reuso; sin ráfaga).
+ * Espejo de `crearPlanValidator` / `editarPlanValidator` (A1): tipos y rangos por campo. Las
+ * reglas cruzadas del modelo de velocidad (CIR ≤ 100 / reuso, ráfaga > velocidad…) no se copian:
+ * las responde `POST /planes/vista-previa` como 422 por campo mientras se escribe, y otra vez
+ * `POST`/`PUT /planes` al guardar. La garantía y la ráfaga se activan con un interruptor:
+ * apagadas viajan como `null` (garantía = 100 / reuso; sin ráfaga).
  */
 export const esquemaPlan = z.object({
     nombre: z.string().trim().min(2, 'Al menos 2 caracteres').max(100, 'Máximo 100 caracteres'),
@@ -54,16 +56,16 @@ export const esquemaPlan = z.object({
     if (datos.con_rafaga && datos.rafaga_bajada_kbps === null && datos.rafaga_subida_kbps === null) {
         ctx.addIssue({ code: 'custom', path: ['rafaga_bajada_kbps'], message: 'Escribe la ráfaga de bajada, de subida o ambas' })
     }
-    for (const error of validarVelocidad(velocidadDeFormulario(datos))) {
-        ctx.addIssue({ code: 'custom', path: [error.field], message: error.message })
-    }
 })
 
 export type EntradaPlan = z.input<typeof esquemaPlan>
 export type SalidaPlan = z.output<typeof esquemaPlan>
 
+type CamposVelocidad = 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantia_automatica' | 'garantizado_pct' | 'con_rafaga' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'
+type VelocidadFormulario = Pick<DatosPlan, 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'>
+
 /** Modelo de velocidad que resulta del formulario (lo que la API guardaría). */
-export function velocidadDeFormulario(datos: Pick<EntradaPlan, 'bajada_kbps' | 'subida_kbps' | 'bajada_limitada_kbps' | 'subida_limitada_kbps' | 'reuso' | 'garantia_automatica' | 'garantizado_pct' | 'con_rafaga' | 'rafaga_bajada_kbps' | 'rafaga_subida_kbps' | 'rafaga_umbral_pct' | 'rafaga_segundos' | 'prioridad'>): VelocidadPlan {
+export function velocidadDeFormulario(datos: Pick<EntradaPlan, CamposVelocidad>): VelocidadFormulario {
     return {
         bajada_kbps: datos.bajada_kbps,
         subida_kbps: datos.subida_kbps,
@@ -103,8 +105,26 @@ export function entradaPlanVacia(): EntradaPlan {
     }
 }
 
+/**
+ * Cuerpo de `POST /planes/vista-previa` con lo que hay en el formulario, o `null` si falta algún
+ * número entero: sin datos completos no se pide (ni se muestra) ninguna cadena.
+ */
+export function cuerpoVistaPrevia(datos: EntradaPlan, activos: number | null): DatosVistaPreviaPlan | null {
+    const enteros = [datos.bajada_kbps, datos.subida_kbps, datos.bajada_limitada_kbps, datos.subida_limitada_kbps, datos.reuso, datos.rafaga_umbral_pct, datos.rafaga_segundos, datos.prioridad]
+    if (!enteros.every(n => typeof n === 'number' && Number.isInteger(n) && n > 0)) {
+        return null
+    }
+    // Garantía manual sin escribir: mandar `null` sería pedir la automática.
+    if (!datos.garantia_automatica && typeof datos.garantizado_pct !== 'number') {
+        return null
+    }
+    return {
+        ...velocidadDeFormulario(datos),
+        activos: typeof activos === 'number' && Number.isInteger(activos) && activos >= 0 ? activos : 1,
+    }
+}
+
 export function entradaDesdePlan(plan: Plan): EntradaPlan {
-    const velocidad = velocidadDePlan(plan)
     return {
         nombre: plan.nombre,
         precio: plan.precio,
@@ -113,14 +133,14 @@ export function entradaDesdePlan(plan: Plan): EntradaPlan {
         bajada_limitada_kbps: plan.bajada_limitada_kbps,
         subida_limitada_kbps: plan.subida_limitada_kbps,
         reuso: plan.reuso,
-        garantia_automatica: velocidad.garantizado_pct === null,
-        garantizado_pct: velocidad.garantizado_pct,
-        con_rafaga: velocidad.rafaga_bajada_kbps !== null || velocidad.rafaga_subida_kbps !== null,
-        rafaga_bajada_kbps: velocidad.rafaga_bajada_kbps,
-        rafaga_subida_kbps: velocidad.rafaga_subida_kbps,
-        rafaga_umbral_pct: velocidad.rafaga_umbral_pct,
-        rafaga_segundos: velocidad.rafaga_segundos,
-        prioridad: velocidad.prioridad,
+        garantia_automatica: plan.garantizado_pct === null,
+        garantizado_pct: plan.garantizado_pct,
+        con_rafaga: plan.rafaga_bajada_kbps !== null || plan.rafaga_subida_kbps !== null,
+        rafaga_bajada_kbps: plan.rafaga_bajada_kbps,
+        rafaga_subida_kbps: plan.rafaga_subida_kbps,
+        rafaga_umbral_pct: plan.rafaga_umbral_pct,
+        rafaga_segundos: plan.rafaga_segundos,
+        prioridad: plan.prioridad,
         dual_stack: plan.dual_stack,
         tamano_prefijo_delegado: plan.tamano_prefijo_delegado,
         global: plan.global,
