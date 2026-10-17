@@ -77,6 +77,7 @@ async function enviado(comprobante: ComprobantePortal) {
                     <UBadge
                         :label="ESTADOS_COMPROBANTE[comprobante.estado].etiqueta"
                         :color="ESTADOS_COMPROBANTE[comprobante.estado].color"
+                        :icon="ESTADOS_COMPROBANTE[comprobante.estado].icono"
                         variant="subtle"
                         class="shrink-0"
                     />
