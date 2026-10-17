@@ -18,14 +18,14 @@ Localización de Guatemala por empresa (NIT): paquete versionado, parámetros e 
 
 ## Acciones
 
-| Acción (permiso) | Ruta | Qué hace |
-| --- | --- | --- |
-| `fiscal.instalar` | `POST /fiscal/empresas/:id/actualizar-localizacion` | Instala o actualiza la versión del paquete |
-| `fiscal.editar_parametros` | `POST /fiscal/parametros/:clave/valores` | Valor nuevo con vigencia (empresa o global con alcance global) |
-| `fiscal.editar_impuesto` (`fiscal.editar_parametros`) | `POST /fiscal/impuestos/:codigo/versiones` | Versión nueva de la tasa o inactiva |
-| `fiscal.cambiar_regimen` | `POST /fiscal/regimen` | Primera configuración con cualquier fecha; cambio solo el 1 de enero de un año futuro con aviso SAT de diciembre (LAT, art. 51) |
-| `fiscal.crear_establecimiento` / `fiscal.editar_establecimiento` (`fiscal.configurar`) | `POST/PUT /fiscal/establecimientos` | Uno por defecto por empresa; el código SAT no se edita |
-| `fiscal.agregar_frase` (`fiscal.configurar`) | `POST /fiscal/frases` | Frase manual o su retiro (`activa: false`) |
+| Acción (permiso)                                                                       | Ruta                                                | Qué hace                                                                                                                        |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `fiscal.instalar`                                                                      | `POST /fiscal/empresas/:id/actualizar-localizacion` | Instala o actualiza la versión del paquete                                                                                      |
+| `fiscal.editar_parametros`                                                             | `POST /fiscal/parametros/:clave/valores`            | Valor nuevo con vigencia (empresa o global con alcance global)                                                                  |
+| `fiscal.editar_impuesto` (`fiscal.editar_parametros`)                                  | `POST /fiscal/impuestos/:codigo/versiones`          | Versión nueva de la tasa o inactiva                                                                                             |
+| `fiscal.cambiar_regimen`                                                               | `POST /fiscal/regimen`                              | Primera configuración con cualquier fecha; cambio solo el 1 de enero de un año futuro con aviso SAT de diciembre (LAT, art. 51) |
+| `fiscal.crear_establecimiento` / `fiscal.editar_establecimiento` (`fiscal.configurar`) | `POST/PUT /fiscal/establecimientos`                 | Uno por defecto por empresa; el código SAT no se edita                                                                          |
+| `fiscal.agregar_frase` (`fiscal.configurar`)                                           | `POST /fiscal/frases`                               | Frase manual o su retiro (`activa: false`)                                                                                      |
 
 Lecturas (`fiscal.ver`): `GET /fiscal/localizaciones`, `/fiscal/empresas/:id/localizacion`, `/fiscal/parametros?fecha=`, `/fiscal/parametros/:clave/historial`, `/fiscal/impuestos?fecha=`, `/fiscal/impuestos/:codigo/historial`, `/fiscal/establecimientos[/:id]`, `/fiscal/frases?fecha=`.
 
@@ -33,10 +33,40 @@ Las frases del régimen no se guardan: se derivan al leer del régimen vigente e
 
 Errores: 422 `localizacion_no_instalada`, `pais_no_soportado`, `parametro_no_editable`, `parametro_fuera_de_rango`, `parametro_sin_confirmar`, `vigencia_en_periodo_bloqueado` (un mes cerrado en o después de la fecha; en la fase 5 se suman los bloqueos), `regimen_fuera_de_plazo`, `establecimiento_por_defecto`, `frase_del_regimen`, `frase_inactiva`; 403 `alcance_global_requerido`; 409 `vigencia_duplicada`, `establecimiento_duplicado`.
 
+## FEL (fase 3, contrato §3.6, §8, §10.1 y §10.9)
+
+- **Proveedores** (`fel/proveedor.ts`): interfaz `ProveedorFel` (`probarCredenciales`, `certificar`, `anular`, `consultar`, `consultarNit`) y registro por código. `fel/infile.ts` (proceso unificado de INFILE, según su documentación pública; detalles por confirmar en §16 del contrato) y `fel/falso.ts` (laboratorio y pruebas: certifica en memoria, idempotente por `identificador`, y `controlFelFalso` guía las respuestas). Las pruebas nunca llaman a INFILE.
+- **XML** (`fel/xml_gt.ts`): `GTDocumento` (FACT, FPEQ, NCRE y NDEB con `ReferenciasNota`) y `GTAnulacionDocumento`, comunes a todos los certificadores.
+- **Configuración** (`fiscal.fel_configuracion`, `fel/configuracion.ts`): proveedor, ambiente, modo (`obligatoria`, `opcional`, `desactivada`) y contingencia por empresa, con `version`. Sin fila (o al migrar) la empresa está `desactivada`: nada cambia. **Credenciales** (`fiscal.fel_credenciales`): cifradas con la clave de la instalación (`#shared/cifrado`, como notify), nunca salen por la API ni a la auditoría (la entrada viaja como `secreto` → `***`); solo se reemplazan.
+- **Modos de emisión** (`modoEmision`, `#billing/emision`): FEL desactivada → como antes; `certificar_al = pagar` (por defecto en plantillas nuevas) con FEL obligatoria u opcional → **aviso de cobro** (IVA a `2.1.11`), se certifica cuando queda cubierto; obligatoria + `emitir` → la factura nace `por_certificar` sin asiento ni `factura.emitida` y se emite al certificarse (`facturas.confirmar_emision`, asiento con la fecha de certificación); con contingencia activa se emite como siempre y su DTE queda `contingencia`.
+- **`fiscal.dte`** (`fel/dte.ts`): un DTE por documento (factura, nota de crédito, nota de débito) con su ciclo `pendiente → enviando → certificado → anulacion_pendiente → anulado`, `error_temporal` (reintento a 1, 5, 15, 60 min y luego cada hora; al tope, `dte.rechazado` con `definitivo: false`) y `rechazado` (definitivo; se corrige y se reintenta con otro `identificador`). `fiscal.dte_intentos`: bitácora ante el certificador, solo inserción. El intento se registra antes de enviar, así el reintento tras una caída **consulta primero** y no certifica dos veces.
+- **2.1.11 IVA por certificar** (§10.1, `#billing/fel_facturas`): al certificarse un aviso, reclasificación `2.1.11 / 2.1.02` (origen `reclasificacion`, `origen_id` = el DTE) por lo que el aviso tenía por certificar (su IVA menos las notas internas). Pago parcial: no se certifica (`certificar_pago_parcial = no`). Pago anulado antes de certificar: nada fiscal; si la cola ya había pedido el DTE, el envío lo descarta (`aviso_sin_cubrir`). Pago anulado **después**: el DTE sigue certificado y `2.1.02` no cambia. Nota interna (aviso sin DTE): debita `2.1.11`. NCRE (factura certificada): debita `2.1.02`.
+- **Consumidor final**: desde `consumidor_final_limite` el receptor necesita NIT, CUI o pasaporte: a mano 422 `receptor_requerido`; en automático el DTE queda `rechazado` local (sin enviarse) con `dte.rechazado`.
+- **Anulación** (`facturas.anular` sobre una factura certificada, exige también `fel.anular`): dentro de `dte_anulacion_plazo` (hasta el fin del mes siguiente al de emisión; días hábiles: contador) el DTE pasa a `anulacion_pendiente` y la anulación interna (reverso del asiento y de la reclasificación, `factura.anulada`) se completa cuando el certificador la confirma (`fel.anular_dte`); fuera de plazo 422 `anulacion_fuera_de_plazo`. Un DTE aún sin enviar se descarta (`documento_anulado`).
+- **Notas** (`facturas.nota_credito`): NCRE referida a la factura certificada, solo dentro de `nota_ventana_meses` (422 `nota_fuera_de_plazo`); por línea con `lineas[]` (`billing.notas_credito_lineas`). **NDEB**: la mora con `mora_con_iva` (solo el contador lo activa) es un aviso que sale como NDEB referida a su factura certificada al cobrarse.
+- **Sustituir** (`facturas.sustituir`, `billing.sustituciones`): anula (sin DTE) o acredita con NCRE completa (con DTE) y emite la nueva del mismo periodo con `clave_unica = <clave>#s<n>` y el receptor corregido.
+- **Cola** (`fel/cola.ts`, `node ace fiscal:worker`, job `fel` cada minuto con lock; `--una-vez`): pide la certificación de los avisos cubiertos (`fel.certificar` automático; también al momento por `pago.registrado`, `ConsumidorFel` en el billing-worker), envía los DTE pendientes, los vencidos con error temporal, los de contingencia cuando se levanta y las anulaciones.
+
+| Acción (permiso)                                 | Ruta                                                             | Qué hace                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| `fel.configurar`                                 | `GET/PUT /fel/configuracion` (`fel.ver` / `fel.configurar`)      | Proveedor, ambiente y modo; 422 `certificar_al_incompatible` |
+| `fel.guardar_credenciales` (`fel.configurar`)    | `PUT /fel/credenciales/:ambiente`                                | Credenciales cifradas; responde solo lo visible              |
+| `fel.probar_credenciales` (`fel.configurar`)     | `POST /fel/credenciales/:ambiente/probar`                        | Prueba sin certificar; 503 `fel_proveedor_no_disponible`     |
+| `fel.contingencia`                               | `POST /fel/activar-contingencia`, `/fel/desactivar-contingencia` | Con motivo; `fel.contingencia_cambiada`                      |
+| `fel.certificar`                                 | `POST /facturas/:id/certificar`                                  | Crea el DTE pendiente (idempotente)                          |
+| `fel.certificar_lote` (`fel.certificar`)         | `POST /fel/lotes`                                                | Varias facturas, errores por factura                         |
+| `fel.reintentar` (`fel.certificar`)              | `POST /dte/:id/reintentar`                                       | Rechazado: DTE nuevo; error temporal: a la cola ya           |
+| `fel.certificar_dte`, `fel.anular_dte` (sistema) | worker                                                           | Envío y anulación ante el certificador                       |
+| `facturas.confirmar_emision` (sistema)           | worker                                                           | Emite la `por_certificar` al certificarse                    |
+| `facturas.sustituir`                             | `POST /facturas/:id/sustituir`                                   | Sustitución de una factura mal emitida                       |
+
+Lecturas (`fel.ver`): `GET /dte` (cursor, `?empresas=todas`), `/dte/:id`, `/dte/:id/xml`, `/dte/:id/pdf` (si el certificador lo devolvió). La factura trae `fel_uuid`, `fel_serie`, `fel_numero`, `fel_estado`, `fel_error` y `dte_id` desde `fiscal.dte` (las columnas `billing.facturas.fel_*` del sistema anterior ya no se escriben; se migraron como DTE `certificado`, §12.4), además de `aviso_cobro`, `certificar_al` y `tipo_dte`.
+
 ## Eventos
 
-- Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `establecimientos`, `frases`).
-- Consume `fiscal.parametros_cambiados` (grupo `billing`) para invalidar la caché.
+- Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
+- FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
+- Consume `fiscal.parametros_cambiados` (grupo `billing`) para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.
 
 ## Libro (`ledger`) en esta fase
 
