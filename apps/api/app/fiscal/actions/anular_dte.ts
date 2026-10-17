@@ -1,6 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import AnularFactura from '#billing/actions/anular_factura'
+import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
 import { configuracionFel, credencialesFel, proveedorFel } from '#fiscal/fel/configuracion'
 import {
     TOPE_REINTENTOS,
@@ -135,6 +137,7 @@ export default class AnularDte extends DomainAction<
                 error: error.slice(0, 500),
                 definitivo: true,
             })
+            await this.aplicarAnticiposTrasRechazo(t, dte)
             return { dte_id: dte.id, estado: 'certificado', omitido: null }
         }
 
@@ -165,6 +168,27 @@ export default class AnularDte extends DomainAction<
             motivo,
         })
         return { dte_id: dte.id, estado: 'anulado', omitido: null }
+    }
+
+    /**
+     * H6: mientras la anulación estaba pendiente la aplicación automática saltó el documento, así
+     * que un pago de esos días quedó como anticipo. Si la anulación se rechaza, el documento vuelve
+     * a cobrarse y el anticipo de su cliente se le aplica en el acto (la más antigua primero).
+     */
+    private async aplicarAnticiposTrasRechazo(t: Transaccion, dte: DteFila) {
+        if (dte.documento_tipo !== 'factura' && dte.documento_tipo !== 'nota_debito') return
+        const doc = (await t.trx
+            .from('billing.facturas')
+            .where('id', dte.documento_id)
+            .select('cliente_id', 'empresa_id')
+            .firstOrFail()) as { cliente_id: number; empresa_id: number }
+        await bloquearCliente(t.trx, doc.cliente_id)
+        const aplicadas = await aplicarAnticipos(t, doc.cliente_id, Number(doc.empresa_id))
+        const servicios = new Set<number>()
+        for (const a of aplicadas) if (a.servicio_id) servicios.add(Number(a.servicio_id))
+        for (const servicioId of servicios) {
+            await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, { trx: t.trx })
+        }
     }
 
     private async reintentar(t: Transaccion, dte: DteFila, error: string) {

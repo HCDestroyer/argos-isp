@@ -178,6 +178,27 @@ test.group('FEL · decisiones sobre los hallazgos del auditor', (group) => {
         assert.equal(await factura(f.id).then((r) => r.estado), 'anulada')
     })
 
+    test('H6: el anticipo que quedó mientras la anulación estaba pendiente se aplica si la anulación se rechaza', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'emitir', '150.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        await cola(e)
+        await new AnularFactura().execute({ factura_id: f.id, motivo: 'error de plan' }, e.ctx)
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '150.00', empresa_id: e.B },
+            e.ctx,
+        )
+        assert.equal(await factura(f.id).then((r) => r.pagado), '0.00')
+        controlFelFalso.siguiente.push('rechazado')
+        await cola(e)
+        assert.equal(await dtesDe('factura', f.id).then((r) => r[0]!.estado), 'certificado')
+        assert.containSubset(await factura(f.id), { estado: 'pagada', pagado: '150.00' })
+        assert.equal(await saldo(e.B, '2.1.01'), '0.00')
+        await afirmarLibro(assert, e.B)
+    })
+
     test('H6: un rechazo de la anulación que en realidad ya estaba anulada se confirma con el certificador y nunca vuelve a certificado', async ({
         assert,
     }) => {
