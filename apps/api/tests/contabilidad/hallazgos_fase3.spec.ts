@@ -125,7 +125,7 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
             `SAT anulado=${enSat?.anulado}, DTE local ${local.estado}, factura ${doc.estado}`,
         )
         assert.equal(local.estado === 'anulado', doc.estado === 'anulada')
-    }).fails('H6: el certificador anula el DTE y el libro conserva la factura viva con su pago')
+    })
 
     test('H7 · anular una mora certificada como NDEB anula el DTE pero deja la mora viva y su IVA en 2.1.02', async ({
         assert,
@@ -161,7 +161,7 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
         const mora = await factura(moraId)
         assert.equal(mora.estado, 'anulada', 'la NDEB se anuló pero la mora sigue viva')
         assert.deepEqual(await verificarLibro(e.C), [])
-    }).fails('H7: AnularDte no completa la anulación de la mora (documento_tipo nota_debito)')
+    })
 
     test('H8 · pasar la FEL a desactivada con avisos pendientes deja su IVA en 2.1.11 para siempre', async ({
         assert,
@@ -183,7 +183,7 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
             desactivar !== null || (await saldo(e.B, IVA_POR_CERTIFICAR)) === '0.00',
             `2.1.11 = ${await saldo(e.B, IVA_POR_CERTIFICAR)} con el aviso ${s.facturas[0]!.id} ya cobrado`,
         )
-    }).fails('H8: avisos cobrados con la FEL desactivada nunca se reclasifican')
+    })
 
     test('H9 · con FEL opcional, la mora con IVA de una factura sin FEL nace aviso y su IVA nunca sale de 2.1.11', async ({
         assert,
@@ -215,5 +215,5 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
             'IVA de la mora cobrada atrapado en 2.1.11',
         )
         assert.equal(await saldo(e.B, IVA_DEBITO), '-18.47')
-    }).fails('H9: la mora con IVA de una factura sin FEL es un aviso que nunca se certifica')
+    })
 })

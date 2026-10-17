@@ -99,6 +99,14 @@ export async function envejecerDte(dteId: number, meses: number) {
     )
 }
 
+/** La factura se emitió hace `meses` meses (plazo de anulación). */
+export async function envejecerFactura(facturaId: number, meses: number) {
+    await db.rawQuery(
+        `UPDATE billing.facturas SET emitida_en = now() - make_interval(months => ?) WHERE id = ?`,
+        [meses, facturaId],
+    )
+}
+
 /** Deja el DTE listo para la siguiente corrida (su espera de reintento ya pasó). */
 export async function adelantarReintento(dteId: number) {
     await db.rawQuery(`UPDATE fiscal.dte SET proximo_intento = now() WHERE id = ?`, [dteId])

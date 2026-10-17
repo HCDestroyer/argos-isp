@@ -287,5 +287,5 @@ test.group('Auditor contable · cadena de hash atacada como DBA', (group) => {
                 'la cadena verifica con un asiento nuevo en septiembre cerrado',
             )
         })
-    }).fails('H10: la cadena de hash no detecta un asiento insertado en un mes cerrado')
+    })
 })

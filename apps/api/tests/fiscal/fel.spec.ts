@@ -30,6 +30,7 @@ import {
     dtesDe,
     empresasFel,
     envejecerDte,
+    envejecerFactura,
     eventosDe,
     factura,
     saldo,
@@ -446,8 +447,8 @@ test.group('FEL · obligatoria con certificar_al = emitir', (group) => {
 
         const vieja = await servicioFel(e, 'emitir', '150.00', cliente, e.C)
         await cola(e)
-        const [dteViejo] = await dtesDe('factura', vieja.facturas[0]!.id)
-        await envejecerDte(Number(dteViejo!.id), 2)
+        // el plazo corre desde la emisión de la factura (decisión del líder), no desde la certificación
+        await envejecerFactura(vieja.facturas[0]!.id, 2)
         const fuera = await errorDe(
             new AnularFactura().execute({ factura_id: vieja.facturas[0]!.id, motivo: 'tarde' }, e.ctx),
         )
