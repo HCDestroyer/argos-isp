@@ -1,7 +1,8 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { cidrV4, dinero, idEntidad, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
+import { cidrV4, dinero, idEntidad, instanteIso, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
+import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
 /*
 |--------------------------------------------------------------------------
@@ -311,6 +312,21 @@ export const listarSesionesValidator = vine.compile(
         router_id: idEntidad().optional(),
         servicio_id: idEntidad().optional(),
         activa: vine.boolean().optional(),
+    }),
+)
+
+/** `GET /red/eventos` (A2): lectura de `audit.red`. `desde` inclusive, `hasta` exclusive. */
+export const listarEventosRedValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        router_id: idEntidad().optional(),
+        servicio_id: idEntidad().optional(),
+        tipo: vine.enum(TIPOS_EVENTO_RED).optional(),
+        resultado: vine.enum(RESULTADOS_EVENTO_RED).optional().meta({
+            description: '`ok` (ACK o escritura aceptada) o `error` (NAK, timeout, sin secret, fallo)',
+        }),
+        desde: instanteIso().optional(),
+        hasta: instanteIso().optional(),
     }),
 )
 

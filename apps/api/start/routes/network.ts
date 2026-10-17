@@ -22,6 +22,7 @@ import {
     RedIpv4,
     Router,
     Sesion,
+    EventoRed,
     VistaPreviaControl,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
@@ -34,6 +35,7 @@ import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementaci
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
 import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
+import { listarEventosRed } from '#network/sesiones/eventos_red'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
@@ -371,4 +373,23 @@ const sesiones: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...planes, ...sesiones]
+// A2: lectura de `audit.red` (CoA, Disconnect y RouterOS) para el panel.
+const red: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/red/eventos',
+        operacion: 'redEventosListar',
+        resumen: 'Eventos de red: CoA, Disconnect y comandos a RouterOS con la respuesta del equipo',
+        descripcion:
+            'Lectura de `audit.red`, el más reciente primero. Filtros por router, servicio, tipo, resultado ' +
+            '(`ok` / `error`) y fecha (`desde` inclusive, `hasta` exclusive). Credenciales como `***`. ' +
+            'Alcance por router y zona.',
+        etiqueta: 'red',
+        permiso: 'red.ver',
+        query: v.listarEventosRedValidator,
+        respuesta: { status: 200, descripcion: 'Página de eventos de red', esquema: pagina(EventoRed) },
+        handler: (ctx, { query }) => listarEventosRed(query, ctx.alcance),
+    }),
+]
+
+export default [...routers, ...planes, ...sesiones, ...red]

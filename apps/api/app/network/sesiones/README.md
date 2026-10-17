@@ -30,6 +30,15 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 
 Desconectar no habla con el NAS: emite `sesion.desconexion_solicitada` (`sesion_id`, `servicio_id`, `nas_ip`, `acct_session_id`, `user_ppp`, `motivo`) en la misma transacción que la auditoría, y `services/coa` manda el Disconnect-Request y deja envío y respuesta en `audit.red`. La sesión se cierra con el Stop que manda el NAS al cortar. No cambia el estado del servicio.
 
+## Eventos de red para el panel (semana 3)
+
+`GET /red/eventos` (`eventos_red.ts`, contrato `EventoRed`, permiso `red.ver`): lectura de `audit.red`, la más reciente primero (`id` descendente), cursor.
+
+- Filtros: `router_id`, `servicio_id`, `tipo` (`coa`, `disconnect`, `routeros`), `resultado` (`ok` = `audit.red.ok`; `error` = NAK, timeout, `sin_secret`, `sin_rate_limit` o fallo de RouterOS), `desde` (inclusive) y `hasta` (exclusive).
+- Alcance por router y zona (como `GET /sesiones`). Una fila sin router (NAS no dado de alta) solo la ve quien no está acotado por router.
+- Credenciales: `comando` y `respuesta` salen con cada clave sensible como `***` a cualquier profundidad (`password`, `secret`, `token`, `private-key`, `User-Password`, `Authorization`…; mismas reglas que `#shared/enmascarar` más los nombres con guion de RouterOS). Hoy `coa` y el cliente de RouterOS no guardan secretos ahí: es defensa en profundidad.
+- Permiso nuevo `red.ver` (no `bitacora.ver` ni `sesiones.ver`): `audit.red` trae comandos y respuestas de los equipos, que necesitan `tecnico` (sin `bitacora.ver`) y `soporte`, pero no `contabilidad` (que sí tiene `bitacora.ver`); y `sesiones.ver` es solo la tabla de sesiones. Lo tienen `admin`, `soporte`, `tecnico` y `lectura` (todos los `.ver`).
+
 ## Vigía de `aaa` (tarea 9)
 
 `node ace aaa:vigilar` (`commands/aaa_vigilar.ts`, `vigia_aaa.ts`) hace `GET <url>/health` a cada nodo de `AAA_SALUD_NODOS` (`nombre=url,…`) cada `AAA_SALUD_CADA_MS` (5 s, timeout 2 s, conexión nueva por sondeo).
@@ -60,6 +69,7 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 ## Pruebas
 
+- `tests/network/eventos_red.spec.ts`: `GET /red/eventos` (filtros, fechas, cursor, credenciales como `***`, permiso y alcance).
 - `tests/network/sesiones_panel.spec.ts`: listado (filtros, cursor, permiso, alcance) y desconexión (auditoría, evento, `Idempotency-Key`, 404/409/422).
 - `tests/network/freeradius.spec.ts` (tarea 10): FreeRADIUS en Docker + `aaa` + `coa` como procesos: authorize de los cuatro estados, accounting completo, CoA ACK y NAK, Disconnect. Cómo correrla en `services/aaa/README.md`.
 - `tests/network/vigia_aaa.spec.ts`: caída a los 60 s, una sola alerta, recuperación, fallo corto sin alerta, dos vigías con lock y racha compartida, racha perdida sin duplicar, `sondeoHttp` contra un servidor real.

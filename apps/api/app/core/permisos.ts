@@ -43,6 +43,7 @@ export const PERMISOS = {
     'planes.editar': 'Editar planes e implementaciones por router',
     'sesiones.ver': 'Ver sesiones PPPoE',
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
+    'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
     'ip.resolver': 'Resolver una IP a su servicio',
 
     'plantillas.ver': 'Ver plantillas de facturación',
@@ -171,6 +172,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'promesas.crear',
             'sesiones.ver',
             'sesiones.desconectar',
+            'red.ver',
             'ip.resolver',
             'bitacora.ver',
             'notificaciones.ver',
@@ -196,6 +198,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'planes.ver',
             'sesiones.ver',
             'sesiones.desconectar',
+            'red.ver',
             'ip.resolver',
         ],
     },

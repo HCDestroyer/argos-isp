@@ -1918,6 +1918,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/red/eventos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Eventos de red: CoA, Disconnect y comandos a RouterOS con la respuesta del equipo
+         * @description Lectura de `audit.red`, el más reciente primero. Filtros por router, servicio, tipo, resultado (`ok` / `error`) y fecha (`desde` inclusive, `hasta` exclusive). Credenciales como `***`. Alcance por router y zona.
+         */
+        get: operations["redEventosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/altas-bajas": {
         parameters: {
             query?: never;
@@ -3246,6 +3266,26 @@ export interface components {
             aprobacion?: components["schemas"]["AprobacionPromesa"];
             /** @description Al cumplirse, incumplirse, rechazarse o cancelarse */
             cierre?: components["schemas"]["CierrePromesa"];
+        };
+        EventoRed: {
+            id: number;
+            /** @enum {string} */
+            tipo: "coa" | "disconnect" | "routeros";
+            router_id: number | null;
+            router_nombre: string | null;
+            servicio_id: number | null;
+            /** @description ACK del NAS o escritura aceptada por RouterOS */
+            ok: boolean;
+            /** @description Lo que se envió. CoA/Disconnect: `evento_id`, `evento`, `razon`, `sesion_id`, `nas_ip`, `puerto`, `atributos`, `intento`. RouterOS: `metodo`, `ruta`, `id`, `propiedades`, `host`, `intento` u `operacion` (fila final de un fallo) */
+            comando: {
+                [key: string]: unknown;
+            };
+            /** @description Lo que respondió el equipo. CoA/Disconnect: `resultado` (ack, nak, timeout, error, sin_secret, sin_rate_limit), `codigo`, `error`, `rtt_ms`, `final`. RouterOS: `status`, `objeto` o `error`/`tipo_error` */
+            respuesta: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
         };
         /** @description Excepciones a la plantilla de facturación del servicio */
         ExcepcionesServicio: {
@@ -11694,6 +11734,68 @@ export interface operations {
             };
         };
     };
+    redEventosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                router_id?: number;
+                servicio_id?: number;
+                tipo?: "coa" | "disconnect" | "routeros";
+                /** @description `ok` (ACK o escritura aceptada) o `error` (NAK, timeout, sin secret, fallo) */
+                resultado?: "ok" | "error";
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de eventos de red */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EventoRed"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso red.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     reportesAltasBajas: {
         parameters: {
             query?: {
@@ -12254,7 +12356,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -12312,7 +12414,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -14307,7 +14409,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

@@ -12283,6 +12283,168 @@
         "x-implementado": true
       }
     },
+    "/api/v1/red/eventos": {
+      "get": {
+        "operationId": "redEventosListar",
+        "summary": "Eventos de red: CoA, Disconnect y comandos a RouterOS con la respuesta del equipo",
+        "description": "Lectura de `audit.red`, el más reciente primero. Filtros por router, servicio, tipo, resultado (`ok` / `error`) y fecha (`desde` inclusive, `hasta` exclusive). Credenciales como `***`. Alcance por router y zona.",
+        "tags": [
+          "red"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "coa",
+                "disconnect",
+                "routeros"
+              ]
+            }
+          },
+          {
+            "name": "resultado",
+            "in": "query",
+            "required": false,
+            "description": "`ok` (ACK o escritura aceptada) o `error` (NAK, timeout, sin secret, fallo)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "error"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de eventos de red",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EventoRed"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/altas-bajas": {
       "get": {
         "operationId": "reportesAltasBajas",
@@ -13584,6 +13746,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "red.ver",
                         "redes.crear",
                         "redes.ver",
                         "reportes.ver",
@@ -13772,6 +13935,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "red.ver",
                         "redes.crear",
                         "redes.ver",
                         "reportes.ver",
@@ -17558,6 +17722,7 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "red.ver",
                             "redes.crear",
                             "redes.ver",
                             "reportes.ver",
@@ -21135,6 +21300,75 @@
           "cierre": {
             "$ref": "#/components/schemas/CierrePromesa",
             "description": "Al cumplirse, incumplirse, rechazarse o cancelarse"
+          }
+        }
+      },
+      "EventoRed": {
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "router_id",
+          "router_nombre",
+          "servicio_id",
+          "ok",
+          "comando",
+          "respuesta",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "coa",
+              "disconnect",
+              "routeros"
+            ]
+          },
+          "router_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "router_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "ACK del NAS o escritura aceptada por RouterOS"
+          },
+          "comando": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Lo que se envió. CoA/Disconnect: `evento_id`, `evento`, `razon`, `sesion_id`, `nas_ip`, `puerto`, `atributos`, `intento`. RouterOS: `metodo`, `ruta`, `id`, `propiedades`, `host`, `intento` u `operacion` (fila final de un fallo)"
+          },
+          "respuesta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "Lo que respondió el equipo. CoA/Disconnect: `resultado` (ack, nak, timeout, error, sin_secret, sin_rate_limit), `codigo`, `error`, `rtt_ms`, `final`. RouterOS: `status`, `objeto` o `error`/`tipo_error`"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

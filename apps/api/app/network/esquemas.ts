@@ -7,6 +7,7 @@ import {
     enumerado,
     id,
     instante,
+    jsonLibre,
     lista,
     nulable,
     objeto,
@@ -211,6 +212,37 @@ export const Sesion = definirEsquema(
         bytes_in: entero,
         bytes_out: entero,
         causa_fin: nulable(texto),
+    }),
+)
+
+/**
+ * Fila de `audit.red` (`GET /red/eventos`): un CoA, un Disconnect-Request o una escritura en
+ * RouterOS, con la respuesta del equipo. Las credenciales salen como `***`.
+ */
+export const EventoRed = definirEsquema(
+    'EventoRed',
+    objeto({
+        id,
+        tipo: enumerado(['coa', 'disconnect', 'routeros']),
+        router_id: nulable(id),
+        router_nombre: nulable(texto),
+        servicio_id: nulable(id),
+        ok: { ...booleano, description: 'ACK del NAS o escritura aceptada por RouterOS' },
+        comando: {
+            ...jsonLibre,
+            description:
+                'Lo que se envió. CoA/Disconnect: `evento_id`, `evento`, `razon`, `sesion_id`, `nas_ip`, ' +
+                '`puerto`, `atributos`, `intento`. RouterOS: `metodo`, `ruta`, `id`, `propiedades`, `host`, ' +
+                '`intento` u `operacion` (fila final de un fallo)',
+        },
+        respuesta: {
+            ...nulable(jsonLibre),
+            description:
+                'Lo que respondió el equipo. CoA/Disconnect: `resultado` (ack, nak, timeout, error, ' +
+                'sin_secret, sin_rate_limit), `codigo`, `error`, `rtt_ms`, `final`. RouterOS: `status`, ' +
+                '`objeto` o `error`/`tipo_error`',
+        },
+        created_at: instante,
     }),
 )
 
