@@ -113,6 +113,25 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         expect(respuesta.headers['content-type']).toContain('image/svg+xml')
         expect(respuesta.cuerpo).toContain('#0f766e')
     })
+
+    it('el manifiesto PWA y sus íconos se sirven en el Host ajeno', async () => {
+        const manifiesto = await pedir('/manifest.webmanifest', { host: 'captive.apple.com' })
+        expect(manifiesto.status).toBe(200)
+        expect(manifiesto.headers['content-type']).toContain('application/manifest+json')
+        const datos = JSON.parse(manifiesto.cuerpo) as { display: string, theme_color: string, icons: { src: string }[] }
+        expect(datos.display).toBe('standalone')
+        expect(datos.theme_color).toBe('#0f766e')
+        for (const icono of datos.icons) {
+            const respuesta = await pedir(icono.src, { host: 'captive.apple.com' })
+            expect(respuesta.status, icono.src).toBe(200)
+        }
+    })
+
+    it('/corte enlaza el manifiesto y la CSP lo permite', async () => {
+        const respuesta = await pedir('/corte', { host: 'connectivitycheck.gstatic.com' })
+        expect(respuesta.cuerpo).toContain('rel="manifest" href="/manifest.webmanifest"')
+        expect(String(respuesta.headers['content-security-policy'])).toContain('manifest-src \'self\'')
+    })
 })
 
 describe('seguridad (semana 3, tarea 3)', () => {

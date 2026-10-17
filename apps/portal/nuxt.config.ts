@@ -17,11 +17,16 @@ export default defineNuxtConfig({
                 // Fondo de cada tema (identidad "vidrio y luz"): la barra del navegador se funde con la página.
                 { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
                 { name: 'theme-color', content: '#0b1014', media: '(prefers-color-scheme: dark)' },
+                { name: 'mobile-web-app-capable', content: 'yes' },
+                { name: 'apple-mobile-web-app-capable', content: 'yes' },
             ],
             // Marca de ArgosIsp (`public/favicon.svg`, misma figura que `LogoArgos`). Se sirve también
             // con Host ajeno (portal cautivo, `RECURSOS_EXACTOS`).
             link: [
                 { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+                // PWA (sin service worker): `server/routes/manifest.webmanifest.get.ts` e `iconos/`.
+                { rel: 'manifest', href: '/manifest.webmanifest' },
+                { rel: 'apple-touch-icon', href: '/iconos/apple-touch-icon.png' },
             ],
         },
     },
