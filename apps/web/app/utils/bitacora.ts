@@ -88,7 +88,6 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'empresa.editar': 'Datos de la empresa editados',
     'facturas.importar_pendiente': 'Aviso de cobro importado',
     'importacion.archivar': 'Filas del sistema anterior archivadas',
-    'promesas.importar': 'Promesa de pago importada',
     'facturas.registrar_saldo_inicial': 'Saldo inicial registrado',
     'ipv6.crear': 'Bloque IPv6 creado',
     'libro.cerrar_periodo': 'Periodo contable cerrado',
