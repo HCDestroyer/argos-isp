@@ -154,6 +154,7 @@ async function crear() {
                     {{ formatearFechaHora(creada.vence_en) }} ·
                     <UBadge
                         :label="ESTADOS_PROMESA[creada.estado].etiqueta"
+                        :icon="ESTADOS_PROMESA[creada.estado].icono"
                         :color="ESTADOS_PROMESA[creada.estado].color"
                         variant="subtle"
                         size="sm"
@@ -357,6 +358,7 @@ async function crear() {
                                     <UBadge
                                         v-if="regla.regla === simulacion.regla"
                                         label="Decide"
+                                        :icon="decision?.icono"
                                         :color="decision?.color ?? 'neutral'"
                                         variant="subtle"
                                         size="sm"

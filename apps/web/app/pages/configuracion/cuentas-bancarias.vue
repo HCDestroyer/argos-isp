@@ -150,7 +150,6 @@ onMounted(() => {
                 :columns="columnas"
                 :loading="cargando"
                 :empty="leidas ? 'No hay cuentas bancarias con este filtro.' : ''"
-                class="rounded-md border border-default"
             >
                 <template #alias-cell="{ row }">
                     <div
@@ -170,6 +169,7 @@ onMounted(() => {
                 <template #activa-cell="{ row }">
                     <UBadge
                         :label="row.original.activa ? 'Activa' : 'Inactiva'"
+                        :icon="row.original.activa ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
                         :color="row.original.activa ? 'success' : 'neutral'"
                         variant="subtle"
                     />

@@ -40,8 +40,11 @@ describe('gráficas del panel', () => {
     })
 
     it('colores por rol: categórica en orden fijo y secuencial para datos ordenados', () => {
-        expect(colorSerie('categorica', 0)).toBe('var(--viz-1)')
-        expect(colorSerie('secuencial', 3)).toBe('var(--viz-sec-4)')
+        expect(colorSerie('categorica', 0)).toBe(CATEGORICAL.light[0])
+        expect(colorSerie('categorica', 1, 'dark')).toBe(CATEGORICAL.dark[1])
+        expect(colorSerie('categorica', 9)).toBe(CATEGORICAL.light[4])
+        expect(colorSerie('secuencial', 3)).toBe(SECUENCIAL.light[3])
+        expect(colorSerie('secuencial', 0, 'dark')).toBe(SECUENCIAL.dark[0])
     })
 
     it('la vista de tabla repite cada valor (con total en la apilada)', async () => {
