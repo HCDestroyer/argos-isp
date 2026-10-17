@@ -139,6 +139,15 @@ async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string>
     return ip
 }
 
+/**
+ * Contexto de una acción pedida desde el portal: actor `cliente` si la petición trae la sesión (el
+ * cliente se autenticó con su código), actor `sistema` si solo se identificó por la IP de origen
+ * (la IP no autentica a nadie). Canal `portal` en los dos casos.
+ */
+function contextoDelTitular(ctx: HttpContext, titular: { clienteId: number; porSesion: boolean }) {
+    return titular.porSesion ? ctx.contextoCliente(titular.clienteId) : ctx.contextoAccion('portal')
+}
+
 /** Límite por IP y luego la sesión del portal (401 sin ella). */
 async function clienteDeLaSesionLimitada(ctx: HttpContext, endpoint: string): Promise<number> {
     await ipDelCliente(ctx, endpoint)
@@ -269,7 +278,7 @@ const autenticadas: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             await new CerrarSesionPortal().execute(
                 { sesionId: sesion.id, clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
             borrarCookieSesion(ctx)
         },
@@ -365,7 +374,7 @@ const autenticadas: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new EditarContactoPortal().execute(
                 { ...cuerpo, clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -406,7 +415,7 @@ const telegram: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new GenerarCodigoTelegram().execute(
                 { cliente_id: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -428,7 +437,7 @@ const telegram: Ruta[] = [
             const sesion = await exigirSesionPortal(ctx)
             return new DesvincularTelegramPortal().execute(
                 { clienteId: sesion.clienteId },
-                ctx.contextoAccion('portal'),
+                ctx.contextoCliente(sesion.clienteId),
             )
         },
     }),
@@ -554,7 +563,8 @@ const promesas: Ruta[] = [
         operacion: 'portalSolicitarPromesa',
         resumen: 'El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)',
         descripcion:
-            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa ' +
+            'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, ' +
+            '`sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa ' +
             'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
             '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
             '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
@@ -568,16 +578,16 @@ const promesas: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: PortalPromesaSolicitada },
         handler: async (ctx, { cuerpo }) => {
             const ip = await ipDelCliente(ctx, 'promesas')
-            const servicioId = await servicioDeLaPeticion(ctx, ip, cuerpo.servicio_id)
+            const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             try {
                 const promesa = await new CrearPromesaPago().execute(
                     {
-                        servicio_id: servicioId,
+                        servicio_id: titular.servicioId,
                         vence_en: venceAlFinalDelDia(cuerpo.vence_el),
                         monto: cuerpo.monto,
                         canal: 'portal',
                     },
-                    ctx.contextoAccion('portal'),
+                    contextoDelTitular(ctx, titular),
                 )
                 return promesaParaCliente(promesa)
             } catch (error) {
@@ -615,6 +625,8 @@ const pagosEnLinea: Ruta[] = [
             const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
             const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
             try {
+                // Actor sistema aun con la sesión: `CrearCobroPasarela` guarda `actor.id` en
+                // `creado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
                 const cobro = await new CrearCobroPasarela().execute(
                     { cliente_id: pagador.clienteId, servicio_id: pagador.servicioId, facturas },
                     ctx.contextoAccion('portal'),
@@ -740,6 +752,8 @@ const comprobantes: Ruta[] = [
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             const archivo = await archivoDeLaPeticion(ctx)
             try {
+                // Actor sistema aun con la sesión: `RegistrarComprobante` guarda `actor.id` en
+                // `registrado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
                 const comprobante = await new RegistrarComprobante().execute(
                     {
                         cliente_id: titular.clienteId,

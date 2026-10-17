@@ -108,9 +108,11 @@ test.group('Portal: vincular Telegram', (group) => {
         const auditoria = await db
             .from('audit.acciones')
             .where({ request_id: req, accion: 'notificaciones.telegram_codigo' })
-            .select('canal', 'entidad_id', 'entrada')
+            .select('canal', 'entidad_id', 'entrada', 'actor_tipo', 'actor_id')
             .firstOrFail()
         assert.equal(auditoria.canal, 'portal')
+        assert.equal(auditoria.actor_tipo, 'cliente')
+        assert.equal(Number(auditoria.actor_id), c.clienteId)
         assert.equal(Number(auditoria.entidad_id), c.clienteId)
         assert.notInclude(JSON.stringify(auditoria), codigo)
 
@@ -224,12 +226,16 @@ test.group('Portal: vincular Telegram', (group) => {
             .firstOrFail()
         assert.isNull(cliente.telegram_chat_id)
         assert.equal(cliente.canal_preferido, 'correo')
-        const acciones = await db.from('audit.acciones').where('request_id', req).select('accion', 'canal')
+        const acciones = await db
+            .from('audit.acciones')
+            .where('request_id', req)
+            .select('accion', 'canal', 'actor_tipo', 'actor_id')
         assert.sameMembers(
             acciones.map((a) => a.accion),
             ['portal.desvincular_telegram', 'clientes.desvincular_telegram', 'clientes.editar'],
         )
         assert.isTrue(acciones.every((a) => a.canal === 'portal'))
+        assert.isTrue(acciones.every((a) => a.actor_tipo === 'cliente' && Number(a.actor_id) === c.clienteId))
 
         // repetir es idempotente
         await estado(client.post('/api/v1/portal/telegram/desvincular').header('Cookie', c.cookie), 200)

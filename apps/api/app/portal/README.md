@@ -42,8 +42,13 @@ Reglas:
   (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/portal`, `Secure` con HTTPS o `PORTAL_COOKIE_SEGURA=siempre`). Inactividad
   `PORTAL_SESION_INACTIVIDAD_S` (1800), máximo `PORTAL_SESION_MAX_S` (14400). Alcance: un cliente;
   todas las lecturas filtran por el `clienteId` de la sesión (`acceso/sesion.ts`).
-- **Actor.** No hay tipo de actor "cliente" todavía: las acciones del portal se auditan con actor
-  `sistema`, canal `portal` y entidad `cliente` (pedido al líder BE en `a5.md`).
+- **Actor.** Canal `portal` siempre. Con la sesión, actor `cliente` (`ctx.contextoCliente`, id de
+  `core.clientes`): `portal.cerrar_sesion`, `portal.editar_contacto`, `portal.desvincular_telegram`,
+  `notificaciones.telegram_codigo` y `promesas.crear` con `servicio_id`; `portal.verificar_codigo`
+  se audita como `cliente` al acertar (`t.identificarActor`, como `auth.login`). Por IP (sin sesión)
+  y al pedir el código, actor `sistema`: la IP no autentica a nadie. `comprobantes.registrar` y
+  `pasarela.crear_cobro` siguen como `sistema` aun con la sesión porque A3 guarda `actor.id` en
+  `registrado_por` / `creado_por` (`core.usuarios`); pasan a `cliente` cuando usen `usuarioDelActor`.
 
 ### PDF del aviso de cobro y plantillas de documentos (tarea 8)
 
@@ -124,7 +129,7 @@ largas siguen en otra página.
 | Endpoint | Identifica | Qué hace |
 | --- | --- | --- |
 | `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante), deuda máxima (máximo, vencida, faltante), `pago_previo` (lo que debe pagar antes de prometer) y si requiere aprobación. Cupo del periodo agotado: no disponible |
-| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` y actor sistema. Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
+| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` (actor `cliente` con la sesión, `sistema` por IP). Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
 
 - **Sin lógica de promesas en el portal.** La decisión, la auditoría (`promesas.crear`, canal `portal`), el
   evento `promesa.creada` y la reactivación son de `CrearPromesaPago`. `promesas.ts` solo identifica el

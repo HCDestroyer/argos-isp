@@ -107,11 +107,16 @@ test.group('Portal: acceso por código', (group) => {
             .from('audit.acciones')
             .whereIn('accion', ['portal.solicitar_codigo', 'portal.verificar_codigo'])
             .where('entidad_id', s.clienteId)
-            .select('accion', 'canal', 'resultado', 'entrada')
+            .select('accion', 'canal', 'resultado', 'entrada', 'actor_tipo', 'actor_id')
         assert.sameMembers(
             auditoria.map((a) => `${a.accion}:${a.canal}:${a.resultado}`),
             ['portal.solicitar_codigo:portal:ok', 'portal.verificar_codigo:portal:ok'],
         )
+        // Pedir el código es anónimo; al verificarlo, el cliente queda como actor (como un login).
+        const porAccion = Object.fromEntries(auditoria.map((a) => [a.accion, a]))
+        assert.include(porAccion['portal.solicitar_codigo'], { actor_tipo: 'sistema', actor_id: null })
+        assert.equal(porAccion['portal.verificar_codigo'].actor_tipo, 'cliente')
+        assert.equal(Number(porAccion['portal.verificar_codigo'].actor_id), s.clienteId)
         assert.notInclude(JSON.stringify(auditoria), codigo)
     })
 
@@ -505,8 +510,15 @@ test.group('Portal: sesión y datos del cliente', (group) => {
         const s = await crearServicio({ nit })
         const cookie = await entrar(client, nit)
         await estado(client.get('/api/v1/portal/cuenta').header('Cookie', cookie), 200)
-        const salida = await estado(client.post('/api/v1/portal/salir').header('Cookie', cookie), 204)
+        const req = `salir-${s.clienteId}`
+        const salida = await estado(
+            client.post('/api/v1/portal/salir').header('Cookie', cookie).header('X-Request-Id', req),
+            204,
+        )
         assert.include(String(salida.headers()['set-cookie']), 'argos_portal=;')
+        const cierre = await db.from('audit.acciones').where('request_id', req).firstOrFail()
+        assert.include(cierre, { accion: 'portal.cerrar_sesion', actor_tipo: 'cliente', canal: 'portal' })
+        assert.equal(Number(cierre.actor_id), s.clienteId)
         await estado(client.get('/api/v1/portal/cuenta').header('Cookie', cookie), 401)
 
         const otra = await entrar(client, nit)
@@ -572,16 +584,20 @@ test.group('Portal: sesión y datos del cliente', (group) => {
             .where('entidad_tipo', 'cliente')
             .where('entidad_id', s.clienteId)
             .whereIn('accion', ['portal.editar_contacto', 'clientes.editar'])
-            .select('accion', 'canal', 'actor_tipo')
+            .select('accion', 'canal', 'actor_tipo', 'actor_id')
         assert.sameMembers(
-            acciones.map((a) => `${a.accion}:${a.canal}:${a.actor_tipo}`),
-            ['portal.editar_contacto:portal:sistema', 'clientes.editar:portal:sistema'],
+            acciones.map((a) => `${a.accion}:${a.canal}:${a.actor_tipo}:${a.actor_id}`),
+            [
+                `portal.editar_contacto:portal:cliente:${s.clienteId}`,
+                `clientes.editar:portal:cliente:${s.clienteId}`,
+            ],
         )
         const cambios = await db
             .from('audit.cambios')
             .where('entidad_tipo', 'cliente')
             .where('entidad_id', s.clienteId)
-            .select('campo')
+            .select('campo', 'actor_tipo', 'actor_id')
+        assert.isTrue(cambios.every((c) => c.actor_tipo === 'cliente' && Number(c.actor_id) === s.clienteId))
         assert.sameMembers(
             cambios.map((c) => c.campo),
             ['email', 'movil', 'canal_preferido'],

@@ -63,10 +63,10 @@ export async function pagadorDeLaPeticion(
     ctx: HttpContext,
     ip: string,
     entrada: EntradaIniciarPago,
-): Promise<{ clienteId: number; servicioId: number | null }> {
+): Promise<{ clienteId: number; servicioId: number | null; porSesion: boolean }> {
     if (entrada.facturas && entrada.facturas.length > 0 && entrada.servicio_id === undefined) {
         const sesion = await exigirSesionPortal(ctx)
-        return { clienteId: sesion.clienteId, servicioId: null }
+        return { clienteId: sesion.clienteId, servicioId: null, porSesion: true }
     }
     return titularDeLaPeticion(ctx, ip, entrada.servicio_id)
 }

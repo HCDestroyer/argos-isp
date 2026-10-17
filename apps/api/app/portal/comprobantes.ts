@@ -72,12 +72,22 @@ export async function bancosPortal(): Promise<{ id: number; nombre: string }[]> 
     return bancos.map((b) => ({ id: Number(b.id), nombre: b.nombre }))
 }
 
-/** Cliente y servicio del comprobante: por la sesión (con `servicio_id`) o por la IP de origen. */
+export interface TitularPeticion {
+    clienteId: number
+    servicioId: number
+    porSesion: boolean
+}
+
+/**
+ * Cliente y servicio de la petición: por la sesión (con `servicio_id`) o por la IP de origen.
+ * `porSesion` dice si el cliente se autenticó (actor `cliente`) o solo se identificó por la IP
+ * (actor `sistema`: la IP no autentica a nadie).
+ */
 export async function titularDeLaPeticion(
     ctx: HttpContext,
     ip: string,
     servicioId: number | undefined,
-): Promise<{ clienteId: number; servicioId: number }> {
+): Promise<TitularPeticion> {
     if (servicioId !== undefined) {
         const sesion = await exigirSesionPortal(ctx)
         const propio = await db
@@ -87,11 +97,11 @@ export async function titularDeLaPeticion(
             .select('id')
             .first()
         if (!propio) throw new NoEncontrado('Ese servicio no es de tu cuenta')
-        return { clienteId: sesion.clienteId, servicioId }
+        return { clienteId: sesion.clienteId, servicioId, porSesion: true }
     }
     const servicio = await servicioDeLaPeticion(ctx, ip, undefined)
     const fila = await db.from('core.servicios').where('id', servicio).select('cliente_id').firstOrFail()
-    return { clienteId: Number(fila.cliente_id), servicioId: servicio }
+    return { clienteId: Number(fila.cliente_id), servicioId: servicio, porSesion: false }
 }
 
 /**

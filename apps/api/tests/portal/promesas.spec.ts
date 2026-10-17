@@ -442,6 +442,17 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             201,
         )
         assert.equal(creada.body().resultado, 'aprobada')
+        // Con la sesión, actor `cliente`; nunca un id de cliente en `aprobada_por` (core.usuarios).
+        const auditoria = await db
+            .from('audit.acciones')
+            .where('accion', 'promesas.crear')
+            .where('entidad_tipo', 'promesa')
+            .where('entidad_id', creada.body().id)
+            .firstOrFail()
+        assert.include(auditoria, { actor_tipo: 'cliente', canal: 'portal', resultado: 'ok' })
+        assert.equal(Number(auditoria.actor_id), s.clienteId)
+        const fila = await db.from('billing.promesas').where('id', creada.body().id).firstOrFail()
+        assert.isNull(fila.aprobada_por)
         assert.equal(await estadoServicio(s.servicioId), 'activo')
         assert.equal(await estadoServicio(ajeno.servicioId), 'suspendido')
 
