@@ -92,6 +92,15 @@ function responder({ status, cuerpo, contentType, headers = {} }: RespuestaFixtu
 }
 
 async function leerCuerpo(request: Request): Promise<unknown> {
+    // Multipart (logo de una empresa): campos de texto y archivos (`File`) como objeto.
+    if ((request.headers.get('Content-Type') ?? '').includes('multipart/form-data')) {
+        const datos = await request.formData()
+        const campos: Record<string, FormDataEntryValue> = {}
+        datos.forEach((valor, nombre) => {
+            campos[nombre] = valor
+        })
+        return campos
+    }
     const texto = await request.text()
     if (!texto) {
         return null

@@ -20,9 +20,12 @@ import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
 import { rutasDocumentos } from './documentos/rutas'
 import { rutasEgresos } from './egresos/rutas'
+import { rutasEmpresas } from './empresas/rutas'
+import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
+import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
-import { sinSesion, usuariosPorToken } from './comun'
+import { empresaActivaDe, empresaNoPermitida, sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
@@ -282,7 +285,10 @@ function conFallasSimuladas(rutas: RutasFixture): RutasFixture {
             if (vencida) {
                 return vencida
             }
-            return csrfInvalido(solicitud, clave) ? { status: 403, cuerpo: PROBLEMA_CSRF } : manejador(solicitud)
+            if (csrfInvalido(solicitud, clave)) {
+                return { status: 403, cuerpo: PROBLEMA_CSRF }
+            }
+            return empresaNoPermitida(solicitud) ?? manejador(solicitud)
         },
     ]))
 }
@@ -332,17 +338,21 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     },
 
     /** Con la cookie, `Me` trae el `csrf` (así el panel lo recupera tras recargar). */
-    'GET /api/v1/me': ({ token, porCookie }) => {
+    'GET /api/v1/me': (solicitud) => {
+        const { token, porCookie } = solicitud
         const usuario = token ? usuariosPorToken[token] : undefined
         if (!usuario) {
             return sinSesion()
         }
+        // Multiempresa: la empresa activa de esta petición (`X-Empresa-Id` o la única del usuario).
+        const empresaActiva = { empresa_activa_id: empresaActivaDe(solicitud) }
         if (!porCookie) {
-            return { status: 200, cuerpo: usuario }
+            return { status: 200, cuerpo: { ...usuario, ...empresaActiva } }
         }
         // Con la cookie: `csrf` y los vencimientos (ya renovados por esta misma petición).
         const me: Schema<'Me'> = {
             ...usuario,
+            ...empresaActiva,
             expira_en: bd.sesion.expiraEn,
             expira_max_en: bd.sesion.expiraMaxEn,
         }
@@ -352,6 +362,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return { status: 200, cuerpo: me }
     },
 
+    ...rutasEmpresas,
+    ...rutasNotificaciones,
     ...rutasZonas,
     ...rutasClientes,
     ...rutasServicios,
@@ -364,6 +376,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasSesiones,
     ...rutasFacturacion,
     ...rutasLibro,
+    ...rutasEstadosFinancieros,
     ...rutasCajas,
     ...rutasComprobantes,
     ...rutasSimulador,

@@ -91,6 +91,18 @@ export const esquemaApertura = z.object({
 export type DatosApertura = z.output<typeof esquemaApertura>
 
 /**
+ * Espejo de `crearCajaValidator` (A3): nombre de 2 a 80 (único por empresa: 409
+ * `caja_duplicada`), cajero opcional y empresa (por defecto la activa).
+ */
+export const esquemaCrearCaja = z.object({
+    nombre: z.string().trim().min(2, 'Escribe al menos 2 caracteres').max(80, 'Máximo 80 caracteres'),
+    cajero_id: z.number().int().positive().nullable(),
+    empresa_id: z.number().int().positive().nullable(),
+})
+
+export type DatosCrearCaja = z.output<typeof esquemaCrearCaja>
+
+/**
  * Espejo de `cerrarCajaValidator`: `contado` con hasta 2 decimales y `motivo` de 3 a 500. El
  * motivo es obligatorio si hay diferencia; `esperado` es el provisional del panel (`null` si no
  * se pudo calcular: entonces la API decide y responde 422 si falta).

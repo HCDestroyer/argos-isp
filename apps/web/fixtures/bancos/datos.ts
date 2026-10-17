@@ -35,6 +35,7 @@ const CREADA = '2026-09-01T15:00:00.000Z'
 function cuentaBancaria(id: number, bancoId: number, numero: string, alias: string, cuentaId: number, codigo: string, extra: Partial<CuentaBancaria> = {}): CuentaBancaria {
     return {
         id,
+        empresa_id: 1,
         banco_id: bancoId,
         banco_nombre: bancos.find(b => b.id === bancoId)?.nombre ?? '',
         numero,

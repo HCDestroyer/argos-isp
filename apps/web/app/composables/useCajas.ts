@@ -39,5 +39,13 @@ export function useCajas() {
         }))
     }
 
-    return { listar, turnos, abrir, cerrar }
+    /** `POST /cajas` (`cajas.crear`): la caja y su subcuenta 1.1.01.NN en la empresa elegida. */
+    function crear(datos: DatosCrearCaja, claveIdempotencia: string): Promise<Resultado<Caja>> {
+        return resolver(api.POST('/api/v1/cajas', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, turnos, abrir, cerrar, crear }
 }

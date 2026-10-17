@@ -8,6 +8,9 @@ import {
     conPermiso,
     cuerpoObjeto,
     datosInvalidos,
+    deLaEmpresa,
+    empresaDeAccion,
+    empresaActivaDe,
     idDe,
     noEncontrado,
     numeroQuery,
@@ -228,41 +231,6 @@ function pendientesDe(clienteId: number) {
 }
 
 /**
- * Como `registrarPago`: primero las `facturas` pedidas (en ese orden), luego las demás de la más
- * antigua a la más nueva; el excedente queda como anticipo.
- */
-function aplicar(clienteId: number, monto: Decimal, indicadas: number[] | null): Pago['aplicaciones'] {
-    const propias = pendientesDe(clienteId)
-    const primero = (indicadas ?? []).map(id => bd.facturas.find(f => f.id === id)).filter(f => f !== undefined)
-    const pendientes = [...primero, ...propias.filter(f => !primero.includes(f))]
-    const aplicaciones: Pago['aplicaciones'] = []
-    let resto = monto
-    for (const factura of pendientes) {
-        if (resto.lte(0)) {
-            break
-        }
-        const saldo = new Decimal(factura.total).minus(factura.pagado)
-        const parte = Decimal.min(resto, saldo)
-        const pagado = new Decimal(factura.pagado).plus(parte)
-        Object.assign(factura, {
-            pagado: dinero(pagado),
-            estado: estadoFactura(pagado, new Decimal(factura.total), factura.vence_en),
-            version: factura.version + 1,
-            updated_at: ahora(),
-        })
-        // Como `conAplicaciones` de la API: el dueño de cada factura (puede no ser el pagador).
-        aplicaciones.push({
-            factura_id: factura.id,
-            monto: dinero(parte),
-            cliente_id: factura.cliente_id,
-            cliente_nombre: bd.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
-        })
-        resto = resto.minus(parte)
-    }
-    return aplicaciones
-}
-
-/**
  * Lo que hace `evaluarEstadoServicio` dentro de `registrarPago` (misma transacción): cada
  * servicio cuyas facturas tocó el pago y que ya no debe facturas vencidas vuelve a `activo`, y el
  * Disconnect hace que el equipo vuelva a conectarse. Un servicio suspendido a mano no se toca.
@@ -314,8 +282,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
             resultado: 'ok',
             error: null,
             request_id: `req-fixture-${id}`,
-            empresa_id: 1,
-            empresa_nombre: 'ArgosIsp',
+            ...empresaDeAccion({ tipo: 'servicio', id: servicio.id }, null),
             created_at: momento,
         })
         evaluados.push({ ...base, estado: 'activo', cambiado: true, motivo: 'sin facturas vencidas' })
@@ -323,72 +290,212 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
     return evaluados
 }
 
-function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
+/** Facturas que tocaría el pago, en el orden de `registrarPago`: las pedidas y luego las más antiguas. */
+function facturasEnOrden(clienteId: number, indicadas: number[] | null): Factura[] {
+    const primero = (indicadas ?? []).map(id => bd.facturas.find(f => f.id === id)).filter((f): f is Factura => f !== undefined)
+    return [...primero, ...pendientesDe(clienteId).filter(f => !primero.includes(f))]
+}
+
+/** Aplica `monto` a `facturas` en ese orden (sin pasar a otras); lo que sobra queda de anticipo. */
+function aplicarEn(facturas: Factura[], monto: Decimal): Pago['aplicaciones'] {
+    const aplicaciones: Pago['aplicaciones'] = []
+    let resto = monto
+    for (const factura of facturas) {
+        if (resto.lte(0)) {
+            break
+        }
+        const saldo = new Decimal(factura.total).minus(factura.pagado)
+        const parte = Decimal.min(resto, saldo)
+        if (parte.lte(0)) {
+            continue
+        }
+        const pagado = new Decimal(factura.pagado).plus(parte)
+        Object.assign(factura, {
+            pagado: dinero(pagado),
+            estado: estadoFactura(pagado, new Decimal(factura.total), factura.vence_en),
+            version: factura.version + 1,
+            updated_at: ahora(),
+        })
+        aplicaciones.push({
+            factura_id: factura.id,
+            monto: dinero(parte),
+            cliente_id: factura.cliente_id,
+            cliente_nombre: bd.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
+        })
+        resto = resto.minus(parte)
+    }
+    return aplicaciones
+}
+
+/** Lo que va a cada empresa: sus facturas (en orden) y el monto; el excedente, a la última. */
+interface ParteEmpresa {
+    empresaId: number
+    facturas: Factura[]
+    monto: Decimal
+}
+
+/**
+ * Como el cobro repartido de `registrarPago` (A3): recorre las facturas en orden repartiendo el
+ * monto y agrupa por la empresa de cada factura. Sin facturas que cubrir, todo a `porDefecto`.
+ */
+function repartir(facturas: Factura[], monto: Decimal, porDefecto: number): ParteEmpresa[] {
+    const partes: ParteEmpresa[] = []
+    let resto = monto
+    for (const factura of facturas) {
+        if (resto.lte(0)) {
+            break
+        }
+        const parte = Decimal.min(resto, new Decimal(factura.total).minus(factura.pagado))
+        if (parte.lte(0)) {
+            continue
+        }
+        let grupo = partes.find(p => p.empresaId === (factura.empresa_id ?? 1))
+        if (!grupo) {
+            grupo = { empresaId: factura.empresa_id ?? 1, facturas: [], monto: new Decimal(0) }
+            partes.push(grupo)
+        }
+        grupo.facturas.push(factura)
+        grupo.monto = grupo.monto.plus(parte)
+        resto = resto.minus(parte)
+    }
+    const ultima = partes.at(-1)
+    if (!ultima) {
+        return [{ empresaId: porDefecto, facturas: [], monto }]
+    }
+    ultima.monto = ultima.monto.plus(resto)
+    return partes
+}
+
+/** Caja de una empresa para un cobro en efectivo: la pedida si es de esa empresa, si no una con turno abierto. */
+function cajaDeEmpresa(empresaId: number, pedida: unknown, unaSola: boolean): number | null {
+    const explicita = bd.cajas.find(c => c.id === pedida && c.empresa_id === empresaId)
+    if (explicita) {
+        return explicita.id
+    }
+    const abierta = bd.cajas.find(c => c.empresa_id === empresaId && c.activa && c.turno_abierto_id !== null)
+    if (abierta) {
+        return abierta.id
+    }
+    // Con una sola empresa en el cobro se conserva la caja principal como respaldo (empresa 1).
+    return unaSola && empresaId === 1 ? CAJA_PRINCIPAL_ID : null
+}
+
+function problemaEmpresa(codigo: string, titulo: string, detalle: string, errores?: Errores): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: titulo, status: 422, detail: detalle, ...(errores ? { errors: errores } : {}) }
+    return { status: 422, cuerpo }
+}
+
+/**
+ * Todo `POST /pagos` después del ACL: validar, 409 por referencia, repartir por empresa (un pago
+ * por empresa con el mismo `cobro_id`), aplicar, asiento, bitácora y `servicios[]`. Lo reutiliza
+ * `POST /comprobantes/:id/aprobar`, que registra el pago anidado.
+ */
+export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
     const cuerpo = cuerpoObjeto(solicitud)
     const errores = validar(cuerpo)
     if (errores.length) {
-        return errores
+        return datosInvalidos(errores)
+    }
+    const repetida = referenciaRepetida(cuerpo)
+    if (repetida) {
+        return repetida
     }
     const clienteId = Number(cuerpo.cliente_id)
     const monto = new Decimal(String(cuerpo.monto))
     const indicadas = Array.isArray(cuerpo.facturas) ? cuerpo.facturas.filter((f): f is number => typeof f === 'number') : null
     const metodo = cuerpo.metodo as Pago['metodo']
-    const momento = ahora()
-    const usuario = solicitud.token ? (usuariosPorToken[solicitud.token]?.id ?? null) : null
     const requeridos = DATOS_POR_METODO[metodo] ?? []
     const cuenta = requeridos.includes('cuenta_bancaria_id') ? bd.cuentasBancarias.find(c => c.id === cuerpo.cuenta_bancaria_id) : undefined
     const banco = requeridos.includes('banco_origen_id') ? bd.bancos.find(b => b.id === cuerpo.banco_origen_id) : undefined
-    return {
-        id: siguienteId(bd.pagos),
-        cliente_id: clienteId,
-        metodo,
-        monto: dinero(monto),
-        comision: '0.00',
-        referencia: textoOpcional(cuerpo.referencia),
-        caja_id: metodo === 'caja' ? (typeof cuerpo.caja_id === 'number' ? cuerpo.caja_id : CAJA_PRINCIPAL_ID) : null,
-        pasarela: null,
-        estado: 'registrado',
-        nota: textoOpcional(cuerpo.nota),
-        registrado_por: usuario,
-        historico: false,
-        aplicaciones: aplicar(clienteId, monto, indicadas),
-        anulado_en: null,
-        motivo_anulacion: null,
-        banco_origen_id: banco?.id ?? null,
-        banco_origen_nombre: banco?.nombre ?? null,
-        cuenta_bancaria_id: cuenta?.id ?? null,
-        cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
-        version: 1,
-        created_at: momento,
-        updated_at: momento,
-    }
-}
+    const fija = typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : (cuenta?.empresa_id ?? null)
 
-/**
- * Todo `POST /pagos` después del ACL: validar, 409 por referencia, aplicar, asiento, bitácora y
- * `servicios[]`. Lo reutiliza `POST /comprobantes/:id/aprobar`, que registra el pago anidado.
- */
-export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
-    const errores = validar(cuerpoObjeto(solicitud))
-    if (errores.length) {
-        return datosInvalidos(errores)
+    let ordenadas = facturasEnOrden(clienteId, indicadas)
+    if (fija !== null) {
+        // Con la empresa fija (cuerpo o cuenta bancaria) no se reparte: facturas pedidas de otra son un 422.
+        const ajena = (indicadas ?? []).map(id => bd.facturas.find(f => f.id === id)).find(f => f && (f.empresa_id ?? 1) !== fija)
+        if (ajena && cuenta) {
+            // Como la API: el error va en `facturas.<i>` de la factura ajena.
+            return problemaEmpresa('cuenta_de_otra_empresa', 'Empresa distinta', `La cuenta bancaria ${cuenta.id} es de la empresa ${fija} y la factura ${ajena.id} es de la empresa ${ajena.empresa_id ?? 1}: no se cruzan dineros entre NIT`, [{ field: `facturas.${(indicadas ?? []).indexOf(ajena.id)}`, message: `La factura ${ajena.id} es de otra empresa`, rule: 'cuenta_de_otra_empresa' }])
+        }
+        ordenadas = ordenadas.filter(f => (f.empresa_id ?? 1) === fija)
     }
-    const repetida = referenciaRepetida(cuerpoObjeto(solicitud))
-    if (repetida) {
-        return repetida
+    const porDefecto = fija ?? empresaActivaDe(solicitud) ?? ordenadas[0]?.empresa_id ?? 1
+    const partes = repartir(ordenadas, monto, porDefecto)
+    if (partes.length > 1 && metodo !== 'caja') {
+        return problemaEmpresa('pago_de_varias_empresas', 'Regla de negocio', `Las facturas pedidas son de varias empresas (${partes.map(p => p.empresaId).join(', ')}): un pago por ${metodo} es de una sola empresa`)
     }
-    const resultado = registrarPago(solicitud)
-    if (Array.isArray(resultado)) {
-        return datosInvalidos(resultado)
+    const cajasPorEmpresa = new Map<number, number | null>()
+    if (metodo === 'caja') {
+        for (const parte of partes) {
+            const caja = cajaDeEmpresa(parte.empresaId, cuerpo.caja_id, partes.length === 1)
+            if (caja === null) {
+                const nombre = bd.empresas.find(e => e.id === parte.empresaId)?.nombre_comercial ?? `Empresa ${parte.empresaId}`
+                const empresa = `${nombre} (empresa ${parte.empresaId})`
+                return problemaEmpresa('caja_no_abierta', 'Caja no abierta', `No tienes una caja abierta en ${empresa}`, [{ field: 'empresa_id', message: `Abre una caja de ${empresa} para cobrar sus facturas en efectivo`, rule: String(parte.empresaId) }])
+            }
+            cajasPorEmpresa.set(parte.empresaId, caja)
+        }
     }
-    bd.pagos.push(resultado)
-    bd.asientos.push(asientoPago(siguienteId(bd.asientos), resultado))
-    registrarAccion(solicitud, 'pagos.registrar', { tipo: 'pago', id: resultado.id }, cuerpoObjeto(solicitud))
-    const tocados = new Set(resultado.aplicaciones
+
+    const momento = ahora()
+    const usuario = usuarioDe(solicitud)
+    const cobroId = siguienteId(bd.cobros)
+    const pagos: Pago[] = []
+    for (const parte of partes) {
+        const pago: Pago = {
+            id: siguienteId(bd.pagos),
+            empresa_id: parte.empresaId,
+            cobro_id: cobroId,
+            cliente_id: clienteId,
+            metodo,
+            monto: dinero(parte.monto),
+            comision: '0.00',
+            referencia: textoOpcional(cuerpo.referencia),
+            caja_id: metodo === 'caja' ? (cajasPorEmpresa.get(parte.empresaId) ?? null) : null,
+            pasarela: null,
+            estado: 'registrado',
+            nota: textoOpcional(cuerpo.nota),
+            registrado_por: usuario,
+            historico: false,
+            aplicaciones: aplicarEn(parte.facturas, parte.monto),
+            anulado_en: null,
+            motivo_anulacion: null,
+            banco_origen_id: banco?.id ?? null,
+            banco_origen_nombre: banco?.nombre ?? null,
+            cuenta_bancaria_id: cuenta?.id ?? null,
+            cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
+            version: 1,
+            created_at: momento,
+            updated_at: momento,
+        }
+        bd.pagos.push(pago)
+        bd.asientos.push(asientoPago(siguienteId(bd.asientos), pago))
+        registrarAccion(solicitud, 'pagos.registrar', { tipo: 'pago', id: pago.id }, cuerpo)
+        pagos.push(pago)
+    }
+    const total = pagos.reduce((suma, p) => suma.plus(p.monto), new Decimal(0))
+    bd.cobros.push({ id: cobroId, cliente_id: clienteId, metodo, monto: dinero(total), registrado_por: usuario, created_at: momento, pagos: pagos.map(p => p.id) })
+    const tocados = new Set(pagos.flatMap(p => p.aplicaciones)
         .map(a => bd.facturas.find(f => f.id === a.factura_id)?.servicio_id)
         .filter((id): id is number => typeof id === 'number'))
     const servicios = evaluarServicios([...tocados])
-    return { status: 201, cuerpo: { ...resultado, servicios } }
+    const [primero] = pagos
+    return { status: 201, cuerpo: { ...primero, pagos, servicios } }
+}
+
+/** Datos de marca de una empresa para el recibo (`EmpresaRecibo`). */
+function empresaRecibo(id: number): Schema<'EmpresaRecibo'> {
+    const empresa = bd.empresas.find(e => e.id === id)
+    return {
+        id,
+        nombre_comercial: empresa?.nombre_comercial ?? `Empresa ${id}`,
+        razon_social: empresa?.razon_social ?? null,
+        nit: empresa?.nit ?? null,
+        direccion_fiscal: empresa?.direccion_fiscal ?? null,
+        telefono: empresa?.telefono ?? null,
+        correo: empresa?.correo ?? null,
+        logo_url: empresa?.logo_url ?? null,
+    }
 }
 
 export const rutasFacturacion: RutasFixture = {
@@ -409,7 +516,7 @@ export const rutasFacturacion: RutasFixture = {
         if (estado && !(ESTADOS_PAGO as readonly string[]).includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
         }
-        const filas = bd.pagos
+        const filas = deLaEmpresa(bd.pagos, solicitud)
             .filter(p => cliente === undefined || p.cliente_id === cliente)
             .filter(p => caja === undefined || p.caja_id === caja)
             .filter(p => !metodo || p.metodo === metodo)
@@ -451,7 +558,7 @@ export const rutasFacturacion: RutasFixture = {
         if (estado && !(ESTADOS_FACTURA as readonly string[]).includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
         }
-        const filas = bd.facturas
+        const filas = deLaEmpresa(bd.facturas, solicitud)
             .filter(f => cliente === undefined || f.cliente_id === cliente)
             .filter(f => servicio === undefined || f.servicio_id === servicio)
             .filter(f => !estado || f.estado === estado)
@@ -494,10 +601,36 @@ export const rutasFacturacion: RutasFixture = {
         return { status: 200, cuerpo: factura }
     })),
 
+    /** Recibo de un cobro (`Cobro`, A3): una sección por empresa con su marca y su pago. */
+    'GET /api/v1/cobros/:id': conPermiso('pagos.ver', (solicitud) => {
+        const cobro = bd.cobros.find(c => c.id === idDe(solicitud))
+        if (!cobro) {
+            return noEncontrado('el cobro')
+        }
+        const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        // Solo las secciones de las empresas del alcance del usuario.
+        const alcance = usuario?.alcance_global ? null : (usuario?.empresas ?? []).map(e => e.id)
+        const secciones = cobro.pagos
+            .map(id => bd.pagos.find(p => p.id === id))
+            .filter((p): p is Pago => p !== undefined && (alcance === null || alcance.includes(p.empresa_id ?? 1)))
+            .map(pago => ({ empresa: empresaRecibo(pago.empresa_id ?? 1), pago }))
+        const recibo: Schema<'Cobro'> = {
+            id: cobro.id,
+            cliente_id: cobro.cliente_id,
+            cliente_nombre: bd.clientes.find(c => c.id === cobro.cliente_id)?.nombre ?? '',
+            metodo: cobro.metodo,
+            monto: cobro.monto,
+            registrado_por: cobro.registrado_por,
+            created_at: cobro.created_at,
+            secciones,
+        }
+        return { status: 200, cuerpo: recibo }
+    }),
+
     'GET /api/v1/pagos/:id': conPermiso('pagos.ver', (solicitud) => {
         const pago = bd.pagos.find(p => p.id === idDe(solicitud))
         return pago ? { status: 200, cuerpo: pago } : noEncontrado('el pago')
     }),
 
-    'GET /api/v1/cajas': conPermiso('cajas.ver', () => ({ status: 200, cuerpo: bd.cajas })),
+    'GET /api/v1/cajas': conPermiso('cajas.ver', solicitud => ({ status: 200, cuerpo: deLaEmpresa(bd.cajas, solicitud) })),
 }

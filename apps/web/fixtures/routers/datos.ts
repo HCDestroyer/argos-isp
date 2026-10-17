@@ -41,7 +41,8 @@ export const routers: Schema<'Router'>[] = [
         modo_velocidad: 'pcq',
         activo: true,
         ...conexion,
-        ...empresa,
+        // Multiempresa: los servicios nuevos de este router se sugieren a Fibra del Sur.
+        empresa_sugerida_id: 2,
         ...meta,
     },
     {

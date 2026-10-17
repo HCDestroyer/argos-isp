@@ -12,7 +12,8 @@ export const categoriasEgreso: Schema<'CategoriaEgreso'>[] = [
     { id: 6, clave: 'otros', nombre: 'Otros', cuenta_id: 31, cuenta_codigo: '5.2.99', cuenta_nombre: 'Otros gastos' },
 ]
 
-const VACIO: Pick<Egreso, 'caja_id' | 'caja_nombre' | 'turno_id' | 'banco_id' | 'banco_nombre' | 'cuenta_bancaria_id' | 'cuenta_bancaria_nombre' | 'anulado_en' | 'anulado_por' | 'motivo_anulacion' | 'asiento_reverso_id'> = {
+const VACIO: Pick<Egreso, 'empresa_id' | 'caja_id' | 'caja_nombre' | 'turno_id' | 'banco_id' | 'banco_nombre' | 'cuenta_bancaria_id' | 'cuenta_bancaria_nombre' | 'anulado_en' | 'anulado_por' | 'motivo_anulacion' | 'asiento_reverso_id'> = {
+    empresa_id: 1,
     caja_id: null,
     caja_nombre: null,
     turno_id: null,
@@ -104,6 +105,7 @@ export const egresos: Egreso[] = [
 export const cierres: Schema<'CierrePeriodo'>[] = [
     {
         id: 2,
+        empresa_id: 1,
         periodo: '2026-09',
         estado: 'cerrado',
         cerrado_en: '2026-10-02T15:30:00.000Z',
@@ -117,6 +119,7 @@ export const cierres: Schema<'CierrePeriodo'>[] = [
     },
     {
         id: 1,
+        empresa_id: 1,
         periodo: '2026-08',
         estado: 'reabierto',
         cerrado_en: '2026-09-03T15:00:00.000Z',

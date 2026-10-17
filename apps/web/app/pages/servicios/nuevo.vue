@@ -70,6 +70,22 @@ const plan = computed(() => planes.value.find(p => p.id === estado.plan_id) ?? n
 const red = computed(() => redes.value.find(r => r.id === estado.red_id) ?? null)
 const plantilla = computed(() => plantillas.value.find(p => p.id === estado.plantilla_facturacion_id) ?? null)
 const soloIpv4 = computed(() => plan.value?.dual_stack === 'v4')
+
+/*
+| Multiempresa: el servicio factura con una empresa (NIT). Sugerida como la API: la de la zona del
+| cliente > la del router > la empresa activa. El operador puede elegir otra de las suyas. Con una
+| sola empresa no se muestra ni se manda (la API usa la única).
+*/
+const { conSelector: variasEmpresas, empresas: empresasUsuario, empresaId: empresaActiva, nombre: nombreEmpresa } = useEmpresaActiva()
+const zonas = shallowRef<Zona[]>([])
+const empresaElegida = ref<string | null>(null)
+const sugerencia = computed(() => sugerenciaEmpresa({
+    zona: zonas.value.find(z => z.id === cliente.value?.zona_id) ?? null,
+    router: router.value,
+    activa: empresaActiva.value,
+}))
+const empresaServicio = computed<number | null>(() => (empresaElegida.value ? Number(empresaElegida.value) : sugerencia.value.empresaId))
+const itemsEmpresa = computed(() => empresasUsuario.value.map(e => ({ label: e.nombre_comercial, value: String(e.id), description: e.nit ? `NIT ${e.nit}` : undefined })))
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 /** El esquema base más la regla que necesita las redes cargadas: la IP fija cae en la red elegida. */
@@ -233,11 +249,15 @@ watch(() => estado.tipo_conexion, (tipo) => {
 })
 
 onMounted(async () => {
-    const [resultadoRouters, resultadoPlantillas] = await Promise.all([
+    const [resultadoRouters, resultadoPlantillas, resultadoZonas] = await Promise.all([
         routersApi.listar({ activo: true }),
         puede('plantillas.ver') ? usePlantillas().listar() : null,
+        variasEmpresas.value && puede('zonas.ver') ? useZonas().listar() : null,
         clienteInicial ? cargarCliente(clienteInicial) : null,
     ])
+    if (resultadoZonas?.ok) {
+        zonas.value = resultadoZonas.data
+    }
     if (resultadoRouters.ok) {
         routers.value = resultadoRouters.data.data
     }
@@ -298,7 +318,11 @@ function pasoDeCampo(campo: string): number {
 async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
     enviando.value = true
     problema.value = null
-    const resultado = await useServicios().crear(cuerpoServicio(evento.data, { omitirPlantilla: !puede('plantillas.ver') }), claveIdempotencia)
+    const cuerpo = cuerpoServicio(evento.data, { omitirPlantilla: !puede('plantillas.ver') })
+    if (variasEmpresas.value && empresaServicio.value !== null) {
+        cuerpo.empresa_id = empresaServicio.value
+    }
+    const resultado = await useServicios().crear(cuerpo, claveIdempotencia)
     enviando.value = false
     if (resultado.ok) {
         toast.add({
@@ -454,6 +478,22 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             variant="card"
                             class="w-full"
                             :ui="{ fieldset: 'grid gap-2' }"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        v-if="variasEmpresas"
+                        name="empresa_id"
+                        label="Empresa que factura"
+                        :description="sugerencia.motivo && !empresaElegida ? `Sugerida ${sugerencia.motivo}` : 'Las facturas de este servicio salen con el NIT de esta empresa.'"
+                    >
+                        <USelect
+                            :model-value="empresaServicio === null ? undefined : String(empresaServicio)"
+                            :items="itemsEmpresa"
+                            placeholder="Elige la empresa"
+                            class="w-full sm:max-w-sm"
+                            data-prueba="empresa-servicio-nuevo"
+                            @update:model-value="valor => empresaElegida = valor ? String(valor) : null"
                         />
                     </UFormField>
 
@@ -877,6 +917,11 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     <DatoFicha
                         etiqueta="Router"
                         :valor="router?.nombre"
+                    />
+                    <DatoFicha
+                        v-if="variasEmpresas"
+                        etiqueta="Empresa que factura"
+                        :valor="empresaServicio === null ? 'La que decida la API' : nombreEmpresa(empresaServicio)"
                     />
                     <DatoFicha
                         etiqueta="Plan"

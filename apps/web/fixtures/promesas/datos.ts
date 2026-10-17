@@ -17,6 +17,8 @@ function promesa(id: number, clienteId: number, datos: Pick<Promesa, 'vence_en' 
     const servicio = servicioDe(clienteId)
     return {
         id,
+        // Multiempresa (A3): la empresa del servicio.
+        empresa_id: servicio.empresa_id,
         servicio_id: servicio.id,
         cliente_id: clienteId,
         ...datos,

@@ -41,6 +41,8 @@ onMounted(() => lista.recargar())
             :columns="columnas"
             :loading="lista.cargando.value"
             :ui="{ td: 'py-2.5 align-top' }"
+            tabindex="0"
+            aria-label="Historial de asignaciones"
         >
             <template #inicio-cell="{ row }">
                 <div class="flex flex-col">
