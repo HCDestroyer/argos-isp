@@ -38,11 +38,13 @@ async function montarBoton() {
     return wrapper
 }
 
-async function montarRetorno(id: number | string) {
-    window.history.replaceState({}, '', `/corte?pago=${id}`)
+/** `estado`: lo que el proveedor pone en la URL de retorno (`&estado=pagado|fallido`). */
+async function montarRetorno(id: number | string, estado?: string) {
+    const ruta = `/corte?pago=${id}${estado ? `&estado=${estado}` : ''}`
+    window.history.replaceState({}, '', ruta)
     clearNuxtData('portal:quien-soy')
     clearNuxtData('portal:empresa')
-    const wrapper = await montar(PaginaCorte, { route: `/corte?pago=${id}` })
+    const wrapper = await montar(PaginaCorte, { route: ruta })
     await esperar()
     return wrapper
 }
@@ -203,6 +205,59 @@ describe('retorno /corte?pago=<id>', () => {
         expect(aviso.text()).toContain('Volver a la página de pago')
     })
 
+    it('?estado=pagado del proveedor: "Tu pago fue aprobado" sin esperar el webhook, y luego "Ya tienes servicio"', async () => {
+        fijarPagoFixture('pagado')
+        const wrapper = await montarRetorno(PAGO_EN_LINEA_ID_FIXTURE, 'pagado')
+
+        // La API aún dice pendiente (el webhook no llegó): se muestra lo que dijo el proveedor.
+        expect(wrapper.find('[data-testid="pago-aprobado"]').text()).toContain('Tu pago fue aprobado')
+        expect(wrapper.find('[data-testid="pago-procesando"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="pagar-en-linea"]').exists()).toBe(false)
+
+        await cicloDe5s()
+        await cicloDe5s()
+        expect(wrapper.find('[data-testid="servicio-reactivado"]').text()).toContain('Ya tienes servicio')
+    })
+
+    it('?estado=pagado sin webhook en 2 min: pide no volver a pagar', async () => {
+        fijarPagoFixture('pendiente')
+        const wrapper = await montarRetorno(PAGO_EN_LINEA_ID_FIXTURE, 'pagado')
+        for (let i = 0; i < 25; i += 1) {
+            await vi.advanceTimersByTimeAsync(5_000)
+        }
+        await esperar()
+        const aviso = wrapper.find('[data-testid="pago-aprobado-sin-confirmar"]')
+        expect(aviso.text()).toContain('No vuelvas a pagar')
+        expect(aviso.text()).toContain('Revisar de nuevo')
+        expect(wrapper.find('[data-testid="pagar-en-linea"]').exists()).toBe(false)
+    })
+
+    it('?estado=fallido del proveedor: error de inmediato, se puede volver a pagar y "Entendido" limpia la URL', async () => {
+        fijarPagoFixture('pendiente')
+        const wrapper = await montarRetorno(PAGO_EN_LINEA_ID_FIXTURE, 'fallido')
+
+        expect(wrapper.find('[data-testid="pago-fallido"]').text()).toContain('Tu pago no se completó')
+        expect(wrapper.find('[data-testid="pagar-en-linea"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="servicio-reactivado"]').exists()).toBe(false)
+
+        const reemplazar = vi.spyOn(useRouter(), 'replace')
+        await wrapper.findAll('button').find(b => b.text().includes('Entendido'))!.trigger('click')
+        await esperar()
+        expect(wrapper.find('[data-testid="pago-fallido"]').exists()).toBe(false)
+        const query = (reemplazar.mock.calls[0]?.[0] as { query: Record<string, unknown> }).query
+        expect(query.pago).toBeUndefined()
+        expect(query.estado).toBeUndefined()
+    })
+
+    it('si la API confirma el pago, gana aunque la URL diga fallido', async () => {
+        fijarPagoFixture('pagado')
+        const wrapper = await montarRetorno(PAGO_EN_LINEA_ID_FIXTURE, 'fallido')
+        expect(wrapper.find('[data-testid="pago-fallido"]').exists()).toBe(true)
+
+        await cicloDe5s()
+        expect(wrapper.find('[data-testid="servicio-reactivado"]').text()).toContain('Ya tienes servicio')
+    })
+
     it('?pago con basura se ignora', async () => {
         const wrapper = await montarRetorno('abc')
         expect(wrapper.find('[data-testid="pago-procesando"]').exists()).toBe(false)
@@ -218,5 +273,13 @@ describe('utilidades del pago', () => {
         expect(idPagoDeLaRuta('4e2')).toBeNull()
         expect(idPagoDeLaRuta(undefined)).toBeNull()
         expect(rutaRetornoPago(42)).toBe('/corte?pago=42')
+    })
+
+    it('estadoRetornoDeLaRuta: solo pagado o fallido', () => {
+        expect(estadoRetornoDeLaRuta('pagado')).toBe('pagado')
+        expect(estadoRetornoDeLaRuta(['fallido'])).toBe('fallido')
+        expect(estadoRetornoDeLaRuta('pendiente')).toBeNull()
+        expect(estadoRetornoDeLaRuta('<script>')).toBeNull()
+        expect(estadoRetornoDeLaRuta(undefined)).toBeNull()
     })
 })

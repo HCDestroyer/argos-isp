@@ -7,7 +7,8 @@
  * Día 2: estado, monto, facturas vencidas, datos de depósito y contacto. Día 4: solicitar promesa
  * de pago (tarea 4, `PromesaSolicitar`) y subir el comprobante de depósito (tarea 5,
  * `ComprobanteSubir`). Semana 2: pagar en línea (`PagoEnLinea`); la pasarela devuelve al cliente a
- * `/corte?pago=<id>`, donde se sigue el cobro (`GET /portal/pagos/en-linea/:id`) junto con el estado.
+ * `/corte?pago=<id>&estado=<pagado|fallido>`, donde se sigue el cobro (`GET /portal/pagos/en-linea/:id`)
+ * junto con el estado; `estado` (lo que dijo el proveedor) se muestra mientras llega el webhook.
  *
  * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
@@ -49,11 +50,18 @@ const { activo: servicioActivo, vigilando, agotado, sinRespuesta, vigilar, deten
 /** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
 const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
 
-/** Retorno de la pasarela: `/corte?pago=<id>`. */
+/** Retorno de la pasarela: `/corte?pago=<id>&estado=<pagado|fallido>` (el estado lo pone el proveedor). */
 const pagoId = ref(idPagoDeLaRuta(route.query.pago))
+const estadoProveedor = ref(estadoRetornoDeLaRuta(route.query.estado))
 const seguimiento = useSeguimientoPago()
 const pago = computed(() => pagoId.value ? seguimiento.cobro.value : null)
-const pagoCerrado = computed(() => pago.value?.estado === 'fallido' || pago.value?.estado === 'expirado')
+/**
+ * Ya no hay reactivación que esperar por este pago: rechazado o vencido en la API, o el proveedor
+ * dijo `fallido` y la API no lo contradice (sigue pendiente hasta que llegue el webhook).
+ */
+const pagoCerrado = computed(() => pago.value?.estado === 'fallido'
+    || pago.value?.estado === 'expirado'
+    || (estadoProveedor.value === 'fallido' && pago.value?.estado !== 'pagado'))
 /** Con un pago pendiente o confirmado no se ofrece pagar otra vez (evita cobros dobles). */
 const pagoEnCamino = computed(() => pagoId.value !== null
     && seguimiento.problema.value === null
@@ -80,6 +88,13 @@ watch(pagoCerrado, (cerrado) => {
     }
 })
 
+// El webhook confirmó el pago (aunque el proveedor hubiera dicho `fallido`): se espera la reactivación.
+watch(() => pago.value?.estado, (estado) => {
+    if (estado === 'pagado') {
+        vigilarEstado()
+    }
+})
+
 // Al volver de la pasarela se sigue el pago en cuanto se identifica el servicio.
 watch(() => corte.value, (actual) => {
     if (actual && pagoId.value !== null) {
@@ -93,15 +108,18 @@ const enVivo = computed(() => ({
     agotado: agotado.value || seguimiento.agotado.value,
     pagoEnCurso: pagoId.value !== null,
     pago: pago.value,
+    estadoProveedor: estadoProveedor.value,
     pagoNoEncontrado: seguimiento.problema.value !== null,
     sinRespuesta: sinRespuesta.value || seguimiento.sinRespuesta.value,
 }))
 
 function descartarPago() {
     pagoId.value = null
+    estadoProveedor.value = null
     seguimiento.detener()
     const query = { ...route.query }
     delete query.pago
+    delete query.estado
     void router.replace({ query })
 }
 

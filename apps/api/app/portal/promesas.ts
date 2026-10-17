@@ -5,7 +5,7 @@ import { Conflicto, NoEncontrado, Problema, ReglaNegocio } from '#shared/errores
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
-import type { ResultadoEvaluacion } from '#billing/promesas'
+import type { ReglaEvaluada, ResultadoEvaluacion } from '#billing/promesas'
 import { limitesPromesa, type LimitesPromesa } from '#billing/simulador_promesas'
 import type { ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
 import { resolverServicio, type EstadoServicio } from '#portal/consultas'
@@ -266,12 +266,28 @@ export function fechaLegible(fecha: string): string {
 const quetzales = (valor: unknown) => `Q${aTexto(dec(String(valor ?? '0')))}`
 
 /**
- * Motivo en palabras del cliente a partir de `resultado_evaluacion` (regla y límite). Si la regla
- * es desconocida, el `motivo` de A3 (ya es texto legible, nunca el código).
+ * Regla que decidió el resultado: la evaluación de A3 se detiene en la primera que falla (o en
+ * `requiere_aprobacion`), así que es la **última** de `reglas` y su `limite` es el que se aplicó
+ * (contrato de A3). Si no coincide con `regla` (evaluación completa del simulador), se busca por nombre.
+ */
+export function reglaDecisiva(evaluacion: ResultadoEvaluacion): ReglaEvaluada | undefined {
+    const ultima = evaluacion.reglas.at(-1)
+    if (ultima && ultima.regla === evaluacion.regla) return ultima
+    return evaluacion.reglas.find((r) => r.regla === evaluacion.regla)
+}
+
+const esNumero = (valor: unknown): valor is number => typeof valor === 'number' && Number.isFinite(valor)
+const esMonto = (valor: unknown) => typeof valor === 'string' && /^\d+(\.\d+)?$/.test(valor)
+const enMinuscula = (texto: string) => `${texto.charAt(0).toLowerCase()}${texto.slice(1)}`
+
+/**
+ * Motivo en palabras del cliente a partir de `resultado_evaluacion`: la regla y su `limite`
+ * (`reglaDecisiva`). Sin límite, el texto general de la regla. Si la regla es desconocida, el
+ * `motivo` de A3 (ya es texto legible, nunca el código).
  */
 export function motivoParaCliente(evaluacion: ResultadoEvaluacion): string {
     if (evaluacion.resultado === 'aprobada') return 'Tu promesa de pago fue aprobada.'
-    const regla = evaluacion.reglas.find((r) => r.regla === evaluacion.regla)
+    const regla = reglaDecisiva(evaluacion)
     const limite = regla?.limite
     switch (evaluacion.regla) {
         case 'requiere_aprobacion':
@@ -284,7 +300,7 @@ export function motivoParaCliente(evaluacion: ResultadoEvaluacion): string {
         case 'plazo_max_dias':
             if (limite === 0) return 'La fecha de pago debe ser hoy.'
             if (limite === 1) return 'La fecha de pago debe ser hoy o mañana.'
-            return typeof limite === 'number'
+            return esNumero(limite)
                 ? `La fecha de pago debe estar dentro de los próximos ${limite} días.`
                 : 'La fecha de pago está demasiado lejos.'
         case 'no_exceder_siguiente_facturacion':
@@ -292,21 +308,36 @@ export function motivoParaCliente(evaluacion: ResultadoEvaluacion): string {
                 ? `La fecha de pago debe ser antes del ${fechaLegible(limite)}, cuando se emite tu próxima factura.`
                 : 'La fecha de pago debe ser antes de tu próxima factura.'
         case 'deuda_maxima':
-            return `Tu saldo vencido es mayor que el permitido para una promesa de pago. Abona una parte o ${CONTACTANOS.charAt(0).toLowerCase()}${CONTACTANOS.slice(1)}`
+            return esMonto(limite)
+                ? `Para pedir una promesa de pago tu saldo vencido debe ser de ${quetzales(limite)} o menos` +
+                      `${esMonto(regla?.valor) ? ` (hoy es ${quetzales(regla?.valor)})` : ''}. Abona la diferencia o ${enMinuscula(CONTACTANOS)}`
+                : `Tu saldo vencido es mayor que el permitido para una promesa de pago. Abona una parte o ${enMinuscula(CONTACTANOS)}`
         case 'abono_inicial_pct':
             return `Antes de solicitar la promesa debes abonar ${quetzales(limite)} (llevas ${quetzales(regla?.valor)}).`
         case 'antiguedad_minima_dias':
-            return `Tu servicio aún es muy reciente para una promesa de pago. ${CONTACTANOS}`
+            return esNumero(limite)
+                ? `Las promesas de pago están disponibles cuando tu servicio cumple ${limite} días. ${CONTACTANOS}`
+                : `Tu servicio aún es muy reciente para una promesa de pago. ${CONTACTANOS}`
         case 'cumplimiento_minimo_pct':
-            return `Por tu historial de promesas no podemos aprobar una nueva desde aquí. ${CONTACTANOS}`
+            return esNumero(limite)
+                ? `Para pedir una promesa desde aquí necesitas haber cumplido al menos el ${limite}% de tus promesas anteriores. ${CONTACTANOS}`
+                : `Por tu historial de promesas no podemos aprobar una nueva desde aquí. ${CONTACTANOS}`
         case 'bloqueo_tras_incumplida_dias': {
             const desde = /desde el (\d{4}-\d{2}-\d{2})/.exec(regla?.detalle ?? '')?.[1]
-            return desde
-                ? `Tuviste una promesa sin cumplir hace poco. Podrás solicitar otra a partir del ${fechaLegible(desde)}.`
+            if (desde) {
+                return `Tuviste una promesa sin cumplir hace poco. Podrás solicitar otra a partir del ${fechaLegible(desde)}.`
+            }
+            return esNumero(limite)
+                ? `Tuviste una promesa sin cumplir hace poco. Podrás solicitar otra ${limite} días después de esa fecha. ${CONTACTANOS}`
                 : `Tuviste una promesa sin cumplir hace poco. ${CONTACTANOS}`
         }
         case 'max_por_periodo':
-            return `Ya usaste las promesas de pago disponibles para este periodo. ${CONTACTANOS}`
+            if (limite === 1) {
+                return `Ya usaste la promesa de pago disponible para este periodo. ${CONTACTANOS}`
+            }
+            return esNumero(limite) && limite > 1
+                ? `Ya usaste las ${limite} promesas de pago disponibles para este periodo. ${CONTACTANOS}`
+                : `Ya usaste las promesas de pago disponibles para este periodo. ${CONTACTANOS}`
         default:
             return evaluacion.motivo
     }

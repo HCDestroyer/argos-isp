@@ -22,6 +22,9 @@ import {
     RedIpv4,
     Router,
     Sesion,
+    EventoRed,
+    ResumenSesionesRouter,
+    MigracionAaaRouter,
     VistaPreviaControl,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
@@ -32,8 +35,16 @@ import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
 import { planesDisponiblesEnRouter } from '#network/actions/obtener_implementacion_plan'
 import { implementacionesDePlan, listarPlanes, verPlan } from '#network/consultas/planes'
-import { dimensionesDeSesion, listarSesiones, verSesion } from '#network/sesiones/consultas'
+import {
+    dimensionesDeSesion,
+    listarSesiones,
+    resumenSesionesRouter,
+    verSesion,
+} from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
+import { listarEventosRed } from '#network/sesiones/eventos_red'
+import { verMigracionAaa } from '#network/sesiones/migracion_aaa'
+import MarcarRouterMigrado from '#network/sesiones/actions/marcar_router_migrado'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
@@ -342,11 +353,71 @@ const sesiones: Ruta[] = [
         ruta: '/sesiones',
         operacion: 'sesionesListar',
         resumen: 'Sesiones PPPoE (activas o históricas)',
+        descripcion:
+            '`desde`/`hasta` filtran por solapamiento: la sesión estuvo viva en algún momento de ' +
+            '[desde, hasta) (abierta o `fin >= desde`, e `inicio < hasta`).',
         etiqueta: 'sesiones',
         permiso: 'sesiones.ver',
         query: v.listarSesionesValidator,
         respuesta: { status: 200, descripcion: 'Página de sesiones', esquema: pagina(Sesion) },
         handler: (ctx, { query }) => listarSesiones(query, ctx.alcance),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/resumen-sesiones',
+        operacion: 'routersResumenSesiones',
+        resumen:
+            'Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha',
+        descripcion:
+            'Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no ' +
+            'tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde`. Sin `desde`, usa la ' +
+            'fecha de migración marcada (`aaa_desde`); 422 si no hay. 404 si el router no existe.',
+        etiqueta: 'sesiones',
+        permiso: 'sesiones.ver',
+        query: v.resumenSesionesRouterValidator,
+        respuesta: { status: 200, descripcion: 'Resumen de sesiones', esquema: ResumenSesionesRouter },
+        handler: (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return resumenSesionesRouter(id, query.desde, ctx.alcance)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/migracion-aaa',
+        operacion: 'routersMigracionAaa',
+        resumen: 'Fecha de migración del router al nuevo aaa',
+        descripcion:
+            '`aaa_desde` marcado por el operador (null si no se marcó) y `primer_accounting` como referencia. ' +
+            '404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Migración del router', esquema: MigracionAaaRouter },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return verMigracionAaa(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/marcar-migrado',
+        operacion: 'routersMarcarMigrado',
+        resumen: 'Marcar cuándo el router pasó al nuevo aaa',
+        descripcion:
+            '`desde` omitido = ahora; `null` = desmarcar (vuelta atrás). Con `version` (la leída) responde ' +
+            '409 si otro la cambió. 422 si `desde` es futura. Queda en la bitácora con el valor anterior. ' +
+            'No toca el router ni las sesiones.',
+        etiqueta: 'routers',
+        permiso: 'routers.marcar_migrado',
+        cuerpo: v.marcarRouterMigradoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Migración del router', esquema: MigracionAaaRouter },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new MarcarRouterMigrado().execute({ router_id: id, ...cuerpo }, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -371,4 +442,23 @@ const sesiones: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...planes, ...sesiones]
+// A2: lectura de `audit.red` (CoA, Disconnect y RouterOS) para el panel.
+const red: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/red/eventos',
+        operacion: 'redEventosListar',
+        resumen: 'Eventos de red: CoA, Disconnect y comandos a RouterOS con la respuesta del equipo',
+        descripcion:
+            'Lectura de `audit.red`, el más reciente primero. Filtros por router, servicio, tipo, resultado ' +
+            '(`ok` / `error`) y fecha (`desde` inclusive, `hasta` exclusive). Credenciales como `***`. ' +
+            'Alcance por router y zona.',
+        etiqueta: 'red',
+        permiso: 'red.ver',
+        query: v.listarEventosRedValidator,
+        respuesta: { status: 200, descripcion: 'Página de eventos de red', esquema: pagina(EventoRed) },
+        handler: (ctx, { query }) => listarEventosRed(query, ctx.alcance),
+    }),
+]
+
+export default [...routers, ...planes, ...sesiones, ...red]
