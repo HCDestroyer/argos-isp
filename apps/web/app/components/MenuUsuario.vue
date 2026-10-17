@@ -24,6 +24,10 @@ const items = computed<DropdownMenuItem[][]>(() => [
         description: usuario.value?.email,
     }],
     [{
+        label: 'Mi cuenta',
+        icon: 'i-lucide-circle-user',
+        to: '/perfil',
+    }, {
         label: 'Apariencia',
         icon: 'i-lucide-sun-moon',
         children: [

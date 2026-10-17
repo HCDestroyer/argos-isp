@@ -100,7 +100,15 @@
     "empresas.editar",
     "empresas.desactivar",
     "empresas.cambiar_logo",
-    "usuarios.asignar_empresas"
+    "usuarios.asignar_empresas",
+    "horus.ver",
+    "horus.configurar",
+    "horus.probar",
+    "horus.abrir",
+    "horus.generar_token",
+    "horus.revocar_token",
+    "sso.emitir",
+    "vinculaciones.revocar"
   ],
   "alcance_global": true,
   "empresas": [
