@@ -167,6 +167,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
+| `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
+| `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
+| `horus.estado_seguridad_cambiado` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, estado, estado_anterior, hallazgos_abiertos |
+| `horus.router_estado_cambiado` | integraciones (Horus) | webhook_id, router (id, nombre, estado, estado_anterior, motivo) |
+| `horus.servicio_infra_cambiado` | integraciones (Horus) | webhook_id, servicio_infra (id, nombre, estado, estado_anterior, motivo) |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 
