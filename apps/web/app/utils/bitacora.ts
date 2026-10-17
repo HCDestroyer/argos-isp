@@ -107,6 +107,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'ipv6.crear': 'Bloque IPv6 creado',
     'libro.cerrar_periodo': 'Periodo contable cerrado',
     'libro.reabrir_periodo': 'Periodo contable reabierto',
+    'libro.sellar': 'Asientos sellados en la cadena de hash',
+    'libro.verificar_integridad': 'Integridad del libro verificada',
     'notificaciones.alertar': 'Alerta al equipo enviada',
     'notificaciones.telegram_codigo': 'Código de Telegram generado',
     'notificaciones.telegram_vincular': 'Telegram vinculado por el bot',

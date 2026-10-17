@@ -18,8 +18,10 @@ import type { ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_ser
  *
  * - 404 si la factura no existe; 409 `factura_anulada` o `factura_sin_saldo` (pagada).
  * - `monto` > 0, a centavos y nunca mayor al saldo de la factura (422 `monto`).
- * - Asiento `nota_credito`: Debe lo que la factura acreditó (Ingresos, IVA, Otros ingresos,
- *   Recargos…) en proporción `monto / total`; Haber CxC del cliente. La nota guarda su IVA.
+ * - Asiento `nota_credito`: Debe lo que a la factura le queda acreditado (Ingresos, IVA, Otros
+ *   ingresos, Recargos…, menos las notas anteriores) en proporción `monto / restante`; la nota
+ *   que agota lo acreditable toma el resto exacto de cada cuenta. Haber CxC del cliente. La nota
+ *   guarda su IVA.
  * - Suma `monto` a `pagado` de la factura (puede quedar `pagada`), emite `nota_credito.emitida` y
  *   re-evalúa el servicio: si ya no le quedan vencidas se reactiva en la misma transacción.
  *   Las promesas activas del cliente se revisan al consumir el evento (grupo `billing`).
@@ -207,7 +209,10 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         return monto!
     }
 
-    /** Lo que el asiento vigente de la factura acreditó (todo menos la CxC). */
+    /**
+     * Lo que el asiento vigente de la factura acreditó (todo menos la CxC), menos lo que ya
+     * debitaron sus notas anteriores: el restante acreditable de cada cuenta.
+     */
     private async lineasAcreditadas(t: Transaccion, factura: FacturaNota) {
         const lineas = (await t.trx
             .from('ledger.asientos as a')
@@ -230,6 +235,26 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             cuenta_codigo: string
             haber: string
         }>
+        // lo que las notas anteriores (vigentes) ya debitaron de cada cuenta de la factura
+        const previas = (await t.trx
+            .from('ledger.asientos as a')
+            .join('billing.notas_credito as n', 'n.id', 'a.origen_id')
+            .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+            .where('a.origen_tipo', 'nota_credito')
+            .where('n.factura_id', factura.id)
+            .whereNull('a.reversa_de')
+            .whereNotExists((q) => q.from('ledger.asientos as r').whereRaw('r.reversa_de = a.id'))
+            .where('m.debe', '>', 0)
+            .groupBy('m.cuenta_id')
+            .select('m.cuenta_id', t.trx.raw('sum(m.debe)::text as debe'))) as Array<{
+            cuenta_id: number
+            debe: string
+        }>
+        const yaDebitado = new Map(previas.map((p) => [Number(p.cuenta_id), dec(p.debe)]))
+        const restantes = lineas.map((l) => {
+            const resto = dec(l.haber).minus(yaDebitado.get(Number(l.cuenta_id)) ?? CERO)
+            return { ...l, haber: aTexto(resto.gt(0) ? resto : CERO) }
+        })
         if (lineas.length === 0) {
             throw new Conflicto(
                 `La factura ${factura.id} no tiene asiento vigente en el libro`,
@@ -237,6 +262,6 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 'Factura sin asiento',
             )
         }
-        return lineas
+        return restantes
     }
 }

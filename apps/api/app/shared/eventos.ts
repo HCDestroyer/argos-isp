@@ -239,6 +239,18 @@ export interface CatalogoEventos {
         contado: Dinero
         diferencia: Dinero
     }
+    /**
+     * La cadena de hash del libro de la empresa no verifica (contrato de localización fiscal
+     * §10.10): el sello `sello` guarda `esperado` y el recálculo dio `obtenido`. Lo emite el
+     * sellador o la verificación diaria, una vez por (empresa, sello).
+     */
+    'libro.integridad_rota': {
+        empresa_id: number
+        sello: number
+        asiento_id: number | null
+        esperado: string
+        obtenido: string
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -312,6 +324,7 @@ export const EVENTOS = [
     'comprobante.aprobado',
     'comprobante.rechazado',
     'caja.cerrada',
+    'libro.integridad_rota',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'fiscal.localizacion_instalada',

@@ -4,7 +4,7 @@
 |--------------------------------------------------------------------------
 */
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { lista, pagina } from '#shared/openapi/esquemas'
+import { lista, objeto, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
 import {
     Asiento,
@@ -18,7 +18,9 @@ import {
     Mayor,
     BalanceSaldos,
     EstadoResultados,
+    IntegridadLibro,
 } from '#ledger/esquemas'
+import { integridadLibro } from '#ledger/sellos'
 import { listarCierres } from '#ledger/cierres'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
@@ -228,6 +230,27 @@ const libro: Ruta[] = [
         query: v.estadoResultadosValidator,
         respuesta: { status: 200, descripcion: 'Estado de resultados', esquema: EstadoResultados },
         handler: (ctx, { query }) => estadoResultados(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/integridad',
+        operacion: 'libroIntegridad',
+        resumen: 'Verificar la cadena de hash del libro (una sección por empresa)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.integridadValidator,
+        descripcion:
+            'Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Integridad por empresa',
+            esquema: objeto({ data: lista(IntegridadLibro) }),
+        },
+        handler: (ctx, { query }) =>
+            integridadLibro(
+                { desde: query.desde, hasta: query.hasta },
+                empresasDeLaLista(ctx.empresa, query.empresas),
+            ),
     }),
 ]
 

@@ -68,6 +68,27 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - `saldoCliente(cliente_id)`: suma del auxiliar CxC (debe − haber). Positivo = el cliente debe.
 - `libroDiario` (filtros `desde`, `hasta`, `origen_tipo`, `origen_id`; cada movimiento con `cliente_nombre`), `libroMayor` (saldo acumulado por línea, consistente entre páginas), `listarCuentas`.
 
+## Diarios y numeración guardada (`diarios.ts`, contrato de localización fiscal §10.7)
+
+- `ledger.diarios` por empresa: `VEN` ventas, `COB` cobros, `COM` compras y egresos, `IMP`, `CIE`, `VAR`, un `CAJ-<caja>` por caja y un `BAN-<cuenta>` por cuenta bancaria propia. Se crean en la migración para lo existente y, después, cuando un asiento los necesita por primera vez.
+- Diario de cada asiento (`diarioDeAsiento`): factura, mora y nota de crédito → `VEN`; ajuste → `VAR`; si toca la cuenta de una caja → `CAJ-n`; la subcuenta de una cuenta bancaria → `BAN-n`; si no, pago → `COB`, egreso → `COM`. `RegistrarAsiento` acepta `diario` (código) para fijarlo; el reverso va al diario de su original.
+- **Número** (`numerarAsiento`, en la transacción de `RegistrarAsiento`): `ledger.secuencias` (`diario_id`, `anio`, `ultimo`) con `SELECT … FOR UPDATE` y `ultimo + 1`; se guarda en `ledger.asientos_numeros` (único `diario_id, anio, numero`). Sin huecos ni repetidos: dos asientos simultáneos del mismo diario esperan su turno y un rollback deshace también la secuencia. Un trigger solo deja avanzar la secuencia de uno en uno. Un asiento con fecha anterior no cambia el número de nadie.
+- **Partida** del Libro Diario: `ledger.asientos_partidas`, correlativo por empresa y año, se asigna en `cerrarPeriodo` a los asientos del mes que no la tienen, en orden `(fecha, numero, id)`, después de la última del año. Las partidas asignadas nunca cambian. El trigger rechaza una partida de un mes abierto.
+- **Reabrir** (decisión del líder, 2026-10-17): solo si ningún mes posterior **cerrado** del mismo año tiene partidas (409 `reapertura_fuera_de_orden`: se reabre del más reciente hacia atrás). Al volver a cerrar, los asientos nuevos del mes reciben las partidas siguientes. Libros emitidos o bloqueo duro impiden reabrir (fase fiscal). **Confirmar con contador**: si las partidas de asientos agregados tras una reapertura pueden ir al final de la secuencia (con el mes posterior también reabierto, quedan después de las de ese mes).
+- `GET /libro/diario` y `GET /libro/asientos/:id` traen `diario`, `numero` y `partida` (null con el mes abierto).
+- Inmutables: `asientos_numeros` y `asientos_partidas` (trigger y `REVOKE`); `secuencias` solo admite `UPDATE (ultimo)`; `diarios` es configuración (`version`).
+
+## Cadena de hash e integridad (`sellos.ts`, contrato de localización fiscal §10.10)
+
+El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la cadena prueba además que nadie con acceso a la base lo alteró.
+
+- `ledger.asientos_sellos` (`asiento_id` PK, `empresa_id`, `sello` correlativo por empresa, `version` `v1`, `hash_anterior`, `hash`, `sellado_en`): solo inserción (trigger y `REVOKE`). Un trigger exige que cada fila encadene con el último sello de su empresa (`sello = último + 1`, `hash_anterior = hash del último`, 64 ceros en el primero) y que el asiento sea de esa empresa: la cadena no se bifurca.
+- `hash = SHA-256(hash_anterior ‖ json)`, JSON canónico v1 con claves ordenadas: `empresa_id`, `asiento_id`, `fecha`, `diario`, `numero`, `origen_tipo`, `origen_id`, `descripcion`, `reversa_de` y los movimientos en orden de id (`cuenta_codigo`, `debe`, `haber` con 2 decimales, `cliente_id`, `proveedor_id` (null hasta la fase 4), `impuesto_codigo`, `cuadricula`). Lo calcula la aplicación (`calcularHash`).
+- **Sellador** `libro.sellar` (`actions/sellar_asientos.ts`): sella en orden de id los asientos confirmados sin sello, por empresa, con `pg_advisory_xact_lock(3006, empresa)`. Lo corre el cron `sellar` del `billing:worker` cada minuto (con el lock de los crons; si no hay asientos pendientes no llama la acción) y `cerrarPeriodo` (anidado). Antes de encadenar recalcula el último sello: si no coincide emite `libro.integridad_rota`. La cadena sigue el orden de sellado, no el de los ids.
+- `libro.verificar_integridad` (`actions/verificar_integridad.ts`, cron `integridad` diario a las 02:15 de Guatemala): recalcula la cadena completa de cada empresa y emite `libro.integridad_rota` con la primera ruptura. El aviso sale una vez por (empresa, sello).
+- `GET /libro/integridad?desde&hasta` (`libro.ver`, `?empresas=todas`): una sección `IntegridadLibro` por empresa con `verificado`, `sellos`, `verificados`, `sin_sellar`, primer y último sello y hash, y la primera `ruptura` (`hash_distinto`, `encadenamiento`, `sello_faltante`, `asiento_inexistente`, `cierre_distinto`). El encadenamiento se revisa siempre completo; el hash se recalcula para los asientos con fecha en el rango (sin rango, todos). Es una lectura: no emite.
+- **Cierre mensual**: sella lo pendiente de la empresa, recalcula la cadena y, si no verifica (o queda algo sin sellar), responde 409 `integridad_rota`. El cierre guarda `ultimo_sello` y `ultimo_hash` (columnas nuevas de `ledger.cierres_mensuales`, null en los anteriores) y la verificación comprueba que ese hash siga en la cadena.
+
 ## Cajas y turnos (tarea 9, `cajas.ts`)
 
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
@@ -79,6 +100,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
+- Un turno cerrado es inmutable (hallazgo H3): el trigger `cajas_turnos_inmutable` rechaza DELETE, cualquier UPDATE de un turno con `cerrado_en` y, en el abierto, todo UPDATE que no sea su cierre o que cambie los datos de apertura; TRUNCATE también se rechaza. `argosisp_app` no tiene DELETE ni TRUNCATE y su UPDATE se limita a las columnas del cierre.
 
 ## Cierre mensual (`cierres.ts`)
 
@@ -88,7 +110,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 | `libro.reabrir_periodo` | `actions/reabrir_periodo.ts` | `libro.reabrir_periodo` | Con motivo obligatorio; agrega `ledger.reaperturas_mensuales` (no borra el cierre). 409 `periodo_abierto`. Se puede volver a cerrar (cierre nuevo)                                        |
 
 - Un mes está cerrado si tiene un cierre sin reapertura: `ledger.periodo_cerrado(fecha)`, la misma función en la acción (`registrarAsiento`) y en los triggers de asientos y movimientos. Después del cierre ningún asiento puede tener fecha en el mes, **ni siquiera un reverso**: `RevertirAsiento` usa la fecha de hoy (periodo abierto) y con una fecha del mes cerrado responde 422.
-- `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
+- `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger de UPDATE/DELETE/TRUNCATE y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
 - `cerrar_periodo` está en `contabilidad`; `reabrir_periodo` solo en `admin`.
 
 ## Egresos (`egresos.ts`)
@@ -119,4 +141,4 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 
 ## Eventos
 
-Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`). Consume: ninguno.
+Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.

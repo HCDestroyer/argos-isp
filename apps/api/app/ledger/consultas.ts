@@ -66,6 +66,9 @@ interface FilaAsiento {
     origen_id: number | null
     reversa_de: number | null
     revertido_por: number | null
+    diario: string | null
+    numero: number | null
+    partida: number | null
     created_by: number | null
     created_at: Date
 }
@@ -81,6 +84,14 @@ function columnasAsiento(cliente: QueryClientContract) {
         'a.reversa_de',
         cliente.raw(
             '(select r.id from ledger.asientos r where r.reversa_de = a.id limit 1) as revertido_por',
+        ),
+        // número guardado al registrar (§10.7): nunca se recalcula por el orden del libro
+        cliente.raw(
+            '(select d.codigo from ledger.asientos_numeros n join ledger.diarios d on d.id = n.diario_id where n.asiento_id = a.id) as diario',
+        ),
+        cliente.raw('(select n.numero from ledger.asientos_numeros n where n.asiento_id = a.id) as numero'),
+        cliente.raw(
+            '(select p.partida from ledger.asientos_partidas p where p.asiento_id = a.id) as partida',
         ),
         'a.created_by',
         'a.created_at',
