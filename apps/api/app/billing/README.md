@@ -56,7 +56,17 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 ## Anular factura
 
-`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5.
+`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5. Una factura con notas de crédito no se anula (409 `factura_con_notas_credito`): se acredita el resto con otra nota.
+
+## Notas de crédito
+
+`actions/emitir_nota_credito.ts` (`facturas.nota_credito`, `POST /facturas/:id/notas-credito { monto, motivo }` + `Idempotency-Key`, 201 `NotaCreditoEmitida`). Interna, sin FEL (semana 5). Tabla `billing.notas_credito`, inmutable (trigger y `REVOKE`).
+
+- `monto` parcial o total, nunca mayor al saldo (`total − pagado`) de la factura (422 `monto`); 409 `factura_anulada` o `factura_sin_saldo`.
+- Asiento `nota_credito` (origen = la nota): Debe lo que el asiento de la factura acreditó (Ingresos, IVA débito, Otros ingresos, Recargos por mora, Saldos de apertura) en proporción `monto / total`, redondeado al final y con la diferencia en la línea mayor (`repartirProporcional` en `notas_credito.ts`); Haber CxC del cliente. La nota guarda `subtotal` e `iva` (el IVA proporcional de la factura).
+- Suma `monto` a `facturas.pagado` (lo cubierto) y recalcula su estado (puede quedar `pagada`); `Factura.acreditado` es la parte de notas. Emite `nota_credito.emitida`, re-evalúa el servicio (sube de inmediato: `servicios[]`) y el consumidor `billing` revisa las promesas del cliente con ese evento.
+- Estado de cuenta: abono con `tipo: nota_credito` y `referencia_id` = la nota. `GET /facturas/:id` trae `notas_credito[]`; `GET /notas-credito` (`cliente_id`, `factura_id`, `desde`, `hasta`) y `GET /notas-credito/:id` con `facturas.ver`.
+- Su asiento no se revierte directo (`reverso_por_documento`).
 
 ## Importación (para A6, sin endpoint)
 
@@ -70,7 +80,9 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 Contrato completo (modos de importación, cuadre y errores) en `.claude/integration/contratos/importacion.md`. Saldo inicial y pago histórico aceptan `id_externo` (o `clave_externa`) y responden 422 `periodo_cerrado` con un detalle claro si la fecha cae en un mes cerrado.
 
-Todas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
+**Neutral respecto al origen** (decisión del PM): todas reciben `origen` (texto libre `^[a-z0-9_]{1,40}$`: `mikrowisp`, `smartisp`, `csv`…) y el `id_externo` es único **por origen** (`claveImportacion` en `importacion.ts`; sin `origen`, el prefijo del id antes de `:` o `externo`). Ninguna acción conoce un sistema en particular: los adaptadores son de A6. `Factura` y `Pago` exponen `origen` e `id_externo`.
+
+Todas idempotentes por (`origen`, `clave_externa`) (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
 
 ## Vencimiento y mora (tarea 5)
 
@@ -210,17 +222,19 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 
 `GET /api/v1/reportes/<nombre>` con permiso `reportes.ver`, filtros por query y `formato=json|csv|xlsx`. Cada reporte declara sus columnas tipadas (`definicion.ts`): de ahí salen el schema del OpenAPI (`Reporte*`), el CSV y el XLSX. Respuesta `{ reporte, titulo, filtros, columnas, filas, totales, generado_en }`; los totales suman dinero (decimal.js) y enteros.
 
-| Reporte                | Filtros                                                                    | Cuadra con el libro                                                      |
-| ---------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                         |
-| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), cliente, zona             | Σ monto = débitos a Caja, Bancos y Comisiones de los asientos de pago    |
-| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, cliente, zona, router, plan                      | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC     |
-| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                |
-| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)              |
-| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado) = `iva_libro` (2.1.02)  |
-| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)           |
-| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado` |
-| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes             |
+| Reporte                | Filtros                                                                    | Cuadra con el libro                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                                                                                              |
+| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), `origen`, cliente, zona   | Σ monto (sistema) = débitos a Caja, Bancos y Comisiones de los asientos de pago; `monto_importado` = débitos a 2.9.01 de los pagos históricos |
+| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, `origen`, cliente, zona, router, plan            | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC; `cobrado` sin notas de crédito (`acreditado`)                           |
+| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                                                                                     |
+| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)                                                                                   |
+| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado − acreditado) = `iva_libro` (2.1.02)                                                          |
+| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)                                                                                |
+| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado`                                                                      |
+| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes                                                                                  |
+
+**Histórico** (decisión del PM, semana 3): los pagos históricos importados (`pagos.historico`) cuentan en `ingresos` en su mes de origen, y las facturas importadas (`facturas.clave_externa`) con lo que esos pagos cubrieron, en `facturado-vs-cobrado` en el mes de su periodo. `origen=sistema|importado` filtra; las columnas `pagos_importados`/`monto_importado` y `facturado_importado`/`cobrado_importado` separan sin filtrar. Columnas agregadas después de publicar un reporte llevan `agregada: true` en `definicion.ts`: van siempre en la respuesta, pero el OpenAPI las declara opcionales para no romper clientes tipados.
 
 Rango por defecto: los últimos 12 meses (cobranza y cierres: el mes en curso). Alcance ACL por zona/router (o caja en cobranza, cierres y egresos).
 

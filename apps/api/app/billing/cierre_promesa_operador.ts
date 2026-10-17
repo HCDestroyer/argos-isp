@@ -1,4 +1,5 @@
 import type { Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import type { EntradaResolverPromesa, FilaPromesa } from '#billing/cierre_promesa'
 
@@ -24,5 +25,5 @@ export function exigirEstadoPromesa(promesa: FilaPromesa, permitidos: string[], 
 }
 
 export function detalleOperador(t: Transaccion, motivo: string) {
-    return { motivo, por: t.ctx.actor.id }
+    return { motivo, por: usuarioDelActor(t.ctx.actor) }
 }

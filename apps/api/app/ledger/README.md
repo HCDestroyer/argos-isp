@@ -42,6 +42,16 @@ La base de datos lo verifica otra vez: constraint trigger diferido de cuadre (d�
 
 Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas contables: `fechas.ts`.
 
+### Reverso de asiento (`POST /libro/asientos/:id/revertir`, `libro.revertir_asiento`)
+
+`{ motivo, fecha? }` + `Idempotency-Key` → 201 `Asiento` (el reverso). Crea el asiento espejo con `reversa_de = :id`; el original nunca se edita.
+
+- Motivo obligatorio (422 por campo).
+- Fecha: hoy (o la indicada); nunca anterior al original ni en un mes cerrado (`periodo_cerrado`). Un asiento de un mes cerrado se revierte con fecha de hoy.
+- Una sola vez (422 `asiento_revertido`); un reverso no se revierte (422 `asiento_es_reverso`).
+- Solo asientos sin documento: `cierre_caja` y `ajuste` manual (sin `origen_id`). Los de `factura`, `mora`, `pago`, `nota_credito`, `egreso` y `ajuste` de saldo inicial responden 422 `reverso_por_documento` con la acción a usar (`reversos.ts`): anular pago, anular factura, anular egreso… Esas acciones llaman `RevertirAsiento` anidada con `por_anulacion: true`.
+- `GET /libro/diario` y `GET /libro/asientos/:id` traen `revertido_por`, `revertible` y `motivo_no_revertible` para que el panel muestre (o no) el botón.
+
 ## Consultas (`consultas.ts`)
 
 - `saldoCliente(cliente_id)`: suma del auxiliar CxC (debe − haber). Positivo = el cliente debe.

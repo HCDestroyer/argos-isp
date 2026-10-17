@@ -15,6 +15,8 @@ import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
 import AnularFactura from '#billing/actions/anular_factura'
+import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { listarNotasCredito, verNotaCredito } from '#billing/notas_credito'
 import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
 import { cajaDelCajero } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
@@ -94,6 +96,8 @@ import {
     CuentaBancaria,
     Factura,
     FacturaDetalle,
+    NotaCredito,
+    NotaCreditoEmitida,
     Pago,
     PlantillaFacturacion,
     Promesa,
@@ -221,7 +225,7 @@ const facturas: Ruta[] = [
         cuerpo: v.anularFacturaValidator,
         idempotente: true,
         descripcion:
-            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.',
+            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.',
         respuesta: { status: 200, descripcion: 'Factura anulada', esquema: Factura },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
@@ -230,6 +234,55 @@ const facturas: Ruta[] = [
                 { factura_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+]
+
+const notasCredito: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/facturas/:id/notas-credito',
+        operacion: 'facturasNotaCredito',
+        resumen: 'Emitir nota de crédito interna (parcial o total)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.nota_credito',
+        cuerpo: v.notaCreditoValidator,
+        idempotente: true,
+        descripcion:
+            'Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.',
+        respuesta: { status: 201, descripcion: 'Nota de crédito emitida', esquema: NotaCreditoEmitida },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            return new EmitirNotaCredito().execute(
+                { factura_id: id, monto: cuerpo.monto, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notas-credito',
+        operacion: 'notasCreditoListar',
+        resumen: 'Listar notas de crédito',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.listarNotasCreditoValidator,
+        respuesta: { status: 200, descripcion: 'Página de notas de crédito', esquema: pagina(NotaCredito) },
+        handler: (ctx, { query }) => listarNotasCredito(query, ctx.alcance),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notas-credito/:id',
+        operacion: 'notasCreditoVer',
+        resumen: 'Ver nota de crédito',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'Nota de crédito', esquema: NotaCredito },
+        handler: async (ctx, { params }) => {
+            const nota = await verNotaCredito(Number(params.id))
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(nota.factura_id))
+            return nota
         },
     }),
 ]
@@ -1016,6 +1069,7 @@ export default [
     ...pasarelaRutas,
     ...plantillas,
     ...facturas,
+    ...notasCredito,
     ...pagos,
     ...promesas,
     ...comprobantes,

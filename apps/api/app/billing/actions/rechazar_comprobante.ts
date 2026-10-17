@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { ValidacionFallida } from '#shared/errores'
 import { verComprobante, type ComprobanteVista } from '#billing/comprobantes'
 import { bloquearComprobante } from '#billing/actions/aprobar_comprobante'
@@ -37,7 +38,7 @@ export default class RechazarComprobante extends DomainAction<EntradaRechazarCom
             .update({
                 estado: 'rechazado',
                 motivo_rechazo: motivo,
-                verificado_por: t.ctx.actor.id,
+                verificado_por: usuarioDelActor(t.ctx.actor),
                 verificado_en: t.trx.knexRawQuery('now()'),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
@@ -45,7 +46,7 @@ export default class RechazarComprobante extends DomainAction<EntradaRechazarCom
         await t.registrarCambios(
             { tipo: 'comprobante', id: comprobante.id },
             { estado: comprobante.estado, motivo_rechazo: null, verificado_por: null },
-            { estado: 'rechazado', motivo_rechazo: motivo, verificado_por: t.ctx.actor.id },
+            { estado: 'rechazado', motivo_rechazo: motivo, verificado_por: usuarioDelActor(t.ctx.actor) },
         )
         await t.emit('comprobante.rechazado', {
             comprobante_id: comprobante.id,

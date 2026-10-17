@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
@@ -135,7 +136,8 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
                 monto: aTexto(monto),
                 estado,
                 canal: input.canal,
-                aprobada_por: estado === 'activa' && input.canal === 'supervisor' ? t.ctx.actor.id : null,
+                aprobada_por:
+                    estado === 'activa' && input.canal === 'supervisor' ? usuarioDelActor(t.ctx.actor) : null,
                 reglas_snapshot: JSON.stringify(config.reglas_promesa),
                 resultado_evaluacion: JSON.stringify(evaluacion),
                 ...(input.ahora ? { created_at: ahora, updated_at: ahora } : {}),

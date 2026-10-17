@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { bloquearCliente } from '#billing/cobros'
 import { verPromesa } from '#billing/promesas'
@@ -73,14 +74,18 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
         }
 
         const aprobacion = {
-            aprobacion: { por: t.ctx.actor.id, en: ahora.toISOString(), nota: input.nota?.trim() || null },
+            aprobacion: {
+                por: usuarioDelActor(t.ctx.actor),
+                en: ahora.toISOString(),
+                nota: input.nota?.trim() || null,
+            },
         }
         await t.trx
             .from('billing.promesas')
             .where('id', promesa.id)
             .update({
                 estado: 'activa',
-                aprobada_por: t.ctx.actor.id,
+                aprobada_por: usuarioDelActor(t.ctx.actor),
                 resultado_evaluacion: t.trx.knexRawQuery(
                     `coalesce(resultado_evaluacion, '{}'::jsonb) || ?::jsonb`,
                     [JSON.stringify(aprobacion)],
@@ -91,7 +96,7 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
         await t.registrarCambios(
             { tipo: 'promesa', id: promesa.id },
             { estado: promesa.estado, aprobada_por: promesa.aprobada_por },
-            { estado: 'activa', aprobada_por: t.ctx.actor.id },
+            { estado: 'activa', aprobada_por: usuarioDelActor(t.ctx.actor) },
         )
 
         await t.emit('promesa.creada', {

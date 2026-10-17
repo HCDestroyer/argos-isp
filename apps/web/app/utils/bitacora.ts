@@ -50,6 +50,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'plantillas.editar': 'Plantilla de facturación editada',
     'facturas.generar': 'Avisos de cobro generados',
     'facturas.anular': 'Aviso de cobro anulado',
+    'facturas.nota_credito': 'Nota de crédito emitida',
     'pagos.registrar': 'Pago registrado',
     'pagos.registrar_historico': 'Pago histórico importado',
     'facturas.anular_saldo_inicial': 'Saldo inicial anulado',

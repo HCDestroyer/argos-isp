@@ -34,6 +34,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `comprobante.recibido` | A3 (`RegistrarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null` | A6 (`notify`): "Recibimos tu comprobante de pago" |
 | `comprobante.aprobado` | A3 (`AprobarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id` (el pago creado), `motivo: null` | A6 (`notify`): "Comprobante de pago aprobado" (el único aviso de pago del pagador) |
 | `comprobante.rechazado` | A3 (`RechazarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo` (texto del revisor) | A6 (`notify`): "Comprobante de pago rechazado" con `{{comprobante.motivo}}` |
+| `nota_credito.emitida` | A3 (`EmitirNotaCredito`, `POST /facturas/:id/notas-credito`) | `nota_credito_id`, `factura_id`, `servicio_id` (null en facturas sin servicio, p. ej. de apertura), `cliente_id` (dueño de la factura), `monto`, `motivo` | A3 (`billing`): revisa las promesas activas del cliente (la nota puede dejarlo sin deuda vencida). El servicio ya se re-evaluó dentro de la acción (reactivación inmediata, `servicio.estado_cambiado`). A6 puede avisar al cliente si quiere (no está en `EVENTOS_NOTIFICABLES`) |
 
 `aaa.caido` se emite cuando un nodo lleva `AAA_CAIDO_TRAS_MS` (60 s) sin responder `GET /health` con 2xx; una sola vez por caída (las acciones miran el último evento del nodo en `audit.outbox`), y `aaa.recuperado` solo después de un `aaa.caido`. El payload de la tabla de `CLAUDE.md` (`nodo`, `desde`) sigue valiendo: `ultimo_error` es un campo más.
 
@@ -48,7 +49,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
 | `routeros` | A2 (`node ace routeros:worker`, `apps/api/app/network/routeros`) | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada` (estado deseado del servicio y control de velocidad de su router), `plan.velocidad_cambiada` (reconcilia los routers del plan) y `router.control_cambiado` (cambio de modo por lotes, o padres globales si solo cambió la capacidad) |
 | `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
-| `billing` | A3 | `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar las vistas del dashboard, `ConsumidorResumenes`) |
+| `billing` | A3 | `pago.registrado` y `nota_credito.emitida` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar las vistas del dashboard, `ConsumidorResumenes`) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y `plan.velocidad_cambiada` (reescribe `aaa:user:<user_ppp>`) |
 
@@ -89,6 +90,10 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 - `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
 - `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.
 - Consumidores: `billing` revisa las promesas de cada cliente de `clientes`; `notify` avisa al pagador (`pago.registrado`) y a cada dueño de factura distinto del pagador (`pago.registrado.tercero`: "Recibimos el pago de tu factura N, hecho por <pagador>"), idempotente por (evento, cliente).
+
+## Payloads de notas de crédito (A3)
+
+`nota_credito.emitida`: `{ nota_credito_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). No hay `nota_credito.anulada`: una nota no se anula (corrección = factura nueva o cargo; FEL en la semana 5 decidirá su anulación).
 
 ## Payloads de comprobantes (A3)
 

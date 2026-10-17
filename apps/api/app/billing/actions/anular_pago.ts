@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import type { MetodoPago } from '#shared/eventos'
 import { dec } from '#ledger/dinero'
@@ -104,7 +105,11 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             .select('a.id')) as Array<{ id: number }>
         for (const asiento of asientos) {
             await new RevertirAsiento().execute(
-                { asiento_id: asiento.id, motivo: `anulación del pago ${pago.id}: ${input.motivo}` },
+                {
+                    asiento_id: asiento.id,
+                    motivo: `anulación del pago ${pago.id}: ${input.motivo}`,
+                    por_anulacion: true,
+                },
                 t.ctx,
                 { trx: t.trx },
             )
@@ -116,7 +121,7 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             .update({
                 estado: 'anulado',
                 anulado_en: t.trx.knexRawQuery('now()'),
-                anulado_por: t.ctx.actor.id,
+                anulado_por: usuarioDelActor(t.ctx.actor),
                 motivo_anulacion: input.motivo.trim(),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),

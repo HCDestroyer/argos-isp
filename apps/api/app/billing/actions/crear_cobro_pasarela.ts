@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { pendienteDe } from '#billing/facturas'
@@ -113,7 +114,7 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
                 monto: aTexto(monto),
                 facturas: t.trx.raw('?::bigint[]', [`{${facturas.join(',')}}`]),
                 canal: t.ctx.canal,
-                creado_por: t.ctx.actor.id,
+                creado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const cobroId = fila!.id

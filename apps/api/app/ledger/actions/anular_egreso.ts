@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { verEgreso, type EgresoVista } from '#ledger/egresos'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -39,16 +40,23 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
             .firstOrFail()
         const motivo = input.motivo.trim()
         const reverso = await new RevertirAsiento().execute(
-            { asiento_id: asiento.id as number, motivo: `anulación del egreso ${egreso.id}: ${motivo}` },
+            {
+                asiento_id: asiento.id as number,
+                motivo: `anulación del egreso ${egreso.id}: ${motivo}`,
+                por_anulacion: true,
+            },
             t.ctx,
             { trx: t.trx },
         )
-        await t.trx.insertQuery().table('ledger.egresos_anulaciones').insert({
-            egreso_id: egreso.id,
-            asiento_id: reverso.id,
-            motivo,
-            anulado_por: t.ctx.actor.id,
-        })
+        await t.trx
+            .insertQuery()
+            .table('ledger.egresos_anulaciones')
+            .insert({
+                egreso_id: egreso.id,
+                asiento_id: reverso.id,
+                motivo,
+                anulado_por: usuarioDelActor(t.ctx.actor),
+            })
         return verEgreso(egreso.id, t.trx)
     }
 }
