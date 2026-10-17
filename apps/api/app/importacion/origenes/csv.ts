@@ -6,6 +6,7 @@ import {
     ENTIDADES,
     OPCIONALES,
     normalizarFuente,
+    type ArchivoOrigen,
     type Entidad,
     type FilasPorEntidad,
     type FuenteCanonica,
@@ -31,6 +32,7 @@ export const ARCHIVOS: Record<Entidad, string> = {
     facturas: 'facturas.csv',
     saldos: 'saldos.csv',
     pagos: 'pagos.csv',
+    promesas: 'promesas.csv',
 }
 
 /** Lee y valida el directorio. `redes`, `facturas`, `saldos` y `pagos` son opcionales. */
@@ -74,7 +76,37 @@ export async function leerDirectorio(directorio: string): Promise<FuenteCanonica
     }
     const fuente = normalizarFuente(filas)
     fuente.problemas.unshift(...avisos)
+    fuente.archivo = archivoCsv(filas)
     return fuente
+}
+
+/**
+ * Archivo del origen de un directorio CSV: cada archivo es una tabla y cada fila va a su entidad
+ * (redes por línea, saldos por cliente). Las líneas son las del archivo (1 = encabezado).
+ */
+function archivoCsv(filas: FilasPorEntidad): ArchivoOrigen {
+    const vinculos = new Map<string, { entidad: Entidad; id: string }>()
+    const tablas: ArchivoOrigen['tablas'] = []
+    for (const entidad of ENTIDADES) {
+        const { origen, filas: lista } = filas[entidad]
+        if (lista.length === 0) continue
+        tablas.push({
+            tabla: origen,
+            columnas: Object.keys(lista[0]!.valores),
+            filas: lista.map((f) => f.valores),
+            lineas: lista.map((f) => f.linea),
+        })
+        for (const f of lista) {
+            const id =
+                entidad === 'redes'
+                    ? `L${f.linea}`
+                    : entidad === 'saldos'
+                      ? (f.valores.cliente_id ?? '').trim()
+                      : (f.valores.id ?? '').trim()
+            vinculos.set(`${origen}#${f.linea}`, { entidad, id })
+        }
+    }
+    return { tablas, vinculos, notasFila: new Map(), notasTabla: {} }
 }
 
 /**

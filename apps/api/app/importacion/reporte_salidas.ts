@@ -26,7 +26,18 @@ export interface LineaDiferencia {
     accion: string
 }
 
-const ORDEN_ENTIDADES = ['router', 'red', 'plan', 'zona', 'cliente', 'servicio', 'factura', 'pago', 'saldo']
+const ORDEN_ENTIDADES = [
+    'router',
+    'red',
+    'plan',
+    'zona',
+    'cliente',
+    'servicio',
+    'factura',
+    'pago',
+    'promesa',
+    'saldo',
+]
 
 const ENTIDAD_DE_ARCHIVO: Array<[RegExp, string]> = [
     // Nombres canónicos (CSV) y tablas de Mikrowisp 6 y SmartISP. `address_routers` antes que `routers`.
@@ -38,6 +49,7 @@ const ENTIDAD_DE_ARCHIVO: Array<[RegExp, string]> = [
     [/clientes|usuarios|clients/, 'cliente'],
     [/facturas|bills|bill_customers|invoices/, 'factura'],
     [/pagos|operaciones|payment/, 'pago'],
+    [/promesas|credito/, 'promesa'],
 ]
 
 export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
@@ -289,6 +301,50 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
             accion: 'Corregir el dato en el origen',
         })
     }
+    for (const x of d.facturas_cargo_unico) {
+        add({
+            entidad: 'factura',
+            id_origen: x.factura_origen,
+            tipo: 'cargo_unico',
+            gravedad: 'info',
+            detalle: `Q ${x.total} entra como cargo único sin periodo`,
+            causa: x.nota ?? 'Factura sin periodo en el origen',
+            accion: 'nada',
+        })
+    }
+    for (const x of d.facturas_sin_cargo) {
+        add({
+            entidad: 'factura',
+            id_origen: x.factura_origen,
+            tipo: 'sin_cargo',
+            gravedad: 'info',
+            detalle: `Factura de total 0 del cliente ${x.cliente_origen}`,
+            causa: x.motivo,
+            accion: 'nada',
+        })
+    }
+    for (const x of d.facturas_saldadas_en_origen) {
+        add({
+            entidad: 'factura',
+            id_origen: x.factura_origen,
+            tipo: 'saldada_en_origen',
+            gravedad: 'aviso',
+            detalle: `Q ${x.total}: entra pagada, sin asiento ni pago (saldada en el origen)`,
+            causa: 'La factura está pagada en el origen pero ningún pago del origen la cubre',
+            accion: 'Revisar en el origen cómo se pagó (si hubo pago, exportarlo)',
+        })
+    }
+    for (const x of d.promesas_no_importadas) {
+        add({
+            entidad: 'promesa',
+            id_origen: x.promesa_origen,
+            tipo: 'promesa_no_importada',
+            gravedad: 'omitido',
+            detalle: `Promesa del cliente ${x.cliente_origen} no entra (queda en el archivo del origen)`,
+            causa: x.motivo,
+            accion: 'Registrarla a mano en ArgosIsp si sigue vigente',
+        })
+    }
     for (const x of r.errores) {
         add({
             entidad: x.entidad,
@@ -356,6 +412,30 @@ export function reporteMarkdown(r: ReporteImportacion): string {
             : `- **No cuadra: diferencia Q ${r.saldos.diferencia}** (ver la sección saldo)`,
         `- Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales'}`,
     )
+    const m = r.dinero
+    s.push('', '## Dinero', '')
+    s.push('| | Origen | ArgosIsp | Diferencia |', '| --- | ---: | ---: | ---: |')
+    for (const campo of ['facturado', 'cobrado', 'pendiente', 'pagos'] as const) {
+        s.push(`| ${campo} | Q ${m.origen[campo]} | Q ${m.argosisp[campo]} | Q ${m.diferencia[campo]} |`)
+    }
+    s.push('')
+    for (const e of m.explicacion) s.push(`- ${md(e)}`)
+    if (r.tablas.length > 0) {
+        s.push('', '## Cuadre por tabla del origen', '')
+        s.push(
+            '| Tabla | Leídas | Creadas | Existentes | Al saldo | Solo archivo | Omitidas |',
+            '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+        )
+        for (const t of r.tablas) {
+            s.push(
+                `| ${md(t.tabla)} | ${t.leidas} | ${t.creadas} | ${t.existentes} | ${t.al_saldo} | ${t.solo_archivo} | ${t.omitidas} |`,
+            )
+        }
+    }
+    if (r.notas_origen.length > 0) {
+        s.push('', '## Notas del origen', '')
+        for (const n of r.notas_origen) s.push(`- ${md(n)}`)
+    }
     const lineas = lineasDiferencias(r)
     s.push('', `## Diferencias (${lineas.length})`)
     if (lineas.length === 0) s.push('', 'Sin diferencias.')

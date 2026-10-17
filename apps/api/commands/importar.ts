@@ -95,14 +95,22 @@ export default class Importar extends BaseCommand {
             this.exitCode = 1
             return
         }
-        const reporte = await importar(fuente, {
-            sistema: this.sistema ?? this.origen,
-            dryRun: this.dryRun,
-            ipv6: this.ipv6,
-            soloPlanesExistentes: this.soloPlanesExistentes,
-            plantillaId: this.plantilla,
-            fuente: ruta,
-        })
+        let reporte
+        try {
+            reporte = await importar(fuente, {
+                sistema: this.sistema ?? this.origen,
+                dryRun: this.dryRun,
+                ipv6: this.ipv6,
+                soloPlanesExistentes: this.soloPlanesExistentes,
+                plantillaId: this.plantilla,
+                fuente: ruta,
+            })
+        } catch (error) {
+            // p. ej. FilasSinContar: el cuadre por tabla no cerró y no se guardó nada
+            this.logger.error((error as Error).message)
+            this.exitCode = 1
+            return
+        }
         this.logger.log(formatearReporte(reporte))
         if (this.reporte) {
             const archivo = resolve(base, this.reporte)
