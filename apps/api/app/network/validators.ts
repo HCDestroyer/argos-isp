@@ -4,6 +4,7 @@ import {
     cidrV4,
     dinero,
     empresaSugerida,
+    empresasConsulta,
     idEntidad,
     instanteIso,
     ipv4,
@@ -132,7 +133,7 @@ export const cambiarControlVelocidadValidator = vine.compile(
 )
 
 export const listarRoutersValidator = vine.compile(
-    vine.object({ ...reglasPaginacion, activo: vine.boolean().optional() }),
+    vine.object({ ...reglasPaginacion, activo: vine.boolean().optional(), empresas: empresasConsulta() }),
 )
 
 /*

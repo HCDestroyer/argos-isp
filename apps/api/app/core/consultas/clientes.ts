@@ -6,6 +6,7 @@ import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { EstadoServicio } from '#shared/eventos'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
  * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, nombre fiscal, NIT/CUI,
@@ -164,9 +165,28 @@ function aplicarFiltrosAvanzados(consulta: DatabaseQueryBuilderContract<any>, fi
     }
 }
 
+/**
+ * Multiempresa: el cliente no tiene empresa, sus servicios sí. Con `empresas` (filtro de
+ * `empresasDeLaLista`) solo salen los clientes con algún servicio en esas empresas y los que aún no
+ * tienen servicios (recién creados: los ve cualquier empresa). null = todos.
+ */
+export function clienteEnEmpresas(q: DatabaseQueryBuilderContract<any>, ids: number[]) {
+    q.where((w) =>
+        w
+            .whereExists((s) =>
+                s
+                    .from('core.servicios as s_em')
+                    .whereRaw('s_em.cliente_id = c.id')
+                    .whereIn('s_em.empresa_id', ids),
+            )
+            .orWhereNotExists((s) => s.from('core.servicios as s_sin').whereRaw('s_sin.cliente_id = c.id')),
+    )
+}
+
 export async function buscarClientes(
     filtros: FiltrosClientes,
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Promise<Pagina<ClienteVista>> {
     const consulta = db.from('core.clientes as c').select(columnasVista(db.connection()))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
@@ -174,6 +194,7 @@ export async function buscarClientes(
     if (filtros.q) aplicarBusqueda(consulta, filtros.q)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)
+    filtrarPorEmpresa(consulta, empresas, clienteEnEmpresas)
     return paginar<ClienteVista>(consulta, filtros, { columna: 'c.id' })
 }
 

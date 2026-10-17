@@ -1128,6 +1128,18 @@
             }
           },
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -4638,7 +4650,7 @@
       "get": {
         "operationId": "empresasListar",
         "summary": "Empresas (NIT) de la instalación",
-        "description": "La principal (id 1) primero. Contrato: `.claude/integration/contratos/multiempresa.md`.",
+        "description": "La principal (id 1) primero; sin alcance global, solo las del usuario. Contrato: `.claude/integration/contratos/multiempresa.md`.",
         "tags": [
           "empresas"
         ],
@@ -16166,6 +16178,18 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -17725,6 +17749,18 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
             }
           },
           {

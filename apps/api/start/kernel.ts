@@ -28,6 +28,7 @@ router.use([
 export const middleware = router.named({
     auth: () => import('#middleware/auth_middleware'),
     autorizar: () => import('#middleware/autorizar_middleware'),
+    empresa: () => import('#middleware/empresa_middleware'),
     idempotencia: () => import('#middleware/idempotencia_middleware'),
     interno: () => import('#middleware/interno_middleware'),
 })

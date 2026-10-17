@@ -655,7 +655,7 @@ export interface paths {
         };
         /**
          * Empresas (NIT) de la instalación
-         * @description La principal (id 1) primero. Contrato: `.claude/integration/contratos/multiempresa.md`.
+         * @description La principal (id 1) primero; sin alcance global, solo las del usuario. Contrato: `.claude/integration/contratos/multiempresa.md`.
          */
         get: operations["empresasListar"];
         put?: never;
@@ -5896,6 +5896,8 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Busca por nombre, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
                 zona_id?: number;
@@ -13960,6 +13962,8 @@ export interface operations {
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
                 activo?: boolean;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
             };
             header?: never;
             path?: never;
@@ -14856,6 +14860,8 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description user_ppp, IP o nombre del cliente */
                 q?: string;
                 cliente_id?: number;

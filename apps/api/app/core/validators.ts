@@ -3,6 +3,7 @@ import { reglasPaginacion } from '#shared/paginacion'
 import {
     coordenadas,
     empresaSugerida,
+    empresasConsulta,
     fechaIso,
     dinero,
     idEntidad,
@@ -77,6 +78,7 @@ export const editarClienteValidator = vine.compile(
 export const listarClientesValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,
+        empresas: empresasConsulta(),
         q: vine
             .string()
             .trim()
@@ -287,6 +289,7 @@ export const editarServicioValidator = vine.compile(
 export const listarServiciosValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,
+        empresas: empresasConsulta(),
         q: vine
             .string()
             .trim()

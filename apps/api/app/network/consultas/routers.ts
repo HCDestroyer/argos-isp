@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
 
 /**
@@ -80,13 +81,32 @@ const COLUMNAS_ROUTER = [
     'updated_at',
 ]
 
+/**
+ * Multiempresa: un router es infraestructura compartida. Con `empresas` (filtro de
+ * `empresasDeLaLista`) salen los routers sin empresa sugerida, los sugeridos para esas empresas y
+ * los que tienen servicios de ellas. null = todos.
+ */
 export async function listarRouters(
     filtros: OpcionesPaginacion & { activo?: boolean },
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Promise<Pagina<RouterVista>> {
     const consulta = db.from('network.routers').select(COLUMNAS_ROUTER)
     if (filtros.activo !== undefined) consulta.where('activo', filtros.activo)
     filtrarPorAlcance(consulta, alcance, { router: (q, ids) => q.whereIn('id', ids) })
+    filtrarPorEmpresa(consulta, empresas, (q, ids) =>
+        q.where((w) =>
+            w
+                .whereNull('network.routers.empresa_sugerida_id')
+                .orWhereIn('network.routers.empresa_sugerida_id', ids)
+                .orWhereExists((s) =>
+                    s
+                        .from('core.servicios as s_em')
+                        .whereRaw('s_em.router_id = network.routers.id')
+                        .whereIn('s_em.empresa_id', ids),
+                ),
+        ),
+    )
     return paginar<RouterVista>(consulta, filtros)
 }
 

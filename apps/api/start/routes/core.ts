@@ -9,6 +9,8 @@
 import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
+import { empresasDeLaLista, exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
 import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
@@ -42,7 +44,7 @@ import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
 import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
 import DesconectarServicio from '#network/sesiones/actions/desconectar_servicio'
-import { dimensionesDeServicio, listarServicios, verServicio } from '#core/consultas/servicios'
+import { listarServicios, verServicio } from '#core/consultas/servicios'
 import CrearCliente from '#core/actions/crear_cliente'
 import EditarCliente from '#core/actions/editar_cliente'
 import VincularTelegramCliente from '#core/actions/vincular_telegram_cliente'
@@ -203,6 +205,8 @@ const auth: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Usuario actual con permisos', esquema: Me },
         handler: async (ctx) => {
             const me = await construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx))
+            // la empresa activa de esta petición (`X-Empresa-Id` o la única del usuario)
+            me.empresa_activa_id = ctx.empresa?.activa ?? me.empresa_activa_id
             const guard = ctx.auth.authenticatedViaGuard
             if (guard === 'panel') {
                 const panel = ctx.auth.use('panel')
@@ -376,7 +380,8 @@ const clientes: Ruta[] = [
         permiso: 'clientes.ver',
         query: v.listarClientesValidator,
         respuesta: { status: 200, descripcion: 'Página de clientes', esquema: pagina(Cliente) },
-        handler: (ctx, { query }) => buscarClientes(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            buscarClientes(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -403,7 +408,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente', esquema: Cliente },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return verCliente(id)
         },
     }),
@@ -419,7 +424,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente actualizado', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             if (cuerpo.zona_id !== undefined) exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
             return new EditarCliente().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
@@ -438,7 +443,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente con el chat vinculado', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new VincularTelegramCliente().execute(
                 { id, chat_id: cuerpo.chat_id },
                 ctx.contextoAccion(),
@@ -456,7 +461,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente sin chat de Telegram', esquema: Cliente },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new DesvincularTelegramCliente().execute({ id }, ctx.contextoAccion())
         },
     }),
@@ -477,7 +482,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente con su responsable de pago', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             // el responsable también debe estar en el alcance; si no existe, la acción responde 422
             const delResponsable = await dimensionesDeCliente(cuerpo.responsable_id).catch((e: unknown) => {
                 if (e instanceof NoEncontrado) return null
@@ -499,7 +504,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cliente sin responsable de pago', esquema: Cliente },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return new QuitarResponsablePago().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
@@ -517,7 +522,7 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de dependientes', esquema: pagina(DependientePago) },
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
+            await exigirCliente(ctx, id)
             return listarDependientes(id, query, ctx.alcance)
         },
     }),
@@ -584,7 +589,7 @@ function accionServicio(
         handler: ejecutar
             ? async (ctx, { cuerpo, params }) => {
                   const id = Number(params.id)
-                  exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+                  await exigirServicio(ctx, id)
                   return ejecutar({ id, motivo: cuerpo.motivo }, ctx)
               }
             : undefined,
@@ -601,7 +606,8 @@ const servicios: Ruta[] = [
         permiso: 'servicios.ver',
         query: v.listarServiciosValidator,
         respuesta: { status: 200, descripcion: 'Página de servicios', esquema: pagina(Servicio) },
-        handler: (ctx, { query }) => listarServicios(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarServicios(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -630,7 +636,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Servicio', esquema: Servicio },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return verServicio(id)
         },
     }),
@@ -648,7 +654,7 @@ const servicios: Ruta[] = [
         },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return configuracionEfectivaPublica(id)
         },
     }),
@@ -666,7 +672,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de tramos', esquema: pagina(TramoAsignacion) },
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return listarTramos(id, query)
         },
     }),
@@ -682,7 +688,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Servicio actualizado', esquema: Servicio },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             if (cuerpo.router_id !== undefined) exigirAlcance(ctx.alcance, { router: [cuerpo.router_id] })
             return new EditarServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
@@ -732,7 +738,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Credenciales PPPoE', esquema: CredencialesPpp },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return new VerCredencialesServicio().execute({ id }, ctx.contextoAccion())
         },
     }),
@@ -753,7 +759,7 @@ const servicios: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Servicio en su nueva empresa', esquema: Servicio },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(id))
+            await exigirServicio(ctx, id)
             return new CambiarEmpresaServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
@@ -796,12 +802,14 @@ const empresas: Ruta[] = [
         operacion: 'empresasListar',
         resumen: 'Empresas (NIT) de la instalación',
         descripcion:
-            'La principal (id 1) primero. Contrato: `.claude/integration/contratos/multiempresa.md`.',
+            'La principal (id 1) primero; sin alcance global, solo las del usuario. Contrato: ' +
+            '`.claude/integration/contratos/multiempresa.md`.',
         etiqueta: 'empresas',
         permiso: 'empresas.ver',
         query: v.listarEmpresasValidator,
         respuesta: { status: 200, descripcion: 'Empresas', esquema: { type: 'array', items: EmpresaGrupo } },
-        handler: (_ctx, { query }) => listarEmpresas({ soloActivas: query.activas === true }),
+        handler: (ctx, { query }) =>
+            listarEmpresas({ ids: ctx.empresa?.permitidas ?? null, soloActivas: query.activas === true }),
     }),
     definirRuta({
         metodo: 'post',
@@ -824,7 +832,10 @@ const empresas: Ruta[] = [
         etiqueta: 'empresas',
         permiso: 'empresas.ver',
         respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaGrupo },
-        handler: (_ctx, { params }) => verEmpresaCompleta(Number(params.id)),
+        handler: (ctx, { params }) => {
+            exigirAccesoEmpresa(ctx.contextoAccion(), Number(params.id))
+            return verEmpresaCompleta(Number(params.id))
+        },
     }),
     definirRuta({
         metodo: 'put',
@@ -959,7 +970,7 @@ const ip: Ruta[] = [
         handler: async (ctx, { params }) => {
             const resolucion = await resolverIp(decodeURIComponent(String(params.ip)))
             if (!resolucion) throw new NoEncontrado(`Ningún servicio tiene la IP ${String(params.ip)}`)
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(resolucion.servicio_id))
+            await exigirServicio(ctx, resolucion.servicio_id)
             return resolucion
         },
     }),

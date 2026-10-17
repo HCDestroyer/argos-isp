@@ -61,6 +61,8 @@ export interface Me {
     alcance_global: boolean
     /** multiempresa: empresas activas que puede operar (selector del panel) */
     empresas: EmpresaResumenVista[]
+    /** multiempresa: empresa activa (en `GET /me`, la de `X-Empresa-Id`); sin ella, la única o null */
+    empresa_activa_id: number | null
 }
 
 export async function permisosDeUsuario(usuarioId: number, token?: AlcancesToken | null): Promise<string[]> {
@@ -211,5 +213,6 @@ export async function construirMe(usuario: Usuario, token?: AlcancesToken | null
         permisos,
         alcance_global: alcance.alcanceGlobal,
         empresas: await empresasDelUsuario(alcance),
+        empresa_activa_id: alcance.empresas.length === 1 ? alcance.empresas[0]! : null,
     }
 }
