@@ -10,3 +10,8 @@ export const esquemaLogin = z.object({
 })
 
 export type DatosLogin = z.output<typeof esquemaLogin>
+
+/** Ventana de bloqueo: el correo es el de la sesión, solo se pide la contraseña. */
+export const esquemaDesbloqueo = esquemaLogin.pick({ password: true })
+
+export type DatosDesbloqueo = z.output<typeof esquemaDesbloqueo>

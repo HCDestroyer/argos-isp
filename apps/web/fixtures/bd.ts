@@ -22,6 +22,14 @@ import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
+/** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
+export interface SesionSimulada {
+    token: string | null
+    csrf: string | null
+    expiraEn: string | null
+    expiraMaxEn: string | null
+}
+
 interface BaseFixtures {
     clientes: Schema<'Cliente'>[]
     servicios: Schema<'Servicio'>[]
@@ -63,8 +71,13 @@ interface BaseFixtures {
     /**
      * Cookie `argos_sesion` simulada (`HttpOnly`: el panel no la lee) y el `csrf` ligado a ella.
      * `csrf: null` = sesión puesta por una prueba con `sesionFixture()`, sin comprobar CSRF.
+     * `expiraEn`/`expiraMaxEn`: vencimiento deslizante y tope (`null` = no vence, como en las pruebas).
      */
-    sesion: { token: string | null, csrf: string | null }
+    sesion: SesionSimulada
+    /** Tokens de sesión del panel que vencieron (una petición en vuelo con uno responde `sesion_expirada`). */
+    sesionesVencidas: string[]
+    /** Logins fallidos seguidos por correo (el límite de intentos de la API). */
+    loginFallidos: Record<string, number>
     /** `GET /red/eventos` (audit.red). */
     eventosRed: Schema<'EventoRed'>[]
     /** Migración al nuevo `aaa` por router (sin entrada = sin marcar). */
@@ -105,7 +118,9 @@ function inicial(): BaseFixtures {
         idempotencia: {},
         fallas: {},
         sesionesCerradas: [],
-        sesion: { token: null, csrf: null },
+        sesion: { token: null, csrf: null, expiraEn: null, expiraMaxEn: null },
+        sesionesVencidas: [],
+        loginFallidos: {},
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],

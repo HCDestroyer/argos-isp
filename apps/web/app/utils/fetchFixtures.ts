@@ -29,6 +29,8 @@ export interface RespuestaFixture {
     cuerpo?: unknown
     /** Por defecto `application/json`, o `application/problem+json` si `status >= 400`. */
     contentType?: string
+    /** Cabeceras extra (p. ej. `Retry-After` de un 429). */
+    headers?: Record<string, string>
 }
 
 export type ManejadorFixture = (solicitud: SolicitudFixture) => RespuestaFixture | Promise<RespuestaFixture>
@@ -75,18 +77,18 @@ function coincidir(ruta: RutaCompilada, segmentos: string[]): Record<string, str
     return params
 }
 
-function responder({ status, cuerpo, contentType }: RespuestaFixture): Response {
+function responder({ status, cuerpo, contentType, headers = {} }: RespuestaFixture): Response {
     if (cuerpo === undefined || status === 204) {
-        return new Response(null, { status })
+        return new Response(null, { status, headers })
     }
     // Archivos (PDF del aviso de cobro): el cuerpo va tal cual, con su `contentType`.
     if (cuerpo instanceof Uint8Array) {
         const bytes = new Uint8Array(cuerpo.byteLength)
         bytes.set(cuerpo)
-        return new Response(bytes, { status, headers: { 'Content-Type': contentType ?? 'application/octet-stream' } })
+        return new Response(bytes, { status, headers: { ...headers, 'Content-Type': contentType ?? 'application/octet-stream' } })
     }
     const tipo = contentType ?? (status >= 400 ? 'application/problem+json' : 'application/json')
-    return new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': tipo } })
+    return new Response(JSON.stringify(cuerpo), { status, headers: { ...headers, 'Content-Type': tipo } })
 }
 
 async function leerCuerpo(request: Request): Promise<unknown> {
