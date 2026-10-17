@@ -179,6 +179,17 @@ export const Cliente = definirEsquema(
     objeto(
         {
             id,
+            codigo: {
+                type: 'string',
+                pattern: '^C-\\d{6,}$',
+                description:
+                    'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
+            },
+            codigo_externo: {
+                ...nulable(texto),
+                description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
+            },
             nombre: texto,
             tipo: enumerado(['persona', 'empresa']),
             nit_cui: nulable(texto),
@@ -203,7 +214,7 @@ export const Cliente = definirEsquema(
             },
             ...auditable,
         },
-        [],
+        ['codigo', 'codigo_externo'],
     ),
 )
 
@@ -406,6 +417,126 @@ export const ResolucionIp = definirEsquema(
         cliente_id: id,
         prefijo: { type: 'string', description: 'Asignación que contiene la IP (prefijo más largo)' },
     }),
+)
+
+/** IP resuelta por `POST /integraciones/horus/resolver` (contrato Horus §2.1). */
+export const IpResueltaHorus = definirEsquema(
+    'IpResueltaHorus',
+    objeto({
+        ip: { type: 'string', description: 'La IP tal como se pidió' },
+        servicio_id: id,
+        cliente_id: id,
+        prefijo: {
+            type: 'string',
+            description: 'Asignación o sesión que contiene la IP (prefijo más largo)',
+        },
+        cliente: objeto({
+            nombre: texto,
+            codigo: { type: 'string', description: 'Código estable del cliente (`C-000455`)' },
+            tipo: enumerado(['persona', 'empresa']),
+        }),
+        servicio: objeto({
+            user_ppp: nulable(texto),
+            plan: { type: 'string', description: 'Nombre del plan' },
+            estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+            router_id: id,
+        }),
+        empresa: objeto({
+            id,
+            nombre: { type: 'string', description: 'Nombre comercial de la empresa (NIT) del servicio' },
+            nit: nulable(texto),
+        }),
+        desde: { ...instante, description: 'Inicio de la sesión o asignación vigente que contiene la IP' },
+    }),
+)
+
+/** IP que ningún servicio del alcance del token tiene (o que no existe). */
+export const IpNoEncontradaHorus = definirEsquema(
+    'IpNoEncontradaHorus',
+    objeto({ ip: texto, error: enumerado(['no_encontrada']) }),
+)
+
+export const ResolucionIpsHorus = definirEsquema(
+    'ResolucionIpsHorus',
+    objeto({
+        resultados: {
+            ...lista({ anyOf: [IpResueltaHorus, IpNoEncontradaHorus] }),
+            description: 'Uno por IP pedida, en el mismo orden',
+        },
+    }),
+)
+
+/** `POST /integraciones/horus/tokens`: el token se muestra una sola vez. */
+export const TokenHorusCreado = definirEsquema(
+    'TokenHorusCreado',
+    objeto({
+        token: { type: 'string', description: 'Valor `atk_…`; se muestra una sola vez' },
+        datos: TokenApi,
+        usuario_id: { ...id, description: 'Usuario técnico Horus' },
+    }),
+)
+
+/** `POST /integraciones/horus/sso/tickets` (contrato Horus §1.5). */
+export const TicketSsoEmitido = definirEsquema(
+    'TicketSsoEmitido',
+    objeto({
+        url: {
+            type: 'string',
+            description:
+                '`https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso',
+        },
+        expira_en: instante,
+    }),
+)
+
+/** Resultado de `POST /auth/sso/canjear` y `POST /auth/sso/vincular`. */
+export const CanjeSso = definirEsquema(
+    'CanjeSso',
+    objeto({
+        resultado: {
+            ...enumerado(['sesion', 'vinculacion_requerida']),
+            description:
+                '`sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login ' +
+                'normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`',
+        },
+        ruta: { type: 'string', description: 'Ruta local del panel del destino, p. ej. `/servicios/812`' },
+        conector: { type: 'string', description: 'Sistema que pidió el autologin (`horus`)' },
+        sesion: { ...nulable(SesionPanel), description: 'Solo con `resultado: sesion`' },
+        vinculacion: {
+            ...nulable(
+                objeto({
+                    token: { type: 'string', description: 'Token de vinculación: 10 min, un solo uso' },
+                    expira_en: instante,
+                    usuario_externo: objeto({
+                        id_externo: texto,
+                        correo: nulable(texto),
+                        nombre: nulable(texto),
+                    }),
+                }),
+            ),
+            description: 'Solo con `resultado: vinculacion_requerida`',
+        },
+    }),
+)
+
+/** Vinculación `(conector, id_externo) → usuario local` del autologin. */
+export const VinculacionExterna = definirEsquema(
+    'VinculacionExterna',
+    objeto({
+        id,
+        conector: texto,
+        id_externo: { type: 'string', description: 'Usuario en el otro sistema' },
+        usuario_id: id,
+        correo_externo: nulable(texto),
+        nombre_externo: nulable(texto),
+        revocada_en: nulable(instante),
+        created_at: instante,
+    }),
+)
+
+export const RevocacionVinculaciones = definirEsquema(
+    'RevocacionVinculaciones',
+    objeto({ revocadas: { type: 'integer', minimum: 0 } }),
 )
 
 /**

@@ -110,6 +110,13 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'integraciones.ver': 'Ver las integraciones con otros sistemas (Horus) y sus tokens, sin el valor',
+    'integraciones.generar_token':
+        'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
+    'integraciones.revocar_token': 'Revocar el token de una integración',
+    'sso.emitir':
+        'Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus)',
+    'vinculaciones.revocar': 'Revocar las vinculaciones de autologin de todos los usuarios o de uno',
 } as const satisfies Record<string, string>
 
 export type Permiso = keyof typeof PERMISOS

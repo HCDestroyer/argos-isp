@@ -18,6 +18,8 @@ export interface DatosCliente {
     zona_id?: number | null
     campos_personalizados?: Record<string, unknown>
     canal_preferido?: 'correo' | 'telegram' | 'whatsapp'
+    /** código del sistema anterior (importador); el estable `codigo` lo pone la base */
+    codigo_externo?: string | null
 }
 
 export interface EntradaCrearCliente extends DatosCliente {
@@ -47,6 +49,9 @@ export async function columnasCliente(t: Transaccion, datos: DatosCliente): Prom
 /**
  * Alta de cliente con datos fiscales (NIT o CUI validado, nombre y dirección fiscal) y campos
  * personalizados libres (jsonb). El saldo no se guarda: es la suma de su auxiliar en el libro.
+ *
+ * `codigo` (`C-000455`) lo deriva la base del id al insertar y es inmutable; el código que traiga
+ * el importador del sistema anterior va en `codigo_externo`.
  */
 export default class CrearCliente extends DomainAction<EntradaCrearCliente, ClienteVista> {
     readonly nombre = 'clientes.crear'

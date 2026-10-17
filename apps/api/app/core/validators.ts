@@ -18,6 +18,7 @@ import { CANALES } from '#shared/contexto'
 import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
+import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -63,6 +64,9 @@ const camposCliente = {
     zona_id: idEntidad().nullable().optional(),
     campos_personalizados: vine.record(vine.any()).optional(),
     canal_preferido: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
+    codigo_externo: vine.string().trim().maxLength(50).nullable().optional().meta({
+        description: 'Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`',
+    }),
 }
 
 export const crearClienteValidator = vine.compile(vine.object(camposCliente))
@@ -84,7 +88,7 @@ export const listarClientesValidator = vine.compile(
             .trim()
             .maxLength(100)
             .optional()
-            .meta({ description: 'Busca por nombre, NIT/CUI, teléfono, user_ppp o IP' }),
+            .meta({ description: 'Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP' }),
         zona_id: idEntidad().optional(),
         estado_servicio: vine
             .enum(ESTADOS_SERVICIO)
@@ -591,5 +595,98 @@ export const cambiarLogoEmpresaValidator = vine.compile(
 export const listarEmpresasValidator = vine.compile(
     vine.object({
         activas: vine.boolean().optional().meta({ description: 'Solo las activas (true) o todas (omitido)' }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Integración Horus (contrato `.claude/integration/contratos/horus.md`)
+|--------------------------------------------------------------------------
+*/
+
+/** Máximo de IPs por llamada a `POST /integraciones/horus/resolver` (contrato §2.1). */
+export const MAXIMO_IPS_RESOLVER = 500
+
+/** `POST /integraciones/horus/resolver`: las IPs van en el cuerpo, nunca en la URL. */
+export const resolverIpsValidator = vine.compile(
+    vine.object({
+        ips: vine
+            .array(vine.string().trim().ipAddress())
+            .minLength(1)
+            .maxLength(MAXIMO_IPS_RESOLVER)
+            .meta({ description: 'IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden' }),
+    }),
+)
+
+/** `POST /integraciones/horus/tokens`. */
+export const generarTokenHorusValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        routers: vine
+            .array(idEntidad())
+            .optional()
+            .meta({ description: 'Restringe el token a servicios de estos routers' }),
+        zonas: vine
+            .array(idEntidad())
+            .optional()
+            .meta({ description: 'Restringe el token a clientes de estas zonas' }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Autologin desde Horus (contrato Horus §1.5, lado receptor)
+|--------------------------------------------------------------------------
+*/
+
+/** `POST /integraciones/horus/sso/tickets` (servidor de Horus con su token `atk_`). */
+export const emitirTicketSsoValidator = vine.compile(
+    vine.object({
+        usuario: vine.object({
+            id_externo: vine
+                .string()
+                .trim()
+                .minLength(1)
+                .maxLength(200)
+                .meta({ description: 'Id del usuario en Horus; con el conector forma la vinculación' }),
+            correo: vine
+                .string()
+                .trim()
+                .maxLength(254)
+                .nullable()
+                .optional()
+                .meta({ description: 'Solo informativo: nunca se vincula por correo' }),
+            nombre: vine.string().trim().maxLength(200).nullable().optional(),
+        }),
+        destino: vine.object({
+            tipo: vine.enum(TIPOS_DESTINO_SSO),
+            id_externo: vine
+                .string()
+                .trim()
+                .regex(/^[1-9]\d{0,17}$/)
+                .meta({ description: 'Id del recurso en ArgosIsp (cliente, servicio o router)' }),
+        }),
+    }),
+)
+
+/** `POST /auth/sso/canjear` (panel, desde `/sso/entrar#<ticket>`). */
+export const canjearTicketSsoValidator = vine.compile(
+    vine.object({ ticket: vine.string().trim().minLength(20).maxLength(200) }),
+)
+
+/** `POST /auth/sso/vincular`: login normal + token de vinculación del canje. */
+export const vincularCuentaSsoValidator = vine.compile(
+    vine.object({
+        token_vinculacion: vine.string().trim().minLength(20).maxLength(200),
+        email: vine.string().trim().email().toLowerCase(),
+        password: vine.string().minLength(1).maxLength(200),
+    }),
+)
+
+/** `POST /vinculaciones/revocar` (administrador). */
+export const revocarVinculacionesValidator = vine.compile(
+    vine.object({
+        usuario_id: idEntidad().optional().meta({ description: 'Solo las de este usuario; sin él, todas' }),
+        conector: vine.enum(CONECTORES_SSO).optional(),
     }),
 )
