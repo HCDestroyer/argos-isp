@@ -6,8 +6,9 @@
 | Solo validan y llaman acciones. Las que no tienen `handler` responden 501.
 |
 */
+import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
-import { definirRuta, type Ruta } from '#shared/rutas'
+import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
@@ -67,6 +68,12 @@ import { resolverIp } from '#network/consultas/ip'
 import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
+import CrearEmpresa from '#core/actions/crear_empresa'
+import EditarEmpresaGrupo from '#core/actions/editar_empresa'
+import DesactivarEmpresa from '#core/actions/desactivar_empresa'
+import CambiarLogoEmpresa from '#core/actions/cambiar_logo_empresa'
+import { filaEmpresa, listarEmpresas, verEmpresaCompleta } from '#core/empresas'
+import { TAMANO_MAXIMO_LOGO, leerArchivoLogo } from '#core/logos'
 import {
     AaaServicio,
     AccionAuditoria,
@@ -75,6 +82,7 @@ import {
     ConfiguracionEfectivaServicio,
     DependientePago,
     CredencialesPpp,
+    EmpresaGrupo,
     Me,
     Permiso,
     ResolucionIp,
@@ -722,6 +730,155 @@ const servicios: Ruta[] = [
     ),
 ]
 
+/** Archivo `logo` del multipart (vacío si no viene); 422 antes de leerlo si pesa más de 512 KB. */
+async function logoDeLaPeticion(ctx: HttpContext): Promise<Uint8Array> {
+    const archivos = ctx.request.files('logo')
+    if (archivos.length > 1) {
+        throw new ValidacionFallida([{ field: 'logo', rule: 'unico', message: 'Más de un archivo' }])
+    }
+    const archivo = archivos[0]
+    if (!archivo?.tmpPath) return new Uint8Array()
+    if (archivo.size > TAMANO_MAXIMO_LOGO) {
+        throw new ValidacionFallida([
+            {
+                field: 'logo',
+                rule: 'tamano',
+                message: `El logo pesa ${Math.ceil(archivo.size / 1024)} KB; el máximo es 512 KB`,
+            },
+        ])
+    }
+    return readFile(archivo.tmpPath)
+}
+
+const empresas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas',
+        operacion: 'empresasListar',
+        resumen: 'Empresas (NIT) de la instalación',
+        descripcion:
+            'La principal (id 1) primero. Contrato: `.claude/integration/contratos/multiempresa.md`.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.ver',
+        query: v.listarEmpresasValidator,
+        respuesta: { status: 200, descripcion: 'Empresas', esquema: { type: 'array', items: EmpresaGrupo } },
+        handler: (_ctx, { query }) => listarEmpresas({ soloActivas: query.activas === true }),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas',
+        operacion: 'empresasCrear',
+        resumen: 'Crear empresa (NIT)',
+        descripcion: '409 `nit_duplicado` si otra empresa activa tiene el mismo NIT. El logo se sube aparte.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.crear',
+        cuerpo: v.crearEmpresaValidator,
+        idempotente: true,
+        respuesta: { status: 201, descripcion: 'Empresa creada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo }) => new CrearEmpresa().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas/:id',
+        operacion: 'empresasVer',
+        resumen: 'Ver empresa',
+        etiqueta: 'empresas',
+        permiso: 'empresas.ver',
+        respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaGrupo },
+        handler: (_ctx, { params }) => verEmpresaCompleta(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/empresas/:id',
+        operacion: 'empresasEditar',
+        resumen: 'Editar datos fiscales y de contacto de la empresa',
+        etiqueta: 'empresas',
+        permiso: 'empresas.editar',
+        cuerpo: v.editarEmpresaValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Empresa actualizada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarEmpresaGrupo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas/:id/desactivar',
+        operacion: 'empresasDesactivar',
+        resumen: 'Desactivar empresa (no se borra)',
+        descripcion:
+            '422 `empresa_principal` (la 1 no se desactiva), `empresa_inactiva` o `empresa_con_servicios` ' +
+            '(primero se mueven sus servicios con `POST /servicios/:id/cambiar-empresa`).',
+        etiqueta: 'empresas',
+        permiso: 'empresas.desactivar',
+        cuerpo: v.desactivarEmpresaValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Empresa desactivada', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo, params }) =>
+            new DesactivarEmpresa().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas/:id/logo',
+        operacion: 'empresasCambiarLogo',
+        resumen: 'Subir o quitar el logo de la empresa',
+        descripcion:
+            '`multipart/form-data` con el archivo `logo`: PNG o SVG de hasta 512 KB. El tipo se decide por ' +
+            'el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni ' +
+            'referencias externas; con DOCTYPE, entidades o mal formado, 422 en `logo`. `quitar=true` sin ' +
+            'archivo lo quita.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.cambiar_logo',
+        cuerpo: v.cambiarLogoEmpresaValidator,
+        multipart: {
+            archivos: { logo: 'PNG o SVG, hasta 512 KB' },
+            archivosOpcionales: ['logo'],
+        },
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Empresa con su logo', esquema: EmpresaGrupo },
+        handler: async (ctx, { cuerpo, params }) => {
+            const contenido = cuerpo.quitar ? new Uint8Array() : await logoDeLaPeticion(ctx)
+            return new CambiarLogoEmpresa().execute(
+                { id: Number(params.id), version: cuerpo.version, contenido, quitar: cuerpo.quitar === true },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresas/:id/logo',
+        operacion: 'empresasLogo',
+        resumen: 'Logo de la empresa (público, con ETag)',
+        descripcion:
+            'Sin login: lo usan el portal, los correos y los PDF. `Content-Type` image/png o image/svg+xml, ' +
+            '`ETag` y `Cache-Control`; con `If-None-Match` igual responde 304. 404 si la empresa no tiene logo.',
+        etiqueta: 'empresas',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Imagen del logo', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            const empresa = await filaEmpresa(Number(params.id))
+            if (!empresa.logo || !empresa.logo_tipo || !empresa.logo_etag) {
+                throw new NoEncontrado('La empresa no tiene logo')
+            }
+            ctx.response.header('ETag', `"${empresa.logo_etag}"`)
+            ctx.response.header('Cache-Control', 'public, max-age=300')
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            if (etagCoincide(ctx, empresa.logo_etag)) return sinCambios()
+            const contenido = await leerArchivoLogo(empresa.logo)
+            ctx.response.header('Content-Type', empresa.logo_tipo)
+            if (empresa.logo_tipo === 'image/svg+xml') {
+                // defensa extra: aunque esté saneado, un SVG abierto directo no ejecuta nada
+                ctx.response.header(
+                    'Content-Security-Policy',
+                    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                )
+            }
+            return contenido
+        },
+    }),
+]
+
 const bitacora: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -834,4 +991,4 @@ const interno: Ruta[] = [
     }),
 ]
 
-export default [...auth, ...usuarios, ...clientes, ...servicios, ...bitacora, ...ip, ...interno]
+export default [...auth, ...usuarios, ...empresas, ...clientes, ...servicios, ...bitacora, ...ip, ...interno]

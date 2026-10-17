@@ -17,6 +17,21 @@ Usuarios, ACL, tokens de API, zonas, clientes y servicios.
 
 Lecturas en `consultas/acl.ts`.
 
+## Empresas (multiempresa)
+
+Contrato: `.claude/integration/contratos/multiempresa.md`. Varios NIT en una instalación.
+
+- `core.empresas` reemplaza a `core.empresa` (una fila, de A5). La fila existente es la **empresa 1** (principal): `nombre` → `nombre_comercial` y `razon_social`, `direccion` → `direccion_fiscal`. Si nunca se guardó, la 1 existe con `version = 0` y las lecturas de `#portal/empresa` (`verEmpresa`, `leerEmpresa`) devuelven los valores por defecto del entorno, igual que antes. `PUT /empresa` (A5, `empresa.editar`) sigue editando la 1 con los nombres de siempre.
+- `nit` normalizado (sin guion, mayúsculas, módulo 11) y único entre las empresas activas (409 `nit_duplicado`). Una empresa nunca se borra; la principal no se desactiva.
+- Logo: `POST /empresas/:id/logo` (multipart `logo`, con `version`): PNG por firma o SVG saneado con lista blanca (`svg.ts`: fuera scripts, `on*`, `style`, `foreignObject`, `<image>`, `<a>` y toda referencia externa; DOCTYPE, entidades o CDATA → 422), hasta 512 KB. Archivo en el almacenamiento de comprobantes (`COMPROBANTES_DIR/logos/empresas/<id>/<uuid>`, `logos.ts`); la fila guarda ruta, tipo y ETag (sha256). `GET /empresas/:id/logo` es público, con `ETag`, `Cache-Control` y 304; el SVG sale con CSP `default-src 'none'; sandbox`.
+
+| Acción               | Permiso                  | Eventos |
+| -------------------- | ------------------------ | ------- |
+| `CrearEmpresa`       | `empresas.crear`         | —       |
+| `EditarEmpresa`      | `empresas.editar`        | —       |
+| `DesactivarEmpresa`  | `empresas.desactivar`    | —       |
+| `CambiarLogoEmpresa` | `empresas.cambiar_logo`  | —       |
+
 ## Clientes y zonas
 
 - NIT con dígito verificador (módulo 11, `K`) o CUI de 13 dígitos (verificador y departamento) o `CF`; se guardan normalizados (`nit_cui.ts`). Sin columna `saldo`: el saldo es el auxiliar del libro.

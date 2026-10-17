@@ -103,8 +103,9 @@ export async function cargarDestinatario(
 }
 
 /**
- * `{{empresa.*}}`: los datos de `core.empresa` que se editan en el panel (`verEmpresa` de
- * `#portal/empresa`; sin fila usa `NOTIFY_EMPRESA_NOMBRE` y `NOTIFY_EMPRESA_TELEFONO`) más
+ * `{{empresa.*}}`: los datos de la empresa (`core.empresas`, la 1 por defecto) que se editan en el
+ * panel (`verEmpresa` de `#portal/empresa`; sin guardar usa `NOTIFY_EMPRESA_NOMBRE` y
+ * `NOTIFY_EMPRESA_TELEFONO`) más
  * `portal_url` (`NOTIFY_PORTAL_URL`). Los campos vacíos van como `''` para que las secciones
  * Mustache (`{{#empresa.telefono}}`) no se muestren.
  */

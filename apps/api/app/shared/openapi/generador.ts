@@ -222,6 +222,10 @@ function operacion(ruta: Ruta): EsquemaJson {
           ? { description: ruta.respuesta.descripcion, content: contenido }
           : { description: ruta.respuesta.descripcion }
 
+    if (ruta.respuesta.etag) {
+        respuestas['304'] = { description: 'Sin cambios: el `If-None-Match` coincide con el `ETag` actual' }
+    }
+
     if (seguridad === 'portal') {
         respuestas['401'] = problema('Sin sesión del portal (cookie vencida o ausente)')
     } else if (seguridad !== 'publico') respuestas['401'] = problema('No autenticado')

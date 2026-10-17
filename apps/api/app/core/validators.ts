@@ -15,6 +15,7 @@ import { NOMBRES_PERMISOS } from '#core/permisos'
 import { CANALES } from '#shared/contexto'
 import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
+import { REGIMENES_ISR } from '#core/empresas'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -442,5 +443,115 @@ export const aaaServiciosLoteValidator = vine.compile(
             .optional()
             .meta({ description: 'Hasta 100 ids de servicio; los inexistentes o sin PPPoE se omiten' }),
         ...reglasPaginacion,
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Empresas (multiempresa: `contratos/multiempresa.md`)
+|--------------------------------------------------------------------------
+*/
+
+/** Texto opcional de la empresa: `null` o vacío lo borra. */
+const textoEmpresa = (maximo: number) => vine.string().trim().maxLength(maximo).nullable().optional()
+
+const telefonoEmpresa = () =>
+    vine
+        .string()
+        .trim()
+        .maxLength(30)
+        .regex(/^\+?[\d\s()-]{7,30}$/)
+        .nullable()
+        .optional()
+
+const camposEmpresa = {
+    direccion_fiscal: textoEmpresa(300),
+    municipio: textoEmpresa(100),
+    departamento: textoEmpresa(100),
+    telefono: telefonoEmpresa(),
+    telefono_alterno: telefonoEmpresa(),
+    whatsapp: telefonoEmpresa(),
+    correo: vine.string().trim().email().maxLength(200).nullable().optional(),
+    sitio_web: vine
+        .string()
+        .trim()
+        .maxLength(300)
+        .url({ require_protocol: true, protocols: ['http', 'https'] })
+        .nullable()
+        .optional(),
+    horario: textoEmpresa(200),
+    instrucciones_pago: textoEmpresa(1000),
+    color_marca: vine
+        .string()
+        .trim()
+        .regex(/^#[0-9A-Fa-f]{6}$/)
+        .nullable()
+        .optional()
+        .meta({ description: 'Color de marca `#RRGGBB`, solo para el PDF y el correo' }),
+    regimen_isr: vine
+        .enum(REGIMENES_ISR)
+        .nullable()
+        .optional()
+        .meta({ description: 'Régimen de ISR para las frases de FEL' }),
+    codigo_establecimiento: vine
+        .number()
+        .withoutDecimals()
+        .min(1)
+        .max(999999)
+        .nullable()
+        .optional()
+        .meta({ description: 'Código de establecimiento en la SAT (FEL)' }),
+}
+
+const nitEmpresa = () =>
+    vine
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^(\d{13}|\d{1,12}-?[0-9K])$/)
+        .meta({
+            description: 'NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas',
+        })
+
+export const crearEmpresaValidator = vine.compile(
+    vine.object({
+        nit: nitEmpresa(),
+        razon_social: vine.string().trim().minLength(1).maxLength(200),
+        nombre_comercial: vine.string().trim().minLength(1).maxLength(200),
+        ...camposEmpresa,
+    }),
+)
+
+export const editarEmpresaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(0).meta({
+            description: 'version leída (0 si la empresa 1 nunca se guardó); si cambió responde 409',
+        }),
+        nit: nitEmpresa().nullable().optional(),
+        razon_social: textoEmpresa(200),
+        nombre_comercial: vine.string().trim().minLength(1).maxLength(200).optional(),
+        ...camposEmpresa,
+    }),
+)
+
+export const desactivarEmpresaValidator = vine.compile(
+    vine.object({ version: versionEsperada(), motivo: motivo() }),
+)
+
+/** Campos del multipart de `POST /empresas/:id/logo` (el archivo va en `logo`). */
+export const cambiarLogoEmpresaValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída de la empresa; si cambió responde 409' }),
+        quitar: vine.boolean().optional().meta({ description: 'true = quitar el logo actual (sin archivo)' }),
+    }),
+)
+
+export const listarEmpresasValidator = vine.compile(
+    vine.object({
+        activas: vine.boolean().optional().meta({ description: 'Solo las activas (true) o todas (omitido)' }),
     }),
 )

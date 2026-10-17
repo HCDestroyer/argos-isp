@@ -24,10 +24,10 @@ test.group('notify · variables de la empresa', () => {
         const trx = await db.transaction()
         try {
             await trx.rawQuery(
-                `INSERT INTO core.empresa (id, nombre, telefono, nit, whatsapp, horario)
-                 VALUES (1, 'Cable Norte', '7777-0000', '12345679', NULL, 'L-V 8 a 17')
-                 ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, telefono = EXCLUDED.telefono,
-                     nit = EXCLUDED.nit, whatsapp = EXCLUDED.whatsapp, horario = EXCLUDED.horario`,
+                // multiempresa (A1): la antigua `core.empresa` es la empresa 1 de `core.empresas`
+                `UPDATE core.empresas SET nombre_comercial = 'Cable Norte', telefono = '7777-0000',
+                     nit = '12345679', whatsapp = NULL, horario = 'L-V 8 a 17', version = version + 1
+                 WHERE id = 1`,
             )
             const empresa = await variablesEmpresa(trx)
             assert.containSubset(empresa, {
@@ -51,7 +51,8 @@ test.group('notify · variables de la empresa', () => {
     test('sin fila en core.empresa usa NOTIFY_EMPRESA_NOMBRE (valores por defecto)', async ({ assert }) => {
         const trx = await db.transaction()
         try {
-            await trx.rawQuery('DELETE FROM core.empresa')
+            // multiempresa (A1): "sin fila" = la empresa 1 con versión 0 (nunca guardada)
+            await trx.rawQuery('UPDATE core.empresas SET version = 0 WHERE id = 1')
             const antes = process.env.NOTIFY_EMPRESA_NOMBRE
             process.env.NOTIFY_EMPRESA_NOMBRE = 'ISP de Prueba'
             try {

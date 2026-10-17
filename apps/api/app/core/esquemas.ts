@@ -19,6 +19,7 @@ import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
 import { ReglasPromesa } from '#billing/esquemas'
 import { PlanEfectivo } from '#network/esquemas'
 import { TIPOS_ACTOR } from '#shared/contexto'
+import { REGIMENES_ISR } from '#core/empresas'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -424,4 +425,53 @@ export const AaaServicio = definirEsquema(
             ],
         },
     }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Empresas (multiempresa)
+|--------------------------------------------------------------------------
+*/
+
+export const EmpresaGrupo = definirEsquema(
+    'EmpresaGrupo',
+    objeto({
+        id,
+        nit: nulable(texto),
+        razon_social: nulable(texto),
+        nombre_comercial: texto,
+        direccion_fiscal: nulable(texto),
+        municipio: nulable(texto),
+        departamento: nulable(texto),
+        telefono: nulable(texto),
+        telefono_alterno: nulable(texto),
+        whatsapp: nulable(texto),
+        correo: nulable(texto),
+        sitio_web: nulable(texto),
+        horario: nulable(texto),
+        instrucciones_pago: nulable(texto),
+        color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
+        regimen_isr: nulable(enumerado(REGIMENES_ISR)),
+        codigo_establecimiento: nulable(entero),
+        logo_url: {
+            ...nulable(texto),
+            description: 'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
+        },
+        logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
+        activa: booleano,
+        principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+        version: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
+        },
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+/** Empresa en `GET /me` (selector de empresa). */
+export const EmpresaResumen = definirEsquema(
+    'EmpresaResumen',
+    objeto({ id, nombre_comercial: texto, nit: nulable(texto), logo_url: nulable(texto) }),
 )

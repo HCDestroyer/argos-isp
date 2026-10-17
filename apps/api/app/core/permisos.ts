@@ -83,6 +83,11 @@ export const PERMISOS = {
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
 
+    'empresas.ver': 'Ver las empresas (NIT) de la instalación',
+    'empresas.crear': 'Crear empresas (NIT)',
+    'empresas.editar': 'Editar los datos fiscales y de contacto de una empresa',
+    'empresas.desactivar': 'Desactivar una empresa (no se borra)',
+    'empresas.cambiar_logo': 'Subir o quitar el logo de una empresa',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',

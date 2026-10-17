@@ -153,6 +153,7 @@ const CAMPOS_IGNORADOS = new Set(['created_at', 'updated_at', 'version'])
  */
 export class Transaccion {
     #entidad?: EntidadRef
+    #empresaId?: number | null
     #ganchos: GanchoConfirmacion[] = []
     #ctx: ContextoAccion
 
@@ -178,6 +179,19 @@ export class Transaccion {
 
     get entidadActual(): EntidadRef | undefined {
         return this.#entidad
+    }
+
+    /**
+     * Empresa a la que pertenece lo que hizo la acción (la del servicio, la de la factura…); se
+     * guarda en `audit.acciones.empresa_id`. Sin llamarla, se usa la empresa activa del contexto.
+     */
+    fijarEmpresa(empresaId: number | null) {
+        this.#empresaId = empresaId
+    }
+
+    /** Empresa para la auditoría: la fijada por la acción o la activa del contexto. */
+    get empresaAuditoria(): number | null {
+        return this.#empresaId !== undefined ? this.#empresaId : (this.#ctx.empresaId ?? null)
     }
 
     /** Entidad principal afectada; se guarda en `audit.acciones.entidad_tipo/entidad_id`. */
