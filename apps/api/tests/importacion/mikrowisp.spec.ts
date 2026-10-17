@@ -404,6 +404,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
                     'p.monto',
                     'p.metodo',
                     'p.historico',
+                    'p.origen',
                     db.raw(`to_char(p.created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD') AS fecha`),
                 )
                 .orderBy('p.clave_externa')) as Array<Record<string, unknown>>
@@ -426,6 +427,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
                 [[f5004.id, '100.00']],
             )
             assert.notEqual(pagos[2]!.cliente_id, f5004.cliente_id)
+            // Origen neutral de A3: el sistema de la corrida, con el mismo formato de id de siempre
+            assert.deepEqual([...new Set(pagos.map((p) => p.origen))], ['mikrowisp'])
 
             // Segunda corrida: nada nuevo, sigue cuadrando
             const r2 = await importar(await leerDumpMikrowisp(FIXTURE), {

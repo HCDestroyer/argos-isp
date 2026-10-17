@@ -45,7 +45,11 @@ export interface CargaFinanciera {
           ) => Promise<Pick<ResultadoPagoHistorico, 'id' | 'creado'>>)
         | null
     /** ¿ya existe el pago histórico con ese id externo? (idempotencia sin auditar de nuevo) */
-    existePagoHistorico?: (claveExterna: string, trx: TransactionClientContract) => Promise<boolean>
+    existePagoHistorico?: (
+        origen: string,
+        claveExterna: string,
+        trx: TransactionClientContract,
+    ) => Promise<boolean>
 }
 
 /** Las acciones de A3. */
@@ -54,6 +58,6 @@ export const cargaFinancieraA3: CargaFinanciera = {
     registrarSaldoInicial: (entrada, ctx, trx) => new RegistrarSaldoInicial().execute(entrada, ctx, { trx }),
     registrarPagoHistorico: (entrada, ctx, trx) =>
         new RegistrarPagoHistorico().execute(entrada, ctx, { trx }),
-    existePagoHistorico: async (clave, trx) =>
-        !!(await trx.from('billing.pagos').where('clave_externa', clave).select('id').first()),
+    existePagoHistorico: async (origen, clave, trx) =>
+        !!(await trx.from('billing.pagos').where({ origen, clave_externa: clave }).select('id').first()),
 }

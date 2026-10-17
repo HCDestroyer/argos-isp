@@ -769,7 +769,7 @@ class Importador {
             const clave = this.#claveFactura(f.id)
             const ya = (await this.trx
                 .from('billing.facturas')
-                .where('clave_externa', clave)
+                .where({ origen: this.sistema, clave_externa: clave })
                 .select('id')
                 .first()) as { id: number } | null
             if (ya) {
@@ -780,7 +780,8 @@ class Importador {
             const hecha = await this.#accion('factura', f.id, 'facturas.importar_pendiente', () =>
                 this.#carga.importarFactura(
                     {
-                        clave_externa: clave,
+                        origen: this.sistema,
+                        id_externo: clave,
                         servicio_id: servicioId,
                         periodo: f.periodo,
                         total: modoB ? f.total : f.pendiente,
@@ -883,7 +884,7 @@ class Importador {
                 continue
             }
             const clave = `${this.sistema}:pago:${p.id}`
-            if (await this.#carga.existePagoHistorico?.(clave, this.trx)) {
+            if (await this.#carga.existePagoHistorico?.(this.sistema, clave, this.trx)) {
                 conteo.existentes++
                 continue
             }
@@ -901,6 +902,7 @@ class Importador {
                 registrar(
                     {
                         historico: true,
+                        origen: this.sistema,
                         id_externo: clave,
                         cliente_id: clienteId,
                         metodo,
@@ -944,7 +946,7 @@ class Importador {
             const clave = `${this.sistema}:saldo:${clienteOrigen}`
             const ya = await this.trx
                 .from('billing.saldos_iniciales')
-                .where('clave_externa', clave)
+                .where({ origen: this.sistema, clave_externa: clave })
                 .select('id')
                 .first()
             if (ya) {
@@ -964,7 +966,8 @@ class Importador {
             const hecho = await this.#accion('saldo', clienteOrigen, 'facturas.registrar_saldo_inicial', () =>
                 this.#carga.registrarSaldoInicial(
                     {
-                        clave_externa: clave,
+                        origen: this.sistema,
+                        id_externo: clave,
                         cliente_id: clienteId,
                         monto: monto.toFixed(2),
                         descripcion: `Saldo inicial importado de ${this.sistema}`,

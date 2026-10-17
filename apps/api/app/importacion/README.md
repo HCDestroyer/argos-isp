@@ -169,7 +169,7 @@ Encabezado: `origen` (sistema), `fuente` (ruta), `modo`, `request_id`. Por entid
 
 ## Carga financiera (A3) detrás de un puerto
 
-Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinanciera` (`carga_financiera.ts`), no por las acciones directamente. El adaptador `cargaFinancieraA3` usa `ImportarFacturaPendiente`, `RegistrarSaldoInicial` y `RegistrarPagoHistorico` (contrato en `.claude/integration/contratos/importacion.md`). Para no auditar en la segunda corrida, el importador consulta antes (solo lectura) `billing.facturas.clave_externa`, `billing.saldos_iniciales.clave_externa` y `billing.pagos.clave_externa`.
+Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinanciera` (`carga_financiera.ts`), no por las acciones directamente. El adaptador `cargaFinancieraA3` usa `ImportarFacturaPendiente`, `RegistrarSaldoInicial` y `RegistrarPagoHistorico` (contrato en `.claude/integration/contratos/importacion.md`). Para no auditar en la segunda corrida, el importador consulta antes (solo lectura) `billing.facturas`, `billing.saldos_iniciales` y `billing.pagos` por `(origen, clave_externa)`; cada acción recibe `origen` = el sistema de la corrida y el `id_externo` con el mismo formato de siempre (`<sistema>:factura:<id>`…), para que lo ya importado se siga reconociendo.
 
 - Una fecha de pago en un mes cerrado del libro termina en `errores` (422 `periodo_cerrado` de A3) y el saldo de ese cliente no cuadra: importar antes de cerrar el primer mes, o reabrir el mes (ver el contrato).
 - Forma de pago del origen → `METODOS_PAGO` con `metodoPago` (`efectivo` → `caja`, `depósito`/`boleta` → `deposito`, `transferencia`, `tarjeta` → `debito`, `en línea`/`PayPal` → `pasarela`; lo desconocido, `caja`). El texto original queda en la nota del pago.
@@ -185,7 +185,6 @@ Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinan
 - Aplicar el estado suspendido del origen: con las facturas, por `evaluarEstadoServicio` en la siguiente evaluación.
 - Ajustar `origenes/mikrowisp.ts` al esquema real cuando llegue el volcado del ISP (falta la copia del PM).
 - Ajustar `origenes/smartisp.ts` con un volcado real de SmartISP (no tenemos ninguno).
-- Si A3 cambia `contratos/importacion.md` a su versión neutral (sin "Mikrowisp"), revisar `carga_financiera.ts`.
 
 ## Eventos
 
