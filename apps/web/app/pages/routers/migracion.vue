@@ -231,7 +231,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
             <template v-if="routerActual">
                 <!-- Fecha de migración -->
                 <section
-                    class="flex flex-col gap-3 rounded-lg border border-default p-4"
+                    class="flex flex-col gap-3 surface-card p-4"
                     aria-labelledby="titulo-fecha"
                     data-prueba="migracion-fecha"
                 >
@@ -312,7 +312,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                     v-else
                     class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
                 >
-                    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default p-4">
+                    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
                         <span class="text-sm text-muted">Servicios PPPoE</span>
                         <p
                             class="text-2xl font-semibold text-highlighted tabular-nums"
@@ -324,7 +324,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                             Sin retirados; WISP no usa RADIUS
                         </p>
                     </div>
-                    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default p-4">
+                    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
                         <span class="text-sm text-muted">Con sesión activa</span>
                         <p
                             class="text-2xl font-semibold text-highlighted tabular-nums"
@@ -336,7 +336,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                             {{ plural(resumen.valor.sesiones_activas, 'sesión abierta', 'sesiones abiertas') }} en el router
                         </p>
                     </div>
-                    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default p-4">
+                    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
                         <span class="text-sm text-muted">Conectados desde el cambio</span>
                         <p
                             class="text-2xl font-semibold text-highlighted tabular-nums"
@@ -348,7 +348,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                             Desde {{ formatearFechaHora(resumen.valor.desde) }}
                         </p>
                     </div>
-                    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default p-4">
+                    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
                         <span class="text-sm text-muted">Sin sesión desde el cambio</span>
                         <p
                             class="text-2xl font-semibold tabular-nums"
@@ -375,7 +375,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                         Servicios PPPoE que no se han conectado desde el cambio
                     </h3>
                     <ul
-                        class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        class="flex flex-col divide-y divide-default surface-card"
                         data-prueba="migracion-lista-pendientes"
                     >
                         <li

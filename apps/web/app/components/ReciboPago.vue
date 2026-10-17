@@ -88,7 +88,7 @@ function periodo(facturaId: number): string {
 
 <template>
     <article
-        class="recibo-ticket flex flex-col gap-3 rounded-lg border border-default bg-default p-4 text-sm"
+        class="recibo-ticket flex flex-col gap-3 surface-card p-4 text-sm"
         aria-label="Recibo de pago"
     >
         <header class="flex flex-col items-center gap-0.5 text-center">

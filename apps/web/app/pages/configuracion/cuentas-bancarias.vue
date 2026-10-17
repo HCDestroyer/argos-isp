@@ -150,7 +150,6 @@ onMounted(() => {
                 :columns="columnas"
                 :loading="cargando"
                 :empty="leidas ? 'No hay cuentas bancarias con este filtro.' : ''"
-                class="rounded-md border border-default"
             >
                 <template #alias-cell="{ row }">
                     <div

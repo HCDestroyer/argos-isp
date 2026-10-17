@@ -54,12 +54,18 @@ const items = computed<NavigationMenuItem[][]>(() => {
 
 <template>
     <UDashboardGroup unit="rem">
+        <!-- Aura: fondo de color difuminado bajo toda la app, para que el vidrio tenga qué reflejar. -->
+        <div
+            class="app-aura"
+            aria-hidden="true"
+        />
+        <!-- Vidrio en la barra lateral y la superior (PanelPagina); el contenido va en tarjetas. -->
         <UDashboardSidebar
             id="principal"
             v-model:open="abierto"
             collapsible
             resizable
-            class="bg-elevated/25"
+            class="glass-material"
             :ui="{
                 footer: 'lg:border-t lg:border-default',
             }"
@@ -70,13 +76,10 @@ const items = computed<NavigationMenuItem[][]>(() => {
                     class="flex items-center gap-2 px-1 font-semibold text-highlighted"
                     aria-label="ArgosIsp, inicio"
                 >
-                    <UIcon
-                        name="i-lucide-radar"
-                        class="size-6 shrink-0 text-primary"
-                    />
+                    <LogoArgos class="size-7 shrink-0" />
                     <span
                         v-if="!collapsed"
-                        class="truncate"
+                        class="truncate tracking-[-0.015em]"
                     >ArgosIsp</span>
                 </NuxtLink>
             </template>

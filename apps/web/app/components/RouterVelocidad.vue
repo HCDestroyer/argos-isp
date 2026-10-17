@@ -179,7 +179,7 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                     >
                         Modo de colas
                     </h3>
-                    <div class="flex flex-col gap-2 rounded-lg border border-default p-4">
+                    <div class="flex flex-col gap-2 surface-card p-4">
                         <div class="flex flex-wrap items-center gap-2">
                             <UBadge
                                 :label="CONTROLES_VELOCIDAD[control].etiqueta"
@@ -311,7 +311,7 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                     </p>
                     <ul
                         v-else
-                        class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        class="flex flex-col divide-y divide-default surface-card"
                         data-prueba="planes-router"
                     >
                         <li

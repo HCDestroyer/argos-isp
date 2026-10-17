@@ -19,7 +19,7 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default bg-default p-4">
+    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
         <div class="flex items-center justify-between gap-2">
             <span class="flex items-center gap-1.5 text-sm text-muted">
                 <UIcon

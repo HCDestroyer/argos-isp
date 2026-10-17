@@ -185,7 +185,11 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
             v-if="verTabla"
             :data="filasTabla"
             :columns="columnasTabla"
-            :ui="{ td: 'py-1.5 text-xs', th: 'py-1.5 text-xs' }"
+            :ui="{
+                root: 'rounded-none bg-transparent ring-0 dark:shadow-none',
+                td: 'py-1.5 text-xs',
+                th: 'py-1.5 text-xs',
+            }"
         />
 
         <div

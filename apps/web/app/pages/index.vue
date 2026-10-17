@@ -103,7 +103,7 @@ onMounted(cargar)
 
                 <template v-else>
                     <section
-                        class="flex flex-col gap-3 rounded-lg border border-default bg-default p-4"
+                        class="flex flex-col gap-3 surface-card p-4"
                         aria-labelledby="titulo-servicios"
                         data-prueba="tablero-servicios"
                     >
@@ -192,7 +192,7 @@ onMounted(cargar)
 
                     <div class="grid gap-4 lg:grid-cols-2">
                         <section
-                            class="flex min-w-0 flex-col gap-2 rounded-lg border border-default bg-default p-4"
+                            class="flex min-w-0 flex-col gap-2 surface-card p-4"
                             aria-labelledby="titulo-montos"
                             data-prueba="grafica-montos"
                         >
@@ -217,7 +217,7 @@ onMounted(cargar)
                             />
                         </section>
                         <section
-                            class="flex min-w-0 flex-col gap-2 rounded-lg border border-default bg-default p-4"
+                            class="flex min-w-0 flex-col gap-2 surface-card p-4"
                             aria-labelledby="titulo-conteos"
                             data-prueba="grafica-conteos"
                         >
