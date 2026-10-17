@@ -11,7 +11,12 @@ import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import { libroDiario } from '#ledger/consultas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
-import { prepararEmpresas, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import {
+    errorDe,
+    prepararEmpresas,
+    saldoCuenta,
+    servicioFacturado,
+} from '#tests/contabilidad/ayudas_contabilidad'
 import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
@@ -252,6 +257,73 @@ test.group('Auditor contable · hallazgos', (group) => {
             'reabrir y volver a cerrar cambió las partidas',
         )
     })
+    test('H4 · reabrir septiembre con octubre ya cerrado (con partidas) responde 409 reapertura_fuera_de_orden', async ({
+        assert,
+    }) => {
+        // Decisión del líder: solo se reabre un mes si ningún mes posterior del mismo año tiene partidas.
+        assert.isTrue(
+            await existeTabla('ledger.asientos_partidas'),
+            'Falta ledger.asientos_partidas (contrato §10.7).',
+        )
+        const e = await prepararEmpresas()
+        await gastoDel(e, '2026-09-10', '10.00')
+        await gastoDel(e, '2026-10-02', '20.00')
+        const enNoviembre = new Date('2026-11-05T12:00:00-06:00')
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9, ahora: enNoviembre }, e.ctx)
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 10, ahora: enNoviembre }, e.ctx)
+        const columna = await columnaPartida()
+        const antes = await partidasDe(e.B, columna!)
+        const error = await errorDe(
+            new ReabrirPeriodo().execute(
+                { empresa_id: e.B, anio: 2026, mes: 9, motivo: 'fuera de orden' },
+                e.ctx,
+            ),
+        )
+        assert.equal(error.status, 409, error.detalle)
+        assert.equal(error.codigo, 'reapertura_fuera_de_orden', error.detalle)
+        assert.deepEqual(await partidasDe(e.B, columna!), antes)
+    })
+
+    test('H4 · septiembre reabierto: el asiento nuevo recibe la partida siguiente al final del mes y las anteriores no cambian', async ({
+        assert,
+    }) => {
+        // Decisión del líder: las partidas asignadas no cambian; los asientos nuevos del mes reciben, al
+        // volver a cerrar, las partidas siguientes al final de la secuencia de ese mes (aunque su fecha sea anterior).
+        assert.isTrue(
+            await existeTabla('ledger.asientos_partidas'),
+            'Falta ledger.asientos_partidas (contrato §10.7).',
+        )
+        const e = await prepararEmpresas()
+        await gastoDel(e, '2026-09-10', '10.00')
+        await gastoDel(e, '2026-09-20', '20.00')
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const columna = await columnaPartida()
+        const antes = await partidasDe(e.B, columna!)
+        assert.deepEqual(
+            antes.map((p) => p.partida),
+            [1, 2],
+        )
+        // octubre sigue abierto: reabrir septiembre se puede
+        await new ReabrirPeriodo().execute(
+            { empresa_id: e.B, anio: 2026, mes: 9, motivo: 'faltó un gasto' },
+            e.ctx,
+        )
+        const nuevo = await gastoDel(e, '2026-09-03', '3.00')
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const despues = await partidasDe(e.B, columna!)
+        assert.deepEqual(
+            despues.filter((p) => Number(p.asiento_id) !== Number(nuevo.id)),
+            antes,
+            'las partidas ya asignadas cambiaron',
+        )
+        const delNuevo = despues.find((p) => Number(p.asiento_id) === Number(nuevo.id))
+        assert.equal(
+            delNuevo?.partida,
+            3,
+            `el asiento ${nuevo.id} debe quedar con la partida 3 (al final del mes)`,
+        )
+        assert.lengthOf(despues, 3)
+    })
 })
 
 async function existeTabla(tabla: string): Promise<boolean> {
@@ -304,4 +376,21 @@ async function partidasDe(empresaId: number, columna: string) {
         [empresaId],
     )
     return resultado.rows as Array<{ asiento_id: number; partida: number; fecha: string }>
+}
+
+/** Gasto manual con fecha dada en la empresa B (Gasto / Banco principal). */
+function gastoDel(e: Awaited<ReturnType<typeof prepararEmpresas>>, fecha: string, monto: string) {
+    return new RegistrarAsiento().execute(
+        {
+            empresa_id: e.B,
+            fecha,
+            descripcion: `auditoría: gasto del ${fecha}`,
+            origen_tipo: 'ajuste',
+            movimientos: [
+                { cuenta: CUENTAS.GASTO_OTROS, debe: monto },
+                { cuenta: CUENTAS.BANCO_PRINCIPAL, haber: monto },
+            ],
+        },
+        e.ctx,
+    )
 }
