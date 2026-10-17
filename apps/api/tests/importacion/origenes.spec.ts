@@ -10,8 +10,13 @@ import { importar } from '#importacion/importador'
 import type { ReporteImportacion } from '#importacion/reporte'
 import type { ProblemaFila } from '#importacion/canonico'
 import { ARCHIVOS, generarPlantillas, leerDirectorio } from '#importacion/origenes/csv'
-import { filasDesdeDump, fuenteDesdeDump, leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
-import { fuenteDesdeDumpSmartisp } from '#importacion/origenes/smartisp'
+import {
+    ESQUEMA as ESQUEMA_MIKROWISP,
+    filasDesdeDump,
+    fuenteDesdeDump,
+    leerDumpMikrowisp,
+} from '#importacion/origenes/mikrowisp'
+import { ESQUEMA as ESQUEMA_SMARTISP, fuenteDesdeDumpSmartisp } from '#importacion/origenes/smartisp'
 import { EsquemaIncompleto } from '#importacion/origenes/esquema_sql'
 import { leerOrigen } from '#importacion/origenes/index'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
@@ -74,6 +79,37 @@ test.group('importacion · orígenes', (group) => {
         // Origen equivocado: se detiene con la lista de lo que falta
         assert.throws(() => fuenteDesdeDump(smartisp, 'smartisp.sql'), /falta la tabla server/)
         assert.throws(() => fuenteDesdeDumpSmartisp(mikrowisp, 'mikrowisp6.sql'), /falta la tabla clients/)
+    })
+
+    test('el runbook pide en el mysqldump exactamente las tablas que lee cada adaptador', async ({
+        assert,
+    }) => {
+        const runbook = await readFile(
+            new URL('../../../../docs/runbooks/importacion.md', import.meta.url),
+            'utf8',
+        )
+        const comandos = [
+            ...runbook.matchAll(/mysqldump [^`]*?-p <base> \\\n([\s\S]*?)> (\w+)-AAAAMMDD\.sql/g),
+        ]
+        const tablasDe = (origen: string) =>
+            comandos
+                .find((m) => m[2] === origen)?.[1]
+                ?.replace(/\\/g, ' ')
+                .split(/\s+/)
+                .filter(Boolean)
+                .sort()
+        assert.deepEqual(
+            tablasDe('mikrowisp'),
+            Object.values(ESQUEMA_MIKROWISP)
+                .map((t) => t.tabla)
+                .sort(),
+        )
+        assert.deepEqual(
+            tablasDe('smartisp'),
+            Object.values(ESQUEMA_SMARTISP)
+                .map((t) => t.tabla)
+                .sort(),
+        )
     })
 
     test('CSV con los mismos datos que el volcado de Mikrowisp da el mismo reporte', async ({ assert }) => {
