@@ -38,6 +38,7 @@ import {
  *   lleva el vencimiento a `ahora + PANEL_SESION_INACTIVIDAD_H` sin pasar de
  *   `login + PANEL_SESION_MAXIMA_H`; guarda y vuelve a emitir la cookie solo cuando avanza al menos
  *   el umbral (15 min). El `csrf` no cambia al renovar: es el HMAC del token, y el token es el mismo.
+ *   La cookie dura hasta el tope (+1 h): quien decide si la sesión sigue viva es `expires_at`.
  *   Vencida (por inactividad o por el tope): 401 `sesion_expirada` y se borra la cookie.
  */
 
@@ -79,9 +80,26 @@ function iguales(a: string, b: string): boolean {
     return ba.length === bb.length && timingSafeEqual(ba, bb)
 }
 
-export function ponerCookieSesionPanel(ctx: HttpContext, token: string, expiraEn: Date | null): void {
-    const maxAge = expiraEn
-        ? Math.max(1, Math.floor((expiraEn.getTime() - relojSesion.ahora().getTime()) / 1000))
+/**
+ * Margen de la cookie después del tope: así la petición que llega justo tras el tope todavía trae la
+ * cookie y recibe 401 `sesion_expirada` (y la cookie se borra) en vez de `no_autenticado`.
+ */
+export const GRACIA_COOKIE_PANEL_S = 3600
+
+/**
+ * Pone la cookie de sesión. Su `Max-Age` llega hasta el **tope absoluto** (`expiraMaxEn`) más
+ * `GRACIA_COOKIE_PANEL_S`, no hasta `expira_en`: si el navegador la borrara al vencer por
+ * inactividad, la siguiente petición llegaría sin cookie y la API no podría responder
+ * `sesion_expirada` (el panel abre la ventana de bloqueo solo con ese `type`). La validez real la
+ * decide siempre el servidor con `expires_at` del token.
+ */
+export function ponerCookieSesionPanel(ctx: HttpContext, token: string, expiraMaxEn: Date | null): void {
+    const maxAge = expiraMaxEn
+        ? Math.max(
+              1,
+              Math.floor((expiraMaxEn.getTime() - relojSesion.ahora().getTime()) / 1000) +
+                  GRACIA_COOKIE_PANEL_S,
+          )
         : undefined
     ctx.response.plainCookie(COOKIE_SESION_PANEL, token, {
         ...opcionesCookiePanel(),
@@ -244,7 +262,7 @@ export class SesionCookieGuard implements GuardContract<Usuario> {
                 .update({ expires_at: decision.expiraEn, last_used_at: ahora, updated_at: ahora })
             token.expiresAt = decision.expiraEn
             token.lastUsedAt = ahora
-            ponerCookieSesionPanel(this.ctx, valor, decision.expiraEn)
+            ponerCookieSesionPanel(this.ctx, valor, decision.expiraMaxEn)
         }
         this.expiraEn = decision.expiraEn
         this.expiraMaxEn = decision.expiraMaxEn

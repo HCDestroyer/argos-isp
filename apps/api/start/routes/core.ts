@@ -137,7 +137,7 @@ const auth: Ruta[] = [
             const sesion = await conLimiteLogin(ctx, cuerpo.email, () =>
                 new IniciarSesion().execute({ ...cuerpo, modo: 'cookie' }, ctx.contextoAccion('panel')),
             )
-            ponerCookieSesionPanel(ctx, sesion.token, sesion.expiraEn)
+            ponerCookieSesionPanel(ctx, sesion.token, sesion.expiraMaxEn)
             const csrf = csrfDeSesion(sesion.token)
             return {
                 usuario: { ...sesion.usuario, csrf },

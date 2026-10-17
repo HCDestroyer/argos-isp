@@ -1,4 +1,11 @@
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { setTimeout as esperar } from 'node:timers/promises'
 import { test } from '@japa/runner'
+import env from '#start/env'
 import db from '@adonisjs/lucid/services/db'
 import { AccessToken } from '@adonisjs/auth/access_tokens'
 import type { ApiClient } from '@japa/api-client'
@@ -77,7 +84,8 @@ test.group('Sesión del panel deslizante', (group) => {
         assert.approximately(expira - inicio.getTime(), 12 * HORA, 5_000)
         assert.equal(new Date(respuesta.body().expira_max_en).getTime(), inicio.getTime() + 72 * HORA)
         const maxAge = cookieSesion(respuesta.header('set-cookie'))!.maxAge!
-        assert.approximately(maxAge, 12 * 3600, 5)
+        // la cookie dura hasta el tope + 1 h de gracia; la validez real la decide expires_at
+        assert.approximately(maxAge, 73 * 3600, 5)
     })
 
     test('una petición renueva el vencimiento, reemite la cookie y conserva el csrf', async ({
@@ -92,7 +100,7 @@ test.group('Sesión del panel deslizante', (group) => {
         const nueva = cookieSesion(r.header('set-cookie'))
         assert.isNotNull(nueva)
         assert.equal(nueva!.valor, valor)
-        assert.equal(nueva!.maxAge, 12 * 3600)
+        assert.equal(nueva!.maxAge, (72 - 11 + 1) * 3600)
         assert.equal(new Date(r.body().expira_en).getTime(), inicio.getTime() + 23 * HORA)
         assert.equal(new Date(r.body().expira_max_en).getTime(), inicio.getTime() + 72 * HORA)
         assert.equal(r.body().csrf, csrf)
@@ -275,5 +283,94 @@ test.group('Sesión del panel deslizante: Bearer intacto', (group) => {
         const r = await estado(client.get('/api/v1/me').bearerToken(creado.body().token), 200)
         assert.isNull(r.body().expira_en)
         assert.isNull(r.body().expira_max_en)
+    })
+})
+
+const ejecutar = promisify(execFile)
+
+/** `curl` con tarro de cookies (`-b`/`-c`): respeta `Max-Age` como un navegador. */
+async function curl(tarro: string, args: string[]): Promise<{ status: number; cuerpo: any }> {
+    const base = `http://${env.get('HOST')}:${env.get('PORT')}`
+    const ruta = args.pop()!
+    const { stdout } = await ejecutar('curl', [
+        '-s',
+        '-b',
+        tarro,
+        '-c',
+        tarro,
+        '-w',
+        '\n%{http_code}',
+        ...args,
+        `${base}${ruta}`,
+    ])
+    const lineas = stdout.split('\n')
+    const status = Number(lineas.pop())
+    const texto = lineas.join('\n')
+    return { status, cuerpo: texto ? JSON.parse(texto) : null }
+}
+
+test.group('Sesión del panel deslizante: tarro de cookies real', (group) => {
+    const anteriores: Record<string, string | undefined> = {}
+    group.each.setup(() => {
+        for (const clave of ['PANEL_SESION_INACTIVIDAD_H', 'PANEL_COOKIE_SEGURA']) {
+            anteriores[clave] = process.env[clave]
+        }
+        // ventana de inactividad de 1,8 s: aquí el reloj tiene que ser el real, porque `curl` borra
+        // las cookies con su propio reloj. Es la única prueba que espera (2,5 s).
+        process.env.PANEL_SESION_INACTIVIDAD_H = '0.0005'
+        // `curl` no manda cookies `Secure` por http
+        process.env.PANEL_COOKIE_SEGURA = 'false'
+        return () => {
+            for (const [clave, valor] of Object.entries(anteriores)) {
+                if (valor === undefined) delete process.env[clave]
+                else process.env[clave] = valor
+            }
+        }
+    })
+
+    test('vencida por inactividad, el navegador aún manda la cookie y la API responde sesion_expirada', async ({
+        assert,
+    }) => {
+        const dir = await mkdtemp(join(tmpdir(), 'argos-tarro-'))
+        const tarro = join(dir, 'cookies.txt')
+        try {
+            const { usuario, password } = await usuarioConRoles(['admin'])
+            const login = await curl(tarro, [
+                '-H',
+                'Content-Type: application/json',
+                '-H',
+                `Origin: ${PANEL}`,
+                '-d',
+                JSON.stringify({ email: usuario.email, password }),
+                '/api/v1/auth/sesion',
+            ])
+            assert.equal(login.status, 200)
+            const viva = await curl(tarro, ['/api/v1/me'])
+            assert.equal(viva.status, 200)
+
+            await esperar(2500)
+            const vencida = await curl(tarro, ['/api/v1/me'])
+            assert.equal(vencida.status, 401)
+            assert.equal(vencida.cuerpo.type, 'urn:argosisp:problema:sesion_expirada')
+
+            // la API borró la cookie: la petición siguiente ya llega sin ella
+            const despues = await curl(tarro, ['/api/v1/me'])
+            assert.equal(despues.status, 401)
+            assert.equal(despues.cuerpo.type, 'urn:argosisp:problema:no_autenticado')
+        } finally {
+            await rm(dir, { recursive: true, force: true })
+        }
+    })
+})
+
+test.group('CORS expone Retry-After', () => {
+    test('un origen permitido puede leer Retry-After (429 del login)', async ({ client, assert }) => {
+        const r = await client.get('/api/v1/me').header('Origin', PANEL)
+        const expuestas = String(r.header('access-control-expose-headers') ?? '')
+            .toLowerCase()
+            .split(',')
+            .map((h) => h.trim())
+        assert.include(expuestas, 'retry-after')
+        assert.include(expuestas, 'x-request-id')
     })
 })
