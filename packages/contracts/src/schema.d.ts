@@ -1151,6 +1151,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notificaciones/configuracion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuración global de los canales de notificación (correo y Telegram)
+         * @description Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). Sin configuración guardada (`origen: entorno`) muestra lo que rige: las variables de entorno.
+         */
+        get: operations["notificacionesConfiguracionVer"];
+        /**
+         * Guardar la configuración global de los canales (servidor, credenciales, interruptores)
+         * @description Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). `version: 0` la crea si no existe. Emite `notificaciones.config_cambiada`: el worker la recarga sin reiniciarse.
+         */
+        put: operations["notificacionesConfiguracionGuardar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/configuracion/empresas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Empresas con configuración de canales guardada (propia o marcada para heredar)
+         * @description Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4).
+         */
+        get: operations["notificacionesConfiguracionEmpresasListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/configuracion/empresas/{empresaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuración de canales de una empresa (o `hereda` si no tiene la suya)
+         * @description Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4).
+         */
+        get: operations["notificacionesConfiguracionEmpresaVer"];
+        /**
+         * Guardar la configuración de canales de una empresa (o volver a heredar la global)
+         * @description Global (`empresa_id` null) o de una empresa (`hereda` = usa la global). Los secretos (contraseña SMTP, token del bot, secreto del webhook) salen siempre como `***` y en la auditoría también; solo se reemplazan (texto) o se borran (null). Contrato en `.claude/integration/a6.md` (pantallas de A4). `version: 0` la crea si no existe.
+         */
+        put: operations["notificacionesConfiguracionEmpresaGuardar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/configuracion/empresas/{empresaId}/probar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enviar una prueba con la configuración de la empresa (o la global si hereda)
+         * @description Igual que `POST /notificaciones/configuracion/probar`.
+         */
+        post: operations["notificacionesConfiguracionEmpresaProbar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/configuracion/probar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enviar una prueba por correo o Telegram con la configuración global guardada
+         * @description No mira los interruptores. Responde 200 aunque falle: `estado: fallido` y `error` con el mensaje real del servidor SMTP o de la Bot API. Queda en `notify.envios`.
+         */
+        post: operations["notificacionesConfiguracionProbar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notificaciones/envios": {
         parameters: {
             query?: never;
@@ -2805,9 +2913,29 @@ export interface paths {
         put?: never;
         /**
          * Webhook del bot de Telegram (lo llama Telegram, no el panel)
-         * @description Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = `TELEGRAM_WEBHOOK_SECRET` (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.
+         * @description Bot de la configuración global (ruta anterior a `/telegram/webhook/:bot`). Autenticado con el header `X-Telegram-Bot-Api-Secret-Token` = el secreto del webhook global (401 si falta o no coincide; sin secreto configurado rechaza todo). Comandos: `/start <código>` vincula el chat (código de `GenerarCodigoTelegram`), `/estado`, `/desvincular`, `/ayuda`. Responde por la Bot API; contrato en `.claude/integration/contratos/telegram.md`.
          */
         post: operations["telegramWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telegram/webhook/{bot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook de un bot de Telegram por su id (lo llama Telegram, no el panel)
+         * @description Una URL por bot: `:bot` es el id público del bot (parte numérica del token, `telegram.bot_id` de la configuración). Autenticado con `X-Telegram-Bot-Api-Secret-Token` = el secreto del webhook de ese bot (401 si falta, no coincide o el bot no está configurado). Responde por el mismo bot. Mismos comandos que `POST /telegram/webhook`.
+         */
+        post: operations["telegramWebhookBot"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3354,6 +3482,70 @@ export interface components {
             /** @description Campos que vienen de una excepción del servicio */
             excepciones: string[];
         };
+        ConfiguracionNotificaciones: {
+            /** @description null: todavía no hay configuración guardada */
+            id: number | null;
+            /** @description null: configuración global */
+            empresa_id: number | null;
+            /** @description Solo empresas: usa la configuración global. La global siempre es false */
+            hereda: boolean;
+            /**
+             * @description `guardada`: fila del panel. `entorno`: global sin guardar, rigen las variables de entorno. `sin_configurar`: empresa sin fila (hereda la global)
+             * @enum {string}
+             */
+            origen: "guardada" | "entorno" | "sin_configurar";
+            sembrada_desde_entorno: boolean;
+            correo: {
+                activo: boolean;
+                host: string | null;
+                puerto: number | null;
+                /** @enum {string} */
+                tls: "auto" | "starttls" | "tls" | "ninguno";
+                usuario: string | null;
+                /**
+                 * @description `***` si hay uno guardado, null si no. Nunca se devuelve el valor
+                 * @enum {string|null}
+                 */
+                password: "***" | null;
+                remitente: string | null;
+                nombre_visible: string | null;
+            };
+            telegram: {
+                clientes_activo: boolean;
+                alertas_activo: boolean;
+                /**
+                 * @description `***` si hay uno guardado, null si no. Nunca se devuelve el valor
+                 * @enum {string|null}
+                 */
+                token: "***" | null;
+                /** @description Id público del bot (parte numérica del token) */
+                bot_id: string | null;
+                bot_nombre: string | null;
+                chat_equipo: string | null;
+                /**
+                 * @description `***` si hay uno guardado, null si no. Nunca se devuelve el valor
+                 * @enum {string|null}
+                 */
+                webhook_secreto: "***" | null;
+                /** @description Ruta del webhook de este bot: `/api/v1/telegram/webhook/<bot_id>` */
+                webhook_ruta: string | null;
+            };
+            avisos: {
+                factura: boolean;
+                vencimiento: boolean;
+                recordatorio: boolean;
+                corte: boolean;
+                pago: boolean;
+                promesa: boolean;
+                comprobante: boolean;
+            };
+            /** @description Control optimista: envíala al guardar (0 = sin guardar) */
+            version: number;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
         CredencialesPpp: {
             servicio_id: number;
             user_ppp: string;
@@ -3559,8 +3751,12 @@ export interface components {
             asunto: string | null;
             cuerpo: string | null;
             /** @enum {string} */
-            estado: "encolado" | "enviado" | "fallido";
+            estado: "encolado" | "enviado" | "fallido" | "omitido";
             error: string | null;
+            /** @description Por qué quedó `omitido` (canal o tipo de aviso apagado en la configuración) */
+            motivo: string | null;
+            /** @description Empresa cuya configuración se aplicó (null = global) */
+            empresa_id: number | null;
             intentos: number;
             proveedor_id: string | null;
             fallback_de: number | null;
@@ -4844,6 +5040,19 @@ export interface components {
             facturas: number[];
             /** @description Servicios que no se pudieron facturar (ver log) */
             errores?: number;
+        };
+        ResultadoPruebaCanal: {
+            /** @enum {string} */
+            estado: "enviado" | "fallido";
+            /** @description Error real del servidor SMTP o de la Bot API */
+            error: string | null;
+            destino: string;
+            /**
+             * @description Configuración con la que se probó
+             * @enum {string}
+             */
+            origen: "global" | "empresa" | "entorno";
+            envio_id: number;
         };
         ResultadoVencimiento: {
             /** @description Facturas que pasaron a vencida */
@@ -9729,6 +9938,483 @@ export interface operations {
             };
         };
     };
+    notificacionesConfiguracionVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuración global */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionNotificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionGuardar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; 0 si todavía no hay configuración guardada. 409 si cambió */
+                    version: number;
+                    correo?: {
+                        /** @description Interruptor del canal correo */
+                        activo?: boolean;
+                        /** @description Servidor SMTP (nombre o IP). Vacío o null lo quita */
+                        host?: string | null;
+                        puerto?: number | null;
+                        /**
+                         * @description `auto`: STARTTLS si el servidor lo ofrece; `starttls`: lo exige; `tls`: TLS desde el inicio (465); `ninguno`: sin cifrar
+                         * @enum {string}
+                         */
+                        tls?: "auto" | "starttls" | "tls" | "ninguno";
+                        usuario?: string | null;
+                        /** @description Contraseña SMTP. Omitida: se conserva; null: se borra; texto: se reemplaza */
+                        password?: string | null;
+                        /**
+                         * Format: email
+                         * @description Dirección del remitente (no-responder@dominio)
+                         */
+                        remitente?: string | null;
+                        /** @description Nombre visible del remitente */
+                        nombre_visible?: string | null;
+                    };
+                    telegram?: {
+                        /** @description Interruptor de Telegram a clientes */
+                        clientes_activo?: boolean;
+                        /** @description Interruptor de las alertas por Telegram al chat del equipo */
+                        alertas_activo?: boolean;
+                        /** @description Token del bot (@BotFather). Omitido: se conserva; null: se borra; texto: se reemplaza */
+                        token?: string | null;
+                        /** @description Usuario del bot, sin @ (arma los enlaces t.me) */
+                        bot_nombre?: string | null;
+                        /** @description Chat del equipo para alertas (id numérico o @canal) */
+                        chat_equipo?: string | null;
+                        /** @description Secreto del webhook (16 a 256 caracteres A-Z a-z 0-9 _ -). Omitido: se conserva o se genera si hay token; null: se borra */
+                        webhook_secreto?: string | null;
+                    };
+                    avisos?: {
+                        factura?: boolean;
+                        vencimiento?: boolean;
+                        recordatorio?: boolean;
+                        corte?: boolean;
+                        pago?: boolean;
+                        promesa?: boolean;
+                        comprobante?: boolean;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Configuración guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionNotificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionEmpresasListar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuraciones por empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionNotificaciones"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionEmpresaVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empresaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuración de la empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionNotificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionEmpresaGuardar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empresaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; 0 si todavía no hay configuración guardada. 409 si cambió */
+                    version: number;
+                    /** @description true: usa la configuración global (por defecto en una empresa nueva) */
+                    hereda?: boolean;
+                    correo?: {
+                        /** @description Interruptor del canal correo */
+                        activo?: boolean;
+                        /** @description Servidor SMTP (nombre o IP). Vacío o null lo quita */
+                        host?: string | null;
+                        puerto?: number | null;
+                        /**
+                         * @description `auto`: STARTTLS si el servidor lo ofrece; `starttls`: lo exige; `tls`: TLS desde el inicio (465); `ninguno`: sin cifrar
+                         * @enum {string}
+                         */
+                        tls?: "auto" | "starttls" | "tls" | "ninguno";
+                        usuario?: string | null;
+                        /** @description Contraseña SMTP. Omitida: se conserva; null: se borra; texto: se reemplaza */
+                        password?: string | null;
+                        /**
+                         * Format: email
+                         * @description Dirección del remitente (no-responder@dominio)
+                         */
+                        remitente?: string | null;
+                        /** @description Nombre visible del remitente */
+                        nombre_visible?: string | null;
+                    };
+                    telegram?: {
+                        /** @description Interruptor de Telegram a clientes */
+                        clientes_activo?: boolean;
+                        /** @description Interruptor de las alertas por Telegram al chat del equipo */
+                        alertas_activo?: boolean;
+                        /** @description Token del bot (@BotFather). Omitido: se conserva; null: se borra; texto: se reemplaza */
+                        token?: string | null;
+                        /** @description Usuario del bot, sin @ (arma los enlaces t.me) */
+                        bot_nombre?: string | null;
+                        /** @description Chat del equipo para alertas (id numérico o @canal) */
+                        chat_equipo?: string | null;
+                        /** @description Secreto del webhook (16 a 256 caracteres A-Z a-z 0-9 _ -). Omitido: se conserva o se genera si hay token; null: se borra */
+                        webhook_secreto?: string | null;
+                    };
+                    avisos?: {
+                        factura?: boolean;
+                        vencimiento?: boolean;
+                        recordatorio?: boolean;
+                        corte?: boolean;
+                        pago?: boolean;
+                        promesa?: boolean;
+                        comprobante?: boolean;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Configuración guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionNotificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionEmpresaProbar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empresaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    canal: "correo" | "telegram";
+                    /** @description Correo destino (obligatorio en correo) o chat de Telegram (por defecto, el del equipo) */
+                    destino?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoPruebaCanal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesConfiguracionProbar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    canal: "correo" | "telegram";
+                    /** @description Correo destino (obligatorio en correo) o chat de Telegram (por defecto, el del equipo) */
+                    destino?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoPruebaCanal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     notificacionesEnviosListar: {
         parameters: {
             query?: {
@@ -9739,7 +10425,7 @@ export interface operations {
                 cliente_id?: number;
                 evento?: string;
                 canal?: "correo" | "telegram" | "whatsapp";
-                estado?: "encolado" | "enviado" | "fallido";
+                estado?: "encolado" | "enviado" | "fallido" | "omitido";
             };
             header?: never;
             path?: never;
@@ -13835,7 +14521,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -13893,7 +14579,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -16100,6 +16786,60 @@ export interface operations {
             };
         };
     };
+    telegramWebhookBot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    update_id: number;
+                    message?: {
+                        message_id: number;
+                        chat: {
+                            id: number;
+                            type: string;
+                        };
+                        text?: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Actualización procesada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramWebhookRespuesta"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     tokensListar: {
         parameters: {
             query?: {
@@ -16170,7 +16910,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
