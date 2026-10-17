@@ -127,6 +127,7 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
             <UBadge
                 v-if="!cuadra(totales)"
                 label="No cuadra"
+                icon="i-lucide-octagon-alert"
                 color="error"
                 variant="solid"
                 size="sm"

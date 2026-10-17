@@ -504,6 +504,7 @@ onMounted(cargar)
                             <UBadge
                                 v-if="row.original.diferencia !== null"
                                 :label="etiquetaDiferencia(row.original.diferencia)"
+                                :icon="iconoDiferencia(row.original.diferencia)"
                                 :color="colorDiferencia(row.original.diferencia)"
                                 variant="subtle"
                                 size="sm"
@@ -511,6 +512,7 @@ onMounted(cargar)
                             <UBadge
                                 v-else
                                 label="Abierto"
+                                icon="i-lucide-lock-open"
                                 color="success"
                                 variant="outline"
                                 size="sm"

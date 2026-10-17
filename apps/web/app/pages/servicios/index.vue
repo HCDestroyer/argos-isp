@@ -426,9 +426,9 @@ onMounted(async () => {
                             />
                             <UBadge
                                 v-if="row.original.promesa_activa"
-                                label="Promesa"
-                                icon="i-lucide-calendar-clock"
-                                color="info"
+                                :label="PROMESA_ACTIVA.etiqueta"
+                                :icon="PROMESA_ACTIVA.icono"
+                                :color="PROMESA_ACTIVA.color"
                                 variant="outline"
                                 size="sm"
                             />

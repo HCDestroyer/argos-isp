@@ -2,6 +2,9 @@
 
 Nuxt 4 (SPA) + Nuxt UI v4. Puerto 3000. Pantallas: agente A4 (`.claude/agents/a4-panel.md`).
 
+Identidad visual "vidrio y luz" (skill `horus-identity`, marca ArgosIsp): tokens, materiales,
+luz, mapeo de estados (color + icono + texto), gráficas y tipografía en [`docs/identidad.md`](docs/identidad.md).
+
 ## Comandos
 
 ```

@@ -83,6 +83,10 @@ function abrirAccion(accion: PresentacionAccionServicio) {
     accionAbierta.value = true
 }
 
+/** Lecturas de la sesión: cada una vuelve a lanzar el anillo del punto "en vivo". */
+const latidoSesion = ref(0)
+const sesionLeidaEn = ref<string | null>(null)
+
 async function cargarSesion() {
     if (!puede('sesiones.ver') || !conPppoe.value) {
         sesion.value = null
@@ -93,7 +97,24 @@ async function cargarSesion() {
     cargandoSesion.value = false
     sesion.value = resultado.ok ? resultado.data : null
     problemaSesion.value = resultado.ok ? null : resultado.problema
+    if (resultado.ok) {
+        latidoSesion.value += 1
+        sesionLeidaEn.value = new Date().toISOString()
+    }
 }
+
+/** La sesión es un dato en vivo: se relee cada 30 s mientras la pestaña está a la vista. */
+const REFRESCO_SESION_MS = 30_000
+let refrescoSesion: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+    refrescoSesion = setInterval(() => {
+        if (document.visibilityState === 'visible' && !cargandoSesion.value) {
+            void cargarSesion()
+        }
+    }, REFRESCO_SESION_MS)
+})
+onBeforeUnmount(() => clearInterval(refrescoSesion))
 
 async function cargarPromesas() {
     if (!puede('promesas.ver')) {
@@ -252,9 +273,9 @@ onMounted(cargar)
                     />
                     <UBadge
                         v-if="servicio.promesa_activa"
-                        label="Promesa activa"
-                        icon="i-lucide-calendar-clock"
-                        color="info"
+                        :label="PROMESA_ACTIVA.etiqueta"
+                        :icon="PROMESA_ACTIVA.icono"
+                        :color="PROMESA_ACTIVA.color"
                         variant="outline"
                     />
                     <SuspensionManualBadge :servicio="servicio" />
@@ -456,44 +477,50 @@ onMounted(cargar)
                         <USkeleton class="h-5 w-48" />
                         <USkeleton class="h-5 w-64" />
                     </div>
-                    <p
+                    <div
                         v-else-if="!sesion"
-                        class="flex items-center gap-2 text-sm text-muted"
+                        class="flex flex-col items-start gap-2"
                     >
-                        <UIcon
-                            name="i-lucide-plug-zap"
-                            class="size-4"
-                        />
-                        Sin sesión PPPoE abierta.
-                    </p>
-                    <dl
+                        <EstadoSesionBadge estado="desconectada" />
+                        <p class="text-sm text-muted">
+                            Sin sesión PPPoE abierta.
+                        </p>
+                    </div>
+                    <div
                         v-else
-                        class="grid gap-x-6 gap-y-4 sm:grid-cols-2"
+                        class="flex flex-col gap-4"
                     >
-                        <DatoFicha
-                            etiqueta="Conectado desde"
-                            :valor="`${formatearFechaHora(sesion.inicio)} (${formatearDuracion(sesion.inicio)})`"
+                        <EstadoSesionBadge
+                            estado="en_linea"
+                            :latido="latidoSesion"
+                            :leido-en="sesionLeidaEn"
                         />
-                        <DatoFicha
-                            etiqueta="NAS"
-                            :valor="`${sesion.nas_ip} · ${sesion.acct_session_id}`"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="IPv4 de la sesión"
-                            :valor="sesion.ipv4"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Prefijos IPv6 de la sesión"
-                            :valor="[sesion.prefijo_enlace_v6, sesion.prefijo_delegado_v6].filter(Boolean).join(' · ') || null"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Tráfico"
-                            :valor="`${formatearBytes(sesion.bytes_in)} ↓ / ${formatearBytes(sesion.bytes_out)} ↑`"
-                        />
-                    </dl>
+                        <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DatoFicha
+                                etiqueta="Conectado desde"
+                                :valor="`${formatearFechaHora(sesion.inicio)} (${formatearDuracion(sesion.inicio)})`"
+                            />
+                            <DatoFicha
+                                etiqueta="NAS"
+                                :valor="`${sesion.nas_ip} · ${sesion.acct_session_id}`"
+                                mono
+                            />
+                            <DatoFicha
+                                etiqueta="IPv4 de la sesión"
+                                :valor="sesion.ipv4"
+                                mono
+                            />
+                            <DatoFicha
+                                etiqueta="Prefijos IPv6 de la sesión"
+                                :valor="[sesion.prefijo_enlace_v6, sesion.prefijo_delegado_v6].filter(Boolean).join(' · ') || null"
+                                mono
+                            />
+                            <DatoFicha
+                                etiqueta="Tráfico"
+                                :valor="`${formatearBytes(sesion.bytes_in)} ↓ / ${formatearBytes(sesion.bytes_out)} ↑`"
+                            />
+                        </dl>
+                    </div>
                 </UPageCard>
 
                 <UPageCard

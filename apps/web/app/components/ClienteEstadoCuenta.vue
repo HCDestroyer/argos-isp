@@ -225,6 +225,7 @@ onMounted(cargar)
                 <template #estado-cell="{ row }">
                     <UBadge
                         :label="ESTADOS_FACTURA[row.original.estado].etiqueta"
+                        :icon="ESTADOS_FACTURA[row.original.estado].icono"
                         :color="ESTADOS_FACTURA[row.original.estado].color"
                         variant="subtle"
                         size="sm"
