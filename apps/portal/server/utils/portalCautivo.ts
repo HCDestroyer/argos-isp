@@ -69,7 +69,7 @@ export const RUTAS_DETECCION: ReadonlySet<string> = new Set(SONDAS.map(sonda => 
 
 /** Recursos de la propia página de corte que se sirven aunque el Host sea ajeno. */
 const PREFIJOS_RECURSOS = ['/_nuxt/', '/api/v1/portal/', '/api/_nuxt_icon/', '/_payload', '/__nuxt']
-const RECURSOS_EXACTOS = new Set(['/favicon.ico', '/robots.txt'])
+const RECURSOS_EXACTOS = new Set(['/favicon.ico', '/favicon.svg', '/robots.txt'])
 
 export const RUTA_CORTE = '/corte'
 

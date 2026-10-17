@@ -106,6 +106,13 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         expect(respuesta.status).toBe(200)
         expect(respuesta.headers['content-type']).toContain('text/html')
     })
+
+    it('el favicon (marca de ArgosIsp) se sirve en el Host ajeno', async () => {
+        const respuesta = await pedir('/favicon.svg', { host: 'captive.apple.com' })
+        expect(respuesta.status).toBe(200)
+        expect(respuesta.headers['content-type']).toContain('image/svg+xml')
+        expect(respuesta.cuerpo).toContain('#0f766e')
+    })
 })
 
 describe('seguridad (semana 3, tarea 3)', () => {

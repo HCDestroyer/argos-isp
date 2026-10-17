@@ -12,7 +12,14 @@ export default defineNuxtConfig({
             title: 'Portal del cliente',
             meta: [
                 { name: 'description', content: 'Portal del cliente: estado del servicio y pagos' },
-                { name: 'theme-color', content: '#0284c7' },
+                // Fondo de cada tema (identidad "vidrio y luz"): la barra del navegador se funde con la página.
+                { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
+                { name: 'theme-color', content: '#0b1014', media: '(prefers-color-scheme: dark)' },
+            ],
+            // Marca de ArgosIsp (`public/favicon.svg`, misma figura que `LogoArgos`). Se sirve también
+            // con Host ajeno (portal cautivo, `RECURSOS_EXACTOS`).
+            link: [
+                { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
             ],
         },
     },

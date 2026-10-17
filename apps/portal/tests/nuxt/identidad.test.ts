@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -21,6 +23,14 @@ describe('logo de ArgosIsp', () => {
         const wrapper = await mountSuspended(LogoArgos, { props: { variante: 'linea' } })
         expect(wrapper.find('rect').exists()).toBe(false)
         expect(wrapper.find('g').attributes('stroke')).toBe('currentColor')
+    })
+
+    it('el favicon es la misma figura que la marca', () => {
+        const favicon = readFileSync(resolve(process.cwd(), 'public/favicon.svg'), 'utf8')
+        expect(favicon).toContain('rx="14" fill="#0f766e"')
+        for (const d of ['M5 42C14.5 27 49.5 27 59 42C49.5 57 14.5 57 5 42Z', 'M22.75 25.98A18.5 18.5 0 0 1 41.25 25.98', 'M15.31 15.29A31.5 31.5 0 0 1 48.69 15.29']) {
+            expect(favicon).toContain(d)
+        }
     })
 })
 
