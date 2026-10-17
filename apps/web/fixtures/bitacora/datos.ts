@@ -1,5 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import { clientes } from '../clientes/datos'
+import { empresas } from '../empresas/datos'
 import { servicios } from '../servicios/datos'
 
 type Accion = Schema<'AccionAuditoria'>
@@ -10,6 +11,11 @@ function mas(fecha: string, horas: number): string {
 
 let siguiente = 1
 
+function empresaDe(tipo: string | null, id: number | null): Pick<Accion, 'empresa_id' | 'empresa_nombre'> {
+    const empresaId = tipo === 'servicio' ? (servicios.find(s => s.id === id)?.empresa_id ?? 1) : null
+    return { empresa_id: empresaId, empresa_nombre: empresas.find(e => e.id === empresaId)?.nombre_comercial ?? null }
+}
+
 function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre' | 'empresa_id' | 'empresa_nombre'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre'>>): Accion {
     const id = siguiente++
     return {
@@ -17,9 +23,8 @@ function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' 
         resultado: 'ok',
         error: null,
         request_id: `req-fixture-${id}`,
-        // Como la API con una sola empresa: la empresa activa es la 1.
-        empresa_id: 1,
-        empresa_nombre: 'ArgosIsp',
+        // Como la API (A1): la empresa del servicio; los clientes son del grupo (`null`).
+        ...empresaDe(datos.entidad_tipo, datos.entidad_id),
         // Como la API: nombre del usuario; `null` para el sistema.
         actor_nombre: datos.actor_id === 1 ? 'Ana Administradora' : null,
         ...datos,

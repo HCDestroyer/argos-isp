@@ -20,7 +20,7 @@ describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', ()
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('el panel ya no exporta fórmulas de velocidad: solo presentación', () => {

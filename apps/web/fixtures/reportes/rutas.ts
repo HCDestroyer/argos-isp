@@ -1,7 +1,8 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import { conPermiso, datosInvalidos } from '../comun'
+import { bd } from '../bd'
+import { conPermiso, datosInvalidos, empresasDeLista } from '../comun'
 import { resumenDashboard } from './datos'
 import { altasBajas, carteraVencida, cierresCaja, cobranzaDiaria, egresos, facturadoCobrado, ingresos, iva, promesas } from './reportes'
 
@@ -63,9 +64,24 @@ function leerOrigen(query: URLSearchParams): Origen | null {
 
 const dec = (valor: Decimal.Value) => new Decimal(valor)
 
+/**
+ * Multiempresa (A3, `COLUMNAS_EMPRESA`): en la vista consolidada (`?empresas=todas` o varias
+ * empresas) cada reporte agrega `empresa_id` y `empresa` al principio. Las filas de estos
+ * fixtures son de ArgosNet (1); con otra empresa elegida el reporte sale vacío.
+ */
+const EMPRESA_FILAS = 1
+const COLUMNAS_EMPRESA: Columna[] = [
+    { clave: 'empresa_id', titulo: 'Empresa', tipo: 'id' },
+    { clave: 'empresa', titulo: 'Nombre de la empresa', tipo: 'texto' },
+]
+
 function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
     return conPermiso('reportes.ver', (solicitud: SolicitudFixture): RespuestaFixture => {
         const { query } = solicitud
+        const empresas = empresasDeLista(solicitud)
+        const consolidado = empresas === null || empresas.length > 1
+        const deLaEmpresa = empresas === null || empresas.includes(EMPRESA_FILAS)
+        const nombreEmpresa = bd.empresas.find(e => e.id === EMPRESA_FILAS)?.nombre_comercial ?? null
         const desde = query.get('desde')
         const hasta = query.get('hasta')
         const errores = [['desde', desde], ['hasta', hasta], ['corte', query.get('corte')]]
@@ -83,7 +99,7 @@ function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
         const base = origen && porOrigen
             ? definicion.filas.map(fila => porOrigen(fila, origen)).filter((fila): fila is F => fila !== null)
             : definicion.filas
-        const filas = base.filter((fila) => {
+        const propias = (deLaEmpresa ? base : []).filter((fila) => {
             const fecha = definicion.fecha?.(fila)
             if (fecha && desde && fecha < desde.slice(0, fecha.length)) {
                 return false
@@ -93,10 +109,14 @@ function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
             }
             return definicion.filtrar ? definicion.filtrar(fila, query) : true
         })
-        const suma = { ...totales(definicion.columnas, filas), ...definicion.extra?.(filas) }
+        const columnas = consolidado ? [...COLUMNAS_EMPRESA, ...definicion.columnas] : definicion.columnas
+        const filas: Record<string, Valor>[] = consolidado
+            ? propias.map(fila => ({ empresa_id: EMPRESA_FILAS, empresa: nombreEmpresa, ...fila }))
+            : propias
+        const suma = { ...totales(columnas, filas), ...definicion.extra?.(propias) }
         const formato = query.get('formato')
         if (formato === 'csv') {
-            return { status: 200, cuerpo: csv(definicion.columnas, filas, suma), contentType: 'text/csv; charset=utf-8' }
+            return { status: 200, cuerpo: csv(columnas, filas, suma), contentType: 'text/csv; charset=utf-8' }
         }
         if (formato === 'xlsx') {
             // Un .xlsx es un ZIP: basta la firma para probar la descarga.
@@ -108,7 +128,7 @@ function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
         }
         return {
             status: 200,
-            cuerpo: { reporte: definicion.reporte, titulo: definicion.titulo, filtros, columnas: definicion.columnas, filas, totales: suma, generado_en: `${HOY}T17:45:00.000Z` },
+            cuerpo: { reporte: definicion.reporte, titulo: definicion.titulo, filtros, columnas, filas, totales: suma, generado_en: `${HOY}T17:45:00.000Z` },
         }
     })
 }

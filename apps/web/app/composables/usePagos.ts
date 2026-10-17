@@ -25,6 +25,11 @@ export function usePagos() {
         }))
     }
 
+    /** Recibo de un cobro repartido por empresa (`GET /cobros/:id`, A3). */
+    function cobro(id: number): Promise<Resultado<Schema<'Cobro'>>> {
+        return resolver(api.GET('/api/v1/cobros/{id}', { params: { path: { id } } }))
+    }
+
     function ver(id: number): Promise<Resultado<Pago>> {
         return resolver(api.GET('/api/v1/pagos/{id}', { params: { path: { id } } }))
     }
@@ -60,5 +65,5 @@ export function usePagos() {
         return { ok: true, data: resultado.data.data.filter(p => p.aplicaciones.some(a => a.factura_id === facturaId)) }
     }
 
-    return { registrar, ver, listar, anular, deFactura }
+    return { registrar, ver, listar, anular, deFactura, cobro }
 }

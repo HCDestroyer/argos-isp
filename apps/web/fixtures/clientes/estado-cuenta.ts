@@ -21,21 +21,50 @@ const METODOS: Record<Schema<'Pago'>['metodo'], string> = {
  * abonos de pagos registrados), nunca una columna. Se calcula sobre `bd`, así que un pago hecho
  * en `/cobro` se ve aquí enseguida.
  */
-export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
-    const facturas = bd.facturas.filter(f => f.cliente_id === clienteId && f.estado !== 'anulada')
+export function estadoCuentaDe(clienteId: number, empresaId?: number): Schema<'EstadoCuenta'> {
+    const total = cuentaDe(clienteId, empresaId ?? null)
+    // Multiempresa (A3): una sección por empresa en la que el cliente tiene documentos; la raíz
+    // es el total (informativo). Con `empresa_id`, solo esa.
+    const ids = [...new Set([
+        ...bd.facturas.filter(f => f.cliente_id === clienteId).map(f => f.empresa_id ?? 1),
+        ...bd.pagos.filter(p => p.cliente_id === clienteId).map(p => p.empresa_id ?? 1),
+    ])].filter(id => empresaId === undefined || id === empresaId).sort((a, b) => a - b)
+    const empresas: Schema<'SeccionEstadoCuenta'>[] = ids.map((id) => {
+        const empresa = bd.empresas.find(e => e.id === id)
+        const seccion = cuentaDe(clienteId, id)
+        return {
+            empresa_id: id,
+            nombre_comercial: empresa?.nombre_comercial ?? `Empresa ${id}`,
+            razon_social: empresa?.razon_social ?? null,
+            nit: empresa?.nit ?? null,
+            logo_url: empresa?.logo_url ?? null,
+            saldo: seccion.saldo,
+            saldo_a_favor: seccion.saldo_a_favor ?? '0.00',
+            facturas_pendientes: seccion.facturas_pendientes,
+            movimientos: seccion.movimientos,
+        }
+    })
+    return { ...total, empresas }
+}
+
+/** El auxiliar del cliente en una empresa (o en todas con `null`). */
+function cuentaDe(clienteId: number, empresaId: number | null): Omit<Schema<'EstadoCuenta'>, 'empresas'> {
+    const deEmpresa = (id: number | undefined) => empresaId === null || (id ?? 1) === empresaId
+    const facturas = bd.facturas.filter(f => f.cliente_id === clienteId && f.estado !== 'anulada' && deEmpresa(f.empresa_id))
     const eventos: Omit<Movimiento, 'saldo'>[] = []
     for (const factura of facturas) {
         eventos.push({
             fecha: factura.periodo,
             tipo: 'factura',
             referencia_id: factura.id,
+            empresa_id: factura.empresa_id,
             descripcion: `Aviso de cobro ${factura.periodo.slice(0, 7)} · servicio ${factura.servicio_id}`,
             cargo: factura.total,
             abono: '0.00',
         })
     }
     const propias = new Set(facturas.map(f => f.id))
-    for (const pago of bd.pagos.filter(p => p.estado === 'registrado')) {
+    for (const pago of bd.pagos.filter(p => p.estado === 'registrado' && deEmpresa(p.empresa_id))) {
         // Pago de terceros (A3): el abono va al auxiliar del dueño de cada factura; al pagador le
         // queda lo que aplicó a las suyas más el anticipo.
         const aplicadas = pago.aplicaciones.filter(a => propias.has(a.factura_id))
@@ -56,6 +85,7 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
                 fecha: pago.created_at.slice(0, 10),
                 tipo: 'pago',
                 referencia_id: pago.id,
+                empresa_id: pago.empresa_id,
                 descripcion: `Pago histórico ${pago.id} (${clavesHistoricas[pago.id] ?? `importado:pago:${pago.id}`}) · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''}${avisos ? ` · facturas ${avisos}` : ' · anticipo'}`,
                 cargo: '0.00',
                 abono: dinero(abono),
@@ -66,13 +96,14 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
             fecha: pago.created_at.slice(0, 10),
             tipo: 'pago',
             referencia_id: pago.id,
+            empresa_id: pago.empresa_id,
             descripcion: `${METODOS[pago.metodo]}${avisos ? ` · aviso ${avisos}` : ''}${pagador ? ` · pagado por ${pagador.nombre}` : ''}`,
             cargo: '0.00',
             abono: dinero(abono),
         })
     }
     // Notas de crédito (A3): abonan la CxC del dueño de la factura.
-    for (const nota of bd.notasCredito.filter(n => n.cliente_id === clienteId)) {
+    for (const nota of bd.notasCredito.filter(n => n.cliente_id === clienteId && deEmpresa(n.empresa_id))) {
         eventos.push({
             fecha: nota.fecha,
             tipo: 'nota_credito',
@@ -92,7 +123,7 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
 
     // Como `saldoAnticipos` de la API: lo que sobró de los pagos del cliente sin aplicar a facturas.
     const aFavor = bd.pagos
-        .filter(p => p.cliente_id === clienteId && p.estado === 'registrado')
+        .filter(p => p.cliente_id === clienteId && p.estado === 'registrado' && deEmpresa(p.empresa_id))
         .reduce((total, p) => total.plus(p.monto).minus(p.aplicaciones.reduce((suma, a) => suma.plus(a.monto), new Decimal(0))), new Decimal(0))
 
     return {

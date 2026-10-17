@@ -45,6 +45,8 @@ function comprobante(semilla: Semilla): Comprobante {
     const actualizado = semilla.rechazo?.en ?? semilla.subido
     return {
         id: semilla.id,
+        // Multiempresa (A3): la empresa de la cuenta bancaria de destino.
+        empresa_id: cuenta?.empresa_id ?? 1,
         cliente_id: semilla.clienteId,
         cliente_nombre: cliente?.nombre ?? '',
         servicio_id: semilla.canal === 'portal' ? deuda.servicioId : null,

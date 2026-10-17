@@ -1,8 +1,10 @@
-import type { Schema } from '@argosisp/contracts'
+import type { Schema, paths } from '@argosisp/contracts'
 
 export type UsuarioPanel = Schema<'Usuario'>
 
-/** Usuarios del panel (`usuarios.ver`). Hoy solo la lista, para filtros por actor. */
+export type AsignacionEmpresas = paths['/api/v1/usuarios/{id}/empresas']['put']['requestBody']['content']['application/json']
+
+/** Usuarios del panel (`usuarios.ver`): la lista (también para filtros por actor) y sus empresas. */
 export function useUsuarios() {
     const api = useApi()
 
@@ -14,5 +16,13 @@ export function useUsuarios() {
         return resolver(api.GET('/api/v1/usuarios', { params: { query } }))
     }
 
-    return { listar }
+    /**
+     * `PUT /usuarios/:id/empresas` (`usuarios.asignar_empresas`): empresas que opera o alcance
+     * global, con la `version` leída. 422 sin ninguna empresa; 403 fuera del alcance de quien asigna.
+     */
+    function asignarEmpresas(id: number, datos: AsignacionEmpresas): Promise<Resultado<UsuarioPanel>> {
+        return resolver(api.PUT('/api/v1/usuarios/{id}/empresas', { params: { path: { id } }, body: datos }))
+    }
+
+    return { listar, asignarEmpresas }
 }

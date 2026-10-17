@@ -3,15 +3,24 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { TableColumn } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
-/** Pestaña "Estado de cuenta": saldo del auxiliar CxC, avisos pendientes y movimientos. */
-const props = defineProps<{
+/**
+ * Pestaña "Estado de cuenta": saldo del auxiliar CxC, avisos pendientes y movimientos. Con varias
+ * empresas (multiempresa) los avisos pendientes van por empresa (la de su servicio) con lo que falta
+ * pagar en cada una; el saldo total queda solo como información (cada NIT cobra lo suyo).
+ */
+const props = withDefaults(defineProps<{
     clienteId: number
-}>()
+    /** Servicios del cliente, para saber la empresa de cada aviso. */
+    servicios?: Servicio[]
+}>(), {
+    servicios: () => [],
+})
 
 type Factura = Schema<'Factura'>
 type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
 const { puede } = usePermisos()
+const { conSelector: porEmpresa } = useEmpresaActiva()
 
 /** Enlace al documento del movimiento (factura, mora, pago o nota de crédito), si el usuario puede verlo. */
 function enlaceMovimiento(movimiento: Movimiento): string | null {
@@ -60,6 +69,34 @@ const columnasMovimientos: TableColumn<Movimiento>[] = [
     { accessorKey: 'saldo', header: 'Saldo' },
 ]
 
+interface GrupoCuenta {
+    empresaId: number | null
+    filas: Factura[]
+    /** Lo que muestra el encabezado: el saldo de la sección (API) o, sin secciones, lo pendiente. */
+    detalle: string
+}
+
+/**
+ * Avisos pendientes por empresa. Con `EstadoCuenta.empresas[]` (A3) cada sección trae su saldo del
+ * auxiliar; sin ella (API anterior) se agrupan por la empresa del servicio y se muestra lo pendiente.
+ */
+const gruposFacturas = computed<GrupoCuenta[]>(() => {
+    const facturas = estado.value?.facturas_pendientes ?? []
+    if (!porEmpresa.value) {
+        return [{ empresaId: null, filas: facturas, detalle: '' }]
+    }
+    const secciones = estado.value?.empresas
+    if (secciones?.length) {
+        return secciones.map(seccion => ({
+            empresaId: seccion.empresa_id,
+            filas: seccion.facturas_pendientes,
+            detalle: `Saldo ${formatearQuetzales(seccion.saldo)}${new Decimal(seccion.saldo_a_favor).gt(0) ? ` · a favor ${formatearQuetzales(seccion.saldo_a_favor)}` : ''}`,
+        }))
+    }
+    return agruparPorEmpresa(facturas, factura => factura.empresa_id ?? empresaDeFactura(factura, props.servicios))
+        .map(grupo => ({ ...grupo, detalle: `Pendiente ${formatearQuetzales(pendienteDeFacturas(grupo.filas))}` }))
+})
+
 function pendiente(factura: Factura): Decimal {
     return new Decimal(factura.total).minus(factura.pagado)
 }
@@ -107,7 +144,7 @@ onMounted(cargar)
                 :ui="{ container: 'gap-1 sm:p-4' }"
             >
                 <p class="text-xs font-medium text-muted">
-                    Saldo
+                    {{ porEmpresa && (estado?.empresas?.length ?? 0) > 1 ? 'Saldo total (informativo)' : 'Saldo' }}
                 </p>
                 <template v-if="cargando || !saldo">
                     <USkeleton class="h-8 w-32" />
@@ -188,57 +225,76 @@ onMounted(cargar)
             />
         </div>
 
-        <section class="flex flex-col gap-2">
+        <section class="flex flex-col gap-3">
             <h3 class="text-sm font-semibold text-highlighted">
                 Avisos de cobro pendientes
             </h3>
-            <UTable
-                :data="estado?.facturas_pendientes ?? []"
-                :columns="columnasFacturas"
-                :loading="cargando"
+            <p
+                v-if="porEmpresa && gruposFacturas.length > 1"
+                class="text-xs text-muted"
             >
-                <template #periodo-cell="{ row }">
-                    <div class="flex flex-col">
-                        <ULink
-                            v-if="puede('facturas.ver')"
-                            :to="`/facturas/${row.original.id}`"
-                            class="text-sm text-highlighted hover:text-primary"
-                        >
-                            {{ formatearFecha(row.original.periodo) }}
-                        </ULink>
-                        <span
-                            v-else
-                            class="text-sm"
-                        >{{ formatearFecha(row.original.periodo) }}</span>
-                        <span class="text-xs text-muted">Aviso #{{ row.original.id }}<template v-if="row.original.servicio_id"> · servicio {{ row.original.servicio_id }}</template></span>
-                    </div>
-                </template>
-                <template #vence_en-cell="{ row }">
-                    {{ formatearFecha(row.original.vence_en) }}
-                </template>
-                <template #total-cell="{ row }">
-                    <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
-                </template>
-                <template #pendiente-cell="{ row }">
-                    <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(pendiente(row.original)) }}</span>
-                </template>
-                <template #estado-cell="{ row }">
-                    <UBadge
-                        :label="ESTADOS_FACTURA[row.original.estado].etiqueta"
-                        :icon="ESTADOS_FACTURA[row.original.estado].icono"
-                        :color="ESTADOS_FACTURA[row.original.estado].color"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </template>
-                <template #empty>
-                    <UEmpty
-                        icon="i-lucide-badge-check"
-                        title="Sin avisos pendientes"
-                        variant="naked"
-                    />
-                </template>
-            </UTable>
+                Cada empresa cobra sus avisos con su NIT; el saldo total es solo informativo.
+            </p>
+            <div
+                v-for="grupo in gruposFacturas"
+                :key="grupo.empresaId ?? 'todas'"
+                class="flex flex-col gap-2"
+                :data-prueba="porEmpresa ? `pendientes-empresa-${grupo.empresaId}` : undefined"
+            >
+                <EncabezadoEmpresa
+                    v-if="porEmpresa"
+                    :empresa-id="grupo.empresaId"
+                    nivel="h4"
+                    :detalle="grupo.detalle"
+                />
+                <UTable
+                    :data="grupo.filas"
+                    :columns="columnasFacturas"
+                    :loading="cargando"
+                >
+                    <template #periodo-cell="{ row }">
+                        <div class="flex flex-col">
+                            <ULink
+                                v-if="puede('facturas.ver')"
+                                :to="`/facturas/${row.original.id}`"
+                                class="text-sm text-highlighted hover:text-primary"
+                            >
+                                {{ formatearFecha(row.original.periodo) }}
+                            </ULink>
+                            <span
+                                v-else
+                                class="text-sm"
+                            >{{ formatearFecha(row.original.periodo) }}</span>
+                            <span class="text-xs text-muted">Aviso #{{ row.original.id }}<template v-if="row.original.servicio_id"> · servicio {{ row.original.servicio_id }}</template></span>
+                        </div>
+                    </template>
+                    <template #vence_en-cell="{ row }">
+                        {{ formatearFecha(row.original.vence_en) }}
+                    </template>
+                    <template #total-cell="{ row }">
+                        <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                    </template>
+                    <template #pendiente-cell="{ row }">
+                        <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(pendiente(row.original)) }}</span>
+                    </template>
+                    <template #estado-cell="{ row }">
+                        <UBadge
+                            :label="ESTADOS_FACTURA[row.original.estado].etiqueta"
+                            :icon="ESTADOS_FACTURA[row.original.estado].icono"
+                            :color="ESTADOS_FACTURA[row.original.estado].color"
+                            variant="subtle"
+                            size="sm"
+                        />
+                    </template>
+                    <template #empty>
+                        <UEmpty
+                            icon="i-lucide-badge-check"
+                            title="Sin avisos pendientes"
+                            variant="naked"
+                        />
+                    </template>
+                </UTable>
+            </div>
         </section>
 
         <section class="flex flex-col gap-2">

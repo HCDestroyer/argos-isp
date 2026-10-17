@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken } from '../comun'
 import { evaluarPromesa } from './simulador'
 
 type Promesa = Schema<'Promesa'>
@@ -105,7 +105,7 @@ export const rutasPromesas: RutasFixture = {
         if (estado && !(ESTADOS as readonly string[]).includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
         }
-        const filas = bd.promesas
+        const filas = deLaEmpresa(bd.promesas, solicitud)
             .filter(p => servicio === undefined || p.servicio_id === servicio)
             .filter(p => cliente === undefined || p.cliente_id === cliente)
             .filter(p => !estado || p.estado === estado)
@@ -160,6 +160,7 @@ export const rutasPromesas: RutasFixture = {
         const momento = ahora()
         const nueva: Promesa = {
             id: siguienteId(bd.promesas),
+            empresa_id: servicio.empresa_id,
             servicio_id: servicio.id,
             cliente_id: servicio.cliente_id,
             vence_en: vence.toISOString(),

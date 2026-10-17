@@ -122,7 +122,7 @@ describe('tarea 12 · caja', () => {
 
 function base() {
     return {
-        id: 1, cliente_id: 1, metodo: 'caja' as const, monto: '0.00', comision: '0.00', referencia: null, caja_id: 1,
+        id: 1, empresa_id: 1, cobro_id: null, cliente_id: 1, metodo: 'caja' as const, monto: '0.00', comision: '0.00', referencia: null, caja_id: 1,
         pasarela: null, estado: 'registrado' as const, nota: null, registrado_por: 2, aplicaciones: [],
         anulado_en: null, motivo_anulacion: null, version: 1, created_at: '2026-10-15T14:00:00.000Z', updated_at: '2026-10-15T14:00:00.000Z',
     }

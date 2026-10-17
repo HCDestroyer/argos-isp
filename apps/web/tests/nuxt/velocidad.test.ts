@@ -22,7 +22,7 @@ describe('semana 2 · formularios de velocidad', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     // La simulación de los fixtures con los mismos casos que `apps/api/tests/network/velocidad.spec.ts`

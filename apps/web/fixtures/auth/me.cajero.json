@@ -25,5 +25,15 @@
     "comprobantes.ver",
     "comprobantes.aprobar",
     "comprobantes.rechazar"
-  ]
+  ],
+  "alcance_global": false,
+  "empresas": [
+    {
+      "id": 1,
+      "nombre_comercial": "ArgosNet",
+      "nit": "1234567-8",
+      "logo_url": null
+    }
+  ],
+  "empresa_activa_id": 1
 }

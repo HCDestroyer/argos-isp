@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { conPermiso, numeroQuery, paginar } from '../comun'
+import { conPermiso, empresasDeLista, numeroQuery, paginar } from '../comun'
 
 /** Como `listarAcciones` de la API: el cliente y sus servicios, facturas, pagos y promesas. */
 function delCliente(accion: Schema<'AccionAuditoria'>, clienteId: number): boolean {
@@ -34,7 +34,10 @@ export const rutasBitacora: RutasFixture = {
         const requestId = solicitud.query.get('request_id')
         const desde = solicitud.query.get('desde')
         const hasta = solicitud.query.get('hasta')
+        // Como `bitacora.ts` de A1: con empresas, las de esas empresas y las que no son de ninguna.
+        const empresas = empresasDeLista(solicitud)
         const filas = bd.acciones
+            .filter(a => empresas === null || a.empresa_id === null || empresas.includes(a.empresa_id))
             .filter(a => !canal || a.canal === canal)
             .filter(a => !excluirCanal || a.canal !== excluirCanal)
             .filter(a => cliente === undefined || delCliente(a, cliente))

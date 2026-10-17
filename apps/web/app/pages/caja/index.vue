@@ -58,6 +58,13 @@ const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egre
 const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
 
 const aperturaAbierta = ref(false)
+const altaAbierta = ref(false)
+
+/** Con varias empresas, cada tarjeta dice de cuál es la caja. */
+const { conSelector: variasEmpresas, empresas: empresasUsuario } = useEmpresaActiva()
+function nombreEmpresa(id: number | undefined): string {
+    return empresasUsuario.value.find(e => e.id === id)?.nombre_comercial ?? (id ? `Empresa ${id}` : '')
+}
 const cierreAbierto = ref(false)
 /** Resultado oficial del último cierre (lo que devolvió la API). */
 const ultimoCierre = shallowRef<TurnoCaja | null>(null)
@@ -180,6 +187,12 @@ async function cargar() {
     await cargarTurno()
 }
 
+async function alCrear(nueva: Caja) {
+    toast.add({ title: 'Caja creada', description: `${nueva.nombre} · ${nombreEmpresa(nueva.empresa_id)}`, icon: 'i-lucide-wallet', color: 'success' })
+    await cargar()
+    cajaId.value = nueva.id
+}
+
 function alAbrir(turno: TurnoCaja) {
     ultimoCierre.value = null
     toast.add({ title: 'Turno abierto', description: `Fondo inicial ${formatearQuetzales(turno.fondo_inicial)}`, icon: 'i-lucide-lock-open', color: 'success' })
@@ -215,6 +228,17 @@ onMounted(cargar)
     >
         <template #acciones>
             <UButton
+                v-if="puede('cajas.crear')"
+                icon="i-lucide-plus"
+                label="Nueva caja"
+                color="neutral"
+                variant="outline"
+                :ui="{ label: 'hidden sm:inline' }"
+                aria-label="Nueva caja"
+                data-prueba="nueva-caja"
+                @click="altaAbierta = true"
+            />
+            <UButton
                 v-if="puede('pagos.registrar')"
                 to="/cobro"
                 icon="i-lucide-hand-coins"
@@ -243,7 +267,8 @@ onMounted(cargar)
             v-else-if="!cajas.length"
             icon="i-lucide-wallet"
             title="No hay cajas"
-            description="Pide a un administrador que cree una caja."
+            :description="puede('cajas.crear') ? 'Crea la primera caja de esta empresa.' : 'Pide a un administrador que cree una caja.'"
+            :actions="puede('cajas.crear') ? [{ label: 'Nueva caja', icon: 'i-lucide-plus', onClick: () => { altaAbierta = true } }] : []"
         />
 
         <div
@@ -268,7 +293,12 @@ onMounted(cargar)
                 >
                     <span class="flex flex-col items-start text-left">
                         <span class="font-medium">{{ c.nombre }}</span>
-                        <span class="text-xs text-muted">{{ c.cajero_id === usuario?.id ? 'Tu caja' : c.cajero_id ? `Cajero #${c.cajero_id}` : 'Sin cajero asignado' }}</span>
+                        <span class="text-xs text-muted">{{ c.cajero_id === usuario?.id ? 'Tu caja' : c.cajero_id ? (c.cajero_nombre ?? `Cajero #${c.cajero_id}`) : 'Sin cajero asignado' }}</span>
+                        <span
+                            v-if="variasEmpresas"
+                            class="text-xs text-muted"
+                            :data-empresa-caja="c.empresa_id"
+                        >{{ nombreEmpresa(c.empresa_id) }}</span>
                     </span>
                     <UBadge
                         :label="c.turno_abierto_id ? 'Turno abierto' : 'Cerrada'"
@@ -560,5 +590,10 @@ onMounted(cargar)
                 />
             </template>
         </div>
+        <CajaCrearModal
+            v-if="puede('cajas.crear')"
+            v-model:open="altaAbierta"
+            @hecho="alCrear"
+        />
     </PanelPagina>
 </template>
