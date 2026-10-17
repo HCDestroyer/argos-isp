@@ -2,7 +2,12 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { pendienteDe } from '#billing/facturas'
-import { pasarela, proveedorConfigurado, PasarelaNoConfigurada } from '#billing/pasarelas/pasarela'
+import {
+    pasarela,
+    proveedorConfigurado,
+    PasarelaNoConfigurada,
+    resolverUrlRetorno,
+} from '#billing/pasarelas/pasarela'
 import { verCobroPasarela, type CobroPasarelaVista } from '#billing/pasarelas/cobros'
 
 /**
@@ -16,6 +21,8 @@ import { verCobroPasarela, type CobroPasarelaVista } from '#billing/pasarelas/co
  *   el pago de terceros) o, sin ellas, todo lo pendiente del cliente. 422 `sin_deuda` si no debe
  *   nada y no se pidió monto.
  * - `facturas` se guardan y el pago se aplicará primero a ellas.
+ * - `url_retorno` (opcional): adonde el proveedor devuelve al cliente al terminar. Solo orígenes de
+ *   `PASARELA_RETORNO_ORIGENES` (422 `url_retorno`); `{cobro_id}` se reemplaza por el id del cobro.
  */
 
 export interface EntradaCrearCobroPasarela {
@@ -23,6 +30,8 @@ export interface EntradaCrearCobroPasarela {
     monto?: string | null
     facturas?: number[]
     servicio_id?: number | null
+    /** p. ej. `https://portal.isp.gt/corte?pago={cobro_id}` */
+    url_retorno?: string | null
 }
 
 export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPasarela, CobroPasarelaVista> {
@@ -91,6 +100,8 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
             ])
         }
         if (monto.lte(0)) throw new ReglaNegocio('El cliente no tiene saldo pendiente', 'sin_deuda')
+        // se valida antes de crear nada (con un id de muestra) y se resuelve con el id real
+        if (input.url_retorno) resolverUrlRetorno(input.url_retorno, 1)
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -107,14 +118,17 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
             .returning('id')) as Array<{ id: number }>
         const cobroId = fila!.id
         t.fijarEntidad('cobro_pasarela', cobroId)
+        const urlRetorno = input.url_retorno ? resolverUrlRetorno(input.url_retorno, cobroId) : null
 
         const creado = await adaptador.crearCobro({
             referencia: String(cobroId),
             monto: aTexto(monto),
             descripcion: `Pago en línea de ${cliente.nombre}`,
             cliente,
+            url_retorno: urlRetorno,
         })
         await t.trx.from('billing.pasarela_cobros').where('id', cobroId).update({
+            url_retorno: urlRetorno,
             id_proveedor: creado.id_proveedor,
             url_pago: creado.url_pago,
             expira_en: creado.expira_en,

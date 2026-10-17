@@ -46,6 +46,7 @@ interface FilaFalsa {
     monto_pagado: string | null
     comision: string
     pagado_en: Date | null
+    url_retorno: string | null
 }
 
 export class PasarelaFalsa implements Pasarela {
@@ -57,6 +58,7 @@ export class PasarelaFalsa implements Pasarela {
             id_proveedor: idProveedor,
             referencia: entrada.referencia,
             monto: aTexto(entrada.monto),
+            url_retorno: entrada.url_retorno ?? null,
         })
         const base = (env.get('PASARELA_URL_PUBLICA') ?? '').replace(/\/$/, '')
         return {
@@ -119,6 +121,23 @@ export class PasarelaFalsa implements Pasarela {
             comision: aTexto(fila.comision),
             pagado_en: fila.pagado_en,
         }
+    }
+
+    /**
+     * Adonde vuelve el cliente después de pagar o rechazar (como el `return_url` de un proveedor
+     * real): la `url_retorno` del cobro con `estado=<estado del cobro en el proveedor>` agregado.
+     * null si el cobro no la trae.
+     */
+    async urlDeRetorno(idProveedor: string): Promise<string | null> {
+        const fila = (await db
+            .from('billing.pasarela_falsa')
+            .where('id_proveedor', idProveedor)
+            .select('estado', 'url_retorno')
+            .first()) as Pick<FilaFalsa, 'estado' | 'url_retorno'> | null
+        if (!fila?.url_retorno) return null
+        const url = new URL(fila.url_retorno)
+        url.searchParams.set('estado', fila.estado)
+        return url.toString()
     }
 
     /**

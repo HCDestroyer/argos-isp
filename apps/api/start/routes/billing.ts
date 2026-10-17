@@ -41,6 +41,7 @@ import {
     archivoDeComprobante,
     dimensionesDeComprobante,
     listarComprobantes,
+    resumenComprobantes,
     verComprobante,
 } from '#billing/comprobantes'
 import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
@@ -87,6 +88,7 @@ import {
     ResultadoWebhookPasarela,
     ArchivoComprobante,
     Comprobante,
+    PaginaComprobantes,
     EstadoCuenta,
     Banco,
     CuentaBancaria,
@@ -303,6 +305,8 @@ const pagos: Ruta[] = [
         permiso: 'pagos.anular',
         cuerpo: v.anularPagoValidator,
         idempotente: true,
+        descripcion:
+            'Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.',
         respuesta: { status: 200, descripcion: 'Pago anulado', esquema: Pago },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
@@ -441,8 +445,13 @@ const comprobantes: Ruta[] = [
         etiqueta: 'pagos',
         permiso: 'comprobantes.ver',
         query: v.listarComprobantesValidator,
-        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(Comprobante) },
-        handler: (ctx, { query }) => listarComprobantes(query, ctx.alcance),
+        descripcion:
+            'Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.',
+        respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: PaginaComprobantes },
+        handler: async (ctx, { query }) => ({
+            ...(await listarComprobantes(query, ctx.alcance)),
+            resumen: await resumenComprobantes(query, ctx.alcance),
+        }),
     }),
     definirRuta({
         metodo: 'get',
@@ -730,6 +739,30 @@ async function pasarelaFalsa() {
     return new PasarelaFalsa()
 }
 
+/** Lado del proveedor + webhook firmado por el mismo camino que uno real. */
+async function simularEnFalsa(
+    ctx: HttpContext,
+    idProveedor: string,
+    cuerpo: { estado?: 'pagado' | 'fallido'; monto?: string; notificar?: boolean },
+) {
+    const falsa = await pasarelaFalsa()
+    const webhook = await falsa.simularPago(idProveedor, { estado: cuerpo.estado, monto: cuerpo.monto })
+    if (cuerpo.notificar === false) {
+        return {
+            recibido: true,
+            duplicado: false,
+            id_evento: '',
+            cobro_id: null,
+            pago_id: null,
+            estado: 'sin_notificar',
+        }
+    }
+    return new ProcesarWebhookPasarela().execute(
+        { proveedor: 'falsa', cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
+        ctx.contextoAccion('webhook'),
+    )
+}
+
 function escaparHtml(texto: string): string {
     return texto.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
@@ -848,9 +881,9 @@ const pasarelaRutas: Ruta[] = [
                 `<!doctype html><html lang="es"><meta charset="utf-8"><title>Pasarela de prueba</title>` +
                     `<body style="font-family:sans-serif;max-width:28rem;margin:3rem auto">` +
                     `<h1>Pasarela de prueba</h1><p>Cobro <code>${id}</code>: Q${escaparHtml(cobro.monto)} · ${escaparHtml(cobro.estado)}</p>` +
-                    `<form method="post" action="${id}/pagar"><input type="hidden" name="estado" value="pagado">` +
+                    `<form method="post" action="${id}/formulario"><input type="hidden" name="estado" value="pagado">` +
                     `<button type="submit">Pagar (simulado)</button></form>` +
-                    `<form method="post" action="${id}/pagar"><input type="hidden" name="estado" value="fallido">` +
+                    `<form method="post" action="${id}/formulario"><input type="hidden" name="estado" value="fallido">` +
                     `<button type="submit">Rechazar tarjeta (simulado)</button></form></body></html>`,
             )
         },
@@ -866,28 +899,39 @@ const pasarelaRutas: Ruta[] = [
         parametros: { cobro: { type: 'string' } },
         cuerpo: v.simularPagoFalsaValidator,
         descripcion:
-            'Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.',
+            'Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido. Para scripts y pruebas; el navegador usa /formulario (303).',
         respuesta: { status: 200, descripcion: 'Resultado del webhook', esquema: ResultadoWebhookPasarela },
+        handler: (ctx, { cuerpo, params }) => simularEnFalsa(ctx, String(params.cobro), cuerpo),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pasarela/falsa/:cobro/formulario',
+        operacion: 'pasarelaFalsaFormulario',
+        resumen: 'Laboratorio: botones de la página de la pasarela falsa (pagar o rechazar y volver)',
+        etiqueta: 'pagos',
+        seguridad: 'publico',
+        permiso: null,
+        parametros: { cobro: { type: 'string' } },
+        cuerpo: v.simularPagoFalsaValidator,
+        descripcion:
+            'Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.',
+        // `RespuestaRuta` solo declara 2xx: el OpenAPI dice 200, la respuesta real es 303 (ver handler)
+        respuesta: {
+            status: 200,
+            descripcion: 'En la práctica 303 al retorno (ver descripción)',
+            contenido: 'text/html',
+        },
         handler: async (ctx, { cuerpo, params }) => {
+            const idProveedor = String(params.cobro)
+            await simularEnFalsa(ctx, idProveedor, cuerpo)
             const falsa = await pasarelaFalsa()
-            const webhook = await falsa.simularPago(String(params.cobro), {
-                estado: cuerpo.estado,
-                monto: cuerpo.monto,
-            })
-            if (cuerpo.notificar === false) {
-                return {
-                    recibido: true,
-                    duplicado: false,
-                    id_evento: '',
-                    cobro_id: null,
-                    pago_id: null,
-                    estado: 'sin_notificar',
-                }
-            }
-            return new ProcesarWebhookPasarela().execute(
-                { proveedor: 'falsa', cuerpo: webhook.cuerpo, cabeceras: webhook.cabeceras },
-                ctx.contextoAccion('webhook'),
-            )
+            const retorno =
+                (await falsa.urlDeRetorno(idProveedor)) ??
+                `/api/v1/pasarela/falsa/${encodeURIComponent(idProveedor)}`
+            // `despachar` (#shared/rutas) fija después el status declarado; se envía ya la
+            // redirección para que el 303 llegue al navegador. Pedido a A1 en a3.md: 3xx en RespuestaRuta.
+            ctx.response.redirect().status(303).toPath(retorno)
+            ctx.response.finish()
         },
     }),
 ]

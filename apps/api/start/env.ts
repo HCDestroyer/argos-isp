@@ -162,4 +162,5 @@ export default await Env.create(new URL('../', import.meta.url), {
     PASARELA_FALSA_SECRETO: Env.schema.string.optional(),
     /** URL pública de la API para armar `url_pago` de la pasarela falsa (p. ej. https://api.lab.local). */
     PASARELA_URL_PUBLICA: Env.schema.string.optional(),
+    PASARELA_RETORNO_ORIGENES: Env.schema.string.optional(),
 })

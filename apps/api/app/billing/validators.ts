@@ -256,6 +256,10 @@ export const listarComprobantesValidator = vine.compile(
         ...reglasPaginacion,
         estado: vine.enum(['pendiente', 'aprobado', 'rechazado'] as const).optional(),
         cliente_id: idEntidad().optional(),
+        metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const).optional(),
+        cuenta_bancaria_id: idEntidad().optional().meta({ description: 'Cuenta bancaria propia de destino' }),
+        desde: fechaIso().optional().meta({ description: 'Fecha de depósito desde (inclusive)' }),
+        hasta: fechaIso().optional().meta({ description: 'Fecha de depósito hasta (inclusive)' }),
     }),
 )
 
@@ -386,6 +390,10 @@ export const crearCobroPasarelaValidator = vine.compile(
         }),
         facturas: vine.array(idEntidad()).optional().meta({ description: 'Facturas a pagar (primero)' }),
         servicio_id: idEntidad().nullable().optional(),
+        url_retorno: vine.string().trim().maxLength(2000).nullable().optional().meta({
+            description:
+                'Adonde el proveedor devuelve al cliente al terminar. Solo orígenes de PASARELA_RETORNO_ORIGENES (422); {cobro_id} se reemplaza por el id del cobro',
+        }),
     }),
 )
 

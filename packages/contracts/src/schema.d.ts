@@ -320,7 +320,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Cola de comprobantes de depósito (portal y panel) */
+        /**
+         * Cola de comprobantes de depósito (portal y panel)
+         * @description Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.
+         */
         get: operations["comprobantesListar"];
         put?: never;
         post?: never;
@@ -803,6 +806,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/bancos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bancos del libro (origen de los egresos con metodo banco)
+         * @description Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.
+         */
+        get: operations["libroBancos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/cuentas": {
         parameters: {
             query?: never;
@@ -1060,7 +1083,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anular pago (asiento de reverso y re-evaluación) */
+        /**
+         * Anular pago (asiento de reverso y re-evaluación)
+         * @description Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.
+         */
         post: operations["pagosAnular"];
         delete?: never;
         options?: never;
@@ -1163,6 +1189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pasarela/falsa/{cobro}/formulario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Laboratorio: botones de la página de la pasarela falsa (pagar o rechazar y volver)
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.
+         */
+        post: operations["pasarelaFalsaFormulario"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pasarela/falsa/{cobro}/pagar": {
         parameters: {
             query?: never;
@@ -1174,7 +1220,7 @@ export interface paths {
         put?: never;
         /**
          * Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)
-         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.
+         * @description Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido. Para scripts y pruebas; el navegador usa /formulario (303).
          */
         post: operations["pasarelaFalsaPagar"];
         delete?: never;
@@ -2654,6 +2700,13 @@ export interface components {
             cliente_id?: number;
             cliente_nombre?: string;
         };
+        AprobacionPromesa: {
+            /** @description Supervisor que aprobó */
+            por: number | null;
+            /** Format: date-time */
+            en: string;
+            nota: string | null;
+        };
         Asiento: {
             id: number;
             /** Format: date */
@@ -2680,6 +2733,21 @@ export interface components {
             id: number;
             nombre: string;
             activo: boolean;
+        };
+        BancoLibro: {
+            /** @description banco_id que acepta POST /egresos con metodo banco */
+            id: number;
+            nombre: string;
+            /** @description Banco del catálogo (GET /bancos), si se conoce */
+            banco_id: number | null;
+            /** @description Nombre del banco del catálogo */
+            banco: string | null;
+            /** @description Número de cuenta con solo los últimos 4 caracteres visibles */
+            numero_enmascarado: string | null;
+            cuenta_id: number;
+            /** @description Cuenta contable del plan (1.1.02.xx) */
+            cuenta_codigo: string;
+            cuenta_nombre: string;
         };
         Caja: {
             id: number;
@@ -2771,6 +2839,20 @@ export interface components {
             reabierto_por_nombre: string | null;
             motivo_reapertura: string | null;
         };
+        CierrePromesa: {
+            /** @enum {string} */
+            estado: "cumplida" | "incumplida" | "cancelada" | "rechazada";
+            /** Format: date-time */
+            en: string;
+            /** @description Rechazo o cancelación (operador, o "venció sin aprobación") */
+            motivo?: string;
+            /** @description Quién la rechazó o canceló */
+            por?: number | null;
+            /** @description Cumplida o incumplida: lo pagado mientras estuvo activa */
+            pagado?: components["schemas"]["Dinero"];
+            /** @description Cumplida o incumplida: deuda vencida al resolverse */
+            deuda_vencida?: components["schemas"]["Dinero"];
+        };
         Cliente: {
             id: number;
             nombre: string;
@@ -2816,6 +2898,8 @@ export interface components {
             estado: "pendiente" | "pagado" | "fallido" | "expirado";
             /** @description Adonde se manda al cliente para pagar */
             url_pago: string | null;
+            /** @description Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto) */
+            url_retorno?: string | null;
             /** Format: date-time */
             expira_en: string | null;
             canal: string;
@@ -2839,6 +2923,8 @@ export interface components {
             titulo: string;
             /** @enum {string} */
             tipo: "texto" | "dinero" | "entero" | "fecha" | "porcentaje" | "id";
+            /** @description Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null */
+            nulable?: boolean;
         };
         Comprobante: {
             id: number;
@@ -2875,6 +2961,8 @@ export interface components {
             registrado_por: number | null;
             /** @description Quién lo aprobó o rechazó */
             verificado_por: number | null;
+            /** @description Nombre de quien lo aprobó o rechazó */
+            verificado_por_nombre?: string | null;
             /** Format: date-time */
             verificado_en: string | null;
             /** @description Solo al aprobar: el pago registrado (aplicaciones y servicios) */
@@ -3004,6 +3092,12 @@ export interface components {
              */
             estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
         };
+        DeudaEvaluada: {
+            pendiente: components["schemas"]["Dinero"];
+            vencida: components["schemas"]["Dinero"];
+            pagado_pendientes: components["schemas"]["Dinero"];
+            facturas_vencidas: number;
+        };
         /**
          * @description Monto en quetzales con 2 decimales, como string
          * @example 150.00
@@ -3129,6 +3223,30 @@ export interface components {
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        EvaluacionPromesa: {
+            /** @enum {string} */
+            resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
+            /**
+             * @description La primera que falló (rechazada), requiere_aprobacion (pendiente) o null (aprobada)
+             * @enum {string|null}
+             */
+            regla: "habilitadas" | "canal_permitido" | "sin_deuda" | "plazo_max_dias" | "no_exceder_siguiente_facturacion" | "deuda_maxima" | "abono_inicial_pct" | "antiguedad_minima_dias" | "cumplimiento_minimo_pct" | "bloqueo_tras_incumplida_dias" | "max_por_periodo" | "requiere_aprobacion" | null;
+            motivo: string;
+            /** @enum {string} */
+            canal: "portal" | "ia" | "operador" | "supervisor";
+            /** Format: date-time */
+            evaluada_en: string;
+            /** @description Reglas revisadas en orden; termina en la que decidió */
+            reglas: components["schemas"]["ReglaEvaluada"][];
+            deuda: components["schemas"]["DeudaEvaluada"];
+            historial: components["schemas"]["HistorialPromesas"];
+            /** Format: date */
+            siguiente_facturacion: string | null;
+            /** @description Al aprobar una pendiente */
+            aprobacion?: components["schemas"]["AprobacionPromesa"];
+            /** @description Al cumplirse, incumplirse, rechazarse o cancelarse */
+            cierre?: components["schemas"]["CierrePromesa"];
+        };
         /** @description Excepciones a la plantilla de facturación del servicio */
         ExcepcionesServicio: {
             dia?: number;
@@ -3219,6 +3337,13 @@ export interface components {
             /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
         };
+        HistorialPromesas: {
+            /** @description Cuántas promesas resueltas se miran */
+            ventana: number;
+            resueltas: number;
+            cumplidas: number;
+            cumplimiento_pct: number | null;
+        };
         Ipv6Bloque: {
             id: number;
             router_id: number;
@@ -3294,6 +3419,11 @@ export interface components {
             abono: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
         };
+        PaginaComprobantes: {
+            data: components["schemas"]["Comprobante"][];
+            nextCursor: string | null;
+            resumen: components["schemas"]["ResumenComprobantes"];
+        };
         Pago: {
             id: number;
             cliente_id: number;
@@ -3326,6 +3456,8 @@ export interface components {
             cuenta_bancaria_id?: number | null;
             /** @description Banco y alias de la cuenta de destino */
             cuenta_bancaria_nombre?: string | null;
+            /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
+            historico?: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3768,7 +3900,7 @@ export interface components {
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
             aprobada_por: number | null;
-            /** @description resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar */
+            /** @description Forma estable: components.schemas.EvaluacionPromesa (Schema<"EvaluacionPromesa">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md */
             resultado_evaluacion: {
                 [key: string]: unknown;
             } | null;
@@ -3824,6 +3956,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ReglaEvaluada: {
+            /**
+             * @description Nombre estable de la regla (contratos/promesas.md)
+             * @enum {string}
+             */
+            regla: "habilitadas" | "canal_permitido" | "sin_deuda" | "plazo_max_dias" | "no_exceder_siguiente_facturacion" | "deuda_maxima" | "abono_inicial_pct" | "antiguedad_minima_dias" | "cumplimiento_minimo_pct" | "bloqueo_tras_incumplida_dias" | "max_por_periodo" | "requiere_aprobacion";
+            ok: boolean;
+            /** @description Lo medido (días, monto "0.00", cantidad, %) */
+            valor: string | number | boolean | null;
+            /** @description Límite aplicado (null = sin límite) */
+            limite: string | number | boolean | null;
+            /**
+             * @description general o el canal cuyo límite reemplazó al general
+             * @enum {string}
+             */
+            origen: "general" | "portal" | "ia" | "operador" | "supervisor";
+            /** @description Explicación para la pantalla */
+            detalle: string;
+            /** @description Solo en la simulación: false si la configuración no la exige */
+            aplica?: boolean;
         };
         ReglaSimulada: {
             regla: string;
@@ -4226,6 +4379,16 @@ export interface components {
             estado: string;
             /** @description cobro_desconocido o cobro_ya_pagado */
             ignorado?: string;
+        };
+        ResumenComprobantes: {
+            /** @description Comprobantes que cumplen todos los filtros (todas las páginas) */
+            total: number;
+            /** @description Suma de sus montos */
+            monto: components["schemas"]["Dinero"];
+            /** @description Pendientes con los demás filtros, sin importar estado (contador del menú) */
+            pendientes: number;
+            /** @description Suma de los montos pendientes */
+            monto_pendiente: components["schemas"]["Dinero"];
         };
         ResumenDashboard: {
             servicios: {
@@ -5847,6 +6010,13 @@ export interface operations {
                 limit?: number;
                 estado?: "pendiente" | "aprobado" | "rechazado";
                 cliente_id?: number;
+                metodo?: "deposito" | "transferencia" | "ach" | "remesa";
+                /** @description Cuenta bancaria propia de destino */
+                cuenta_bancaria_id?: number;
+                /** @description Fecha de depósito desde (inclusive) */
+                desde?: string;
+                /** @description Fecha de depósito hasta (inclusive) */
+                hasta?: string;
             };
             header?: never;
             path?: never;
@@ -5860,10 +6030,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: components["schemas"]["Comprobante"][];
-                        nextCursor: string | null;
-                    };
+                    "application/json": components["schemas"]["PaginaComprobantes"];
                 };
             };
             /** @description No autenticado */
@@ -7749,6 +7916,44 @@ export interface operations {
             };
         };
     };
+    libroBancos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bancos del libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BancoLibro"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso egresos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     libroCuentas: {
         parameters: {
             query?: never;
@@ -8766,6 +8971,8 @@ export interface operations {
                     /** @description Facturas a pagar (primero) */
                     facturas?: number[];
                     servicio_id?: number | null;
+                    /** @description Adonde el proveedor devuelve al cliente al terminar. Solo orígenes de PASARELA_RETORNO_ORIGENES (422); {cobro_id} se reemplaza por el id del cobro */
+                    url_retorno?: string | null;
                 };
             };
         };
@@ -9013,6 +9220,60 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pasarelaFalsaFormulario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cobro: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado?: "pagado" | "fallido";
+                    /**
+                     * @description Simular un pago por otro monto
+                     * @example 150.00
+                     */
+                    monto?: string;
+                    /** @description false simula un webhook perdido */
+                    notificar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description En la práctica 303 al retorno (ver descripción) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2310,6 +2310,7 @@
       "get": {
         "operationId": "comprobantesListar",
         "summary": "Cola de comprobantes de depósito (portal y panel)",
+        "description": "Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.",
         "tags": [
           "pagos"
         ],
@@ -2361,6 +2362,52 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "metodo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "deposito",
+                "transferencia",
+                "ach",
+                "remesa"
+              ]
+            }
+          },
+          {
+            "name": "cuenta_bancaria_id",
+            "in": "query",
+            "required": false,
+            "description": "Cuenta bancaria propia de destino",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de depósito desde (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de depósito hasta (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
           }
         ],
         "responses": {
@@ -2369,25 +2416,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "data",
-                    "nextCursor"
-                  ],
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Comprobante"
-                      }
-                    },
-                    "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
+                  "$ref": "#/components/schemas/PaginaComprobantes"
                 }
               }
             }
@@ -5505,6 +5534,58 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/bancos": {
+      "get": {
+        "operationId": "libroBancos",
+        "summary": "Bancos del libro (origen de los egresos con metodo banco)",
+        "description": "Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos del libro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BancoLibro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso egresos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "egresos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/cuentas": {
       "get": {
         "operationId": "libroCuentas",
@@ -7118,6 +7199,7 @@
       "post": {
         "operationId": "pagosAnular",
         "summary": "Anular pago (asiento de reverso y re-evaluación)",
+        "description": "Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.",
         "tags": [
           "pagos"
         ],
@@ -7417,6 +7499,14 @@
                       "null"
                     ],
                     "minimum": 1
+                  },
+                  "url_retorno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 2000,
+                    "description": "Adonde el proveedor devuelve al cliente al terminar. Solo orígenes de PASARELA_RETORNO_ORIGENES (422); {cobro_id} se reemplaza por el id del cobro"
                   }
                 },
                 "required": [
@@ -7806,11 +7896,98 @@
         "x-implementado": true
       }
     },
+    "/api/v1/pasarela/falsa/{cobro}/formulario": {
+      "post": {
+        "operationId": "pasarelaFalsaFormulario",
+        "summary": "Laboratorio: botones de la página de la pasarela falsa (pagar o rechazar y volver)",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.",
+        "tags": [
+          "pagos"
+        ],
+        "parameters": [
+          {
+            "name": "cobro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "pagado",
+                      "fallido"
+                    ]
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Simular un pago por otro monto",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "notificar": {
+                    "description": "false simula un webhook perdido",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "En la práctica 303 al retorno (ver descripción)",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/pasarela/falsa/{cobro}/pagar": {
       "post": {
         "operationId": "pasarelaFalsaPagar",
         "summary": "Laboratorio: simular el pago en la pasarela falsa (envía el webhook firmado)",
-        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido.",
+        "description": "Solo con PASARELA_PROVEEDOR=falsa (404 si no). Marca el cobro en el lado del proveedor y procesa el webhook firmado por el mismo camino que uno real; notificar=false simula un webhook perdido. Para scripts y pruebas; el navegador usa /formulario (303).",
         "tags": [
           "pagos"
         ],
@@ -18633,6 +18810,34 @@
           }
         }
       },
+      "AprobacionPromesa": {
+        "type": "object",
+        "required": [
+          "por",
+          "en",
+          "nota"
+        ],
+        "properties": {
+          "por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Supervisor que aprobó"
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Asiento": {
         "type": "object",
         "required": [
@@ -18757,6 +18962,62 @@
           },
           "activo": {
             "type": "boolean"
+          }
+        }
+      },
+      "BancoLibro": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "banco_id",
+          "banco",
+          "numero_enmascarado",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "banco_id que acepta POST /egresos con metodo banco"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Banco del catálogo (GET /bancos), si se conoce"
+          },
+          "banco": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del banco del catálogo"
+          },
+          "numero_enmascarado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de cuenta con solo los últimos 4 caracteres visibles"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "Cuenta contable del plan (1.1.02.xx)"
+          },
+          "cuenta_nombre": {
+            "type": "string"
           }
         }
       },
@@ -19154,6 +19415,48 @@
           }
         }
       },
+      "CierrePromesa": {
+        "type": "object",
+        "required": [
+          "estado",
+          "en"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cumplida",
+              "incumplida",
+              "cancelada",
+              "rechazada"
+            ]
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "motivo": {
+            "type": "string",
+            "description": "Rechazo o cancelación (operador, o \"venció sin aprobación\")"
+          },
+          "por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Quién la rechazó o canceló"
+          },
+          "pagado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida: lo pagado mientras estuvo activa"
+          },
+          "deuda_vencida": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida: deuda vencida al resolverse"
+          }
+        }
+      },
       "Cliente": {
         "type": "object",
         "required": [
@@ -19375,6 +19678,13 @@
             ],
             "description": "Adonde se manda al cliente para pagar"
           },
+          "url_retorno": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto)"
+          },
           "expira_en": {
             "type": [
               "string",
@@ -19459,6 +19769,10 @@
               "porcentaje",
               "id"
             ]
+          },
+          "nulable": {
+            "type": "boolean",
+            "description": "Solo viene (en true) si la celda puede ser null (p. ej. \"Sin zona\"); ausente = nunca null"
           }
         }
       },
@@ -19622,6 +19936,13 @@
             ],
             "minimum": 1,
             "description": "Quién lo aprobó o rechazó"
+          },
+          "verificado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien lo aprobó o rechazó"
           },
           "verificado_en": {
             "type": [
@@ -20130,6 +20451,29 @@
               "retirado"
             ],
             "description": "Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios"
+          }
+        }
+      },
+      "DeudaEvaluada": {
+        "type": "object",
+        "required": [
+          "pendiente",
+          "vencida",
+          "pagado_pendientes",
+          "facturas_vencidas"
+        ],
+        "properties": {
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "vencida": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pagado_pendientes": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "facturas_vencidas": {
+            "type": "integer"
           }
         }
       },
@@ -20704,6 +21048,96 @@
           "retirado"
         ]
       },
+      "EvaluacionPromesa": {
+        "type": "object",
+        "required": [
+          "resultado",
+          "regla",
+          "motivo",
+          "canal",
+          "evaluada_en",
+          "reglas",
+          "deuda",
+          "historial",
+          "siguiente_facturacion"
+        ],
+        "properties": {
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aprobada",
+              "rechazada",
+              "pendiente_aprobacion"
+            ]
+          },
+          "regla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "habilitadas",
+              "canal_permitido",
+              "sin_deuda",
+              "plazo_max_dias",
+              "no_exceder_siguiente_facturacion",
+              "deuda_maxima",
+              "abono_inicial_pct",
+              "antiguedad_minima_dias",
+              "cumplimiento_minimo_pct",
+              "bloqueo_tras_incumplida_dias",
+              "max_por_periodo",
+              "requiere_aprobacion",
+              null
+            ],
+            "description": "La primera que falló (rechazada), requiere_aprobacion (pendiente) o null (aprobada)"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ]
+          },
+          "evaluada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaEvaluada"
+            },
+            "description": "Reglas revisadas en orden; termina en la que decidió"
+          },
+          "deuda": {
+            "$ref": "#/components/schemas/DeudaEvaluada"
+          },
+          "historial": {
+            "$ref": "#/components/schemas/HistorialPromesas"
+          },
+          "siguiente_facturacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "aprobacion": {
+            "$ref": "#/components/schemas/AprobacionPromesa",
+            "description": "Al aprobar una pendiente"
+          },
+          "cierre": {
+            "$ref": "#/components/schemas/CierrePromesa",
+            "description": "Al cumplirse, incumplirse, rechazarse o cancelarse"
+          }
+        }
+      },
       "ExcepcionesServicio": {
         "type": "object",
         "description": "Excepciones a la plantilla de facturación del servicio",
@@ -21000,6 +21434,33 @@
           "total": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Saldo pendiente de las facturas vencidas"
+          }
+        }
+      },
+      "HistorialPromesas": {
+        "type": "object",
+        "required": [
+          "ventana",
+          "resueltas",
+          "cumplidas",
+          "cumplimiento_pct"
+        ],
+        "properties": {
+          "ventana": {
+            "type": "integer",
+            "description": "Cuántas promesas resueltas se miran"
+          },
+          "resueltas": {
+            "type": "integer"
+          },
+          "cumplidas": {
+            "type": "integer"
+          },
+          "cumplimiento_pct": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       },
@@ -21306,6 +21767,31 @@
           }
         }
       },
+      "PaginaComprobantes": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor",
+          "resumen"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comprobante"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resumen": {
+            "$ref": "#/components/schemas/ResumenComprobantes"
+          }
+        }
+      },
       "Pago": {
         "type": "object",
         "required": [
@@ -21452,6 +21938,10 @@
               "null"
             ],
             "description": "Banco y alias de la cuenta de destino"
+          },
+          "historico": {
+            "type": "boolean",
+            "description": "Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos"
           },
           "version": {
             "type": "integer",
@@ -23158,7 +23648,7 @@
               "null"
             ],
             "additionalProperties": true,
-            "description": "resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar"
+            "description": "Forma estable: components.schemas.EvaluacionPromesa (Schema<\"EvaluacionPromesa\">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md"
           },
           "servicio": {
             "$ref": "#/components/schemas/ServicioEvaluado",
@@ -23344,6 +23834,77 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReglaEvaluada": {
+        "type": "object",
+        "required": [
+          "regla",
+          "ok",
+          "valor",
+          "limite",
+          "origen",
+          "detalle"
+        ],
+        "properties": {
+          "regla": {
+            "type": "string",
+            "enum": [
+              "habilitadas",
+              "canal_permitido",
+              "sin_deuda",
+              "plazo_max_dias",
+              "no_exceder_siguiente_facturacion",
+              "deuda_maxima",
+              "abono_inicial_pct",
+              "antiguedad_minima_dias",
+              "cumplimiento_minimo_pct",
+              "bloqueo_tras_incumplida_dias",
+              "max_por_periodo",
+              "requiere_aprobacion"
+            ],
+            "description": "Nombre estable de la regla (contratos/promesas.md)"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "valor": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Lo medido (días, monto \"0.00\", cantidad, %)"
+          },
+          "limite": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Límite aplicado (null = sin límite)"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "general",
+              "portal",
+              "ia",
+              "operador",
+              "supervisor"
+            ],
+            "description": "general o el canal cuyo límite reemplazó al general"
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Explicación para la pantalla"
+          },
+          "aplica": {
+            "type": "boolean",
+            "description": "Solo en la simulación: false si la configuración no la exige"
           }
         }
       },
@@ -25252,6 +25813,33 @@
           "ignorado": {
             "type": "string",
             "description": "cobro_desconocido o cobro_ya_pagado"
+          }
+        }
+      },
+      "ResumenComprobantes": {
+        "type": "object",
+        "required": [
+          "total",
+          "monto",
+          "pendientes",
+          "monto_pendiente"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Comprobantes que cumplen todos los filtros (todas las páginas)"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de sus montos"
+          },
+          "pendientes": {
+            "type": "integer",
+            "description": "Pendientes con los demás filtros, sin importar estado (contador del menú)"
+          },
+          "monto_pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de los montos pendientes"
           }
         }
       },

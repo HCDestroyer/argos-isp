@@ -65,7 +65,12 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 | `facturas.importar_pendiente`      | `actions/importar_factura_pendiente.ts` | `{ clave_externa, servicio_id, periodo, total, vence_en?, concepto?, aplicar_mora? }` → factura pendiente del periodo (ocupa `clave_unica`), IVA desglosado, mora `ninguna` salvo `aplicar_mora`, `vencida` si `vence_en` ya pasó. Asiento `CxC / 2.9.01 Saldos de apertura`                |
 | `facturas.registrar_saldo_inicial` | `actions/registrar_saldo_inicial.ts`    | `{ clave_externa, cliente_id, monto (con signo), fecha?, descripcion? }`: > 0 → factura de apertura sin servicio (`apertura-<clave>`, vencida, no cuenta para el corte) con `CxC / 2.9.01`; < 0 → `2.9.01 / Anticipos` y se aplica a sus facturas (`billing.saldos_iniciales_aplicaciones`) |
 
-Ambas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
+| `facturas.anular_saldo_inicial` | `actions/anular_saldo_inicial.ts` | `{ id_externo \| saldo_inicial_id, motivo }`: reversos de la apertura (y de sus aplicaciones si era a favor), anula la factura de apertura; 409 `saldo_con_pagos` si ya tiene pagos |
+| `pagos.registrar_historico` | `actions/registrar_pago_historico.ts` | `{ historico: true, id_externo, cliente_id, metodo, monto, fecha, referencia?, nota?, facturas? }`: pago con su fecha original, asiento `2.9.01 / CxC (+ Anticipos)` con esa fecha; sin caja, sin evento y sin reevaluar |
+
+Contrato completo (modos de importación, cuadre y errores) en `.claude/integration/contratos/importacion.md`. Saldo inicial y pago histórico aceptan `id_externo` (o `clave_externa`) y responden 422 `periodo_cerrado` con un detalle claro si la fecha cae en un mes cerrado.
+
+Todas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
 
 ## Vencimiento y mora (tarea 5)
 
@@ -143,6 +148,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Archivo: JPG, PNG, WebP o PDF de hasta 5 MB, con el tipo decidido por los primeros bytes (sin dependencias). Se guarda en `COMPROBANTES_DIR` (por defecto `apps/api/storage/comprobantes`, ruta `AAAA/MM/<uuid>.<ext>`), nunca en la base; la auditoría guarda nombre y tamaño, no el contenido. 422 `archivo` con `rule` `tipo`, `tamano` o `required`.
 - Referencia única: 409 `referencia_duplicada` si ya es un pago (mismo método y cuenta) o si otro comprobante pendiente la tiene (índice parcial `comprobantes_referencia_pendiente`). Uno rechazado la libera.
 - Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
+- Cola (`GET /comprobantes`): filtros `estado`, `cliente_id`, `metodo`, `cuenta_bancaria_id`, `desde`/`hasta` (fecha de depósito, inclusive) y `resumen { total, monto, pendientes, monto_pendiente }` con los mismos filtros y alcance (`pendientes` ignora `estado`: el contador del menú sale de `?limit=1`). Cada comprobante trae `verificado_por_nombre`.
 - Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
 
 ## Pasarela en línea (semana 2, `pasarelas/`)

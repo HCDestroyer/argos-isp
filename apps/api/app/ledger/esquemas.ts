@@ -120,6 +120,23 @@ export const Caja = definirEsquema(
     ),
 )
 
+export const BancoLibro = definirEsquema(
+    'BancoLibro',
+    objeto({
+        id: { ...id, description: 'banco_id que acepta POST /egresos con metodo banco' },
+        nombre: texto,
+        banco_id: { ...nulable(id), description: 'Banco del catálogo (GET /bancos), si se conoce' },
+        banco: { ...nulable(texto), description: 'Nombre del banco del catálogo' },
+        numero_enmascarado: {
+            ...nulable(texto),
+            description: 'Número de cuenta con solo los últimos 4 caracteres visibles',
+        },
+        cuenta_id: id,
+        cuenta_codigo: { ...texto, description: 'Cuenta contable del plan (1.1.02.xx)' },
+        cuenta_nombre: texto,
+    }),
+)
+
 export const CajaTurno = definirEsquema(
     'CajaTurno',
     objeto(

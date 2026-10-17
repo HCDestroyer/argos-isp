@@ -15,6 +15,7 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { METODOS_PAGO } from '#shared/eventos'
+import { NOMBRES_REGLA } from '#billing/promesas'
 
 /**
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
@@ -240,9 +241,15 @@ export const Pago = definirEsquema(
                 ...nulable(texto),
                 description: 'Banco y alias de la cuenta de destino',
             },
+            historico: {
+                ...booleano,
+                description:
+                    'Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos',
+            },
             ...auditable,
         },
         [
+            'historico',
             'cliente_nombre',
             'anulado_en',
             'motivo_anulacion',
@@ -252,6 +259,106 @@ export const Pago = definirEsquema(
             'cuenta_bancaria_id',
             'cuenta_bancaria_nombre',
         ],
+    ),
+)
+
+const CANALES_PROMESA = ['portal', 'ia', 'operador', 'supervisor'] as const
+const valorRegla = { type: ['string', 'number', 'boolean', 'null'] }
+
+export const ReglaEvaluada = definirEsquema(
+    'ReglaEvaluada',
+    objeto(
+        {
+            regla: {
+                ...enumerado(NOMBRES_REGLA),
+                description: 'Nombre estable de la regla (contratos/promesas.md)',
+            },
+            ok: booleano,
+            valor: { ...valorRegla, description: 'Lo medido (días, monto "0.00", cantidad, %)' },
+            limite: { ...valorRegla, description: 'Límite aplicado (null = sin límite)' },
+            origen: {
+                ...enumerado(['general', ...CANALES_PROMESA]),
+                description: 'general o el canal cuyo límite reemplazó al general',
+            },
+            detalle: { ...texto, description: 'Explicación para la pantalla' },
+            aplica: {
+                ...booleano,
+                description: 'Solo en la simulación: false si la configuración no la exige',
+            },
+        },
+        ['aplica'],
+    ),
+)
+
+export const DeudaEvaluada = definirEsquema(
+    'DeudaEvaluada',
+    objeto({
+        pendiente: Dinero,
+        vencida: Dinero,
+        pagado_pendientes: Dinero,
+        facturas_vencidas: entero,
+    }),
+)
+
+export const HistorialPromesas = definirEsquema(
+    'HistorialPromesas',
+    objeto({
+        ventana: { ...entero, description: 'Cuántas promesas resueltas se miran' },
+        resueltas: entero,
+        cumplidas: entero,
+        cumplimiento_pct: nulable(entero),
+    }),
+)
+
+export const AprobacionPromesa = definirEsquema(
+    'AprobacionPromesa',
+    objeto({
+        por: { ...nulable(id), description: 'Supervisor que aprobó' },
+        en: instante,
+        nota: nulable(texto),
+    }),
+)
+
+export const CierrePromesa = definirEsquema(
+    'CierrePromesa',
+    objeto(
+        {
+            estado: enumerado(['cumplida', 'incumplida', 'cancelada', 'rechazada']),
+            en: instante,
+            motivo: { ...texto, description: 'Rechazo o cancelación (operador, o "venció sin aprobación")' },
+            por: { ...nulable(id), description: 'Quién la rechazó o canceló' },
+            pagado: { ...Dinero, description: 'Cumplida o incumplida: lo pagado mientras estuvo activa' },
+            deuda_vencida: { ...Dinero, description: 'Cumplida o incumplida: deuda vencida al resolverse' },
+        },
+        ['motivo', 'por', 'pagado', 'deuda_vencida'],
+    ),
+)
+
+export const EvaluacionPromesa = definirEsquema(
+    'EvaluacionPromesa',
+    objeto(
+        {
+            resultado: enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
+            regla: {
+                type: ['string', 'null'],
+                enum: [...NOMBRES_REGLA, null],
+                description:
+                    'La primera que falló (rechazada), requiere_aprobacion (pendiente) o null (aprobada)',
+            },
+            motivo: texto,
+            canal: enumerado(CANALES_PROMESA),
+            evaluada_en: instante,
+            reglas: {
+                ...lista(ReglaEvaluada),
+                description: 'Reglas revisadas en orden; termina en la que decidió',
+            },
+            deuda: DeudaEvaluada,
+            historial: HistorialPromesas,
+            siguiente_facturacion: nulable(fecha),
+            aprobacion: { ...AprobacionPromesa, description: 'Al aprobar una pendiente' },
+            cierre: { ...CierrePromesa, description: 'Al cumplirse, incumplirse, rechazarse o cancelarse' },
+        },
+        ['aprobacion', 'cierre'],
     ),
 )
 
@@ -275,10 +382,12 @@ export const Promesa = definirEsquema(
             ]),
             canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
             aprobada_por: nulable(id),
+            // la API ya responde siempre con la forma de EvaluacionPromesa; el campo sigue abierto
+            // hasta que el panel migre sus fixtures (a3.md) y entonces pasa a nulable(EvaluacionPromesa)
             resultado_evaluacion: {
                 ...nulable(jsonLibre),
                 description:
-                    'resultado (aprobada/rechazada/pendiente_aprobacion), regla (la que falló o requiere_aprobacion), motivo, reglas[] revisadas, deuda, historial; aprobacion y cierre al aprobar/cerrar',
+                    'Forma estable: components.schemas.EvaluacionPromesa (Schema<"EvaluacionPromesa">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md',
             },
             servicio: {
                 ...ServicioEvaluado,
@@ -368,12 +477,35 @@ export const Comprobante = definirEsquema(
             pago_id: { ...nulable(id), description: 'Pago creado al aprobarlo' },
             registrado_por: nulable(id),
             verificado_por: { ...nulable(id), description: 'Quién lo aprobó o rechazó' },
+            verificado_por_nombre: { ...nulable(texto), description: 'Nombre de quien lo aprobó o rechazó' },
             verificado_en: nulable(instante),
             pago: { ...Pago, description: 'Solo al aprobar: el pago registrado (aplicaciones y servicios)' },
             ...auditable,
         },
-        ['pago'],
+        ['pago', 'verificado_por_nombre'],
     ),
+)
+
+export const ResumenComprobantes = definirEsquema(
+    'ResumenComprobantes',
+    objeto({
+        total: { ...entero, description: 'Comprobantes que cumplen todos los filtros (todas las páginas)' },
+        monto: { ...Dinero, description: 'Suma de sus montos' },
+        pendientes: {
+            ...entero,
+            description: 'Pendientes con los demás filtros, sin importar estado (contador del menú)',
+        },
+        monto_pendiente: { ...Dinero, description: 'Suma de los montos pendientes' },
+    }),
+)
+
+export const PaginaComprobantes = definirEsquema(
+    'PaginaComprobantes',
+    objeto({
+        data: lista(Comprobante),
+        nextCursor: { type: ['string', 'null'] },
+        resumen: ResumenComprobantes,
+    }),
 )
 
 /** Respuesta binaria: la foto o el PDF del comprobante. */
@@ -387,26 +519,34 @@ export const ArchivoComprobante = {
 
 export const CobroPasarela = definirEsquema(
     'CobroPasarela',
-    objeto({
-        id,
-        proveedor: texto,
-        id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
-        cliente_id: id,
-        cliente_nombre: texto,
-        servicio_id: nulable(id),
-        monto: Dinero,
-        facturas: lista(id),
-        estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
-        url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
-        expira_en: nulable(instante),
-        canal: texto,
-        pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
-        monto_pagado: nulable(Dinero),
-        comision: Dinero,
-        pagado_en: nulable(instante),
-        conciliado_en: nulable(instante),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            proveedor: texto,
+            id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
+            cliente_id: id,
+            cliente_nombre: texto,
+            servicio_id: nulable(id),
+            monto: Dinero,
+            facturas: lista(id),
+            estado: enumerado(['pendiente', 'pagado', 'fallido', 'expirado']),
+            url_pago: { ...nulable(texto), description: 'Adonde se manda al cliente para pagar' },
+            url_retorno: {
+                ...nulable(texto),
+                description:
+                    'Adonde el proveedor devuelve al cliente al terminar (ya con {cobro_id} resuelto)',
+            },
+            expira_en: nulable(instante),
+            canal: texto,
+            pago_id: { ...nulable(id), description: 'Pago registrado al llegar el webhook' },
+            monto_pagado: nulable(Dinero),
+            comision: Dinero,
+            pagado_en: nulable(instante),
+            conciliado_en: nulable(instante),
+            ...auditable,
+        },
+        ['url_retorno'],
+    ),
 )
 
 export const ResultadoWebhookPasarela = definirEsquema(
@@ -462,8 +602,6 @@ export const ConciliacionPasarela = definirEsquema(
         ['ejecutado_por', 'created_at'],
     ),
 )
-
-const valorRegla = { type: ['string', 'number', 'boolean', 'null'] }
 
 export const ReglaSimulada = definirEsquema(
     'ReglaSimulada',

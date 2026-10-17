@@ -21,7 +21,22 @@ Lo exponen `POST /promesas` (en `Promesa.resultado_evaluacion`) y `POST /promesa
 ```
 
 - `regla`: la **primera** que falló (rechazada), `requiere_aprobacion` (pendiente) o `null` (aprobada). `reglas[]` termina en esa regla: la creación se detiene en la primera que falla.
-- Al aprobar se agrega `aprobacion`; al rechazar o cancelar, `cierre = { estado, en, motivo, por }`.
+- Al aprobar se agrega `aprobacion = { por, en, nota }`. Al cerrarse se agrega `cierre`:
+    - rechazada o cancelada por un supervisor: `{ estado, en, motivo, por }`;
+    - cancelada sola al vencer sin aprobación: `{ estado: 'cancelada', en, motivo: 'venció sin aprobación' }`;
+    - cumplida o incumplida: `{ estado, en, pagado, deuda_vencida }`.
+
+### Tipo estable en el OpenAPI (decisión, semana 3)
+
+La forma de `resultado_evaluacion` es el componente `EvaluacionPromesa` de `packages/contracts`. Úsenlo con `Schema<'EvaluacionPromesa'>` y sus piezas: `ReglaEvaluada`, `DeudaEvaluada`, `HistorialPromesas`, `AprobacionPromesa`, `CierrePromesa`.
+
+- Transición: el campo `Promesa.resultado_evaluacion` sigue declarado como objeto abierto (su descripción apunta a `EvaluacionPromesa`) porque los fixtures y `leerEvaluacion` del panel usan otra forma y el typecheck del workspace se rompería. Cuando A4 los migre (fila en `a3.md`), A3 cambia el campo a `EvaluacionPromesa | null` sin cambiar nada de la respuesta: la API ya responde exactamente esta forma.
+
+- Obligatorios: `resultado`, `regla`, `motivo`, `canal`, `evaluada_en`, `reglas`, `deuda`, `historial`, `siguiente_facturacion`. Opcionales: `aprobacion`, `cierre`.
+- `regla` y `reglas[].regla` son el enum `NOMBRES_REGLA` (`app/billing/promesas.ts`), en el orden de abajo. `reglas[].origen`: `general` o un canal.
+- La forma es cerrada: no aparecen claves fuera del esquema. `tests/billing/promesas_contrato.spec.ts` valida contra el OpenAPI cada respuesta real (aprobada, rechazada, pendiente, aprobada y rechazada por el supervisor, cancelada y cumplida).
+- Cambios: solo aditivos y opcionales; una regla nueva se agrega al final del enum y se avisa en `a3.md`.
+- `null` solo en promesas sin evaluación guardada (no existen hoy; el tipo lo admite por seguridad).
 
 ## Nombres de regla, en orden
 

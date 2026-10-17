@@ -1,5 +1,5 @@
 import env from '#start/env'
-import { Problema } from '#shared/errores'
+import { Problema, ValidacionFallida } from '#shared/errores'
 
 /**
  * Contrato de un proveedor de pago en línea. Cada proveedor (el falso del laboratorio y, cuando
@@ -21,6 +21,11 @@ export interface EntradaCrearCobro {
     monto: string
     descripcion: string
     cliente: { id: number; nombre: string; email?: string | null }
+    /**
+     * adonde el proveedor devuelve al cliente al terminar (el real la recibe como `return_url`).
+     * Ya validada contra `PASARELA_RETORNO_ORIGENES` y con `{cobro_id}` resuelto.
+     */
+    url_retorno?: string | null
 }
 
 export interface CobroCreado {
@@ -75,6 +80,65 @@ export class PasarelaNoConfigurada extends Problema {
     constructor(detalle = 'No hay pasarela de pago en línea configurada (PASARELA_PROVEEDOR)') {
         super(503, 'pasarela_no_configurada', 'Pasarela no configurada', detalle)
     }
+}
+
+/*
+|--------------------------------------------------------------------------
+| URL de retorno
+|--------------------------------------------------------------------------
+*/
+
+/** Marcador que se reemplaza por el id del cobro (el id existe recién al crearlo). */
+export const MARCADOR_COBRO = '{cobro_id}'
+
+/**
+ * Orígenes (`esquema://host[:puerto]`) a los que el proveedor puede devolver al cliente:
+ * `PASARELA_RETORNO_ORIGENES` (separados por comas) o, sin ella, el origen de `NOTIFY_PORTAL_URL`
+ * (el portal). Sin ninguna de las dos no se acepta `url_retorno`.
+ */
+export function origenesRetorno(): string[] {
+    const lista = env.get('PASARELA_RETORNO_ORIGENES') || env.get('NOTIFY_PORTAL_URL') || ''
+    return lista
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+        .flatMap((o) => {
+            try {
+                return [new URL(o).origin]
+            } catch {
+                return []
+            }
+        })
+}
+
+/**
+ * Valida `url_retorno` (http/https, sin usuario ni clave, origen permitido) y reemplaza
+ * `{cobro_id}`. Lanza 422 en `url_retorno` (`rule`: `url` u `origen_no_permitido`): evita que el
+ * cobro sirva de redirección abierta hacia un sitio ajeno.
+ */
+export function resolverUrlRetorno(plantilla: string, cobroId: number | string): string {
+    const error = (message: string, rule: string) =>
+        new ValidacionFallida([{ field: 'url_retorno', message, rule }])
+    const texto = plantilla.trim().replaceAll(MARCADOR_COBRO, String(cobroId))
+    let url: URL
+    try {
+        url = new URL(texto)
+    } catch {
+        throw error('url_retorno debe ser una URL absoluta', 'url')
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+        throw error('url_retorno debe ser http o https, sin usuario ni clave', 'url')
+    }
+    const permitidos = origenesRetorno()
+    if (!permitidos.includes(url.origin)) {
+        throw error(
+            permitidos.length === 0
+                ? 'No hay orígenes permitidos para url_retorno (configure PASARELA_RETORNO_ORIGENES)'
+                : `El origen ${url.origin} no está permitido para url_retorno`,
+            'origen_no_permitido',
+        )
+    }
+    return url.toString()
 }
 
 /** Ventana de tiempo aceptada para la marca de tiempo de un webhook (± 5 minutos). */

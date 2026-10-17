@@ -12,6 +12,9 @@ import {
 import { CABECERA_FIRMA, PasarelaFalsa, firmar } from '#billing/pasarelas/falsa'
 import { hoyGuatemala } from '#ledger/fechas'
 import { crearClienteFila } from '#tests/core/fabricas'
+import env from '#start/env'
+import { resolverUrlRetorno } from '#billing/pasarelas/pasarela'
+import type { ValidacionFallida } from '#shared/errores'
 
 /**
  * Pasarela en línea con el adaptador falso: cobro, webhook firmado (HMAC, ventana, idempotente),
@@ -179,6 +182,7 @@ test.group('billing · pasarela en línea', () => {
         pagina.assertStatus(200)
         assert.match(pagina.header('content-type') ?? '', /text\/html/)
         assert.include(pagina.text(), 'Pagar (simulado)')
+        assert.include(pagina.text(), `${cobroPagado.id_proveedor}/formulario`)
 
         const simulado = await estado(
             client.post(`/api/v1/pasarela/falsa/${cobroPagado.id_proveedor}/pagar`).json({}),
@@ -215,5 +219,121 @@ test.group('billing · pasarela en línea', () => {
         const lista = await estado(client.get('/api/v1/pasarela/conciliaciones').bearerToken(token), 200)
         assert.equal(lista.body().data[0].id, resultado.id)
         await afirmarLibroCuadrado(assert)
+    })
+
+    test('url_retorno: solo orígenes permitidos, {cobro_id} resuelto y 303 de la página falsa con el estado', async ({
+        client,
+        assert,
+    }) => {
+        const previo = env.get('PASARELA_RETORNO_ORIGENES')
+        env.set('PASARELA_RETORNO_ORIGENES', 'http://portal.prueba.local, https://otro.prueba.local:8443')
+        try {
+            // reglas de la URL
+            assert.equal(
+                resolverUrlRetorno('http://portal.prueba.local/corte?pago={cobro_id}', 7),
+                'http://portal.prueba.local/corte?pago=7',
+            )
+            assert.equal(
+                resolverUrlRetorno('https://otro.prueba.local:8443/x', 1),
+                'https://otro.prueba.local:8443/x',
+            )
+            const reglas = (url: string) => {
+                try {
+                    resolverUrlRetorno(url, 1)
+                } catch (error) {
+                    return (error as ValidacionFallida).errores?.map((e) => `${e.field}:${e.rule}`)
+                }
+                return []
+            }
+            assert.deepEqual(reglas('https://malo.example/corte'), ['url_retorno:origen_no_permitido'])
+            assert.deepEqual(reglas('https://portal.prueba.local/corte'), ['url_retorno:origen_no_permitido'])
+            assert.deepEqual(reglas('javascript:alert(1)'), ['url_retorno:url'])
+            assert.deepEqual(reglas('http://yo:clave@portal.prueba.local/'), ['url_retorno:url'])
+            assert.deepEqual(reglas('/corte'), ['url_retorno:url'])
+
+            const datos = await servicioCortado()
+            const { token } = await usuarioConRoles(['cajero'])
+            const antes = await db
+                .from('billing.pasarela_cobros')
+                .where('cliente_id', datos.clienteId)
+                .count('* as n')
+            const rechazado = await estado(
+                client.post('/api/v1/pasarela/cobros').bearerToken(token).json({
+                    cliente_id: datos.clienteId,
+                    url_retorno: 'https://phishing.example/{cobro_id}',
+                }),
+                422,
+            )
+            assert.equal(rechazado.body().errors[0].field, 'url_retorno')
+            const despues = await db
+                .from('billing.pasarela_cobros')
+                .where('cliente_id', datos.clienteId)
+                .count('* as n')
+            assert.deepEqual(despues, antes)
+
+            const crear = async (facturas: number[]) => {
+                const respuesta = await estado(
+                    client.post('/api/v1/pasarela/cobros').bearerToken(token).json({
+                        cliente_id: datos.clienteId,
+                        facturas,
+                        url_retorno: 'http://portal.prueba.local/corte?pago={cobro_id}',
+                    }),
+                    201,
+                )
+                return respuesta.body() as { id: number; id_proveedor: string; url_retorno: string }
+            }
+            const [septiembre, octubre] = await facturasDe(datos.servicioId)
+            const pagado = await crear([septiembre!.id])
+            assert.equal(pagado.url_retorno, `http://portal.prueba.local/corte?pago=${pagado.id}`)
+
+            // el navegador manda el formulario de la página: 303 al retorno con el estado del cobro
+            const pagar = await client
+                .post(`/api/v1/pasarela/falsa/${pagado.id_proveedor}/formulario`)
+                .form({ estado: 'pagado' })
+                .redirects(0)
+            pagar.assertStatus(303)
+            assert.equal(
+                pagar.header('location'),
+                `http://portal.prueba.local/corte?pago=${pagado.id}&estado=pagado`,
+            )
+            const cobro = await db.from('billing.pasarela_cobros').where('id', pagado.id).firstOrFail()
+            assert.equal(cobro.estado, 'pagado')
+            assert.isNotNull(cobro.pago_id)
+
+            const fallido = await crear([octubre!.id])
+            const rechazar = await client
+                .post(`/api/v1/pasarela/falsa/${fallido.id_proveedor}/formulario`)
+                .form({ estado: 'fallido' })
+                .redirects(0)
+            rechazar.assertStatus(303)
+            assert.equal(
+                rechazar.header('location'),
+                `http://portal.prueba.local/corte?pago=${fallido.id}&estado=fallido`,
+            )
+
+            // sin url_retorno, el formulario vuelve a la página de la pasarela
+            const otro = await servicioCortado()
+            const sinRetorno = await estado(
+                client
+                    .post('/api/v1/pasarela/cobros')
+                    .bearerToken(token)
+                    .json({ cliente_id: otro.clienteId }),
+                201,
+            )
+            assert.isNull(sinRetorno.body().url_retorno)
+            const volver = await client
+                .post(`/api/v1/pasarela/falsa/${sinRetorno.body().id_proveedor}/formulario`)
+                .form({ estado: 'pagado' })
+                .redirects(0)
+            volver.assertStatus(303)
+            assert.equal(
+                volver.header('location'),
+                `/api/v1/pasarela/falsa/${sinRetorno.body().id_proveedor}`,
+            )
+            assert.equal(await estadoServicio(otro.servicioId), 'activo')
+            await afirmarLibroCuadrado(assert)
+        } finally {
+            env.set('PASARELA_RETORNO_ORIGENES', previo ?? '')
+        }
     })
 })

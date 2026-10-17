@@ -374,6 +374,96 @@ test.group('billing · comprobantes de depósito', () => {
         assert.equal(nuevo.estado, 'pendiente')
     })
 
+    test('cola: filtros por método, cuenta y fecha; resumen; verificado_por_nombre', async ({
+        client,
+        assert,
+    }) => {
+        const { clienteId } = await servicioCortado()
+        const cuentaA = await cuentaBancariaPrueba()
+        const cuentaB = await cuentaBancariaPrueba('Banco Industrial')
+        const deposito1 = await subir({
+            cliente_id: clienteId,
+            cuenta_bancaria_id: cuentaA.id,
+            monto: '100.00',
+            fecha_deposito: '2026-10-01',
+        })
+        const transferencia = await subir({
+            cliente_id: clienteId,
+            metodo: 'transferencia',
+            banco_origen_id: await bancoId(),
+            cuenta_bancaria_id: cuentaB.id,
+            monto: '150.50',
+            fecha_deposito: '2026-10-05',
+        })
+        const deposito2 = await subir({
+            cliente_id: clienteId,
+            cuenta_bancaria_id: cuentaA.id,
+            monto: '200.00',
+            fecha_deposito: '2026-10-10',
+        })
+        const { token, usuario } = await usuarioConRoles(['contabilidad'])
+        await estado(
+            client
+                .post(`/api/v1/comprobantes/${deposito1.id}/rechazar`)
+                .bearerToken(token)
+                .json({ motivo: 'no aparece en el banco' }),
+            200,
+        )
+
+        const listar = async (qs: Record<string, unknown>) => {
+            const respuesta = await estado(
+                client
+                    .get('/api/v1/comprobantes')
+                    .qs({ cliente_id: clienteId, ...qs })
+                    .bearerToken(token),
+                200,
+            )
+            const cuerpo = respuesta.body() as {
+                data: Array<{ id: number; verificado_por_nombre: string | null }>
+                resumen: Record<string, unknown>
+            }
+            return { ids: cuerpo.data.map((c) => c.id).sort((a, b) => a - b), cuerpo }
+        }
+        const idsDe = async (qs: Record<string, unknown>) => {
+            const { ids } = await listar(qs)
+            return ids
+        }
+
+        const todos = await listar({})
+        assert.deepEqual(todos.ids, [deposito1.id, transferencia.id, deposito2.id])
+        assert.deepEqual(todos.cuerpo.resumen, {
+            total: 3,
+            monto: '450.50',
+            pendientes: 2,
+            monto_pendiente: '350.50',
+        })
+        const rechazado = todos.cuerpo.data.find((c) => c.id === deposito1.id)!
+        assert.equal(rechazado.verificado_por_nombre, usuario.nombre)
+        assert.isNull(todos.cuerpo.data.find((c) => c.id === deposito2.id)!.verificado_por_nombre)
+
+        assert.deepEqual(await idsDe({ metodo: 'transferencia' }), [transferencia.id])
+        assert.deepEqual(await idsDe({ cuenta_bancaria_id: cuentaA.id }), [deposito1.id, deposito2.id])
+        assert.deepEqual(await idsDe({ desde: '2026-10-05', hasta: '2026-10-05' }), [transferencia.id])
+        assert.deepEqual(await idsDe({ desde: '2026-10-02' }), [transferencia.id, deposito2.id])
+        assert.deepEqual(await idsDe({ hasta: '2026-10-05' }), [deposito1.id, transferencia.id])
+
+        // estado filtra la lista y el total; pendientes no depende de estado
+        const soloRechazados = await listar({ estado: 'rechazado' })
+        assert.deepEqual(soloRechazados.ids, [deposito1.id])
+        assert.deepEqual(soloRechazados.cuerpo.resumen, {
+            total: 1,
+            monto: '100.00',
+            pendientes: 2,
+            monto_pendiente: '350.50',
+        })
+        // la página no recorta el resumen
+        const pagina = await listar({ limit: 1 })
+        assert.lengthOf(pagina.cuerpo.data, 1)
+        assert.equal(pagina.cuerpo.resumen.total, 3)
+
+        await estado(client.get('/api/v1/comprobantes').qs({ metodo: 'caja' }).bearerToken(token), 422)
+    })
+
     test('referencia duplicada: con un pago o con otro comprobante pendiente → 409', async ({ assert }) => {
         const { clienteId } = await servicioCortado()
         const cuenta = await cuentaBancariaPrueba()

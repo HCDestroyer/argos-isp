@@ -50,6 +50,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'facturas.generar': 'Avisos de cobro generados',
     'facturas.anular': 'Aviso de cobro anulado',
     'pagos.registrar': 'Pago registrado',
+    'pagos.registrar_historico': 'Pago histórico importado',
+    'facturas.anular_saldo_inicial': 'Saldo inicial anulado',
     'pagos.anular': 'Pago anulado',
     'promesas.crear': 'Promesa de pago creada',
     'promesas.aprobar': 'Promesa de pago aprobada',

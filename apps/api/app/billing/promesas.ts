@@ -35,20 +35,25 @@ const ESTADOS_EN_CUPO: readonly EstadoPromesa[] = ['activa', 'cumplida', 'incump
 |--------------------------------------------------------------------------
 */
 
-/** Nombre de cada regla tal como aparece en `resultado_evaluacion.regla`. */
-export type NombreRegla =
-    | 'habilitadas'
-    | 'canal_permitido'
-    | 'sin_deuda'
-    | 'plazo_max_dias'
-    | 'no_exceder_siguiente_facturacion'
-    | 'deuda_maxima'
-    | 'abono_inicial_pct'
-    | 'antiguedad_minima_dias'
-    | 'cumplimiento_minimo_pct'
-    | 'bloqueo_tras_incumplida_dias'
-    | 'max_por_periodo'
-    | 'requiere_aprobacion'
+/**
+ * Nombre de cada regla tal como aparece en `resultado_evaluacion.regla`, en el orden en que se
+ * evalúan. Contrato: `.claude/integration/contratos/promesas.md` (una regla nueva va al final).
+ */
+export const NOMBRES_REGLA = [
+    'habilitadas',
+    'canal_permitido',
+    'sin_deuda',
+    'plazo_max_dias',
+    'no_exceder_siguiente_facturacion',
+    'deuda_maxima',
+    'abono_inicial_pct',
+    'antiguedad_minima_dias',
+    'cumplimiento_minimo_pct',
+    'bloqueo_tras_incumplida_dias',
+    'max_por_periodo',
+    'requiere_aprobacion',
+] as const
+export type NombreRegla = (typeof NOMBRES_REGLA)[number]
 
 export interface ReglaEvaluada {
     regla: NombreRegla
