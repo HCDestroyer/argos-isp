@@ -1,5 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { deducirTipoDocumento, errorDocumentoFiscal, limpiarDocumento, type TipoDocumentoFiscal } from '~/utils/documentoFiscal'
 import { bd, siguienteId } from '../bd'
 import {
     ahora,
@@ -21,7 +22,7 @@ import { estadoCuentaDe } from './estado-cuenta'
 type Cliente = Schema<'Cliente'>
 type CamposCliente = Omit<Cliente, 'id' | 'version' | 'created_at' | 'updated_at' | 'telegram_chat_id'>
 
-const NIT_CUI = /^(CF|\d{13}|\d{1,12}-?[0-9K])$/
+const TIPOS_DOCUMENTO: readonly TipoDocumentoFiscal[] = ['nit', 'cui', 'pasaporte', 'cf']
 const CAMPOS_TEXTO = ['nit_cui', 'nombre_fiscal', 'direccion_fiscal', 'email', 'telefono', 'movil', 'direccion', 'coordenadas'] as const
 
 /** Validación mínima, en el espíritu de `crearClienteValidator`, para probar el 422 en pantalla. */
@@ -33,8 +34,20 @@ function validar(cuerpo: Record<string, unknown>, parcial: boolean): NonNullable
             errores.push({ field: 'nombre', message: 'El nombre debe tener al menos 2 caracteres', rule: 'minLength' })
         }
     }
-    if (typeof nit === 'string' && !NIT_CUI.test(nit.trim().toUpperCase())) {
-        errores.push({ field: 'nit_cui', message: 'NIT o CUI inválido', rule: 'regex' })
+    // `validarDocumentoFiscal` de A1: el tipo indicado o, sin él, el que se deduce del número.
+    const tipoPedido = cuerpo.tipo_documento_fiscal
+    if (tipoPedido !== undefined && !TIPOS_DOCUMENTO.includes(tipoPedido as TipoDocumentoFiscal)) {
+        errores.push({ field: 'tipo_documento_fiscal', message: 'Uno de: nit, cui, pasaporte, cf', rule: 'enum' })
+    }
+    else if (tipoPedido !== undefined || (typeof nit === 'string' && nit.trim())) {
+        const tipo = (tipoPedido as TipoDocumentoFiscal | undefined) ?? deducirTipoDocumento(typeof nit === 'string' ? nit : null)
+        const pais = typeof cuerpo.pais_fiscal === 'string' ? cuerpo.pais_fiscal : 'GT'
+        const error = tipo
+            ? errorDocumentoFiscal(tipo, typeof nit === 'string' ? nit : '', pais)
+            : { campo: 'nit_cui', mensaje: 'El NIT no es válido (dígito verificador)' }
+        if (error) {
+            errores.push({ field: error.campo, message: error.mensaje, rule: tipo ?? 'nit' })
+        }
     }
     if (typeof email === 'string' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
         errores.push({ field: 'email', message: 'Correo inválido', rule: 'email' })
@@ -69,6 +82,22 @@ function aplicar(base: CamposCliente, cuerpo: Record<string, unknown>): CamposCl
     if (resultado.nit_cui) {
         resultado.nit_cui = resultado.nit_cui.toUpperCase()
     }
+    if ('nit_cui' in cuerpo || 'tipo_documento_fiscal' in cuerpo) {
+        // Como la API: se guarda sin guiones ni espacios y la marca de inválido se apaga al corregirlo.
+        const tipo = TIPOS_DOCUMENTO.find(t => t === cuerpo.tipo_documento_fiscal) ?? deducirTipoDocumento(resultado.nit_cui) ?? 'nit'
+        resultado.tipo_documento_fiscal = tipo
+        resultado.nit_cui = tipo === 'cf' ? (resultado.nit_cui === 'CF' ? 'CF' : null) : (resultado.nit_cui ? limpiarDocumento(resultado.nit_cui) : null)
+        resultado.nit_cui_invalido = false
+    }
+    if (typeof cuerpo.pais_fiscal === 'string') {
+        resultado.pais_fiscal = cuerpo.pais_fiscal.toUpperCase()
+    }
+    for (const campo of ['agente_retencion_iva', 'sector_publico'] as const) {
+        const valor = cuerpo[campo]
+        if (typeof valor === 'boolean') {
+            resultado[campo] = valor
+        }
+    }
     if ('zona_id' in cuerpo) {
         resultado.zona_id = typeof cuerpo.zona_id === 'number' ? cuerpo.zona_id : null
     }
@@ -91,6 +120,11 @@ const VACIO: CamposCliente = {
     canal_preferido: 'correo',
     responsable_pago_id: null,
     responsable_pago_nombre: null,
+    tipo_documento_fiscal: 'cf',
+    nit_cui_invalido: false,
+    pais_fiscal: 'GT',
+    agente_retencion_iva: false,
+    sector_publico: false,
 }
 
 const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }
@@ -168,7 +202,12 @@ function cumpleFiltrosAvanzados(cliente: Cliente, solicitud: SolicitudFixture): 
         return false
     }
     const promesa = banderaQuery(solicitud, 'con_promesa_activa')
-    return promesa === undefined || servicios.some(s => s.promesa_activa) === promesa
+    if (promesa !== undefined && servicios.some(s => s.promesa_activa) !== promesa) {
+        return false
+    }
+    // Localización fiscal (A1): NIT/CUI que no pasó la validación al migrar.
+    const invalido = banderaQuery(solicitud, 'nit_cui_invalido')
+    return invalido === undefined || (cliente.nit_cui_invalido === true) === invalido
 }
 
 export const rutasClientes: RutasFixture = {

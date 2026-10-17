@@ -1,4 +1,5 @@
 import type { Schema } from '@argosisp/contracts'
+import { deducirTipoDocumento, limpiarDocumento, nitValido } from '~/utils/documentoFiscal'
 
 type Cliente = Schema<'Cliente'>
 
@@ -66,6 +67,24 @@ function correo(nombre: string): string {
     return `${base}@correo.gt`
 }
 
+/**
+ * Datos fiscales como los deja la migración de la localización fiscal (A1, fase 1): el tipo se
+ * deduce del número y lo que no pasa el dígito verificador se conserva con `nit_cui_invalido`.
+ * Varios NIT de ejemplo no cuadran con el módulo 11: así se ve el aviso «por corregir».
+ */
+function datosFiscales(nit: string | undefined, indice: number): Pick<Cliente, 'tipo_documento_fiscal' | 'nit_cui_invalido' | 'pais_fiscal' | 'agente_retencion_iva' | 'sector_publico'> {
+    const tipo = deducirTipoDocumento(nit)
+    const invalido = tipo === null && nit !== undefined && !nitValido(limpiarDocumento(nit))
+    return {
+        tipo_documento_fiscal: tipo ?? 'nit',
+        nit_cui_invalido: invalido,
+        pais_fiscal: 'GT',
+        // Comercial El Progreso retiene IVA; el colegio es del sector público.
+        agente_retencion_iva: indice === 2,
+        sector_publico: indice === 19,
+    }
+}
+
 /** Cliente importado de Mikrowisp (con un pago histórico en `facturacion/datos.ts`). */
 export const CLIENTE_IMPORTADO = 8
 
@@ -77,6 +96,7 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         nombre: semilla.nombre,
         tipo: semilla.tipo ?? 'persona',
         nit_cui: semilla.nit ?? null,
+        ...datosFiscales(semilla.nit, indice),
         nombre_fiscal: semilla.fiscal ?? (semilla.nit && semilla.nit !== 'CF' ? semilla.nombre.toUpperCase() : null),
         direccion_fiscal: semilla.nit && semilla.nit !== 'CF' ? `${3 + indice} calle ${indice + 1}-${20 + indice}, zona ${(indice % 18) + 1}` : null,
         email: indice % 5 === 3 ? null : correo(semilla.nombre),

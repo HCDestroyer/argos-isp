@@ -103,7 +103,7 @@ watch(() => filtros.q, () => {
     temporizador = setTimeout(aplicarFiltros, 300)
 })
 watch(
-    () => [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.conPromesa],
+    () => [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.conPromesa, filtros.nitInvalido],
     () => {
         clearTimeout(temporizador)
         void aplicarFiltros()
@@ -294,6 +294,11 @@ onMounted(async () => {
                         v-model="filtros.conPromesa"
                         label="Con promesa activa"
                         description="Promesa de pago vigente"
+                    />
+                    <USwitch
+                        v-model="filtros.nitInvalido"
+                        label="NIT o CUI por corregir"
+                        description="No pasó la validación fiscal"
                     />
                 </div>
             </div>
