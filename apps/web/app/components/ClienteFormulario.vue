@@ -337,7 +337,7 @@ onMounted(async () => {
                 type="submit"
                 :label="editando ? 'Guardar cambios' : 'Crear cliente'"
                 icon="i-lucide-check"
-                class="justify-center"
+                class="glow-brand justify-center"
                 :loading="enviando"
             />
         </div>

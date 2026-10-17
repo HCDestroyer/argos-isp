@@ -1,4 +1,6 @@
+import { enableAutoUnmount, flushPromises } from '@vue/test-utils'
 import { Headers as HeadersHappyDom } from 'happy-dom'
+import { afterEach } from 'vitest'
 
 /**
  * En el entorno `nuxt` + happy-dom, `Request` es el de happy-dom pero `Headers` es el de Node.
@@ -7,3 +9,22 @@ import { Headers as HeadersHappyDom } from 'happy-dom'
  * En el navegador ambos son nativos y no pasa.
  */
 globalThis.Headers = HeadersHappyDom as unknown as typeof globalThis.Headers
+
+/**
+ * Nada de la prueba sigue vivo cuando el entorno se desmonta. Antes, una pantalla montada con
+ * `mountSuspended` quedaba montada al terminar: un temporizador suyo (la búsqueda con espera de
+ * `ClienteSelector`, el refresco de la sesión) o una respuesta de los fixtures llegaba después,
+ * Vue repintaba una lista de reka-ui y fallaba con "Element is not defined" (el `window` de
+ * happy-dom ya no existía). Solo pasaba con la máquina cargada.
+ *
+ * Los `afterEach` corren en orden inverso al de registro: primero se esperan las promesas
+ * pendientes (con el DOM vivo), luego se desmonta todo lo montado en la prueba (cada componente
+ * limpia sus temporizadores en `onBeforeUnmount`) y al final se vacía lo que el desmontaje dejó.
+ */
+afterEach(async () => {
+    await flushPromises()
+})
+enableAutoUnmount(afterEach)
+afterEach(async () => {
+    await flushPromises()
+})

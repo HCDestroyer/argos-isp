@@ -13,47 +13,76 @@ export interface SeccionPanel {
     permiso: string
 }
 
+/**
+ * Grupo plegable del menú (decisión del PM: menú resumido). Sin permiso para ninguna de sus
+ * secciones, el grupo no aparece; el de la página actual se abre solo.
+ */
 export interface GrupoSecciones {
+    id: string
     etiqueta: string
+    icono: string
     secciones: SeccionPanel[]
 }
 
 export const GRUPOS_PANEL: GrupoSecciones[] = [
     {
+        id: 'operacion',
         etiqueta: 'Operación',
+        icono: 'i-lucide-activity',
         secciones: [
             { id: 'clientes', etiqueta: 'Clientes', descripcion: 'Búsqueda, fichas, datos fiscales y estado de cuenta.', icono: 'i-lucide-users', ruta: '/clientes', permiso: 'clientes.ver' },
             { id: 'servicios', etiqueta: 'Servicios', descripcion: 'Servicios PPPoE, sesiones activas y acciones de corte.', icono: 'i-lucide-wifi', ruta: '/servicios', permiso: 'servicios.ver' },
-            { id: 'routers', etiqueta: 'Routers', descripcion: 'Routers MikroTik, redes IPv4 y bloques IPv6.', icono: 'i-lucide-router', ruta: '/routers', permiso: 'routers.ver' },
-            { id: 'planes', etiqueta: 'Planes', descripcion: 'Velocidades, precios e implementación por router.', icono: 'i-lucide-gauge', ruta: '/planes', permiso: 'planes.ver' },
-            { id: 'plantillas', etiqueta: 'Plantillas', descripcion: 'Ciclos de facturación, corte, mora y reglas de promesas.', icono: 'i-lucide-file-cog', ruta: '/plantillas', permiso: 'plantillas.ver' },
+            { id: 'migracion', etiqueta: 'Migración de router', descripcion: 'Quién volvió a conectarse desde que el router pasó al nuevo aaa, y fallos de red.', icono: 'i-lucide-arrow-right-left', ruta: '/routers/migracion', permiso: 'routers.ver' },
         ],
     },
     {
+        id: 'cobros',
         etiqueta: 'Cobros',
+        icono: 'i-lucide-coins',
         secciones: [
             { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-hand-coins', ruta: '/cobro', permiso: 'pagos.registrar' },
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
-            { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'comprobantes', etiqueta: 'Comprobantes', descripcion: 'Depósitos y transferencias por verificar: aprobar registra el pago y reactiva.', icono: 'i-lucide-file-check-2', ruta: '/comprobantes', permiso: 'comprobantes.ver' },
-            { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
             { id: 'promesas', etiqueta: 'Promesas', descripcion: 'Promesas de pago y su evaluación.', icono: 'i-lucide-calendar-clock', ruta: '/promesas', permiso: 'promesas.ver' },
+            { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
         ],
     },
     {
-        etiqueta: 'Control',
+        id: 'contabilidad',
+        etiqueta: 'Contabilidad',
+        icono: 'i-lucide-calculator',
+        secciones: [
+            { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
+            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y cierre mensual.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
+        ],
+    },
+    {
+        id: 'red',
+        etiqueta: 'Red',
+        icono: 'i-lucide-network',
+        secciones: [
+            { id: 'routers', etiqueta: 'Routers', descripcion: 'Routers MikroTik, redes IPv4 y bloques IPv6.', icono: 'i-lucide-router', ruta: '/routers', permiso: 'routers.ver' },
+            { id: 'planes', etiqueta: 'Planes', descripcion: 'Velocidades, precios e implementación por router.', icono: 'i-lucide-gauge', ruta: '/planes', permiso: 'planes.ver' },
+        ],
+    },
+    {
+        id: 'control',
+        etiqueta: 'Reportes y bitácora',
+        icono: 'i-lucide-chart-pie',
         secciones: [
             { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cartera vencida, ingresos, IVA, cobranza, cierres de caja y más, en CSV o Excel.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
-            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y cierre mensual.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
-            { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
-            { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
         ],
     },
     {
+        id: 'configuracion',
         etiqueta: 'Configuración',
+        icono: 'i-lucide-settings',
         secciones: [
+            { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
+            { id: 'plantillas', etiqueta: 'Plantillas', descripcion: 'Ciclos de facturación, corte, mora y reglas de promesas.', icono: 'i-lucide-file-cog', ruta: '/plantillas', permiso: 'plantillas.ver' },
             { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },
             { id: 'empresa', etiqueta: 'Empresa', descripcion: 'Contacto, horario e instrucciones de pago del aviso y el portal.', icono: 'i-lucide-building-2', ruta: '/configuracion/empresa', permiso: 'empresa.ver' },
             { id: 'aviso-cobro', etiqueta: 'Plantilla del aviso', descripcion: 'HTML con variables del PDF del aviso de cobro.', icono: 'i-lucide-file-code-2', ruta: '/configuracion/aviso-cobro', permiso: 'documentos.ver' },
@@ -69,4 +98,18 @@ export function obtenerSeccion(id: string): SeccionPanel {
         throw new Error(`Sección desconocida: ${id}`)
     }
     return seccion
+}
+
+/** Grupo al que pertenece la ruta actual (la sección con el prefijo más largo), o `null`. */
+export function grupoDeRuta(ruta: string): GrupoSecciones | null {
+    let mejor: { grupo: GrupoSecciones, largo: number } | null = null
+    for (const grupo of GRUPOS_PANEL) {
+        for (const seccion of grupo.secciones) {
+            const coincide = ruta === seccion.ruta || ruta.startsWith(`${seccion.ruta}/`)
+            if (coincide && (!mejor || seccion.ruta.length > mejor.largo)) {
+                mejor = { grupo, largo: seccion.ruta.length }
+            }
+        }
+    }
+    return mejor?.grupo ?? null
 }

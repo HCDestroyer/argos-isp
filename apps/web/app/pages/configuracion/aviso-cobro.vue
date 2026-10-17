@@ -177,7 +177,7 @@ onBeforeUnmount(liberarVista)
                 <div class="flex flex-wrap items-center gap-2 text-sm text-muted">
                     <UBadge
                         :label="plantilla.version === 0 ? 'Plantilla de fábrica' : `Versión ${plantilla.version}`"
-                        :color="plantilla.version === 0 ? 'neutral' : 'primary'"
+                        :color="plantilla.version === 0 ? 'neutral' : 'info'"
                         variant="subtle"
                     />
                     <span>HTML con variables <span class="font-mono">{{ EJEMPLO_VARIABLE }}</span>; una sección <span class="font-mono">{{ EJEMPLO_SECCION }}</span> se oculta si el dato está vacío.</span>
@@ -333,7 +333,7 @@ onBeforeUnmount(liberarVista)
                     v-if="urlVista"
                     :src="urlVista"
                     title="Vista previa del aviso de cobro"
-                    class="h-[70vh] w-full rounded-md border border-default bg-white"
+                    class="h-[70vh] w-full rounded-md border border-default bg-default"
                     data-prueba="vista-previa"
                 />
                 <UEmpty

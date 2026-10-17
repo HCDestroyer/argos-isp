@@ -9,7 +9,7 @@ type Estado = Comprobante['estado']
 export const ESTADOS_COMPROBANTE: Record<Estado, { etiqueta: string, plural: string, color: NonNullable<BadgeProps['color']>, icono: string }> = {
     pendiente: { etiqueta: 'Pendiente', plural: 'Pendientes', color: 'warning', icono: 'i-lucide-hourglass' },
     aprobado: { etiqueta: 'Aprobado', plural: 'Aprobados', color: 'success', icono: 'i-lucide-circle-check' },
-    rechazado: { etiqueta: 'Rechazado', plural: 'Rechazados', color: 'error', icono: 'i-lucide-circle-x' },
+    rechazado: { etiqueta: 'Rechazado', plural: 'Rechazados', color: 'neutral', icono: 'i-lucide-circle-x' },
 }
 
 export const CANALES_COMPROBANTE: Record<Comprobante['canal'], string> = {

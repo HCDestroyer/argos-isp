@@ -955,6 +955,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     v-else
                     type="submit"
                     label="Crear servicio"
+                    class="glow-brand"
                     icon="i-lucide-check"
                     :loading="enviando"
                 />

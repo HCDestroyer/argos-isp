@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Indicador del dashboard: etiqueta, cifra principal y una línea de contexto. El color no
+ * Indicador del dashboard: etiqueta, cifra principal (número vivo: rueda al cambiar) y una línea de contexto. El color no
  * codifica nada aquí (el valor va en tinta de texto); el enlace lleva a la lista que lo explica.
  */
 withDefaults(defineProps<{
@@ -19,7 +19,7 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-1 rounded-lg border border-default bg-default p-4">
+    <div class="flex min-w-0 flex-col gap-1 surface-card p-4">
         <div class="flex items-center justify-between gap-2">
             <span class="flex items-center gap-1.5 text-sm text-muted">
                 <UIcon
@@ -41,10 +41,10 @@ withDefaults(defineProps<{
             />
         </div>
         <p
-            class="truncate text-2xl font-semibold tabular-nums text-highlighted"
+            class="truncate text-2xl font-semibold tracking-[-0.02em] tabular-nums text-highlighted"
             data-prueba="valor"
         >
-            {{ valor }}
+            <NumeroVivo :valor="valor" />
         </p>
         <p
             v-if="detalle || $slots.default"

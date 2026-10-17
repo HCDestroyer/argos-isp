@@ -54,7 +54,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
         data-prueba="vista-previa-control"
     >
         <dl class="grid grid-cols-3 gap-2">
-            <div class="flex flex-col gap-0.5 rounded-lg border border-default p-3">
+            <div class="flex flex-col gap-0.5 surface-card p-3">
                 <dt class="text-xs text-muted">
                     Servicios afectados
                 </dt>
@@ -65,7 +65,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                     {{ vista.servicios }}
                 </dd>
             </div>
-            <div class="flex flex-col gap-0.5 rounded-lg border border-default p-3">
+            <div class="flex flex-col gap-0.5 surface-card p-3">
                 <dt class="text-xs text-muted">
                     Lotes
                 </dt>
@@ -76,7 +76,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                     {{ vista.lotes }}
                 </dd>
             </div>
-            <div class="flex flex-col gap-0.5 rounded-lg border border-default p-3">
+            <div class="flex flex-col gap-0.5 surface-card p-3">
                 <dt class="text-xs text-muted">
                     Sesiones a desconectar
                 </dt>
@@ -126,7 +126,6 @@ function plural(cantidad: number, singular: string, varios: string): string {
                 :data="vista.menus"
                 :columns="columnas"
                 :ui="{ th: 'px-2 sm:px-4', td: 'px-2 py-3 sm:px-4 whitespace-normal' }"
-                class="rounded-lg border border-default"
                 data-prueba="vista-menus"
             >
                 <template #ruta-cell="{ row }">

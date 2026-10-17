@@ -52,6 +52,19 @@ export function formatearFechaHora(valor: FechaEntrada): string {
     return fecha ? formatoFechaHora.format(fecha) : '—'
 }
 
+const formatoHora = new Intl.DateTimeFormat(LOCALE, {
+    timeZone: ZONA_HORARIA,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+})
+
+/** `2026-10-19T15:42:00Z` → `09:42` en hora de Guatemala (frescura de un dato en vivo). */
+export function formatearHora(valor: FechaEntrada): string {
+    const fecha = aDate(valor)
+    return fecha ? formatoHora.format(fecha) : '—'
+}
+
 /** Agrupa miles con coma: `1234567` → `1,234,567`. */
 function agruparMiles(entero: string): string {
     return entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
