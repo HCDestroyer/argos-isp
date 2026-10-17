@@ -124,7 +124,14 @@ export const Factura = definirEsquema(
             subtotal: Dinero,
             iva: Dinero,
             total: Dinero,
-            pagado: Dinero,
+            pagado: {
+                ...Dinero,
+                description: 'Lo cubierto de la factura: pagos, saldos a favor y notas de crédito',
+            },
+            acreditado: {
+                ...Dinero,
+                description: 'Parte de pagado que viene de notas de crédito (saldo = total − pagado)',
+            },
             fel_uuid: nulable(texto),
             fel_serie: nulable(texto),
             fel_numero: nulable(texto),
@@ -139,12 +146,50 @@ export const Factura = definirEsquema(
             motivo_anulacion: nulable(texto),
             ...auditable,
         },
-        ['tipo', 'factura_origen_id', 'vencida_en', 'anulada_en', 'motivo_anulacion', 'cliente_nombre'],
+        [
+            'tipo',
+            'factura_origen_id',
+            'vencida_en',
+            'anulada_en',
+            'motivo_anulacion',
+            'cliente_nombre',
+            'acreditado',
+        ],
     ),
 )
 
+export const NotaCredito = definirEsquema(
+    'NotaCredito',
+    objeto({
+        id,
+        factura_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        servicio_id: nulable(id),
+        fecha: { ...fecha, description: 'Fecha contable (Guatemala)' },
+        subtotal: Dinero,
+        iva: { ...Dinero, description: 'IVA acreditado, proporcional al de la factura' },
+        monto: { ...Dinero, description: 'subtotal + iva' },
+        motivo: texto,
+        asiento_id: { ...nulable(id), description: 'Asiento nota_credito (Debe ingresos/IVA, Haber CxC)' },
+        created_by: nulable(id),
+        created_by_nombre: nulable(texto),
+        created_at: instante,
+    }),
+)
+
 export const FacturaDetalle = definirEsquema('FacturaDetalle', {
-    allOf: [Factura, objeto({ lineas: lista(FacturaLinea), reglas_snapshot: jsonLibre })],
+    allOf: [
+        Factura,
+        objeto(
+            {
+                lineas: lista(FacturaLinea),
+                reglas_snapshot: jsonLibre,
+                notas_credito: { ...lista(NotaCredito), description: 'Notas de crédito de la factura' },
+            },
+            ['notas_credito'],
+        ),
+    ],
 })
 
 export const ResultadoGeneracion = definirEsquema(
@@ -206,6 +251,19 @@ export const ServicioEvaluado = definirEsquema(
         motivo: texto,
     }),
 )
+
+export const NotaCreditoEmitida = definirEsquema('NotaCreditoEmitida', {
+    allOf: [
+        NotaCredito,
+        objeto({
+            factura: { ...FacturaDetalle, description: 'La factura con su nuevo saldo y estado' },
+            servicios: {
+                ...lista(ServicioEvaluado),
+                description: 'Cómo quedó el servicio de la factura (reactivación inmediata)',
+            },
+        }),
+    ],
+})
 
 export const Pago = definirEsquema(
     'Pago',

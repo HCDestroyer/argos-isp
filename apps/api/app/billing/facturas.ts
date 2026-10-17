@@ -4,6 +4,7 @@ import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/ac
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, D, aTexto, dec, redondear, type Dec, type Monto } from '#ledger/dinero'
+import { notasDeFactura } from '#billing/notas_credito'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -92,7 +93,10 @@ export interface FacturaFila {
     subtotal: string
     iva: string
     total: string
+    /** cubierto: pagos, saldos a favor aplicados y notas de crédito */
     pagado: string
+    /** parte de `pagado` que viene de notas de crédito */
+    acreditado: string
     fel_uuid: string | null
     fel_serie: string | null
     fel_numero: string | null
@@ -125,6 +129,9 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('iva'),
         c('total'),
         c('pagado'),
+        cliente.raw(
+            `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = ${alias}.id) as acreditado`,
+        ),
         c('fel_uuid'),
         c('fel_serie'),
         c('fel_numero'),
@@ -146,7 +153,7 @@ export interface FiltrosFacturas extends OpcionesPaginacion {
 }
 
 /** Filtros de alcance de una factura: zona del cliente y router del servicio. */
-const dimensionesFactura: FiltrosDimension = {
+export const dimensionesFactura: FiltrosDimension = {
     zona: (q, ids) => q.whereIn('c.zona_id', ids),
     router: (q, ids) => q.whereIn('s.router_id', ids),
 }
@@ -187,7 +194,8 @@ export async function verFactura(id: number, cliente: QueryClientContract = db.c
             'iva',
             'total',
         )
-    return { ...fila, lineas }
+    const notas = await notasDeFactura(id, cliente)
+    return { ...fila, lineas, notas_credito: notas }
 }
 
 /** Dimensiones de alcance de una factura (para `exigirAlcance`). */

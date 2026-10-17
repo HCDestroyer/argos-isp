@@ -56,7 +56,17 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 ## Anular factura
 
-`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5.
+`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5. Una factura con notas de crédito no se anula (409 `factura_con_notas_credito`): se acredita el resto con otra nota.
+
+## Notas de crédito
+
+`actions/emitir_nota_credito.ts` (`facturas.nota_credito`, `POST /facturas/:id/notas-credito { monto, motivo }` + `Idempotency-Key`, 201 `NotaCreditoEmitida`). Interna, sin FEL (semana 5). Tabla `billing.notas_credito`, inmutable (trigger y `REVOKE`).
+
+- `monto` parcial o total, nunca mayor al saldo (`total − pagado`) de la factura (422 `monto`); 409 `factura_anulada` o `factura_sin_saldo`.
+- Asiento `nota_credito` (origen = la nota): Debe lo que el asiento de la factura acreditó (Ingresos, IVA débito, Otros ingresos, Recargos por mora, Saldos de apertura) en proporción `monto / total`, redondeado al final y con la diferencia en la línea mayor (`repartirProporcional` en `notas_credito.ts`); Haber CxC del cliente. La nota guarda `subtotal` e `iva` (el IVA proporcional de la factura).
+- Suma `monto` a `facturas.pagado` (lo cubierto) y recalcula su estado (puede quedar `pagada`); `Factura.acreditado` es la parte de notas. Emite `nota_credito.emitida`, re-evalúa el servicio (sube de inmediato: `servicios[]`) y el consumidor `billing` revisa las promesas del cliente con ese evento.
+- Estado de cuenta: abono con `tipo: nota_credito` y `referencia_id` = la nota. `GET /facturas/:id` trae `notas_credito[]`; `GET /notas-credito` (`cliente_id`, `factura_id`, `desde`, `hasta`) y `GET /notas-credito/:id` con `facturas.ver`.
+- Su asiento no se revierte directo (`reverso_por_documento`).
 
 ## Importación (para A6, sin endpoint)
 

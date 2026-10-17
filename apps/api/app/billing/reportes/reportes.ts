@@ -435,13 +435,17 @@ export const COLUMNAS_IVA = definirColumnas([
     { clave: 'facturas_anuladas', titulo: 'Facturas anuladas', tipo: 'entero' },
     { clave: 'base_anulada', titulo: 'Base anulada', tipo: 'dinero' },
     { clave: 'iva_anulado', titulo: 'IVA anulado', tipo: 'dinero' },
+    { clave: 'notas_credito', titulo: 'Notas de crédito', tipo: 'entero', agregada: true },
+    { clave: 'base_acreditada', titulo: 'Base acreditada', tipo: 'dinero', agregada: true },
+    { clave: 'iva_acreditado', titulo: 'IVA acreditado', tipo: 'dinero', agregada: true },
     { clave: 'iva_neto', titulo: 'IVA débito neto', tipo: 'dinero' },
     { clave: 'iva_libro', titulo: 'Saldo del mes en 2.1.02', tipo: 'dinero' },
 ])
 
 /**
- * Débito fiscal por mes contable, desde el libro: lo facturado (asientos de factura) y lo anulado
- * (sus reversos, en el mes del reverso). `iva_libro` es el movimiento neto de la cuenta IVA
+ * Débito fiscal por mes contable, desde el libro: lo facturado (asientos de factura), lo anulado
+ * (sus reversos, en el mes del reverso) y lo acreditado por notas de crédito (en el mes de la
+ * nota). `iva_neto = facturado − anulado − acreditado`. `iva_libro` es el movimiento neto de la cuenta IVA
  * débito fiscal del mes; debe ser igual a `iva_neto`.
  */
 export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string }): Promise<Reporte> {
@@ -460,13 +464,17 @@ export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string })
         SELECT i.periodo,
                count(*) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo = 'factura')::int AS facturas,
                coalesce(sum(f.subtotal) FILTER (WHERE i.reversa_de IS NULL), 0)::text AS base,
-               coalesce(sum(i.haber) FILTER (WHERE i.reversa_de IS NULL), 0)::text AS iva_facturado,
+               coalesce(sum(i.haber) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo <> 'nota_credito'), 0)::text AS iva_facturado,
+               count(*) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo = 'nota_credito')::int AS notas_credito,
+               coalesce(sum(n.subtotal) FILTER (WHERE i.reversa_de IS NULL), 0)::text AS base_acreditada,
+               coalesce(sum(i.debe) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo = 'nota_credito'), 0)::text AS iva_acreditado,
                count(*) FILTER (WHERE i.reversa_de IS NOT NULL AND i.origen_tipo = 'factura')::int AS facturas_anuladas,
                coalesce(sum(f.subtotal) FILTER (WHERE i.reversa_de IS NOT NULL), 0)::text AS base_anulada,
                coalesce(sum(i.debe) FILTER (WHERE i.reversa_de IS NOT NULL), 0)::text AS iva_anulado,
                coalesce(sum(i.haber) - sum(i.debe), 0)::text AS iva_libro
           FROM iva i
           LEFT JOIN billing.facturas f ON i.origen_tipo = 'factura' AND f.id = i.origen_id
+          LEFT JOIN billing.notas_credito n ON i.origen_tipo = 'nota_credito' AND n.id = i.origen_id
          GROUP BY i.periodo
          ORDER BY i.periodo
         `,
@@ -478,7 +486,13 @@ export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string })
         iva_facturado: dinero(f.iva_facturado),
         base_anulada: dinero(f.base_anulada),
         iva_anulado: dinero(f.iva_anulado),
-        iva_neto: aTexto(dec(f.iva_facturado as string).minus(dec(f.iva_anulado as string))),
+        base_acreditada: dinero(f.base_acreditada),
+        iva_acreditado: dinero(f.iva_acreditado),
+        iva_neto: aTexto(
+            dec(f.iva_facturado as string)
+                .minus(dec(f.iva_anulado as string))
+                .minus(dec(f.iva_acreditado as string)),
+        ),
         iva_libro: dinero(f.iva_libro),
     }))
     return armarReporte({

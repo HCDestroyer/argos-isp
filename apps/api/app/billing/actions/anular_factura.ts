@@ -10,7 +10,8 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  * `facturas.anular` (`POST /facturas/:id/anular`, permiso `facturas.anular`, con motivo).
  *
  * - 409 `factura_con_pagos` si la factura (o una de sus moras) tiene pagos aplicados: hay que
- *   anular el pago primero. 409 `factura_anulada` si ya estaba anulada.
+ *   anular el pago primero. 409 `factura_con_notas_credito` si tiene notas de crédito (se
+ *   acredita el resto con otra nota). 409 `factura_anulada` si ya estaba anulada.
  * - Pasa a `anulada` con quién/cuándo/motivo; nunca se borra. Sus recargos de mora pendientes
  *   se anulan con ella (cada uno con su reverso y su evento).
  * - Revierte su asiento (`factura` o `mora`) con `RevertirAsiento`: el saldo del cliente baja.
@@ -67,6 +68,23 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 `La factura ${factura.id} ya está anulada`,
                 'factura_anulada',
                 'Factura anulada',
+            )
+        }
+        const conNotas = await t.trx
+            .from('billing.notas_credito')
+            .whereIn(
+                'factura_id',
+                facturas.map((f) => f.id),
+            )
+            .orderBy('id', 'asc')
+            .select('id', 'factura_id')
+        if (conNotas.length > 0) {
+            throw new Conflicto(
+                `La factura ${factura.id} tiene notas de crédito (${conNotas
+                    .map((n) => `nota ${n.id} de la factura ${n.factura_id}`)
+                    .join(', ')}); acredita el resto con otra nota en lugar de anularla`,
+                'factura_con_notas_credito',
+                'Factura con notas de crédito',
             )
         }
         const conPagos = facturas.filter((f) => f.estado !== 'anulada' && dec(f.pagado).gt(0))

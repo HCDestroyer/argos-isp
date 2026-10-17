@@ -126,6 +126,23 @@ export const corteValidator = vine.compile(
 
 export const anularFacturaValidator = vine.compile(vine.object({ motivo: motivo() }))
 
+export const notaCreditoValidator = vine.compile(
+    vine.object({
+        monto: dinero(),
+        motivo: motivo(),
+    }),
+)
+
+export const listarNotasCreditoValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        factura_id: idEntidad().optional(),
+        desde: fechaIso().optional().meta({ description: 'Fecha contable desde (inclusive)' }),
+        hasta: fechaIso().optional().meta({ description: 'Fecha contable hasta (inclusive)' }),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Pagos
