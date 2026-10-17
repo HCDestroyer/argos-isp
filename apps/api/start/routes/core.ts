@@ -13,6 +13,12 @@ import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
 import { conLimiteLogin } from '#core/auth/limite_login'
+import {
+    borrarCookieSesionPanel,
+    csrfDeSesion,
+    ponerCookieSesionPanel,
+    verificarOrigenLogin,
+} from '#core/auth/sesion_panel'
 import CerrarSesion from '#core/actions/cerrar_sesion'
 import CrearUsuario from '#core/actions/crear_usuario'
 import EditarUsuario from '#core/actions/editar_usuario'
@@ -75,6 +81,7 @@ import {
     Rol,
     Servicio,
     Sesion,
+    SesionPanel,
     TokenApi,
     TokenApiCreado,
     Usuario,
@@ -96,21 +103,58 @@ const auth: Ruta[] = [
         cuerpo: v.loginValidator,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Sesión iniciada', esquema: Sesion },
-        handler: (ctx, { cuerpo }) =>
-            conLimiteLogin(ctx, cuerpo.email, () =>
+        handler: async (ctx, { cuerpo }) => {
+            const sesion = await conLimiteLogin(ctx, cuerpo.email, () =>
                 new IniciarSesion().execute(cuerpo, ctx.contextoAccion()),
-            ),
+            )
+            return { token: sesion.token, usuario: sesion.usuario }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/auth/sesion',
+        operacion: 'authSesion',
+        resumen: 'Iniciar sesión del panel en cookie HttpOnly',
+        etiqueta: 'auth',
+        seguridad: 'publico',
+        permiso: null,
+        descripcion:
+            'Igual que `POST /auth/login` (mismas credenciales y límite de intentos), pero el token va en la ' +
+            'cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el ' +
+            'cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. ' +
+            'Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. ' +
+            'Contrato: `.claude/integration/contratos/sesion-panel.md`.',
+        cuerpo: v.loginValidator,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Sesión iniciada; cookie puesta', esquema: SesionPanel },
+        handler: async (ctx, { cuerpo }) => {
+            verificarOrigenLogin(ctx)
+            const sesion = await conLimiteLogin(ctx, cuerpo.email, () =>
+                new IniciarSesion().execute(cuerpo, ctx.contextoAccion('panel')),
+            )
+            ponerCookieSesionPanel(ctx, sesion.token, sesion.expiraEn)
+            const csrf = csrfDeSesion(sesion.token)
+            return {
+                usuario: { ...sesion.usuario, csrf },
+                csrf,
+                expira_en: sesion.expiraEn?.toISOString() ?? null,
+            }
+        },
     }),
     definirRuta({
         metodo: 'post',
         ruta: '/auth/logout',
         operacion: 'authLogout',
         resumen: 'Cerrar la sesión actual',
+        descripcion:
+            'Revoca el token de login (Bearer o cookie del panel). Con la cookie, la borra ' +
+            '(`Set-Cookie` vencida) y exige `X-CSRF-Token` como todo POST.',
         etiqueta: 'auth',
         permiso: null,
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
         handler: async (ctx) => {
-            if (ctx.auth.authenticatedViaGuard !== 'api') {
+            const guard = ctx.auth.authenticatedViaGuard
+            if (guard !== 'api' && guard !== 'panel') {
                 throw new Problema(
                     400,
                     'no_es_sesion',
@@ -118,7 +162,7 @@ const auth: Ruta[] = [
                     'Un token de API se revoca con POST /tokens/:id/revocar',
                 )
             }
-            const usuario = ctx.auth.use('api').getUserOrFail()
+            const usuario = ctx.auth.use(guard).getUserOrFail()
             const tokenId = usuario.currentAccessToken.identifier
             await new CerrarSesion().execute(
                 {
@@ -130,6 +174,7 @@ const auth: Ruta[] = [
                 },
                 ctx.contextoAccion(),
             )
+            if (guard === 'panel') borrarCookieSesionPanel(ctx)
         },
     }),
     definirRuta({
@@ -140,7 +185,11 @@ const auth: Ruta[] = [
         etiqueta: 'auth',
         permiso: null,
         respuesta: { status: 200, descripcion: 'Usuario actual con permisos', esquema: Me },
-        handler: (ctx) => construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx)),
+        handler: async (ctx) => {
+            const me = await construirMe(ctx.auth.getUserOrFail(), alcancesDelToken(ctx))
+            if (ctx.auth.authenticatedViaGuard !== 'panel') return me
+            return { ...me, csrf: csrfDeSesion(ctx.auth.use('panel').tokenSesion!) }
+        },
     }),
 ]
 

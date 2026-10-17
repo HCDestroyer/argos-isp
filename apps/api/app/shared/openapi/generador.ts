@@ -1,6 +1,13 @@
 import { esPermiso } from '#core/permisos'
 import { esquemasRegistrados, ref, type EsquemaJson } from '#shared/openapi/esquemas'
-import { COOKIE_PORTAL, PREFIJO_API, esParametroEntero, parametrosDeRuta, type Ruta } from '#shared/rutas'
+import {
+    COOKIE_PORTAL,
+    COOKIE_SESION_PANEL,
+    PREFIJO_API,
+    esParametroEntero,
+    parametrosDeRuta,
+    type Ruta,
+} from '#shared/rutas'
 
 /**
  * Genera el OpenAPI 3.1 a partir del registro de rutas.
@@ -52,6 +59,15 @@ export function generarOpenApi(rutas: Ruta[], info: InfoOpenApi): EsquemaJson {
                     type: 'http',
                     scheme: 'bearer',
                     description: 'Token de sesión (POST /api/v1/auth/login) o token de API',
+                },
+                panel: {
+                    type: 'apiKey',
+                    in: 'cookie',
+                    name: COOKIE_SESION_PANEL,
+                    description:
+                        'Sesión del panel: cookie HttpOnly que pone POST /api/v1/auth/sesion. Solo cuenta sin ' +
+                        '`Authorization`. POST, PUT y DELETE exigen `X-CSRF-Token` (el `csrf` del login o de ' +
+                        'GET /me) y un `Origin` permitido; si no, 403 `csrf_invalido`',
                 },
                 interno: {
                     type: 'http',
@@ -193,7 +209,12 @@ function operacion(ruta: Ruta): EsquemaJson {
     if (seguridad === 'portal') {
         respuestas['401'] = problema('Sin sesión del portal (cookie vencida o ausente)')
     } else if (seguridad !== 'publico') respuestas['401'] = problema('No autenticado')
-    if (seguridad === 'sesion' && ruta.permiso) respuestas['403'] = problema(`Sin el permiso ${ruta.permiso}`)
+    if (seguridad === 'sesion') {
+        const csrf = ruta.metodo === 'get' ? null : 'CSRF inválido con la cookie del panel (`csrf_invalido`)'
+        const permiso = ruta.permiso ? `Sin el permiso ${ruta.permiso}` : null
+        const motivos = [permiso, csrf].filter((m): m is string => m !== null)
+        if (motivos.length > 0) respuestas['403'] = problema(motivos.join('; o '))
+    }
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')
     if (ruta.versionada || ruta.idempotente) {
         respuestas['409'] = problema(
@@ -211,7 +232,7 @@ function operacion(ruta: Ruta): EsquemaJson {
         summary: ruta.resumen,
         ...(ruta.descripcion ? { description: ruta.descripcion } : {}),
         tags: [ruta.etiqueta],
-        ...(seguridad === 'sesion' ? { security: [{ bearer: [] }] } : {}),
+        ...(seguridad === 'sesion' ? { security: [{ bearer: [] }, { panel: [] }] } : {}),
         ...(seguridad === 'interno' ? { security: [{ interno: [] }] } : {}),
         ...(seguridad === 'portal' ? { security: [{ portal: [] }] } : {}),
         ...(parametros.length > 0 ? { parameters: parametros } : {}),

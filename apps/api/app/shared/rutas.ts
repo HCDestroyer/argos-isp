@@ -18,7 +18,7 @@ export const PREFIJO_API = '/api/v1'
 export type MetodoHttp = 'get' | 'post' | 'put' | 'delete'
 
 /**
- * - `sesion`: Bearer de login (o token de API, A1) + permiso del ACL.
+ * - `sesion`: Bearer de login, token de API o cookie `HttpOnly` del panel (con CSRF) + permiso del ACL.
  * - `interno`: Bearer con `INTERNAL_TOKEN` (servicios aaa y coa).
  * - `portal`: cookie de sesión del portal del cliente (`argos_portal`). El router no monta
  *   middleware: el handler la exige con `exigirSesionPortal` (A5); el OpenAPI declara el esquema
@@ -29,6 +29,9 @@ export type Seguridad = 'sesion' | 'interno' | 'portal' | 'publico'
 
 /** Nombre de la cookie de sesión del portal (esquema de seguridad `portal` del OpenAPI). */
 export const COOKIE_PORTAL = 'argos_portal'
+
+/** Cookie `HttpOnly` de la sesión del panel (esquema `panel`; `app/core/auth/sesion_panel.ts`). */
+export const COOKIE_SESION_PANEL = 'argos_sesion'
 
 type ValidadorVine = VineValidator<SchemaTypes, any>
 type Salida<V> = V extends VineValidator<infer S, any> ? Infer<S> : undefined
