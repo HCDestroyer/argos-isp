@@ -1,5 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
  * Consultas de solo lectura sobre `audit.acciones` y `audit.cambios` (pantalla de bitácora).
@@ -35,7 +36,16 @@ export interface FiltrosCambios extends OpcionesPaginacion {
 
 type Fila = Record<string, unknown> & { id: number }
 
-export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<Fila>> {
+/**
+ * Acciones de la bitácora. `empresas` sale de `empresasDeLaLista` (multiempresa): con una lista,
+ * solo las acciones de esas empresas **y las que no son de ninguna** (`empresa_id` null: login,
+ * usuarios, roles, clientes, procesos del sistema); con `null` (consolidado o alcance global sin
+ * empresa activa), todas.
+ */
+export async function listarAcciones(
+    filtros: FiltrosAcciones,
+    empresas: number[] | null = null,
+): Promise<Pagina<Fila>> {
     const consulta = db
         .from('audit.acciones as a')
         .leftJoin('core.usuarios as u_a', (j) =>
@@ -44,6 +54,7 @@ export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<F
         .leftJoin('core.clientes as cl_a', (j) =>
             j.on('cl_a.id', '=', 'a.actor_id').andOnVal('a.actor_tipo', '=', 'cliente'),
         )
+        .leftJoin('core.empresas as e_a', 'e_a.id', 'a.empresa_id')
         .select(
             'a.id',
             'a.actor_tipo',
@@ -58,6 +69,8 @@ export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<F
             'a.resultado',
             'a.error',
             'a.request_id',
+            'a.empresa_id',
+            'e_a.nombre_comercial as empresa_nombre',
             'a.created_at',
         )
         .if(filtros.actor_id, (q) => q.where('a.actor_id', filtros.actor_id!))
@@ -69,6 +82,10 @@ export async function listarAcciones(filtros: FiltrosAcciones): Promise<Pagina<F
         .if(filtros.hasta, (q) => q.where('a.created_at', '<', filtros.hasta!))
         .if(filtros.canal, (q) => q.where('a.canal', filtros.canal!))
         .if(filtros.excluir_canal, (q) => q.whereNot('a.canal', filtros.excluir_canal!))
+
+    filtrarPorEmpresa(consulta, empresas, (q, ids) =>
+        q.where((w) => w.whereIn('a.empresa_id', ids).orWhereNull('a.empresa_id')),
+    )
 
     if (filtros.cliente_id) {
         const clienteId = filtros.cliente_id

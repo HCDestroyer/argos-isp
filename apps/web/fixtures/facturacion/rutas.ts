@@ -314,6 +314,8 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
             resultado: 'ok',
             error: null,
             request_id: `req-fixture-${id}`,
+            empresa_id: 1,
+            empresa_nombre: 'ArgosIsp',
             created_at: momento,
         })
         evaluados.push({ ...base, estado: 'activo', cambiado: true, motivo: 'sin facturas vencidas' })
