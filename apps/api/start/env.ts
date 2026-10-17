@@ -119,6 +119,10 @@ export default await Env.create(new URL('../', import.meta.url), {
     CORS_ORIGINS: Env.schema.string.optional(),
     /** `Secure` de la cookie de sesión del panel; `false` solo en desarrollo (`app/core/auth/sesion_panel.ts`). */
     PANEL_COOKIE_SEGURA: Env.schema.boolean.optional(),
+    /** Sesión deslizante del panel (`app/core/auth/sesion_deslizante.ts`): horas sin uso para vencer (12). */
+    PANEL_SESION_INACTIVIDAD_H: Env.schema.number.optional(),
+    /** Tope absoluto de la sesión del panel en horas desde el login, aunque se use (72). */
+    PANEL_SESION_MAXIMA_H: Env.schema.number.optional(),
 
     /*
     |----------------------------------------------------------
