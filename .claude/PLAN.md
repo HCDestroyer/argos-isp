@@ -124,6 +124,10 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 | Pase a producción con INFILE y primera factura real | PM | Factura real válida en el portal de la SAT |
 | **Fase 1 completa** | PM | Viernes 20 de noviembre |
 
+## Multiempresa (decisión del PM, 17 oct)
+
+Varios NIT en una instalación: contabilidad separada por NIT, servicio → empresa, usuarios acotados por empresa y marca de la empresa en portal, avisos y documentos. Contrato en `.claude/integration/contratos/multiempresa.md`. Orden: A1 (modelo, contexto, ACL) → A3 (libro, cobros y reportes por empresa) + A4 (selector y CRUD) + A5 (portal por empresa) + A6 (notify e importación) → A2 si algún evento de red lo necesita.
+
 ## Distribución e instalación (al cerrar los sprints)
 
 Decisión del PM (17 oct): al terminar la fase 1, ArgosIsp se entrega como producto instalable, no como repositorio que se compila en cada servidor.

@@ -94,14 +94,65 @@ export interface FacturaOrigen {
     cliente_id: string
     /** servicio del origen; si falta y el cliente tiene un solo servicio, se usa ese */
     servicio_id: string | null
-    /** primer día del periodo (YYYY-MM-DD) */
-    periodo: string
+    /**
+     * Primer día del periodo (YYYY-MM-DD). `null`: **cargo único** sin periodo (instalación,
+     * equipo, un cobro suelto, o una segunda factura del mismo periodo).
+     */
+    periodo: string | null
     /** total original, IVA incluido, con 2 decimales (modo con historial: se importa por este) */
     total: string
     /** lo pendiente (total − pagado), IVA incluido, con 2 decimales */
     pendiente: string
     vence: string | null
+    /** fecha de emisión en el origen (la exigen los cargos únicos y las facturas sin servicio) */
+    emitida: string | null
     concepto: string | null
+    /** fecha en que el origen la dio por pagada (para un pago sin registro en el origen) */
+    fecha_pago: string | null
+    /** observación del adaptador que acompaña a la factura (p. ej. por qué entra como cargo único) */
+    nota: string | null
+}
+
+/**
+ * Promesa de pago vigente en el origen (el cliente se comprometió a pagar una factura hasta una
+ * fecha). Solo las vigentes: las vencidas o cumplidas quedan en el archivo del origen.
+ */
+export interface PromesaOrigen {
+    id: string
+    cliente_id: string
+    /** factura del origen que promete pagar */
+    factura_id: string | null
+    /** hasta cuándo (YYYY-MM-DD) */
+    vence: string
+    /** cuándo se registró en el origen */
+    fecha: string | null
+    /** monto prometido; vacío: lo pendiente de la factura */
+    monto: string | null
+    descripcion: string | null
+}
+
+/**
+ * Archivo del origen: **todas** las filas de **todas** las tablas tal como vinieron (también las
+ * que no tienen equivalente en ArgosIsp), para guardarlas en `importacion.filas_origen` y contar
+ * cada una en el cuadre por tabla. Solo lo entregan los adaptadores que leen un volcado o CSV.
+ */
+export interface ArchivoOrigen {
+    tablas: Array<{
+        tabla: string
+        columnas: string[]
+        filas: Array<Record<string, string | null>>
+        /** número de cada fila (la clave `<tabla>#<n>`); sin él, su posición (1 = la primera) */
+        lineas?: number[]
+    }>
+    /**
+     * Fila del origen → entidad canónica que la lleva a ArgosIsp. Clave `<tabla>#<n>` (n = número
+     * de fila en la tabla, 1 = la primera). El id es el de la entidad canónica (en redes, `L<n>`).
+     */
+    vinculos: Map<string, { entidad: Entidad; id: string }>
+    /** fila que queda solo en el archivo, con el motivo (`<tabla>#<n>` → motivo) */
+    notasFila: Map<string, string>
+    /** por qué una tabla queda solo en el archivo (si no se dice, "sin equivalente en ArgosIsp") */
+    notasTabla: Record<string, string>
 }
 
 /**
@@ -148,7 +199,12 @@ export interface FuenteCanonica {
     facturas: FacturaOrigen[]
     saldos: SaldoOrigen[]
     pagos: PagoOrigen[]
+    promesas: PromesaOrigen[]
     problemas: ProblemaFila[]
+    /** líneas informativas del adaptador para el reporte (p. ej. servicios sin PPPoE por router) */
+    notas?: string[]
+    /** todas las filas del origen (volcado o CSV), para el archivo y el cuadre por tabla */
+    archivo?: ArchivoOrigen
     /**
      * Dueño de cada factura del origen, incluidas las pagadas o anuladas que no vienen en
      * `facturas` (solo si el origen lo sabe): para reconocer pagos a facturas de otro cliente.
@@ -165,12 +221,13 @@ export const ENTIDADES = [
     'facturas',
     'saldos',
     'pagos',
+    'promesas',
 ] as const
 
 export type Entidad = (typeof ENTIDADES)[number]
 
 /** Entidades que un origen puede no traer (sin ellas no hay redes, deuda ni historial). */
-export const OPCIONALES: readonly Entidad[] = ['redes', 'facturas', 'saldos', 'pagos']
+export const OPCIONALES: readonly Entidad[] = ['redes', 'facturas', 'saldos', 'pagos', 'promesas']
 
 /** Columna del formato canónico, para validar, documentar y generar las plantillas CSV. */
 export interface Columna {
@@ -271,11 +328,19 @@ export const COLUMNAS: Record<Entidad, Columna[]> = {
         col('id', 'si', 'Id de la factura en el origen', 'F1'),
         col('cliente_id', 'si', 'Cliente dueño (id del origen)', 'C1'),
         col('servicio_id', 'no', 'Servicio (id del origen); vacío: el único servicio del cliente', 'S1'),
-        col('periodo', 'si', 'Mes que cobra: `2026-08`, `08/2026` o `2026-08-01`', '2026-09'),
-        col('total', 'si', 'Total con IVA', '150.00'),
+        col(
+            'periodo',
+            'no',
+            'Mes que cobra: `2026-08`, `08/2026` o `2026-08-01`. Vacío: cargo único sin periodo (instalación, equipo)',
+            '2026-09',
+        ),
+        col('total', 'si', 'Total con IVA (puede ser 0: factura sin cargo)', '150.00'),
         col('pagado', 'no', 'Lo ya pagado; vacío: la suma de sus pagos en pagos.csv', '50.00'),
         col('vence', 'no', 'Fecha de vencimiento', '2026-09-10'),
+        col('emitida', 'no', 'Fecha de emisión', '2026-09-01'),
         col('concepto', 'no', 'Descripción', 'Internet septiembre 2026'),
+        col('fecha_pago', 'no', 'Fecha en que se pagó (si está pagada)', '2026-09-08'),
+        col('nota', 'no', 'Observación que acompaña a la factura', ''),
     ],
     saldos: [
         col('cliente_id', 'si', 'Cliente (id del origen)', 'C1'),
@@ -288,6 +353,15 @@ export const COLUMNAS: Record<Entidad, Columna[]> = {
         col('monto', 'si', 'Monto pagado', '50.00'),
         col('fecha', 'no', 'Fecha del pago', '2026-09-05'),
         col('metodo', 'no', 'Forma de pago del origen (efectivo, depósito, transferencia...)', 'efectivo'),
+    ],
+    promesas: [
+        col('id', 'si', 'Id de la promesa en el origen', 'P1'),
+        col('cliente_id', 'si', 'Cliente (id del origen)', 'C1'),
+        col('factura_id', 'no', 'Factura que promete pagar (id del origen)', 'F1'),
+        col('vence', 'si', 'Fecha límite de la promesa', '2026-10-20'),
+        col('fecha', 'no', 'Cuándo se registró', '2026-10-10'),
+        col('monto', 'no', 'Monto prometido; vacío: lo pendiente de la factura', '150.00'),
+        col('descripcion', 'no', 'Nota de la promesa', 'Paga el viernes'),
     ],
 }
 
@@ -411,11 +485,14 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
             id: f.requerido('id'),
             cliente_id: f.requerido('cliente_id'),
             servicio_id: f.opcional('servicio_id'),
-            periodo: f.periodo('periodo'),
+            periodo: f.opcional('periodo') ? f.periodo('periodo') : null,
             total,
             pendiente: pendiente.toFixed(2),
             vence: f.fecha('vence'),
+            emitida: f.fecha('emitida'),
             concepto: f.opcional('concepto'),
+            fecha_pago: f.fecha('fecha_pago'),
+            nota: f.opcional('nota'),
         }
     })
 
@@ -433,6 +510,20 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
         fecha: f.fecha('fecha'),
         metodo: f.opcional('metodo'),
     }))
+
+    const promesas = procesar(leer('promesas'), (f) => {
+        const vence = f.fecha('vence')
+        if (!vence) throw new FilaInvalida('Falta vence (fecha límite de la promesa)')
+        return {
+            id: f.requerido('id'),
+            cliente_id: f.requerido('cliente_id'),
+            factura_id: f.idOpcional('factura_id'),
+            vence,
+            fecha: f.fecha('fecha'),
+            monto: f.opcional('monto') ? f.dinero('monto') : null,
+            descripcion: f.opcional('descripcion'),
+        }
+    })
 
     // Factura sin columna `pagado`: lo pagado es la suma de sus pagos (de quien sea).
     const sinPagado = new Set(
@@ -454,7 +545,7 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
         }
     }
 
-    return { routers, redes, planes, clientes, servicios, facturas, saldos, pagos, problemas }
+    return { routers, redes, planes, clientes, servicios, facturas, saldos, pagos, promesas, problemas }
 }
 
 /**

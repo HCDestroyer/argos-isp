@@ -44,9 +44,35 @@ En el modo B, si un pago histórico se importa sin su factura, el dinero queda c
 
 ## Acciones
 
-### `ImportarFacturaPendiente` (`#billing/actions/importar_factura_pendiente`) · ya existía
+### `ImportarFacturaPendiente` (`#billing/actions/importar_factura_pendiente`) · ampliada (importación completa)
 
-`{ origen, id_externo (o clave_externa), servicio_id, periodo: 'YYYY-MM-01', total, vence_en?, concepto?, aplicar_mora? }` → `{ factura_id, creada, estado }`. En el modo B, `total` es el total original de la factura. Asiento `CxC / 2.9.01` con fecha de hoy.
+Una sola acción para toda factura del origen (decisión de A3: una acción hermana repetiría la idempotencia, el IVA y el asiento).
+
+```ts
+{
+    origen: 'mikrowisp',
+    id_externo: 'factura-123',         // o clave_externa
+    servicio_id?: 45,                  // sin él: cargo único del cliente (exige cliente_id)
+    cliente_id?: 12,                   // obligatorio sin servicio; con servicio, si viene, debe ser su dueño (422)
+    periodo?: '2026-09-01',            // sin él: cargo único (exige emitida_en)
+    cargo_unico?: true,                // por defecto: true si falta servicio_id o periodo
+    emitida_en?: '2026-09-03',         // fecha de emisión en el origen (YYYY-MM-DD, no futura)
+    total: '150.00',                   // total original, IVA incluido; "0.00" permitido (historial)
+    saldada_en_origen?: true,          // pagada en el origen sin ningún pago registrado
+    vence_en?: '2026-09-08',
+    concepto?: 'INSTALACION',
+    aplicar_mora?: false,              // solo con servicio
+}
+```
+
+Salida: `{ factura_id, creada, estado, cargo_unico }`.
+
+- **De periodo** (`servicio_id` + `periodo`, sin `cargo_unico`): ocupa `clave_unica = servicio_id-periodo`; `generarFacturas` ya no emite ese periodo. Si ya existe → 409 `periodo_facturado` (el detalle sugiere `cargo_unico: true`).
+- **Cargo único**: `clave_unica = importada-<origen>:<id_externo>`. No ocupa ningún periodo y el cron nunca la genera. El `periodo` guardado es el dado o el primer día del mes de `emitida_en` (para los reportes).
+- `emitida_en`: se guarda en `facturas.emitida_en` (mediodía de Guatemala) y es la **fecha del asiento**, así el estado de cuenta la muestra en su lugar. En un mes cerrado → 422 `periodo_cerrado`. Sin ella: hoy (como antes).
+- `vence_en` por defecto: periodo (o `emitida_en` en un cargo sin periodo) + días de gracia de la plantilla (0 sin servicio). Si ya pasó, nace `vencida`.
+- Asiento `CxC / 2.9.01` (origen `factura`) por `total`; aplica el anticipo del cliente si tiene. **Sin asiento** si `total` es 0 o `saldada_en_origen`: la factura queda `pagada`.
+- En el modo B, `total` es el total original de la factura.
 
 ### `RegistrarSaldoInicial` (`#billing/actions/registrar_saldo_inicial`)
 
@@ -105,17 +131,43 @@ Salida: `Pago` (como `GET /pagos/:id`, con `historico: true`, `origen`, `id_exte
 - No exige caja, cuenta bancaria ni banco de origen. El pago queda con `created_at` = la fecha del origen (mediodía de Guatemala), así sale en su lugar del estado de cuenta.
 - Se anula como cualquier pago (`POST /pagos/:id/anular`); esa anulación sí reevalúa el servicio y emite `pago.anulado`.
 
+### `ImportarPromesa` (`#billing/actions/importar_promesa`) · nueva
+
+```ts
+{
+    origen: 'mikrowisp',
+    id_externo: 'promesa-77',          // o clave_externa
+    facturas?: [101, 102],             // ids de ArgosIsp; todas del mismo servicio
+    factura_id?: 101,                  // equivale a facturas: [101]
+    servicio_id?: 45,                  // obligatorio sin facturas; con ellas debe ser el suyo
+    vence: '2026-10-25',               // YYYY-MM-DD (= 23:59:59 Guatemala) o instante ISO 8601
+    monto?: '300.00',                  // por defecto: lo pendiente de esas facturas (o del servicio)
+    creada_en: '2026-10-05',           // YYYY-MM-DD (= mediodía Guatemala) o instante ISO 8601; no futura
+    canal?: 'operador',                // por defecto operador
+}
+```
+
+Salida: `Promesa` (como `GET /promesas`) más `creada`, `origen` e `id_externo`.
+
+- Queda `activa` **sin evaluar las reglas de la plantilla** (el origen ya la aprobó), con `created_at = creada_en` y `resultado_evaluacion` = `{ resultado: 'aprobada', regla: null, motivo: 'Importada de …', reglas: [] … }`. `reglas_snapshot.importacion` guarda origen, id, facturas y `creada_en`.
+- Sin eventos y sin reevaluar: el siguiente corte (`EjecutarCorte`) la ve activa y no corta (o reactiva). Desde ahí vive como cualquier promesa: se cumple con el primer `pago.registrado` que la cubra y el cron `incumplirPromesas` la incumple al vencer (esos sí emiten eventos: son hechos nuevos).
+- Un pago histórico con fecha **anterior** a `creada_en` no cuenta para cumplirla aunque se importe después; uno posterior sí.
+- `vence` ya pasado → **422 `promesa_vencida`**: una promesa vencida no está vigente; si el cliente no pagó, el corte decide con sus facturas vencidas. No se importa como incumplida (no tendría efecto y emitiría eventos al cliente).
+- Factura sin servicio (retirados) → 422 `facturas.<i>`: una promesa protege un servicio.
+- Sin deuda pendiente (sin `monto`) → 422 `sin_deuda`. El servicio ya tiene otra promesa activa o pendiente → 409 `promesa_abierta`.
+- Idempotente por (`origen`, `id_externo`): repetirla devuelve la misma (`creada: false`), aunque ya haya vencido o se haya cumplido; con otro servicio, `vence` o `monto` → 409 `clave_externa_conflicto`.
+
 ## Idempotencia
 
-Las tres acciones (saldo inicial, pago histórico y factura) son idempotentes por (`origen`, `id_externo`):
+Las acciones de importación (saldo inicial, pago histórico, factura y promesa) son idempotentes por (`origen`, `id_externo`):
 
 - Mismo id y mismos datos → devuelve lo ya registrado (`creado: false` / `creada: false`), sin asiento nuevo. Una segunda corrida del importador no duplica nada.
 - Mismo id con otros datos (cliente, monto, fecha) → 409 `clave_externa_conflicto`.
-- Para no auditar en la segunda corrida, el importador puede consultar antes (solo lectura) `billing.facturas`, `billing.saldos_iniciales` y `billing.pagos` por `(origen, clave_externa)`.
+- Para no auditar en la segunda corrida, el importador puede consultar antes (solo lectura) `billing.facturas`, `billing.saldos_iniciales`, `billing.pagos` y `billing.promesas` por `(origen, clave_externa)`.
 
 ## Periodos cerrados
 
-Si la `fecha` (pago histórico o saldo inicial) cae en un mes cerrado del libro → **422 `periodo_cerrado`** antes de escribir nada, con un detalle que dice qué registro, qué fecha y qué hacer:
+Si la `fecha` (pago histórico o saldo inicial) o la `emitida_en` de una factura con asiento cae en un mes cerrado del libro → **422 `periodo_cerrado`** antes de escribir nada, con un detalle que dice qué registro, qué fecha y qué hacer:
 
 > Pago histórico smartisp:pago-987: la fecha 2026-05-15 cae en el periodo 2026-05, que está cerrado en el libro. Use una fecha de un periodo abierto o pida a contabilidad reabrir ese mes (POST /libro/periodos/reabrir) y vuelva a cerrarlo al terminar la importación.
 
@@ -125,9 +177,34 @@ Recomendación: importar antes de cerrar el primer mes en ArgosIsp. Una repetici
 
 | Status | `type` (`urn:argosisp:problema:…`) | Cuándo |
 | --- | --- | --- |
-| 422 | `validacion` | Campo inválido (`errors[].field`: `origen`, `id_externo`, `monto`, `fecha`, `metodo`, `historico`, `cliente_id`, `facturas.<i>`, `motivo`) |
-| 422 | `periodo_cerrado` | Fecha en un mes cerrado |
+| 422 | `validacion` | Campo inválido (`errors[].field`: `origen`, `id_externo`, `monto`, `total`, `fecha`, `emitida_en`, `periodo`, `vence`, `creada_en`, `metodo`, `historico`, `cliente_id`, `servicio_id`, `cargo_unico`, `aplicar_mora`, `canal`, `factura_id`, `facturas.<i>`, `motivo`) |
+| 422 | `periodo_cerrado` | Fecha (o `emitida_en` de una factura con asiento) en un mes cerrado |
+| 422 | `sin_plantilla` | Factura de un servicio sin plantilla de facturación |
+| 422 | `promesa_vencida` | Promesa cuyo `vence` ya pasó |
+| 422 | `sin_deuda` | Promesa sin `monto` sobre facturas o servicio sin saldo pendiente |
 | 409 | `clave_externa_conflicto` | (`origen`, `id_externo`) ya usado con otros datos |
+| 409 | `periodo_facturado` | Factura de periodo cuyo `servicio_id-periodo` ya existe (use `cargo_unico: true` para la segunda) |
+| 409 | `promesa_abierta` | El servicio ya tiene otra promesa activa o pendiente |
 | 409 | `saldo_con_pagos` | Anular un saldo deudor que ya tiene pagos |
 | 409 | `saldo_inicial_anulado` | Anular dos veces, o volver a registrar un id anulado |
-| 404 | `no_encontrado` | Saldo inicial inexistente al anular |
+| 404 | `no_encontrado` | Saldo inicial, servicio o cliente inexistente |
+
+## Importación completa: casos especiales
+
+Decisión del PM (17 oct): «Se debe traer todo, para no perder ni dejar volando datos». Cómo se importa cada caso real de los diagnósticos (`docs/importacion/diagnostico-*.sql`):
+
+| Caso del origen | Cómo lo importa A6 | Efecto en ArgosIsp |
+| --- | --- | --- |
+| Cargos únicos sin periodo (Mikrowisp `tipo 1`: «INSTALACION», «TV adicional», «PAGO DE SEPTIEMBRE»…) | `ImportarFacturaPendiente` con `servicio_id` (si lo tiene) o `cliente_id`, **sin `periodo`**, `emitida_en`, `concepto` y `total`; sus pagos con `RegistrarPagoHistorico` y `facturas: [id]` | Cargo único (`importada-<origen>:<id>`), no ocupa periodo; el cron sigue facturando los periodos normales |
+| Dos facturas de servicio del mismo cliente + mes | La primera como factura de periodo; la segunda con `cargo_unico: true` (puede llevar el mismo `periodo`) | Las dos suman al saldo y, si vencen, al corte del servicio |
+| Clientes RETIRADO sin servicios con facturas no pagadas | Una `ImportarFacturaPendiente` **por factura**, con `cliente_id`, sin `servicio_id`, `emitida_en`, `concepto`, `total` (no un saldo inicial genérico) | Deuda real en el auxiliar CxC con su fecha y concepto; se cobra como cualquier factura; no corta a nadie |
+| Factura con total 0 (SmartISP status 2) | `ImportarFacturaPendiente` con `total: "0.00"` | Factura `pagada` sin cargo, sin asiento (historial) |
+| Factura pagada sin ningún pago en el origen | `ImportarFacturaPendiente` con `saldada_en_origen: true` y su `total` | `pagada` (`pagado = total`) **sin asiento ni pago**: no aparece dinero que no entró y el saldo queda igual que en el origen (0 por esa factura). No sale en ingresos ni en la cobranza diaria (no hubo pago); en facturado vs cobrado cuenta como facturada y cobrada (columnas `*_importado`) |
+| Pago cuyo número de factura no existe en el origen | `RegistrarPagoHistorico` sin `facturas` | Se aplica a la más antigua del cliente o queda en Anticipos |
+| Promesas de pago vigentes | `ImportarPromesa` con sus `facturas` (ya importadas), `vence`, `creada_en` y `monto` | Promesa `activa`; el siguiente corte no corta ese servicio |
+
+Corte: cuentan las facturas importadas **con servicio** (de periodo o cargo único) en estado `vencida`, como cualquier factura de servicio. Las que no tienen servicio no cortan: no hay servicio que cortar.
+
+Orden por cliente: facturas (todas) → pagos históricos → saldo inicial (solo si queda diferencia) → promesas. Cuadre: `saldoCliente − saldoAnticipos` = saldo del origen.
+
+Multiempresa: cuando `core.empresas` y `empresa_id` lleguen a `main` (contrato `multiempresa.md`), las facturas tomarán la empresa del servicio y los cargos sin servicio aceptarán `empresa_id` opcional. Hoy no se pide.

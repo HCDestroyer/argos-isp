@@ -206,6 +206,15 @@ export interface CatalogoEventos {
         evento_origen: string
         estado: 'enviado' | 'fallido'
     }
+    /**
+     * Cambió la configuración de canales de notificación (global si `empresa_id` es null). Los
+     * procesos que envían recargan la suya (regla 5). `campos` son columnas, nunca valores.
+     */
+    'notificaciones.config_cambiada': {
+        configuracion_id: number
+        empresa_id: number | null
+        campos: string[]
+    }
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -240,6 +249,7 @@ export const EVENTOS = [
     'comprobante.rechazado',
     'caja.cerrada',
     'notificacion.enviada',
+    'notificaciones.config_cambiada',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

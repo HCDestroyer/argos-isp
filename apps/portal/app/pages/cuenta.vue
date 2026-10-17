@@ -1,18 +1,32 @@
 <script setup lang="ts">
-import type { TabsItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Portal autenticado: saldo y servicios arriba; facturas, pagos (con los comprobantes de depósito
- * enviados), promesas y datos en pestañas.
+ * Portal con sesión: el "dashboard" del cliente, pensado para el teléfono.
+ *
+ * - Encabezado compacto con el total y el estado más urgente; "Actualizar" y jalar para actualizar.
+ * - Cuatro secciones en la URL (`?seccion=inicio|pagar|facturas|cuenta`, `utils/navegacion.ts`)
+ *   con la barra inferior del layout en el teléfono y la barra superior en escritorio.
+ * - Inicio: accesos rápidos (`utils/accesos.ts`: solo lo que la API aceptaría ahora) y los
+ *   servicios, agrupados por empresa (`utils/empresas.ts`, listo para multiempresa).
+ *
  * Sin sesión (401) manda a `/entrar`. Si la cuenta no se puede leer, muestra el error con
  * "Reintentar" y ningún monto.
  */
-const { nombre: nombreEmpresa } = useEmpresa()
+const { empresa, nombre: nombreEmpresa } = useEmpresa()
 const { data: resultado, status, refresh } = useCuenta()
 const acceso = useAccesoPortal()
+const route = useRoute()
+const { condiciones: leerCondiciones } = useSolicitudPromesa()
+const telegram = useTelegram()
 
-useHead({ title: computed(() => `Mi cuenta · ${nombreEmpresa.value}`) })
+useHead({
+    title: computed(() => `Mi cuenta · ${nombreEmpresa.value}`),
+    // El gesto de jalar es el nuestro (`PortalJalarParaActualizar`): sin el recargar nativo de Chrome.
+    htmlAttrs: { class: 'overscroll-y-contain' },
+})
+
+const seccion = computed(() => seccionDeLaRuta(route.query.seccion))
 
 // Solo la primera carga muestra el esqueleto; una recarga (p. ej. tras vincular Telegram) no lo hace.
 const cargando = computed(() => !resultado.value && (status.value === 'idle' || status.value === 'pending'))
@@ -25,24 +39,46 @@ watch(problema, (actual) => {
     }
 }, { immediate: true })
 
-const pestanas: TabsItem[] = [
-    { label: 'Facturas', icon: 'i-lucide-receipt', value: 'facturas', slot: 'facturas' as const },
-    { label: 'Pagos', icon: 'i-lucide-wallet', value: 'pagos', slot: 'pagos' as const },
-    { label: 'Promesas', icon: 'i-lucide-hand-coins', value: 'promesas', slot: 'promesas' as const },
-    { label: 'Mis datos', icon: 'i-lucide-user-round', value: 'datos', slot: 'datos' as const },
-]
-const pestana = ref('facturas')
-
 function contactoActualizado(contacto: ContactoPortal) {
     if (resultado.value?.ok) {
         resultado.value = { ok: true, data: { ...resultado.value.data, cliente: contacto } }
     }
 }
 
-/** Servicios a los que se les puede pedir promesa: con saldo, sin promesa activa y no retirados. */
+/** Servicios a los que tiene sentido preguntarles por una promesa: con saldo, sin promesa y no retirados. */
 function admitePromesa(servicio: { estado: string, promesa_activa: boolean, monto_adeudado: string }) {
     return servicio.estado !== 'retirado' && !servicio.promesa_activa && new Decimal(servicio.monto_adeudado).greaterThan(0)
 }
+
+/**
+ * Condiciones de promesa de cada servicio (`GET /portal/promesas/condiciones?servicio_id=`): el
+ * acceso "Prometer pago" y "Pedir promesa" solo aparecen si la API dice que se puede ahora.
+ */
+const promesaPorServicio = ref<Record<number, boolean | null>>({})
+async function cargarCondiciones() {
+    const servicios = cuenta.value?.servicios ?? []
+    const estado: Record<number, boolean | null> = {}
+    for (const servicio of servicios) {
+        estado[servicio.id] = admitePromesa(servicio) ? null : false
+    }
+    promesaPorServicio.value = estado
+    await Promise.all(servicios.filter(admitePromesa).map(async (servicio) => {
+        const leido = await leerCondiciones(servicio.id)
+        promesaPorServicio.value = {
+            ...promesaPorServicio.value,
+            [servicio.id]: leido.ok ? promesaPermitida(leido.data) : false,
+        }
+    }))
+}
+watch(cuenta, (actual, anterior) => {
+    if (actual && actual !== anterior) {
+        void cargarCondiciones()
+    }
+}, { immediate: true })
+
+onMounted(() => {
+    void telegram.cargar()
+})
 
 /** Servicio al que se asocia un comprobante: el primero con saldo (o el primero). Solo informativo para A3. */
 const servicioComprobante = computed(() => {
@@ -66,7 +102,34 @@ const servicioPago = computed(() => serviciosConSaldo.value.some(s => s.id === s
     ? servicioElegido.value
     : serviciosConSaldo.value[0]?.id)
 
+/** Grupos por empresa (hoy uno) y sus accesos rápidos. */
+const grupos = computed(() => agruparPorEmpresa(cuenta.value?.servicios ?? [], {
+    id: null,
+    nombre: nombreEmpresa.value,
+    logoUrl: null,
+}))
+const accesosPorGrupo = computed(() => grupos.value.map((grupo, indice) => {
+    const permisos = grupo.servicios.map(s => promesaPorServicio.value[s.id] ?? null)
+    const promesaDisponible = permisos.includes(true) ? true : permisos.includes(null) ? null : false
+    return accesosRapidos({
+        modo: 'sesion',
+        empresa: empresa.value,
+        montoAdeudado: grupo.montoAdeudado,
+        retirado: grupo.servicios.every(s => s.estado === 'retirado'),
+        promesaDisponible,
+        // Telegram es del cliente, no de la empresa: va solo en el primer grupo.
+        telegram: indice === 0 && telegram.estado.value
+            ? { disponible: telegram.estado.value.disponible, vinculado: telegram.estado.value.vinculado }
+            : null,
+        soporte: soporteDe(empresa.value),
+        rutaTelegram: '/cuenta?seccion=cuenta#telegram',
+    })
+}))
+const estadoGeneral = computed(() => estadoMasUrgente(cuenta.value?.servicios ?? []))
+
 const verPromesa = ref(false)
+const verComprobante = ref(false)
+const verDeposito = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
 const promesa = ref<PromesaSolicitada | null>(null)
 
@@ -75,13 +138,44 @@ function pedirPromesa(servicioId: number) {
     verPromesa.value = true
 }
 
+function alAcceso(grupo: GrupoEmpresa, accion: NonNullable<AccesoRapido['accion']>) {
+    if (accion === 'pagar') {
+        void navigateTo('/cuenta?seccion=pagar')
+    }
+    else if (accion === 'comprobante') {
+        verComprobante.value = true
+    }
+    else if (accion === 'deposito') {
+        verDeposito.value = true
+    }
+    else {
+        const servicio = grupo.servicios.find(s => promesaPorServicio.value[s.id] === true)
+        if (servicio) {
+            pedirPromesa(servicio.id)
+        }
+    }
+}
+
 /** Aprobada o pendiente: se recarga la cuenta (estado del servicio y promesa activa). */
-async function promesaResuelta(resultado: PromesaSolicitada) {
-    if (resultado.resultado === 'rechazada') {
+async function promesaResuelta(resuelta: PromesaSolicitada) {
+    if (resuelta.resultado === 'rechazada') {
         return
     }
-    promesa.value = resultado
+    promesa.value = resuelta
     await refresh()
+}
+
+/** "Actualizar" y jalar para actualizar: la cuenta, Telegram y las listas de la sección (se remontan). */
+const actualizando = ref(false)
+const recargas = ref(0)
+async function actualizar() {
+    if (actualizando.value) {
+        return
+    }
+    actualizando.value = true
+    recargas.value += 1
+    await Promise.all([refresh(), telegram.cargar()])
+    actualizando.value = false
 }
 
 const saliendo = ref(false)
@@ -91,15 +185,29 @@ async function salir() {
     saliendo.value = false
     await navigateTo('/')
 }
+
+// Al llegar a "Cuenta" desde "Vincular Telegram", la tarjeta de Telegram queda a la vista.
+watch(() => route.hash, async (hash) => {
+    if (hash === '#telegram') {
+        await nextTick()
+        document.getElementById('telegram')?.scrollIntoView({ block: 'start' })
+    }
+})
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div
+        class="flex flex-col gap-4"
+        data-testid="cuenta"
+    >
         <template v-if="cargando">
-            <USkeleton class="h-6 w-1/2" />
-            <USkeleton class="h-28 w-full" />
-            <USkeleton class="h-10 w-full" />
-            <USkeleton class="h-40 w-full" />
+            <USkeleton class="h-20 w-full" />
+            <div class="grid grid-cols-2 gap-2">
+                <USkeleton class="h-28" />
+                <USkeleton class="h-28" />
+                <USkeleton class="h-28" />
+                <USkeleton class="h-28" />
+            </div>
         </template>
 
         <UAlert
@@ -113,105 +221,22 @@ async function salir() {
         />
 
         <template v-else-if="cuenta">
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="text-sm text-muted">
-                        Hola,
-                    </p>
-                    <h1 class="text-2xl font-semibold text-balance break-words text-highlighted">
-                        {{ cuenta.cliente.nombre }}
-                    </h1>
-                </div>
-                <UButton
-                    label="Salir"
-                    icon="i-lucide-log-out"
-                    color="neutral"
-                    variant="ghost"
-                    :loading="saliendo"
-                    @click="salir"
-                />
-            </div>
+            <PortalJalarParaActualizar
+                :actualizando="actualizando"
+                @actualizar="actualizar"
+            />
 
-            <UCard>
-                <p class="text-sm text-muted">
-                    Total pendiente
-                </p>
-                <p
-                    class="text-3xl font-semibold tabular-nums text-highlighted"
-                    data-testid="saldo-cuenta"
-                >
-                    {{ formatearQuetzales(cuenta.monto_adeudado) }}
-                </p>
-                <div
-                    v-for="servicio in cuenta.servicios"
-                    :key="servicio.id"
-                    class="mt-3 flex items-center justify-between gap-3 border-t border-default pt-3"
-                    data-testid="servicio-cuenta"
-                >
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-medium text-default">
-                            {{ servicio.plan ?? 'Servicio de internet' }}
-                        </p>
-                        <p
-                            v-if="servicio.direccion"
-                            class="truncate text-xs text-muted"
-                        >
-                            {{ servicio.direccion }}
-                        </p>
-                    </div>
-                    <div class="flex shrink-0 flex-col items-end gap-1">
-                        <EstadoServicioBadge
-                            :estado="servicio.estado"
-                            size="sm"
-                        />
-                        <span
-                            v-if="cuenta.servicios.length > 1"
-                            class="text-sm font-medium tabular-nums text-highlighted"
-                            data-testid="saldo-servicio"
-                        >
-                            {{ formatearQuetzales(servicio.monto_adeudado) }}
-                        </span>
-                        <UButton
-                            v-if="admitePromesa(servicio)"
-                            label="Pedir promesa"
-                            icon="i-lucide-hand-coins"
-                            color="neutral"
-                            variant="link"
-                            size="sm"
-                            class="px-0"
-                            data-testid="pedir-promesa"
-                            @click="pedirPromesa(servicio.id)"
-                        />
-                    </div>
-                </div>
-                <UFormField
-                    v-if="opcionesPago.length > 1"
-                    label="¿Qué servicio quieres pagar en línea?"
-                    class="mt-3"
-                >
-                    <USelect
-                        :model-value="servicioPago"
-                        :items="opcionesPago"
-                        class="w-full"
-                        data-testid="servicio-a-pagar"
-                        @update:model-value="servicioElegido = Number($event)"
-                    />
-                </UFormField>
-                <PagoEnLinea
-                    v-if="servicioPago !== undefined"
-                    :servicio-id="servicioPago"
-                    id-ayuda="pagar-en-linea-ayuda-cuenta"
-                    class="mt-3"
-                />
-                <UButton
-                    v-if="cuenta.servicios.some(s => s.estado === 'suspendido' || s.estado === 'limitado')"
-                    label="Cómo reactivar mi servicio"
-                    icon="i-lucide-wifi"
-                    to="/corte"
-                    class="mt-3"
-                    block
-                />
-            </UCard>
+            <h1 class="sr-only">
+                Mi cuenta
+            </h1>
+
+            <CuentaResumen
+                :nombre="cuenta.cliente.nombre"
+                :monto-adeudado="cuenta.monto_adeudado"
+                :estado="estadoGeneral"
+                :actualizando="actualizando"
+                @actualizar="actualizar"
+            />
 
             <UAlert
                 v-if="promesa?.resultado === 'aprobada'"
@@ -234,51 +259,179 @@ async function salir() {
                 data-testid="promesa-pendiente-cuenta"
             />
 
-            <UTabs
-                v-model="pestana"
-                :items="pestanas"
-                variant="link"
-                :ui="{
-                    list: 'w-full',
-                    trigger: 'flex-1 flex-col gap-1 px-1 text-xs sm:flex-row sm:gap-1.5 sm:text-sm',
-                }"
+            <Transition
+                name="seccion"
+                mode="out-in"
             >
-                <template #facturas>
-                    <CuentaFacturas />
-                </template>
-                <template #pagos>
-                    <div class="flex flex-col gap-6">
-                        <CuentaComprobantes :servicio-id="servicioComprobante" />
-                        <section
-                            class="flex flex-col gap-3"
-                            aria-labelledby="titulo-pagos"
+                <div
+                    v-if="seccion === 'inicio'"
+                    key="inicio"
+                    class="flex flex-col gap-6"
+                    data-testid="seccion-inicio"
+                >
+                    <UAlert
+                        v-if="estadoGeneral === 'suspendido' || estadoGeneral === 'limitado'"
+                        :color="ESTADOS_SERVICIO[estadoGeneral].color"
+                        variant="subtle"
+                        :icon="ESTADOS_SERVICIO[estadoGeneral].icono"
+                        :title="estadoGeneral === 'suspendido' ? 'Tu servicio está suspendido' : 'Tu servicio está limitado'"
+                        description="Paga, sube tu comprobante o pide una promesa para reactivarlo."
+                        :actions="[{ label: 'Cómo reactivar mi servicio', icon: 'i-lucide-wifi', color: 'neutral', variant: 'outline', to: '/corte' }]"
+                        data-testid="aviso-reactivar"
+                    />
+                    <CuentaInicioEmpresa
+                        v-for="(grupo, indice) in grupos"
+                        :key="grupo.clave"
+                        :grupo="grupo"
+                        :accesos="accesosPorGrupo[indice] ?? []"
+                        :mostrar-marca="grupos.length > 1"
+                        :promesa-por-servicio="promesaPorServicio"
+                        @accion="alAcceso(grupo, $event)"
+                        @pedir-promesa="pedirPromesa"
+                    />
+                </div>
+
+                <div
+                    v-else-if="seccion === 'pagar'"
+                    key="pagar"
+                    class="flex flex-col gap-6"
+                    data-testid="seccion-pagar"
+                >
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-labelledby="titulo-pagar"
+                    >
+                        <h2
+                            id="titulo-pagar"
+                            class="text-lg font-semibold text-highlighted"
                         >
-                            <h2
-                                id="titulo-pagos"
-                                class="text-sm font-semibold text-highlighted"
-                            >
-                                Pagos registrados
-                            </h2>
-                            <CuentaPagos />
-                        </section>
-                    </div>
-                </template>
-                <template #promesas>
-                    <CuentaPromesas />
-                </template>
-                <template #datos>
-                    <div class="flex flex-col gap-4">
-                        <CuentaTelegram
-                            :vinculado="cuenta.cliente.telegram_vinculado"
-                            @cambio="refresh()"
+                            Pagar
+                        </h2>
+                        <UCard v-if="servicioPago !== undefined">
+                            <div class="flex flex-col gap-3">
+                                <UFormField
+                                    v-if="opcionesPago.length > 1"
+                                    label="¿Qué servicio quieres pagar en línea?"
+                                >
+                                    <USelect
+                                        :model-value="servicioPago"
+                                        :items="opcionesPago"
+                                        class="w-full"
+                                        data-testid="servicio-a-pagar"
+                                        @update:model-value="servicioElegido = Number($event)"
+                                    />
+                                </UFormField>
+                                <PagoEnLinea
+                                    :servicio-id="servicioPago"
+                                    id-ayuda="pagar-en-linea-ayuda-cuenta"
+                                />
+                            </div>
+                        </UCard>
+                        <p
+                            v-else
+                            class="text-sm text-muted"
+                            data-testid="sin-saldo"
+                        >
+                            No tienes saldo pendiente.
+                        </p>
+                        <UButton
+                            v-if="empresa && (empresa.cuentas_deposito.length > 0 || empresa.instrucciones_pago)"
+                            label="Ver datos de depósito"
+                            icon="i-lucide-landmark"
+                            color="neutral"
+                            variant="outline"
+                            size="lg"
+                            block
+                            @click="verDeposito = true"
                         />
-                        <CuentaContacto
-                            :contacto="cuenta.cliente"
-                            @actualizado="contactoActualizado"
-                        />
-                    </div>
-                </template>
-            </UTabs>
+                    </section>
+
+                    <CuentaComprobantes
+                        :key="`comprobantes-${recargas}`"
+                        :servicio-id="servicioComprobante"
+                    />
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-labelledby="titulo-pagos"
+                    >
+                        <h2
+                            id="titulo-pagos"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Pagos registrados
+                        </h2>
+                        <CuentaPagos :key="`pagos-${recargas}`" />
+                    </section>
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-labelledby="titulo-promesas"
+                    >
+                        <h2
+                            id="titulo-promesas"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Promesas de pago
+                        </h2>
+                        <CuentaPromesas :key="`promesas-${recargas}`" />
+                    </section>
+                </div>
+
+                <section
+                    v-else-if="seccion === 'facturas'"
+                    key="facturas"
+                    class="flex flex-col gap-3"
+                    aria-labelledby="titulo-facturas"
+                    data-testid="seccion-facturas"
+                >
+                    <h2
+                        id="titulo-facturas"
+                        class="text-lg font-semibold text-highlighted"
+                    >
+                        Facturas
+                    </h2>
+                    <CuentaFacturas :key="`facturas-${recargas}`" />
+                </section>
+
+                <div
+                    v-else
+                    key="cuenta"
+                    class="flex flex-col gap-4"
+                    data-testid="seccion-cuenta"
+                >
+                    <h2 class="text-lg font-semibold text-highlighted">
+                        Mi cuenta
+                    </h2>
+                    <CuentaTelegram
+                        id="telegram"
+                        :vinculado="cuenta.cliente.telegram_vinculado"
+                        @cambio="refresh(); telegram.cargar()"
+                    />
+                    <CuentaContacto
+                        :contacto="cuenta.cliente"
+                        @actualizado="contactoActualizado"
+                    />
+                    <UButton
+                        label="Ayuda y contacto"
+                        icon="i-lucide-headset"
+                        color="neutral"
+                        variant="outline"
+                        size="lg"
+                        to="/contacto"
+                        block
+                    />
+                    <UButton
+                        label="Salir"
+                        icon="i-lucide-log-out"
+                        color="neutral"
+                        variant="ghost"
+                        size="lg"
+                        block
+                        :loading="saliendo"
+                        data-testid="salir"
+                        @click="salir"
+                    />
+                </div>
+            </Transition>
         </template>
 
         <PromesaSolicitar
@@ -286,5 +439,11 @@ async function salir() {
             :servicio-id="servicioPromesa"
             @resultado="promesaResuelta"
         />
+        <ComprobanteSubir
+            v-model:open="verComprobante"
+            :servicio-id="servicioComprobante"
+            @enviado="recargas += 1"
+        />
+        <CorteDatosDeposito v-model:open="verDeposito" />
     </div>
 </template>

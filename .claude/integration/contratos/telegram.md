@@ -43,9 +43,10 @@ const r = await new GenerarCodigoTelegram().execute({ cliente_id }, ctx.contexto
 
 ## Lo que hace el bot (A6)
 
-`POST /api/v1/telegram/webhook` (público, fuera del ACL, en el OpenAPI como `telegramWebhook`):
+`POST /api/v1/telegram/webhook/:bot` (público, fuera del ACL, en el OpenAPI como `telegramWebhookBot`): **una URL por bot**. `:bot` es el id público del bot (la parte numérica del token, `telegram.bot_id` de la configuración). Con varias empresas con bots distintos (configuración propia, `hereda = false`), el webhook sabe de qué bot viene cada actualización y responde por ese mismo bot. `POST /api/v1/telegram/webhook` (sin id, `telegramWebhook`) queda para el bot de la configuración global registrado antes de este cambio.
 
-- **Autenticación.** Header `X-Telegram-Bot-Api-Secret-Token` comparado en tiempo constante con `TELEGRAM_WEBHOOK_SECRET`; si falta, no coincide o el secreto no está configurado: `401`. El webhook se registra con `node ace telegram:webhook` (`setWebhook` con `secret_token`, `allowed_updates: ['message']`, y los comandos en español con `setMyCommands`); `--info` y `--borrar`.
+- **Configuración.** Token, nombre del bot y secreto del webhook se guardan desde el panel (`PUT /notificaciones/configuracion`, cifrados; ver `apps/api/app/notify/README.md`). Las variables `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_NOMBRE` y `TELEGRAM_WEBHOOK_SECRET` solo siembran la configuración global la primera vez.
+- **Autenticación.** Header `X-Telegram-Bot-Api-Secret-Token` comparado en tiempo constante con el secreto del webhook de ese bot (si el panel guarda un token sin secreto, se genera uno); si falta, no coincide, el bot no está configurado o el secreto es de otro bot: `401`. El webhook se registra con `node ace telegram:webhook [--empresa=<id>]` (`setWebhook` en `<TELEGRAM_WEBHOOK_URL>/<id del bot>` con `secret_token`, `allowed_updates: ['message']`, y los comandos en español con `setMyCommands`); `--info` y `--borrar`.
 - **Solo chats privados.** En grupos el bot responde "solo atiendo en un chat privado" a los comandos y no vincula ni muestra cuentas; el texto libre del grupo no se contesta.
 - **Comandos.**
 
@@ -65,9 +66,9 @@ const r = await new GenerarCodigoTelegram().execute({ cliente_id }, ctx.contexto
 
 | Variable | Dónde | Qué |
 | --- | --- | --- |
-| `TELEGRAM_BOT_TOKEN` | api, worker | Token de @BotFather (ya existía: canal de notify y alertas) |
-| `TELEGRAM_BOT_NOMBRE` | api | Usuario del bot sin `@` |
-| `TELEGRAM_WEBHOOK_SECRET` | api | 16 a 256 caracteres `A-Z a-z 0-9 _ -` (`openssl rand -hex 32`) |
-| `TELEGRAM_WEBHOOK_URL` | api (comando) | `https://<dominio>/api/v1/telegram/webhook` (Telegram exige HTTPS) |
+| `TELEGRAM_BOT_TOKEN` | api, worker | Opcional: valor inicial del token (se siembra una vez en la configuración global; después manda el panel) |
+| `TELEGRAM_BOT_NOMBRE` | api | Opcional: valor inicial del usuario del bot sin `@` |
+| `TELEGRAM_WEBHOOK_SECRET` | api | Opcional: valor inicial del secreto (16 a 256 caracteres `A-Z a-z 0-9 _ -`) |
+| `TELEGRAM_WEBHOOK_URL` | api (comando) | Base pública: `https://<dominio>/api/v1/telegram/webhook`; el comando registra `<base>/<id del bot>` (Telegram exige HTTPS) |
 | `TELEGRAM_CODIGO_VIGENCIA_S` | api | Vigencia del código (900, mínimo 60) |
 | `NOTIFY_PORTAL_URL` | api | Enlace al portal en los textos del bot |

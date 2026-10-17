@@ -1,7 +1,13 @@
 import { Decimal } from 'decimal.js'
 import type { FilaCsv } from '#importacion/csv'
 import type { FilaSql, TablaSql } from '#importacion/mysql_dump'
-import { ENTIDADES, type Entidad, type FilasPorEntidad, type ProblemaFila } from '#importacion/canonico'
+import {
+    ENTIDADES,
+    type ArchivoOrigen,
+    type Entidad,
+    type FilasPorEntidad,
+    type ProblemaFila,
+} from '#importacion/canonico'
 
 /**
  * Ayudas para los adaptadores que leen un volcado MySQL (Mikrowisp, SmartISP): comprobar que el
@@ -69,12 +75,17 @@ export function tablasDelEsquema<K extends string>(
     return salida
 }
 
-/** Fila del origen ya con los nombres de columna canónicos (undefined = la columna no vino). */
+/**
+ * Fila del origen ya con los nombres de columna canónicos (undefined = la columna no vino).
+ * `__linea`: número de la fila en su tabla del origen (1 = la primera); con él, los problemas de
+ * formato apuntan a la fila real y el cuadre por tabla la encuentra.
+ */
 export type FilaOrigen = Record<string, string | null | undefined>
 
 /**
- * Filas por entidad en el formato canónico. `linea` = número de fila dentro de la tabla
- * (1 = la primera); el nombre del origen sale en el reporte como `<archivo>:<tabla>`.
+ * Filas por entidad en el formato canónico. `linea` = número de fila dentro de la tabla del
+ * origen (`__linea`; sin él, la posición en la lista); el nombre del origen sale en el reporte
+ * como `<archivo>:<tabla>`.
  */
 export function filasCanonicas(
     entidades: Record<Entidad, FilaOrigen[]>,
@@ -85,7 +96,10 @@ export function filasCanonicas(
     for (const entidad of ENTIDADES) {
         filas[entidad] = {
             origen: `${nombre}:${tablaDe[entidad]}`,
-            filas: entidades[entidad].map((v, i): FilaCsv => ({ linea: i + 1, valores: aTexto(v) })),
+            filas: entidades[entidad].map((v, i): FilaCsv => ({
+                linea: Number(v.__linea ?? i + 1),
+                valores: aTexto(v),
+            })),
         }
     }
     return filas
@@ -154,5 +168,45 @@ export class ProblemasOrigen {
 }
 
 function aTexto(fila: FilaOrigen): Record<string, string> {
-    return Object.fromEntries(Object.entries(fila).map(([k, v]) => [k, v ?? '']))
+    return Object.fromEntries(
+        Object.entries(fila)
+            .filter(([k]) => k !== '__linea')
+            .map(([k, v]) => [k, v ?? '']),
+    )
+}
+
+/**
+ * Lo que el adaptador sabe de cada fila del volcado para el archivo del origen
+ * (`importacion.filas_origen`) y el cuadre por tabla: a qué entidad canónica va (`vincular`) o
+ * por qué se queda solo en el archivo (`soloArchivo`, por fila o por tabla). Las filas que el
+ * adaptador descarta van por `ProblemasOrigen.omitir` y cuentan como omitidas.
+ */
+export class TrazaOrigen {
+    readonly vinculos = new Map<string, { entidad: Entidad; id: string }>()
+    readonly notasFila = new Map<string, string>()
+    readonly notasTabla: Record<string, string> = {}
+
+    vincular(tabla: string, linea: number, entidad: Entidad, id: string) {
+        this.vinculos.set(`${tabla}#${linea}`, { entidad, id })
+    }
+
+    soloArchivo(tabla: string, linea: number, motivo: string) {
+        this.notasFila.set(`${tabla}#${linea}`, motivo)
+    }
+
+    tabla(tabla: string, motivo: string) {
+        this.notasTabla[tabla] = motivo
+    }
+
+    /** Todas las tablas del volcado, con sus filas tal cual. */
+    archivo(tablas: Map<string, TablaSql>): ArchivoOrigen {
+        return {
+            tablas: [...tablas.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([tabla, t]) => ({ tabla, columnas: t.columnas, filas: t.filas })),
+            vinculos: this.vinculos,
+            notasFila: this.notasFila,
+            notasTabla: this.notasTabla,
+        }
+    }
 }

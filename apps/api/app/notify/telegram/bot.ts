@@ -3,7 +3,8 @@ import logger from '@adonisjs/core/services/logger'
 import type { ContextoAccion } from '#shared/contexto'
 import { Problema } from '#shared/errores'
 import { fechaHora, quetzales } from '#notify/formato'
-import { obtenerCanal } from '#notify/canales/registro'
+import type { Canal } from '#notify/canales/canal'
+import { configPara, construirCanal } from '#notify/configuracion'
 import CanjearCodigoTelegram, { CodigoTelegramInvalido } from '#notify/actions/canjear_codigo_telegram'
 import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
 import AnularCodigosTelegram from '#notify/actions/anular_codigos_telegram'
@@ -106,33 +107,45 @@ export function leerComando(texto: string): { comando: string; argumento: string
     return { comando: coincidencia[1]!.toLowerCase(), argumento: (coincidencia[2] ?? '').trim() }
 }
 
+export interface OpcionesBot {
+    /**
+     * Bot por el que se responde: el mismo del que vino la actualización (webhook por bot). Sin
+     * él, el bot de la configuración global.
+     */
+    canal?: Canal | null
+}
+
 export async function procesarActualizacion(
     actualizacion: ActualizacionTelegram,
     ctx: ContextoAccion,
+    opciones: OpcionesBot = {},
 ): Promise<ResultadoBot> {
     const mensaje = actualizacion.message
     if (!mensaje || typeof mensaje.text !== 'string') return { comando: 'ignorado', respuesta: null }
     const chatId = String(mensaje.chat.id)
+    const canal =
+        opciones.canal !== undefined ? opciones.canal : construirCanal(await configPara(null), 'telegram')
+    const responder = (comando: Comando, texto: string) => responderPor(canal, chatId, comando, texto)
 
     if (mensaje.chat.type !== 'private') {
         // En grupos solo responde si le hablan con un comando (no a cada mensaje del grupo).
         if (!leerComando(mensaje.text)) return { comando: 'ignorado', respuesta: null }
-        return responder(chatId, 'grupo', MENSAJES.grupo())
+        return responder('grupo', MENSAJES.grupo())
     }
 
     const leido = leerComando(mensaje.text)
     switch (leido?.comando) {
         case 'start': {
-            if (!leido.argumento) return responder(chatId, 'start', MENSAJES.bienvenida())
+            if (!leido.argumento) return responder('start', MENSAJES.bienvenida())
             try {
                 const canje = await new CanjearCodigoTelegram().execute(
                     { token_vinculacion: leido.argumento, chat_id: chatId },
                     ctx,
                 )
-                return responder(chatId, 'vincular', MENSAJES.vinculado(canje.nombre))
+                return responder('vincular', MENSAJES.vinculado(canje.nombre))
             } catch (error) {
                 if (error instanceof CodigoTelegramInvalido) {
-                    return responder(chatId, 'vincular', MENSAJES.codigoInvalido())
+                    return responder('vincular', MENSAJES.codigoInvalido())
                 }
                 throw error
             }
@@ -146,15 +159,15 @@ export async function procesarActualizacion(
                     { err: error, request_id: ctx.requestId },
                     'Telegram /estado: no se pudo leer la cuenta',
                 )
-                return responder(chatId, 'estado', MENSAJES.errorTemporal())
+                return responder('estado', MENSAJES.errorTemporal())
             }
-            if (cuentas.length === 0) return responder(chatId, 'estado', MENSAJES.noVinculado())
-            return responder(chatId, 'estado', textoEstado(cuentas))
+            if (cuentas.length === 0) return responder('estado', MENSAJES.noVinculado())
+            return responder('estado', textoEstado(cuentas))
         }
         case 'desvincular': {
             const cuentas = await cuentasDelChat(chatId).catch(() => null)
-            if (cuentas === null) return responder(chatId, 'desvincular', MENSAJES.errorTemporal())
-            if (cuentas.length === 0) return responder(chatId, 'desvincular', MENSAJES.noVinculado())
+            if (cuentas === null) return responder('desvincular', MENSAJES.errorTemporal())
+            if (cuentas.length === 0) return responder('desvincular', MENSAJES.noVinculado())
             for (const cuenta of cuentas) {
                 // Misma transacción: desvincular y anular sus códigos pendientes (un enlace viejo
                 // no debe volver a vincular el chat).
@@ -163,19 +176,24 @@ export async function procesarActualizacion(
                     await new AnularCodigosTelegram().execute({ cliente_id: cuenta.cliente_id }, ctx, { trx })
                 })
             }
-            return responder(chatId, 'desvincular', MENSAJES.desvinculado())
+            return responder('desvincular', MENSAJES.desvinculado())
         }
         default:
-            return responder(chatId, 'ayuda', MENSAJES.ayuda())
+            return responder('ayuda', MENSAJES.ayuda())
     }
 }
 
 /**
- * Responde por el canal `telegram`. Si la Bot API falla no se relanza: la actualización ya se
+ * Responde por el bot de la actualización (no depende del interruptor de avisos a clientes: es
+ * una respuesta a quien escribió). Si la Bot API falla no se relanza: la actualización ya se
  * procesó (un reintento del webhook repetiría el comando) y el error queda en el log.
  */
-async function responder(chatId: string, comando: Comando, texto: string): Promise<ResultadoBot> {
-    const canal = obtenerCanal('telegram')
+async function responderPor(
+    canal: Canal | null,
+    chatId: string,
+    comando: Comando,
+    texto: string,
+): Promise<ResultadoBot> {
     if (!canal) {
         logger.warn({ comando }, 'Telegram: no hay canal configurado para responder')
         return { comando, respuesta: texto }

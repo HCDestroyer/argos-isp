@@ -37,6 +37,7 @@ onMounted(recargar)
                 <UBadge
                     :label="ESTADOS_PAGO[pago.estado].etiqueta"
                     :color="ESTADOS_PAGO[pago.estado].color"
+                    :icon="ESTADOS_PAGO[pago.estado].icono"
                     variant="subtle"
                     class="shrink-0"
                 />

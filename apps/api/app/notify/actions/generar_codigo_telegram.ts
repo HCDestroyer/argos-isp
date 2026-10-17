@@ -2,7 +2,7 @@ import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, Problema } from '#shared/errores'
 import {
-    configBot,
+    configBotGlobal,
     enlaceInicio,
     generarCodigoVinculacion,
     hashCodigoVinculacion,
@@ -23,7 +23,7 @@ export interface CodigoTelegram {
     vence_en: string
 }
 
-/** 503 cuando el bot no está configurado (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`). */
+/** 503 cuando el bot no está configurado (token y nombre del bot en la configuración de notificaciones). */
 export class TelegramNoConfigurado extends Problema {
     constructor() {
         super(
@@ -50,7 +50,7 @@ export default class GenerarCodigoTelegram extends DomainAction<
     readonly nombre = 'notificaciones.telegram_codigo'
 
     protected async handle(input: EntradaGenerarCodigoTelegram, t: Transaccion): Promise<CodigoTelegram> {
-        const config = configBot()
+        const config = await configBotGlobal()
         if (!config.token || !config.nombre) throw new TelegramNoConfigurado()
         t.fijarEntidad('cliente', input.cliente_id)
 

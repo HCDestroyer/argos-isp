@@ -35,9 +35,9 @@ describe('página /corte', () => {
 
         expect(boton(wrapper, 'Pagar en línea')?.attributes('disabled')).toBeUndefined()
         expect(boton(wrapper, 'Subir comprobante')?.attributes('disabled')).toBeUndefined()
-        expect(boton(wrapper, 'Solicitar promesa')?.attributes('disabled')).toBeUndefined()
+        expect(boton(wrapper, 'Prometer pago')?.attributes('disabled')).toBeUndefined()
         expect(boton(wrapper, 'Ver datos de depósito')?.attributes('disabled')).toBeUndefined()
-        expect(texto).toContain('Llamar a soporte: 7765-4321')
+        expect(texto).toContain('Llamar al 7765-4321')
     })
 
     it('sin pasarela, "Pagar en línea" se ve apagado: neutro, sin el azul primario, con la alternativa', async () => {
@@ -75,7 +75,7 @@ describe('página /corte', () => {
         expect(texto).toContain('Tu servicio está activo')
         expect(texto).toContain('Sin facturas vencidas')
         expect(texto).toContain('Tienes una promesa de pago activa')
-        expect(boton(wrapper, 'Solicitar promesa')).toBeUndefined()
+        expect(boton(wrapper, 'Prometer pago')).toBeUndefined()
     })
 
     it('IP desconocida: no muestra montos ni nombre, sí depósito y contacto', async () => {

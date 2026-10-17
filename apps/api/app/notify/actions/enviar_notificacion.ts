@@ -2,8 +2,8 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import type { CanalNotificacion } from '#shared/eventos'
 import { ErrorCanal } from '#notify/canales/canal'
-import { obtenerCanal } from '#notify/canales/registro'
-import { crearEnvio, plantillasActivas } from '#notify/envios'
+import { resolverCanal } from '#notify/canales/registro'
+import { crearEnvio, plantillasActivas, type EstadoEnvio } from '#notify/envios'
 import { cargarDestinatario, type Variables } from '#notify/variables'
 
 export interface EntradaEnviar {
@@ -26,12 +26,13 @@ interface FilaEnvio {
     origen: string
     evento: string
     cliente_id: number | null
+    empresa_id: number | null
     canal: CanalNotificacion
     destino: string
     asunto: string | null
     cuerpo: string | null
     variables: Variables
-    estado: 'encolado' | 'enviado' | 'fallido'
+    estado: EstadoEnvio
 }
 
 /**
@@ -42,6 +43,8 @@ interface FilaEnvio {
  * - Éxito → `enviado`, `proveedor_id`, `enviado_en`; emite `notificacion.enviada` (enviado).
  * - Error transitorio antes del último intento → sigue `encolado` con el error y el número de
  *   intentos; devuelve `reintentar` y el worker lanza para que BullMQ reintente con backoff.
+ * - Canal apagado en la configuración desde que se programó → `omitido` con el motivo (sin
+ *   evento ni fallback: lo apagó alguien a propósito).
  * - Error permanente o último intento → `fallido`; emite `notificacion.enviada` (fallido) y, si
  *   el canal no era correo, crea el envío de fallback por correo (`fallbackId`).
  */
@@ -58,6 +61,7 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
                 'origen',
                 'evento',
                 'cliente_id',
+                'empresa_id',
                 'canal',
                 'destino',
                 'asunto',
@@ -70,9 +74,23 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
         t.fijarEntidad('envio', envio.id)
         if (envio.estado !== 'encolado') return { estado: 'omitido' }
 
-        const canal = obtenerCanal(envio.canal)
+        // Las alertas internas (sin cliente) usan el interruptor de alertas al equipo.
+        const uso = envio.cliente_id === null && envio.origen.startsWith('alerta:') ? 'alertas' : 'clientes'
+        const resuelto = await resolverCanal(envio.canal, { empresaId: envio.empresa_id, uso })
+        if (resuelto.apagado) {
+            await t.trx
+                .from('notify.envios')
+                .where('id', envio.id)
+                .update({
+                    estado: 'omitido',
+                    motivo: resuelto.motivo,
+                    updated_at: t.trx.knexRawQuery('now()'),
+                })
+            return { estado: 'omitido', error: resuelto.motivo ?? undefined }
+        }
+        const canal = resuelto.canal
         try {
-            if (!canal) throw new ErrorCanal(envio.canal, 'canal no configurado en este entorno', true)
+            if (!canal) throw new ErrorCanal(envio.canal, resuelto.motivo ?? 'canal no configurado', true)
             const resultado = await canal.enviar(envio.destino, envio.asunto, envio.cuerpo ?? '')
             await t.trx
                 .from('notify.envios')
@@ -126,7 +144,9 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
         const destinatario = await cargarDestinatario(t.trx, envio.cliente_id)
         const plantillas = await plantillasActivas(t.trx, envio.evento)
         const plantilla = plantillas.get('correo')
-        if (!destinatario?.email || !plantilla || !obtenerCanal('correo')) return undefined
+        if (!destinatario?.email || !plantilla) return undefined
+        const correo = await resolverCanal('correo', { empresaId: envio.empresa_id })
+        if (!correo.canal) return undefined
 
         const nuevo = await crearEnvio(t.trx, {
             origen: envio.origen,
@@ -138,6 +158,7 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
             plantilla,
             requestId: t.ctx.requestId,
             fallbackDe: envio.id,
+            empresaId: envio.empresa_id,
         })
         return nuevo.estado === 'encolado' ? nuevo.id : undefined
     }

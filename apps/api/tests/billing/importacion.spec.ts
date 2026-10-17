@@ -33,7 +33,12 @@ test.group('billing · importación', () => {
         const r = await importar(servicioId, clave)
         assert.containSubset(r, { creada: true, estado: 'vencida' })
         const repetida = await importar(servicioId, clave)
-        assert.deepEqual(repetida, { factura_id: r.factura_id, creada: false, estado: 'vencida' })
+        assert.deepEqual(repetida, {
+            factura_id: r.factura_id,
+            creada: false,
+            estado: 'vencida',
+            cargo_unico: false,
+        })
         await assert.rejects(() => importar(servicioId, clave, { total: '151.00' }), /ya se importó/)
 
         const factura = await db.from('billing.facturas').where('id', r.factura_id).firstOrFail()

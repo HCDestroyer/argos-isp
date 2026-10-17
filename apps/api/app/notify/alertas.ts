@@ -1,7 +1,6 @@
 import { DateTime } from 'luxon'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import env from '#start/env'
-import { canalDisponible } from '#notify/canales/registro'
+import { configPara, disponibilidad, type ConfigCanales } from '#notify/configuracion'
 import { crearEnvio, type EnvioCreado } from '#notify/envios'
 import { PLANTILLAS_ALERTA } from '#notify/plantillas_base'
 import { variablesEmpresa, type Variables } from '#notify/variables'
@@ -48,12 +47,13 @@ const COLUMNAS = [
 /** Chat del equipo; las pruebas lo reemplazan con `fijarChatEquipo`. */
 let chatEquipo: string | null | undefined
 
-export function chatDelEquipo(): string | null {
+/** Chat del equipo de la configuración global (panel; sin configuración, `TELEGRAM_CHAT_EQUIPO`). */
+export function chatDelEquipo(config: ConfigCanales): string | null {
     if (chatEquipo !== undefined) return chatEquipo
-    return env.get('TELEGRAM_CHAT_EQUIPO') || null
+    return config.telegram.chatEquipo
 }
 
-/** Reemplaza el chat del equipo (`undefined` vuelve al entorno). Para pruebas. */
+/** Reemplaza el chat del equipo (`undefined` vuelve a la configuración). Para pruebas. */
 export function fijarChatEquipo(valor: string | null | undefined) {
     chatEquipo = valor
 }
@@ -198,12 +198,16 @@ export async function crearAlerta(
     const plantilla = enBase ?? PLANTILLAS_ALERTA.find((p) => p.evento === datos.evento)
     if (!plantilla) throw new Error(`Alerta sin plantilla: ${datos.evento}`)
 
-    const chat = chatDelEquipo()
-    const error = !chat
-        ? 'TELEGRAM_CHAT_EQUIPO no configurado'
-        : !canalDisponible('telegram')
-          ? 'TELEGRAM_BOT_TOKEN no configurado'
-          : undefined
+    // Las alertas al equipo usan la configuración global y su interruptor de alertas.
+    const config = await configPara(null)
+    const chat = chatDelEquipo(config)
+    const uso = disponibilidad(config, 'telegram', 'alertas')
+    const omitido = uso.apagado ? uso.motivo : null
+    const error = omitido
+        ? undefined
+        : !chat
+          ? 'Chat del equipo de Telegram no configurado'
+          : (uso.motivo ?? undefined)
 
     return crearEnvio(trx, {
         origen: `alerta:${datos.incidente.id}:${datos.fase}`,
@@ -215,6 +219,7 @@ export async function crearAlerta(
         plantilla,
         requestId: datos.requestId,
         error,
+        omitido,
     })
 }
 

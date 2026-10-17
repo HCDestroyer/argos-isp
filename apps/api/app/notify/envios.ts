@@ -1,7 +1,7 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { CanalNotificacion } from '#shared/eventos'
 import { renderizar } from '#notify/plantillas'
-import { canalDisponible } from '#notify/canales/registro'
+import { avisoApagado, disponibilidad, type ConfigCanales } from '#notify/configuracion'
 import type { Destinatario, Variables } from '#notify/variables'
 
 /**
@@ -17,10 +17,12 @@ export interface Plantilla {
     cuerpo: string
 }
 
+export type EstadoEnvio = 'encolado' | 'enviado' | 'fallido' | 'omitido'
+
 export interface EnvioCreado {
     id: number
     canal: CanalNotificacion
-    estado: 'encolado' | 'enviado' | 'fallido'
+    estado: EstadoEnvio
     nuevo: boolean
 }
 
@@ -43,24 +45,45 @@ export function destinoDe(canal: CanalNotificacion, destinatario: Destinatario):
     return null
 }
 
+export interface EleccionCanal {
+    canal: CanalNotificacion
+    destino: string
+    plantilla: Plantilla
+    /** motivo si el canal o el tipo de aviso están apagados: el envío se registra `omitido` */
+    omitido: string | null
+}
+
 /**
  * Canales por los que se avisa al cliente: todos los que sirven, para que el aviso le llegue por
- * cualquier medio (decisión del PM, 2026-10-15). Un canal sirve si el adaptador está configurado,
- * el cliente tiene destino en ese canal y hay plantilla activa. El preferido va primero. Lista
- * vacía si ninguno sirve.
+ * cualquier medio (decisión del PM, 2026-10-15). Un canal sirve si el cliente tiene destino en
+ * ese canal, hay plantilla activa y la configuración (`config`) lo tiene configurado. El
+ * preferido va primero. Lista vacía si ninguno sirve.
+ *
+ * Si el tipo de aviso (`config.avisos`) o el canal están **apagados**, el canal igual se devuelve
+ * con `omitido` = motivo: no se envía, pero queda registrado.
  */
 export function elegirCanales(
     destinatario: Destinatario,
     plantillas: Map<CanalNotificacion, Plantilla>,
-): Array<{ canal: CanalNotificacion; destino: string; plantilla: Plantilla }> {
+    config: ConfigCanales,
+    evento: string,
+): EleccionCanal[] {
     const candidatos = [
         ...new Set<CanalNotificacion>([destinatario.canalPreferido, 'correo', 'telegram', 'whatsapp']),
     ]
-    const elegidos: Array<{ canal: CanalNotificacion; destino: string; plantilla: Plantilla }> = []
+    const avisoOmitido = avisoApagado(config, evento)
+    const elegidos: EleccionCanal[] = []
     for (const canal of candidatos) {
         const plantilla = plantillas.get(canal)
         const destino = destinoDe(canal, destinatario)
-        if (plantilla && destino && canalDisponible(canal)) elegidos.push({ canal, destino, plantilla })
+        if (!plantilla || !destino) continue
+        if (avisoOmitido) {
+            elegidos.push({ canal, destino, plantilla, omitido: avisoOmitido })
+            continue
+        }
+        const uso = disponibilidad(config, canal, 'clientes')
+        if (uso.canal) elegidos.push({ canal, destino, plantilla, omitido: null })
+        else if (uso.apagado) elegidos.push({ canal, destino, plantilla, omitido: uso.motivo })
     }
     return elegidos
 }
@@ -95,13 +118,17 @@ export interface DatosEnvio {
     fallbackDe?: number
     /** fallido de entrada (sin destino); por defecto `encolado` */
     error?: string
+    /** `omitido` de entrada, con su motivo (canal o tipo de aviso apagado) */
+    omitido?: string | null
+    /** empresa cuya configuración se aplicó (null = global) */
+    empresaId?: number | null
 }
 
 /** Renderiza la plantilla y registra el envío. Idempotente por `(origen, cliente_id, canal)`. */
 export async function crearEnvio(trx: TransactionClientContract, datos: DatosEnvio): Promise<EnvioCreado> {
     const asunto = datos.plantilla.asunto ? renderizar(datos.plantilla.asunto, datos.variables).trim() : null
     const cuerpo = renderizar(datos.plantilla.cuerpo, datos.variables).trim()
-    const estado = datos.error ? 'fallido' : 'encolado'
+    const estado: EstadoEnvio = datos.omitido ? 'omitido' : datos.error ? 'fallido' : 'encolado'
 
     const insertadas = (await trx
         .knexQuery()
@@ -116,7 +143,9 @@ export async function crearEnvio(trx: TransactionClientContract, datos: DatosEnv
             cuerpo,
             variables: JSON.stringify(datos.variables),
             estado,
-            error: datos.error ?? null,
+            error: datos.omitido ? null : (datos.error ?? null),
+            motivo: datos.omitido ?? null,
+            empresa_id: datos.empresaId ?? null,
             fallback_de: datos.fallbackDe ?? null,
             request_id: datos.requestId,
         })

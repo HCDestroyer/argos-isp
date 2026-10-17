@@ -11,7 +11,12 @@ const titulo = computed(() => props.error.statusCode === 404 ? 'Página no encon
 
 <template>
     <UApp :locale="es">
+        <div
+            class="app-aura app-aura-lite"
+            aria-hidden="true"
+        />
         <UError
+            class="relative"
             :error="{
                 statusCode: error.statusCode,
                 statusMessage: titulo,
@@ -19,6 +24,13 @@ const titulo = computed(() => props.error.statusCode === 404 ? 'Página no encon
             }"
             :clear="{ label: 'Ver el estado de mi servicio', color: 'primary' }"
             redirect="/corte"
-        />
+        >
+            <template #leading>
+                <LogoArgos
+                    variante="linea"
+                    class="size-16 text-primary"
+                />
+            </template>
+        </UError>
     </UApp>
 </template>

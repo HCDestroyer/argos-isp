@@ -11,6 +11,7 @@ export type SesionPortal = Schema<'PortalSesion'>
  */
 export function useAccesoPortal() {
     const api = useApi()
+    const sesion = useSesionPortal()
 
     function solicitarPorIdentificador(identificador: string): Promise<Resultado<SolicitudCodigo>> {
         return resolver(api.POST('/api/v1/portal/codigo', { body: { identificador } }))
@@ -21,12 +22,17 @@ export function useAccesoPortal() {
         return resolver(api.POST('/api/v1/portal/codigo', { body: { por_ip: true } }))
     }
 
-    function verificar(solicitud: string, codigo: string): Promise<Resultado<SesionPortal>> {
-        return resolver(api.POST('/api/v1/portal/verificar', { body: { solicitud, codigo } }))
+    async function verificar(solicitud: string, codigo: string): Promise<Resultado<SesionPortal>> {
+        const resultado = await resolver(api.POST('/api/v1/portal/verificar', { body: { solicitud, codigo } }))
+        if (resultado.ok) {
+            sesion.confirmar()
+        }
+        return resultado
     }
 
     async function salir(): Promise<Resultado<undefined>> {
         const resultado = await resolver(api.POST('/api/v1/portal/salir'))
+        sesion.cerrar()
         clearNuxtData(clave => clave.startsWith('portal:cuenta'))
         return resultado as Resultado<undefined>
     }
