@@ -147,20 +147,22 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 
 | Evento | Emite | Payload |
 | --- | --- | --- |
-| `servicio.creado` | núcleo | servicio_id, cliente_id, router_id, plan_id |
-| `servicio.estado_cambiado` | núcleo | servicio_id, de, a, motivo |
-| `servicio.config_cambiada` | núcleo | servicio_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac) |
-| `asignacion.cambiada` | núcleo/IPAM | servicio_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
-| `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6 |
-| `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, servicio_id, cliente_id, total, vence |
-| `pago.registrado` / `pago.anulado` | billing | pago_id, cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
-| `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, servicio_id, vence, monto |
-| `caja.cerrada` | ledger | caja_id, cajero_id, esperado, contado, diferencia |
+| `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
+| `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo |
+| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`) |
+| `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
+| `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6; `sesion.terminada` además motivo (causa de fin) |
+| `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
+| `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
+| `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
+| `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |
+| `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
+| `notificaciones.config_cambiada` | notify | configuracion_id, empresa_id (null = global), campos[] |
 | `sesion.desconexion_solicitada` | network | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, motivo |
 | `coa.fallido` | coa | servicio_id (o null), nas_ip, tipo (coa/disconnect), error |
 | `aaa.caido` / `aaa.recuperado` | network (vigía) | nodo, desde, hasta (recuperado), ultimo_error |
-| `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, cliente_id, pago_id, motivo |
+| `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, empresa_id, cliente_id, pago_id, motivo |
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
