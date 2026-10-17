@@ -83,7 +83,7 @@
       "post": {
         "operationId": "authLogin",
         "summary": "Iniciar sesión",
-        "description": "Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.",
+        "description": "Límite de intentos por IP (todos, también los de cuerpo inválido) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.",
         "tags": [
           "auth"
         ],
@@ -152,12 +152,16 @@
       "post": {
         "operationId": "authLogout",
         "summary": "Cerrar la sesión actual",
+        "description": "Revoca el token de login (Bearer o cookie del panel). Con la cookie, la borra (`Set-Cookie` vencida) y exige `X-CSRF-Token` como todo POST.",
         "tags": [
           "auth"
         ],
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -166,6 +170,85 @@
           },
           "401": {
             "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/sesion": {
+      "post": {
+        "operationId": "authSesion",
+        "summary": "Iniciar sesión del panel en cookie HttpOnly",
+        "description": "Igual que `POST /auth/login` (mismas credenciales y límite de intentos), pero el token va en la cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. Contrato: `.claude/integration/contratos/sesion-panel.md`.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión iniciada; cookie puesta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionPanel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -188,6 +271,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -228,6 +314,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -439,6 +528,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -565,6 +657,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -616,6 +711,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -686,7 +784,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso cajas.abrir",
+            "description": "Sin el permiso cajas.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -741,6 +839,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -820,7 +921,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso cajas.cerrar",
+            "description": "Sin el permiso cajas.cerrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -874,6 +975,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -993,6 +1097,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1172,6 +1279,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1332,7 +1442,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.crear",
+            "description": "Sin el permiso clientes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1376,6 +1486,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1443,6 +1556,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1606,7 +1722,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.editar",
+            "description": "Sin el permiso clientes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1661,6 +1777,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1779,6 +1898,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1825,7 +1947,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.desvincular_telegram",
+            "description": "Sin el permiso clientes.desvincular_telegram; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1879,6 +2001,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -1948,6 +2073,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2013,7 +2141,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.quitar_responsable_pago",
+            "description": "Sin el permiso clientes.quitar_responsable_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2068,6 +2196,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2140,7 +2271,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.asignar_responsable_pago",
+            "description": "Sin el permiso clientes.asignar_responsable_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2195,6 +2326,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2262,7 +2396,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso clientes.vincular_telegram",
+            "description": "Sin el permiso clientes.vincular_telegram; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2317,6 +2451,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2466,6 +2603,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2536,6 +2676,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2611,7 +2754,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso comprobantes.aprobar",
+            "description": "Sin el permiso comprobantes.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2666,6 +2809,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2738,6 +2884,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2805,7 +2954,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso comprobantes.rechazar",
+            "description": "Sin el permiso comprobantes.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2859,6 +3008,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -2929,6 +3081,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -2996,7 +3151,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso cuentas_bancarias.editar",
+            "description": "Sin el permiso cuentas_bancarias.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3030,6 +3185,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3097,6 +3255,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3178,7 +3339,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso cuentas_bancarias.editar",
+            "description": "Sin el permiso cuentas_bancarias.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3233,6 +3394,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -3282,6 +3446,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3353,6 +3520,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3423,6 +3593,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3487,7 +3660,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso documentos.editar",
+            "description": "Sin el permiso documentos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3542,6 +3715,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3602,7 +3778,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso documentos.editar",
+            "description": "Sin el permiso documentos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3646,6 +3822,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3823,6 +4002,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -3959,7 +4141,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso egresos.registrar",
+            "description": "Sin el permiso egresos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4003,6 +4185,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4073,6 +4258,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4140,7 +4328,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso egresos.anular",
+            "description": "Sin el permiso egresos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4194,6 +4382,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -4245,6 +4436,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -4292,6 +4486,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -4402,7 +4599,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso empresa.editar",
+            "description": "Sin el permiso empresa.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4446,6 +4643,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4601,6 +4801,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4671,6 +4874,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4738,7 +4944,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso facturas.anular",
+            "description": "Sin el permiso facturas.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4792,6 +4998,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4852,7 +5061,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso facturas.generar",
+            "description": "Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4896,6 +5105,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -4958,7 +5170,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso facturas.generar",
+            "description": "Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5002,6 +5214,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5064,7 +5279,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso facturas.generar",
+            "description": "Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5281,6 +5496,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5350,6 +5568,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5420,6 +5641,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5500,7 +5724,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso ipv6.crear",
+            "description": "Sin el permiso ipv6.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5545,6 +5769,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -5596,6 +5823,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -5647,6 +5877,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5793,6 +6026,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -5913,6 +6149,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6025,6 +6264,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6089,7 +6331,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.cerrar_periodo",
+            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6134,6 +6376,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6204,7 +6449,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.reabrir_periodo",
+            "description": "Sin el permiso libro.reabrir_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6248,6 +6493,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -6285,6 +6533,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6428,6 +6679,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -6480,6 +6734,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6553,7 +6810,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso notificaciones.editar",
+            "description": "Sin el permiso notificaciones.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6607,6 +6864,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -6658,6 +6918,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6728,7 +6991,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso notificaciones.editar",
+            "description": "Sin el permiso notificaciones.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6782,6 +7045,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -6965,6 +7231,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7092,7 +7361,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso pagos.registrar",
+            "description": "Sin el permiso pagos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7136,6 +7405,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7206,6 +7478,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7273,7 +7548,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso pagos.anular",
+            "description": "Sin el permiso pagos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7327,6 +7602,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7448,6 +7726,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7539,7 +7820,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso pagos.registrar",
+            "description": "Sin el permiso pagos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7583,6 +7864,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7652,6 +7936,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7762,6 +8049,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -7819,7 +8109,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso facturas.generar",
+            "description": "Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7948,13 +8238,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "En la práctica 303 al retorno (ver descripción)",
-            "content": {
-              "text/html": {
+          "303": {
+            "description": "Al retorno del cobro o a la página de la pasarela",
+            "headers": {
+              "Location": {
+                "description": "URL de destino de la redirección",
+                "required": true,
                 "schema": {
                   "type": "string",
-                  "format": "binary"
+                  "format": "uri-reference"
                 }
               }
             }
@@ -8122,6 +8414,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -8173,6 +8468,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -8287,6 +8585,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -8438,7 +8739,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso planes.crear",
+            "description": "Sin el permiso planes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8472,6 +8773,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -8539,6 +8843,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -8701,7 +9008,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso planes.editar",
+            "description": "Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8755,6 +9062,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -8827,6 +9137,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -8999,7 +9312,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso planes.editar",
+            "description": "Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9054,6 +9367,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -9182,7 +9498,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso planes.ver",
+            "description": "Sin el permiso planes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9216,6 +9532,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -9265,6 +9584,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -9620,7 +9942,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso plantillas.crear",
+            "description": "Sin el permiso plantillas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9654,6 +9976,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -9721,6 +10046,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -10090,7 +10418,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso plantillas.editar",
+            "description": "Sin el permiso plantillas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11565,6 +11893,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -11697,6 +12028,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -11777,7 +12111,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso promesas.crear",
+            "description": "Sin el permiso promesas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11821,6 +12155,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -11888,7 +12225,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso promesas.aprobar",
+            "description": "Sin el permiso promesas.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11943,6 +12280,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12010,7 +12350,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso promesas.cancelar",
+            "description": "Sin el permiso promesas.cancelar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12065,6 +12405,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12132,7 +12475,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso promesas.rechazar",
+            "description": "Sin el permiso promesas.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12187,6 +12530,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -12259,7 +12605,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso promesas.ver",
+            "description": "Sin el permiso promesas.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12294,6 +12640,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12418,6 +12767,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12554,6 +12906,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12677,6 +13032,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12800,6 +13158,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -12926,6 +13287,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13071,6 +13435,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13216,6 +13583,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13313,6 +13683,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13459,6 +13832,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -13508,6 +13884,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -13650,7 +14029,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso roles.crear",
+            "description": "Sin el permiso roles.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13684,6 +14063,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13837,7 +14219,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso roles.editar",
+            "description": "Sin el permiso roles.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13891,6 +14273,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -13996,6 +14381,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -14152,7 +14540,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso routers.crear",
+            "description": "Sin el permiso routers.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14186,6 +14574,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14253,6 +14644,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14412,7 +14806,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso routers.editar",
+            "description": "Sin el permiso routers.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14467,6 +14861,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14536,7 +14933,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso routers.cambiar_control_velocidad",
+            "description": "Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14590,6 +14987,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14660,6 +15060,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14716,7 +15119,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso ipv6.crear",
+            "description": "Sin el permiso ipv6.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14760,6 +15163,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14832,6 +15238,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14902,6 +15311,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -14973,7 +15385,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso redes.crear",
+            "description": "Sin el permiso redes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15018,6 +15430,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15109,6 +15524,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15289,6 +15707,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15601,7 +16022,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.crear",
+            "description": "Sin el permiso servicios.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15645,6 +16066,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -15712,6 +16136,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16014,7 +16441,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.editar",
+            "description": "Sin el permiso servicios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16069,6 +16496,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16187,6 +16617,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16256,6 +16689,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16325,6 +16761,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16392,7 +16831,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.desconectar",
+            "description": "Sin el permiso servicios.desconectar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16446,6 +16885,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16513,7 +16955,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.limitar",
+            "description": "Sin el permiso servicios.limitar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16567,6 +17009,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16634,7 +17079,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.quitar_limite",
+            "description": "Sin el permiso servicios.quitar_limite; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16688,6 +17133,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16755,7 +17203,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.reactivar",
+            "description": "Sin el permiso servicios.reactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16809,6 +17257,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16876,7 +17327,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.retirar",
+            "description": "Sin el permiso servicios.retirar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16930,6 +17381,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -16997,7 +17451,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso servicios.suspender",
+            "description": "Sin el permiso servicios.suspender; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17051,6 +17505,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -17177,6 +17634,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -17244,7 +17704,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso sesiones.desconectar",
+            "description": "Sin el permiso sesiones.desconectar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17384,6 +17844,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -17481,6 +17944,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -17651,7 +18117,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso tokens.crear",
+            "description": "Sin el permiso tokens.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17685,6 +18151,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -17720,7 +18189,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso tokens.revocar",
+            "description": "Sin el permiso tokens.revocar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17754,6 +18223,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -17851,6 +18323,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -17948,7 +18423,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso usuarios.crear",
+            "description": "Sin el permiso usuarios.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17982,6 +18457,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -18049,6 +18527,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -18160,7 +18641,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso usuarios.editar",
+            "description": "Sin el permiso usuarios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18214,6 +18695,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "responses": {
@@ -18263,6 +18747,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "requestBody": {
@@ -18308,7 +18795,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso zonas.crear",
+            "description": "Sin el permiso zonas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18342,6 +18829,9 @@
         "security": [
           {
             "bearer": []
+          },
+          {
+            "panel": []
           }
         ],
         "parameters": [
@@ -18404,7 +18894,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso zonas.editar",
+            "description": "Sin el permiso zonas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18455,6 +18945,12 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Token de sesión (POST /api/v1/auth/login) o token de API"
+      },
+      "panel": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "argos_sesion",
+        "description": "Sesión del panel: cookie HttpOnly que pone POST /api/v1/auth/sesion. Solo cuenta sin `Authorization`. POST, PUT y DELETE exigen `X-CSRF-Token` (el `csrf` del login o de GET /me) y un `Origin` permitido; si no, 403 `csrf_invalido`"
       },
       "interno": {
         "type": "http",
@@ -21672,6 +22168,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "csrf": {
+            "type": "string",
+            "description": "Solo con la sesión del panel por cookie (`GET /me`): valor de `X-CSRF-Token` para POST, PUT y DELETE"
           }
         }
       },
@@ -26590,6 +27090,31 @@
           },
           "usuario": {
             "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "SesionPanel": {
+        "type": "object",
+        "required": [
+          "usuario",
+          "csrf",
+          "expira_en"
+        ],
+        "properties": {
+          "usuario": {
+            "$ref": "#/components/schemas/Me"
+          },
+          "csrf": {
+            "type": "string",
+            "description": "Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo vence la sesión (no se renueva)"
           }
         }
       },

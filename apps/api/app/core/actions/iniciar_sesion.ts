@@ -10,11 +10,14 @@ export interface EntradaIniciarSesion {
 
 export interface SalidaIniciarSesion {
     token: string
+    /** vencimiento del token (`ACCESS_TOKEN_EXPIRA`); null si no vence */
+    expiraEn: Date | null
     usuario: Me
 }
 
 /**
- * Login del panel: verifica credenciales y emite un token opaco de sesión.
+ * Login: verifica credenciales y emite un token opaco de sesión. La ruta lo entrega como Bearer
+ * (`POST /auth/login`) o en la cookie `HttpOnly` del panel (`POST /auth/sesion`).
  * La contraseña nunca llega a la auditoría (se enmascara como `***`). Un login correcto queda
  * en `audit.acciones` con el actor = usuario que entró; uno fallido, con actor `sistema`.
  */
@@ -34,6 +37,10 @@ export default class IniciarSesion extends DomainAction<EntradaIniciarSesion, Sa
         // la petición llega anónima: el login queda auditado con el usuario que entró
         t.identificarActor({ tipo: 'usuario', id: usuario.id })
         const token = await Usuario.accessTokens.create(usuario, ['*'], { name: `login ${t.ctx.canal}` })
-        return { token: token.value!.release(), usuario: await construirMe(usuario) }
+        return {
+            token: token.value!.release(),
+            expiraEn: token.expiresAt ?? null,
+            usuario: await construirMe(usuario),
+        }
     }
 }
