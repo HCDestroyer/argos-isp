@@ -178,6 +178,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     return {
         id,
         cliente_id: Number(cuerpo.cliente_id),
+        // Multiempresa (A1): la explícita o la 1 (una sola empresa)
+        empresa_id: typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : 1,
         router_id: routerId,
         plan_id: Number(cuerpo.plan_id),
         plantilla_facturacion_id: 'plantilla_facturacion_id' in cuerpo

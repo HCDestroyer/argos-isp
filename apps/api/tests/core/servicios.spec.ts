@@ -96,12 +96,19 @@ test.group('Servicios · alta', () => {
         assert.deepEqual(evs, [
             {
                 evento: 'servicio.creado',
-                payload: { servicio_id: s.id, cliente_id: clienteId, router_id: routerId, plan_id: planId },
+                payload: {
+                    servicio_id: s.id,
+                    empresa_id: 1,
+                    cliente_id: clienteId,
+                    router_id: routerId,
+                    plan_id: planId,
+                },
             },
             {
                 evento: 'asignacion.cambiada',
                 payload: {
                     servicio_id: s.id,
+                    empresa_id: 1,
                     ipv4: [`${base}.2`],
                     prefijo_enlace_v6: `${raiz}00::/64`,
                     prefijo_delegado_v6: `${raiz}10::/56`,
@@ -448,7 +455,7 @@ test.group('Servicios · edición y retiro', () => {
         const evs = await eventos(requestId)
         assert.deepEqual(evs[0], {
             evento: 'servicio.config_cambiada',
-            payload: { servicio_id: servicio.id, campos: ['plan', 'prefijo_v6'] },
+            payload: { servicio_id: servicio.id, empresa_id: 1, campos: ['plan', 'prefijo_v6'] },
         })
         assert.equal(evs[1]!.evento, 'asignacion.cambiada')
         assert.equal(evs[1]!.payload.prefijo_delegado_v6, `${raiz}20::/48`)
@@ -550,7 +557,13 @@ test.group('Servicios · edición y retiro', () => {
         const evs = await eventos(requestId)
         assert.deepEqual(evs[0], {
             evento: 'servicio.estado_cambiado',
-            payload: { servicio_id: servicio.id, de: 'activo', a: 'retirado', motivo: 'Cliente se mudó' },
+            payload: {
+                servicio_id: servicio.id,
+                empresa_id: 1,
+                de: 'activo',
+                a: 'retirado',
+                motivo: 'Cliente se mudó',
+            },
         })
         assert.containsSubset(evs[1], { evento: 'asignacion.cambiada', payload: { ipv4: [] } })
         assert.lengthOf(

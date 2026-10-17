@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, restablecerEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { usarFuenteCuentasDeposito, type CuentaDeposito } from '#portal/cuentas_deposito'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import { bancoId } from '#tests/billing/ayudas_billing'
@@ -24,7 +24,7 @@ test.group('Empresa: configuración editable', (group) => {
             usarFuenteCuentasDeposito(undefined)
             if (previo === undefined) delete process.env.PORTAL_REDIS_PREFIJO
             else process.env.PORTAL_REDIS_PREFIJO = previo
-            await db.from('core.empresa').delete()
+            await restablecerEmpresaPrincipal()
         }
     })
 

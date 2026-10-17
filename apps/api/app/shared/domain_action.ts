@@ -25,7 +25,8 @@ import type { NombreEvento, PayloadEvento } from '#shared/eventos'
  * ```
  *
  * - `execute` abre una transacción Lucid (o un savepoint si recibe `{ trx }` de otra acción).
- * - Al terminar bien escribe `audit.acciones` con resultado `ok` en la MISMA transacción.
+ * - Al terminar bien escribe `audit.acciones` con resultado `ok` en la MISMA transacción, con la
+ *   empresa de lo que hizo (`t.fijarEmpresa`) o la empresa activa del contexto (multiempresa).
  * - Antes del COMMIT ejecuta `SET CONSTRAINTS ALL IMMEDIATE` (ver `verificarRestriccionesDiferidas`):
  *   así un asiento descuadrado falla como error normal de la acción y no se pierde en el COMMIT.
  * - Si falla, la transacción se revierte y la auditoría del error se escribe en una transacción
@@ -65,7 +66,15 @@ export abstract class DomainAction<Entrada, Salida> {
             const salida = await this.handle(input, t)
             if (this.auditarExito(salida)) {
                 // t.ctx: la acción pudo identificar al actor (login)
-                await registrarAccion(trx, t.ctx, this.nombre, entrada, t.entidadActual, null)
+                await registrarAccion(
+                    trx,
+                    t.ctx,
+                    this.nombre,
+                    entrada,
+                    t.entidadActual,
+                    null,
+                    t.empresaAuditoria,
+                )
             }
             // Las acciones anidadas dejan la verificación a la transacción externa.
             if (!anidada) await verificarRestriccionesDiferidas(trx)
@@ -76,7 +85,7 @@ export abstract class DomainAction<Entrada, Salida> {
         try {
             salida = opciones.trx ? await opciones.trx.transaction(ejecutar) : await db.transaction(ejecutar)
         } catch (error) {
-            await this.auditarError(ctx, entrada, t?.entidadActual, error)
+            await this.auditarError(ctx, entrada, t?.entidadActual, error, t?.empresaAuditoria)
             throw error
         }
 
@@ -99,9 +108,12 @@ export abstract class DomainAction<Entrada, Salida> {
         entrada: unknown,
         entidad: EntidadRef | undefined,
         error: unknown,
+        empresaId: number | null = ctx.empresaId ?? null,
     ) {
         try {
-            await db.transaction((trx) => registrarAccion(trx, ctx, this.nombre, entrada, entidad, error))
+            await db.transaction((trx) =>
+                registrarAccion(trx, ctx, this.nombre, entrada, entidad, error, empresaId),
+            )
         } catch (errorAuditoria) {
             logger.error(
                 { err: errorAuditoria, accion: this.nombre, requestId: ctx.requestId },
@@ -153,6 +165,7 @@ const CAMPOS_IGNORADOS = new Set(['created_at', 'updated_at', 'version'])
  */
 export class Transaccion {
     #entidad?: EntidadRef
+    #empresaId?: number | null
     #ganchos: GanchoConfirmacion[] = []
     #ctx: ContextoAccion
 
@@ -178,6 +191,19 @@ export class Transaccion {
 
     get entidadActual(): EntidadRef | undefined {
         return this.#entidad
+    }
+
+    /**
+     * Empresa a la que pertenece lo que hizo la acción (la del servicio, la de la factura…); se
+     * guarda en `audit.acciones.empresa_id`. Sin llamarla, se usa la empresa activa del contexto.
+     */
+    fijarEmpresa(empresaId: number | null) {
+        this.#empresaId = empresaId
+    }
+
+    /** Empresa para la auditoría: la fijada por la acción o la activa del contexto. */
+    get empresaAuditoria(): number | null {
+        return this.#empresaId !== undefined ? this.#empresaId : (this.#ctx.empresaId ?? null)
     }
 
     /** Entidad principal afectada; se guarda en `audit.acciones.entidad_tipo/entidad_id`. */
@@ -276,11 +302,13 @@ async function registrarAccion(
     entrada: unknown,
     entidad: EntidadRef | undefined,
     error: unknown,
+    empresaId: number | null,
 ) {
     await trx
         .insertQuery()
         .table('audit.acciones')
         .insert({
+            empresa_id: empresaId,
             actor_tipo: ctx.actor.tipo,
             actor_id: ctx.actor.id,
             canal: ctx.canal,

@@ -28,6 +28,7 @@ export const PERMISOS = {
     'servicios.retirar': 'Retirar servicios',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
+    'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
@@ -87,6 +88,11 @@ export const PERMISOS = {
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
 
+    'empresas.ver': 'Ver las empresas (NIT) de la instalación',
+    'empresas.crear': 'Crear empresas (NIT)',
+    'empresas.editar': 'Editar los datos fiscales y de contacto de una empresa',
+    'empresas.desactivar': 'Desactivar una empresa (no se borra)',
+    'empresas.cambiar_logo': 'Subir o quitar el logo de una empresa',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
@@ -96,6 +102,7 @@ export const PERMISOS = {
     'usuarios.ver': 'Ver usuarios',
     'usuarios.crear': 'Crear usuarios',
     'usuarios.editar': 'Editar usuarios y sus roles',
+    'usuarios.asignar_empresas': 'Definir en qué empresas (NIT) trabaja un usuario o darle alcance global',
     'roles.ver': 'Ver roles y permisos',
     'roles.crear': 'Crear roles',
     'roles.editar': 'Editar roles y sus permisos',

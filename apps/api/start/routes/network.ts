@@ -12,6 +12,7 @@ import EditarRouter from '#network/actions/editar_router'
 import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
 import { listarRedesIpv4, listarRouters, verRouter } from '#network/consultas/routers'
+import { empresasDeLaLista } from '#shared/empresa_activa'
 import {
     Ipv6Bloque,
     Ipv6Pool,
@@ -63,7 +64,8 @@ const routers: Ruta[] = [
         permiso: 'routers.ver',
         query: v.listarRoutersValidator,
         respuesta: { status: 200, descripcion: 'Página de routers', esquema: pagina(Router) },
-        handler: (ctx, { query }) => listarRouters(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarRouters(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',

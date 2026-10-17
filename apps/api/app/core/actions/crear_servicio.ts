@@ -16,9 +16,15 @@ import { registrarTramo } from '#network/historial'
 import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
+import { resolverEmpresaServicio } from '#core/empresas'
 
 export interface EntradaCrearServicio {
     cliente_id: number
+    /**
+     * Empresa (NIT) que factura el servicio. Sin ella: la sugerida de la zona del cliente, la del
+     * router, la empresa activa del contexto o la única activa (`resolverEmpresaServicio`).
+     */
+    empresa_id?: number | null
     router_id: number
     plan_id: number
     plantilla_facturacion_id?: number | null
@@ -79,9 +85,10 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         const cliente = (await t.trx
             .from('core.clientes')
             .where('id', input.cliente_id)
-            .select('nombre')
+            .select('nombre', 'zona_id')
             .first()) as {
             nombre: string
+            zona_id: number | null
         } | null
         if (!cliente) {
             throw new ValidacionFallida([
@@ -101,6 +108,12 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             ])
         }
         if (!router.activo) throw new ReglaNegocio('El router está desactivado', 'router_inactivo')
+        const empresaId = await resolverEmpresaServicio(t.trx, t.ctx, {
+            empresa_id: input.empresa_id,
+            zona_id: cliente.zona_id === null ? null : Number(cliente.zona_id),
+            router_id: input.router_id,
+        })
+        t.fijarEmpresa(empresaId)
         let plantillaId = input.plantilla_facturacion_id ?? null
         if (input.plantilla_facturacion_id === undefined && input.plantillaPorDefecto) {
             plantillaId = await plantillaPorDefecto(t.trx)
@@ -144,6 +157,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             .table('core.servicios')
             .insert({
                 cliente_id: input.cliente_id,
+                empresa_id: empresaId,
                 router_id: input.router_id,
                 plan_id: input.plan_id,
                 plantilla_facturacion_id: plantillaId,
@@ -186,12 +200,14 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         })
         await t.emit('servicio.creado', {
             servicio_id: id,
+            empresa_id: empresaId,
             cliente_id: input.cliente_id,
             router_id: input.router_id,
             plan_id: input.plan_id,
         })
         await t.emit('asignacion.cambiada', {
             servicio_id: id,
+            empresa_id: empresaId,
             ipv4: asignaciones.ipv4 ? [asignaciones.ipv4] : [],
             prefijo_enlace_v6: asignaciones.prefijo_enlace_v6,
             prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,

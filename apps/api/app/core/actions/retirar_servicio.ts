@@ -26,9 +26,11 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             .from('core.servicios')
             .where('id', input.id)
             .forUpdate()
-            .select('estado')
-            .first()) as { estado: EstadoServicio } | null
+            .select('estado', 'empresa_id')
+            .first()) as { estado: EstadoServicio; empresa_id: number } | null
         if (!fila) throw new NoEncontrado(`El servicio ${input.id} no existe`)
+        const empresaId = Number(fila.empresa_id)
+        t.fijarEmpresa(empresaId)
         if (fila.estado === 'retirado') {
             throw new ReglaNegocio('El servicio ya está retirado', 'servicio_retirado')
         }
@@ -51,12 +53,14 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
         const ahora = new Date().toISOString()
         await t.emit('servicio.estado_cambiado', {
             servicio_id: input.id,
+            empresa_id: empresaId,
             de: fila.estado,
             a: 'retirado',
             motivo: input.motivo,
         })
         await t.emit('asignacion.cambiada', {
             servicio_id: input.id,
+            empresa_id: empresaId,
             ipv4: [],
             prefijo_enlace_v6: null,
             prefijo_delegado_v6: null,
