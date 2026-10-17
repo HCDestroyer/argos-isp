@@ -13548,6 +13548,19 @@
                 "mora"
               ]
             }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "description": "sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sistema",
+                "importado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -13691,6 +13704,19 @@
               "enum": [
                 "mes",
                 "dia"
+              ]
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "description": "sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sistema",
+                "importado"
               ]
             }
           }
@@ -25788,6 +25814,15 @@
                 "cobranza_pct": {
                   "type": "number",
                   "description": "Porcentaje 0–100 con 2 decimales"
+                },
+                "acreditado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "facturado_importado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cobrado_importado": {
+                  "$ref": "#/components/schemas/Dinero"
                 }
               }
             }
@@ -25849,6 +25884,36 @@
                 "type": [
                   "number",
                   "null"
+                ]
+              },
+              "acreditado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "facturado_importado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cobrado_importado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },
@@ -25918,6 +25983,12 @@
                 },
                 "neto": {
                   "$ref": "#/components/schemas/Dinero"
+                },
+                "pagos_importados": {
+                  "type": "integer"
+                },
+                "monto_importado": {
+                  "$ref": "#/components/schemas/Dinero"
                 }
               }
             }
@@ -25972,6 +26043,22 @@
                 ]
               },
               "neto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pagos_importados": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "monto_importado": {
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/Dinero"

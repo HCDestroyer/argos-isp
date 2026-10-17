@@ -167,16 +167,26 @@ export const COLUMNAS_INGRESOS = definirColumnas([
     { clave: 'monto', titulo: 'Monto', tipo: 'dinero' },
     { clave: 'comision', titulo: 'Comisión', tipo: 'dinero' },
     { clave: 'neto', titulo: 'Neto', tipo: 'dinero' },
+    { clave: 'pagos_importados', titulo: 'Pagos importados', tipo: 'entero', agregada: true },
+    { clave: 'monto_importado', titulo: 'Monto importado', tipo: 'dinero', agregada: true },
 ])
+
+/** `sistema`: lo registrado en ArgosIsp; `importado`: carga histórica de otro sistema. */
+export type OrigenReporte = 'sistema' | 'importado'
 
 export interface FiltrosIngresos extends FiltrosCliente {
     desde?: string
     hasta?: string
     metodo?: MetodoPago
     agrupar?: 'mes' | 'dia'
+    origen?: OrigenReporte
 }
 
-/** Pagos vigentes (registrados, no anulados ni pendientes de verificación) por mes (o día) y método. */
+/**
+ * Pagos vigentes (registrados, no anulados ni pendientes de verificación) por mes (o día) y método.
+ * Incluye los pagos históricos importados en su mes de origen (decisión del PM): su fecha es la
+ * del sistema de origen. `pagos_importados`/`monto_importado` separan esa parte; `origen` filtra.
+ */
 export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const agrupar = filtros.agrupar ?? 'mes'
@@ -187,6 +197,7 @@ export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Pro
         .join('core.clientes as c', 'c.id', 'p.cliente_id')
         .where('p.estado', 'registrado')
         .whereRaw(`${diaGt('p.created_at')} between ? and ?`, [desde, hasta])
+        .if(filtros.origen, (q) => q.where('p.historico', filtros.origen === 'importado'))
         .if(filtros.metodo, (q) => q.where('p.metodo', filtros.metodo!))
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
         .if(filtros.zona_id, (q) => q.where('c.zona_id', filtros.zona_id!))
@@ -199,6 +210,8 @@ export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Pro
             db.raw('sum(p.monto)::text as monto'),
             db.raw('sum(p.comision)::text as comision'),
             db.raw('sum(p.monto - p.comision)::text as neto'),
+            db.raw('(count(*) filter (where p.historico))::int as pagos_importados'),
+            db.raw('coalesce(sum(p.monto) filter (where p.historico), 0)::text as monto_importado'),
         )
     filtrarPorAlcance(consulta, alcance, { zona: (q, ids) => q.whereIn('c.zona_id', ids) })
     const filas = ((await consulta) as Fila[]).map((f) => ({
@@ -206,6 +219,7 @@ export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Pro
         monto: dinero(f.monto),
         comision: dinero(f.comision),
         neto: dinero(f.neto),
+        monto_importado: dinero(f.monto_importado),
     }))
     return armarReporte({
         reporte: 'ingresos',
@@ -229,17 +243,28 @@ export const COLUMNAS_FACTURADO = definirColumnas([
     { clave: 'cobrado', titulo: 'Cobrado', tipo: 'dinero' },
     { clave: 'pendiente', titulo: 'Pendiente', tipo: 'dinero' },
     { clave: 'cobranza_pct', titulo: '% cobrado', tipo: 'porcentaje' },
+    { clave: 'acreditado', titulo: 'Notas de crédito', tipo: 'dinero', agregada: true },
+    { clave: 'facturado_importado', titulo: 'Facturado importado', tipo: 'dinero', agregada: true },
+    { clave: 'cobrado_importado', titulo: 'Cobrado importado', tipo: 'dinero', agregada: true },
 ])
+
+/** Lo acreditado por notas de crédito a la factura `f` (parte de `f.pagado` que no es cobro). */
+const ACREDITADO = '(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = f.id)'
 
 export interface FiltrosFacturado extends FiltrosCliente {
     desde?: string
     hasta?: string
     tipo?: 'servicio' | 'mora'
+    origen?: OrigenReporte
 }
 
 /**
  * Por periodo de la factura (mes de `periodo`): lo facturado (facturas no anuladas, IVA incluido),
- * lo cobrado de esas facturas hasta hoy (`pagado`) y lo pendiente.
+ * lo cobrado de esas facturas hasta hoy y lo pendiente. `cobrado` = pagos y saldos a favor
+ * aplicados (también los pagos históricos importados); las notas de crédito no son cobro y van en
+ * `acreditado` (`pendiente = facturado − cobrado − acreditado`). Las facturas importadas
+ * (`clave_externa`, con sus pagos históricos) cuentan en el mes de su periodo de origen;
+ * `facturado_importado`/`cobrado_importado` separan esa parte y `origen` filtra.
  */
 export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Alcance): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
@@ -251,6 +276,8 @@ export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Al
         .whereNot('f.estado', 'anulada')
         .whereRaw(`f.periodo between date_trunc('month', ?::date) and ?::date`, [desde, hasta])
         .if(filtros.tipo, (q) => q.where('f.tipo', filtros.tipo!))
+        .if(filtros.origen === 'importado', (q) => q.whereNotNull('f.clave_externa'))
+        .if(filtros.origen === 'sistema', (q) => q.whereNull('f.clave_externa'))
         .if(filtros.cliente_id, (q) => q.where('f.cliente_id', filtros.cliente_id!))
         .if(filtros.zona_id, (q) => q.where('c.zona_id', filtros.zona_id!))
         .if(filtros.router_id, (q) => q.where('s.router_id', filtros.router_id!))
@@ -261,8 +288,15 @@ export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Al
             db.raw(`${periodo} as periodo`),
             db.raw('count(*)::int as facturas'),
             db.raw('sum(f.total)::text as facturado'),
-            db.raw('sum(f.pagado)::text as cobrado'),
+            db.raw(`sum(f.pagado - ${ACREDITADO})::text as cobrado`),
             db.raw('sum(f.total - f.pagado)::text as pendiente'),
+            db.raw(`coalesce(sum(${ACREDITADO}), 0)::text as acreditado`),
+            db.raw(
+                'coalesce(sum(f.total) filter (where f.clave_externa is not null), 0)::text as facturado_importado',
+            ),
+            db.raw(
+                `coalesce(sum(f.pagado - ${ACREDITADO}) filter (where f.clave_externa is not null), 0)::text as cobrado_importado`,
+            ),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
     const filas = ((await consulta) as Fila[]).map((f) => ({
@@ -271,6 +305,9 @@ export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Al
         cobrado: dinero(f.cobrado),
         pendiente: dinero(f.pendiente),
         cobranza_pct: porcentaje(f.cobrado as string, f.facturado as string),
+        acreditado: dinero(f.acreditado),
+        facturado_importado: dinero(f.facturado_importado),
+        cobrado_importado: dinero(f.cobrado_importado),
     }))
     const reporte = armarReporte({
         reporte: 'facturado-vs-cobrado',

@@ -4357,6 +4357,9 @@ export interface components {
                 pendiente: components["schemas"]["Dinero"];
                 /** @description Porcentaje 0–100 con 2 decimales */
                 cobranza_pct: number;
+                acreditado?: components["schemas"]["Dinero"];
+                facturado_importado?: components["schemas"]["Dinero"];
+                cobrado_importado?: components["schemas"]["Dinero"];
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
@@ -4366,6 +4369,9 @@ export interface components {
                 cobrado: components["schemas"]["Dinero"] | null;
                 pendiente: components["schemas"]["Dinero"] | null;
                 cobranza_pct: number | null;
+                acreditado?: components["schemas"]["Dinero"] | null;
+                facturado_importado?: components["schemas"]["Dinero"] | null;
+                cobrado_importado?: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -4384,6 +4390,8 @@ export interface components {
                 monto: components["schemas"]["Dinero"];
                 comision: components["schemas"]["Dinero"];
                 neto: components["schemas"]["Dinero"];
+                pagos_importados?: number;
+                monto_importado?: components["schemas"]["Dinero"];
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
@@ -4393,6 +4401,8 @@ export interface components {
                 monto: components["schemas"]["Dinero"] | null;
                 comision: components["schemas"]["Dinero"] | null;
                 neto: components["schemas"]["Dinero"] | null;
+                pagos_importados?: number | null;
+                monto_importado?: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -12447,6 +12457,8 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 tipo?: "servicio" | "mora";
+                /** @description sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos */
+                origen?: "sistema" | "importado";
             };
             header?: never;
             path?: never;
@@ -12505,6 +12517,8 @@ export interface operations {
                 zona_id?: number;
                 metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
                 agrupar?: "mes" | "dia";
+                /** @description sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos */
+                origen?: "sistema" | "importado";
             };
             header?: never;
             path?: never;

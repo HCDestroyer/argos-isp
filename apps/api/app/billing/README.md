@@ -220,17 +220,19 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 
 `GET /api/v1/reportes/<nombre>` con permiso `reportes.ver`, filtros por query y `formato=json|csv|xlsx`. Cada reporte declara sus columnas tipadas (`definicion.ts`): de ahí salen el schema del OpenAPI (`Reporte*`), el CSV y el XLSX. Respuesta `{ reporte, titulo, filtros, columnas, filas, totales, generado_en }`; los totales suman dinero (decimal.js) y enteros.
 
-| Reporte                | Filtros                                                                    | Cuadra con el libro                                                      |
-| ---------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                         |
-| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), cliente, zona             | Σ monto = débitos a Caja, Bancos y Comisiones de los asientos de pago    |
-| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, cliente, zona, router, plan                      | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC     |
-| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                |
-| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)              |
-| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado) = `iva_libro` (2.1.02)  |
-| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)           |
-| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado` |
-| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes             |
+| Reporte                | Filtros                                                                    | Cuadra con el libro                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cartera-vencida`      | `corte`, `agrupar` (cliente/zona/router/plan), cliente, zona, router, plan | Σ total = saldo del auxiliar CxC                                                                                                              |
+| `ingresos`             | `desde`, `hasta`, `metodo`, `agrupar` (mes/dia), `origen`, cliente, zona   | Σ monto (sistema) = débitos a Caja, Bancos y Comisiones de los asientos de pago; `monto_importado` = débitos a 2.9.01 de los pagos históricos |
+| `facturado-vs-cobrado` | `desde`, `hasta`, `tipo`, `origen`, cliente, zona, router, plan            | Σ facturado = cargos CxC de facturas y mora; Σ pendiente = saldo CxC; `cobrado` sin notas de crédito (`acreditado`)                           |
+| `cobranza-diaria`      | `desde`, `hasta` (mes en curso), `caja_id`, `metodo`                       | igual que `ingresos`; los anulados aparte                                                                                                     |
+| `cierres-caja`         | `desde`, `hasta`, `caja_id`                                                | Σ diferencia = asientos `cierre_caja` (sobrante − faltante)                                                                                   |
+| `iva`                  | `desde`, `hasta`                                                           | desde el libro: `iva_neto` (facturado − anulado − acreditado) = `iva_libro` (2.1.02)                                                          |
+| `promesas`             | `desde`, `hasta`, `canal`, cliente, zona, router, plan                     | (no mueve dinero) tasa = cumplidas / (cumplidas + incumplidas)                                                                                |
+| `altas-bajas`          | `desde`, `hasta`, zona, router, plan                                       | altas por instalación; bajas/suspensiones por `servicio.estado_cambiado`                                                                      |
+| `egresos`              | `desde`, `hasta`, `categoria`, `metodo`                                    | Σ monto = cuentas de gasto de los asientos `egreso` vigentes                                                                                  |
+
+**Histórico** (decisión del PM, semana 3): los pagos históricos importados (`pagos.historico`) cuentan en `ingresos` en su mes de origen, y las facturas importadas (`facturas.clave_externa`) con lo que esos pagos cubrieron, en `facturado-vs-cobrado` en el mes de su periodo. `origen=sistema|importado` filtra; las columnas `pagos_importados`/`monto_importado` y `facturado_importado`/`cobrado_importado` separan sin filtrar. Columnas agregadas después de publicar un reporte llevan `agregada: true` en `definicion.ts`: van siempre en la respuesta, pero el OpenAPI las declara opcionales para no romper clientes tipados.
 
 Rango por defecto: los últimos 12 meses (cobranza y cierres: el mes en curso). Alcance ACL por zona/router (o caja en cobranza, cierres y egresos).
 
