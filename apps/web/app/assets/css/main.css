@@ -451,12 +451,6 @@
     box-shadow: 0 0 26px var(--hf-glow-brand);
 }
 
-/* Datos de red y de acceso (IPs, MAC, usuarios PPP, prefijos): monoespaciada y tabular. */
-.dato-red {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-}
-
 /*
  * Menos transparencia: el vidrio fuerte de modales, paneles laterales y menús también pasa a
  * sólido (la skill solo lo hace con `.glass-material`; aquí ese vidrio va por `:ui`).

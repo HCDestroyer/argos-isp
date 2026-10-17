@@ -112,3 +112,15 @@ cortado.
   también como `aria-describedby` del SVG; `hallazgoMontos` y `hallazgoConteos` en
   `utils/dashboard.ts`) y la tabla alternativa ("Ver tabla").
 - Los reportes (`/reportes/:reporte`) son tablas con exportación XLSX/CSV; hoy no tienen gráficas.
+
+## Tipografía
+
+- Fuente del sistema (`--font-sans` de la skill, sin descargas: `ui.fonts: false`) y
+  monoespaciada (`--font-mono`, utilidad `font-mono`) para IPs, prefijos IPv6, MAC, DUID, usuarios
+  PPP, NAS, NIT/CUI y rutas de RouterOS, también en los campos de los formularios
+  (`class="font-mono"` en el `UInput`) y en `DatoFicha` con `mono`.
+- Cifras tabulares: en toda tabla (regla base de `main.css`), en los KPIs (`NumeroVivo` e
+  `IndicadorTablero`) y en los ejes de las gráficas.
+- `h1` con tracking −0,015 em (regla base); KPIs con −0,02 em; jerarquía por peso y tamaño en `rem`.
+- Montos en quetzales con dos decimales (`formatearQuetzales`) y fechas `dd/mm/aaaa HH:mm` en
+  America/Guatemala (`formatearFecha`, `formatearFechaHora`, `formatearHora`).
