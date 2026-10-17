@@ -1,0 +1,51 @@
+# Portal del cliente por HTTPS (A6, pendiente de A5; docs/seguridad/portal.md § 3).
+# Se agrega encima del compose principal:
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.portal-https.yml up -d
+#
+# - `portal-proxy` (Caddy, infra/proxy/Caddyfile.portal) toma los puertos públicos del portal:
+#   80 (HTTP: /corte del dst-nat con cualquier Host; /entrar y /cuenta del dominio → 308 a HTTPS)
+#   y 443 (HTTPS del dominio del portal, certificado PORTAL_TLS, HSTS).
+# - El portal deja de publicar puertos: solo se llega por el proxy.
+# - La API pone la cookie de sesión siempre con Secure (PORTAL_COOKIE_SEGURA=siempre).
+# IP real del cliente: igual que antes (puertos por iptables, sin userland-proxy); Caddy la pasa en
+# X-Forwarded-For y la API confía en la red de compose. Detalle en infra/proxy/README.md.
+
+services:
+  portal:
+    ports: !reset []
+
+  api:
+    environment:
+      PORTAL_COOKIE_SEGURA: siempre
+
+  portal-proxy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      PORTAL_DOMINIO: ${PORTAL_DOMINIO:-portal.localhost}
+      # internal | /certs/<certificado> /certs/<llave> | correo para Let's Encrypt
+      PORTAL_TLS: ${PORTAL_TLS:-internal}
+      PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-31536000}
+    volumes:
+      - ./proxy/Caddyfile.portal:/etc/caddy/Caddyfile:ro
+      # Certificado y llave reales (PORTAL_TLS=/certs/portal.crt /certs/portal.key)
+      - ${PORTAL_TLS_DIR:-./proxy/portal-certs}:/certs:ro
+      - portal-caddydata:/data
+      - portal-caddyconfig:/config
+    ports:
+      # Los mismos que publicaba el portal: el MikroTik hace dst-nat de TCP/80 a PORTAL_BIND_IP.
+      - ${PORTAL_BIND_IP:-127.0.0.1}:${PORTAL_CORTE_PORT_HOST:-80}:80
+      - ${PORTAL_BIND_IP:-127.0.0.1}:${PORTAL_HTTPS_PORT_HOST:-443}:443
+    depends_on:
+      portal:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  portal-caddydata:
+  portal-caddyconfig:

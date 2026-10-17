@@ -64,6 +64,7 @@ portal (Nitro) ──/api/v1/portal/** + X-Forwarded-For──▶ api:3333
 - El MikroTik conserva la IP de origen al hacer dst-nat.
 - El portal agrega la IP de su socket al final de `X-Forwarded-For`. La API acepta esa cabecera (`PORTAL_CABECERA_IP=x-forwarded-for`) solo si la conexión viene de `PORTAL_PROXIES_CONFIABLES`, que por defecto es la subred fija de la red de compose (`COMPOSE_SUBNET_V4`/`COMPOSE_SUBNET_V6`). Si pones un proxy inverso delante del portal, agrega su IP a `PORTAL_PROXIES_CONFIABLES`.
 - **Docker debe entregar al portal la IP real del cliente.** Por IPv4, los puertos publicados con las reglas DNAT de iptables la conservan. Esto deja de cumplirse cuando entra en juego `userland-proxy`: Docker lo usa por defecto en las conexiones a IPv6 del host y para loopback, y en esos casos el portal ve la IP del puente y `quien-soy` no identifica a nadie.
+- **Portal por HTTPS** (`docker-compose.portal-https.yml`): el proxy `portal-proxy` se pone delante del portal en los mismos puertos y la cadena sigue funcionando (Caddy pasa la IP real; ver `infra/proxy/README.md`, "Portal por HTTPS").
 
 ### Perfil lab (IPv4 + IPv6)
 

@@ -74,6 +74,9 @@ x-api-env: &api-env
   # (el portal reenvía /api/v1/portal/** y agrega la IP del cliente al final de la cadena).
   PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
   PORTAL_CABECERA_IP: x-forwarded-for
+  # Cookie de sesión del portal con Secure: auto (si llegó por HTTPS) o siempre (producción, con el
+  # portal por HTTPS: docker-compose.portal-https.yml la pone en siempre).
+  PORTAL_COOKIE_SEGURA: ${PORTAL_COOKIE_SEGURA:-auto}
   SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
   # Pasarela de pago en línea (A3, app/billing/pasarelas; a3.md). La imagen corre con
