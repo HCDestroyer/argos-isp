@@ -42,6 +42,9 @@
       "name": "facturacion"
     },
     {
+      "name": "integraciones"
+    },
+    {
       "name": "interno"
     },
     {
@@ -6699,6 +6702,1020 @@
           }
         },
         "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus": {
+      "get": {
+        "operationId": "horusConectorVer",
+        "summary": "Conector con Horus Flow: configuración (secretos como ***) y salud de la conexión",
+        "description": "Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "horusConectorGuardar",
+        "summary": "Guardar el conector con Horus: URL, código hf_pat_, receptor de Horus e interruptor",
+        "description": "Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`. `version: 0` lo crea. El primer guardado (o `regenerar_secreto_entrada`) genera el secreto del receptor de Argos y lo devuelve **una sola vez** en `webhook_entrada_secreto_nuevo`. Emite `horus.config_cambiada`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída; 0 si nunca se guardó. 409 si cambió"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "url_base": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL base de Horus, solo https (http solo en laboratorio)"
+                  },
+                  "token": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Código de conexión `hf_pat_…`. Omitido se conserva; null lo borra"
+                  },
+                  "webhook_salida_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL completa del receptor de Horus (la muestra Horus)"
+                  },
+                  "webhook_salida_secreto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Secreto del receptor de Horus. Omitido se conserva; null lo borra"
+                  },
+                  "regenerar_secreto_entrada": {
+                    "description": "Genera otro secreto para el receptor de Argos (se muestra una vez)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conector guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorusGuardado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/abrir": {
+      "post": {
+        "operationId": "horusAbrir",
+        "summary": "Ver en Horus: URL de autologin con ticket de un solo uso",
+        "description": "§1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla. Para `servicio` y `cliente` se revisa el acceso del usuario.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "cliente",
+                          "servicio",
+                          "router",
+                          "hallazgo"
+                        ]
+                      },
+                      "id_externo": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "tipo",
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "URL de Horus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/conexion/canjear": {
+      "post": {
+        "operationId": "horusEnlaceCanjear",
+        "summary": "Canje del enlace de conexión de Argos (lo llama Horus, servidor a servidor)",
+        "description": "§1.4. Sin sesión: lo autentica el código del enlace. Guarda cifrados el `hf_pat_`, la URL de Horus y su receptor; emite el token `atk_` del usuario técnico Horus y genera el secreto del receptor de Argos. El conector queda apagado. 410 si el código venció, se usó o no existe.",
+        "tags": [
+          "integraciones"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "codigo": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "sistema": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "webhook": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "secreto": {
+                        "type": "string",
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "secreto"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "sistema",
+                  "base_url",
+                  "token",
+                  "webhook"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credenciales de Argos para Horus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeConexionHorus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/conexion/conectar": {
+      "post": {
+        "operationId": "horusEnlaceConectar",
+        "summary": "Conectar con un enlace de conexión generado en Horus",
+        "description": "§1.4 (Argos canjea el enlace de Horus). Emite el token `atk_` y el secreto del receptor de Argos, llama a `POST <horus>/api/v1/integrations/argosisp/conexion/canjear` y guarda lo que devuelve. El conector queda apagado. 422 `enlace_vencido` si Horus responde 410; 502 `horus_error` con el error real si Horus falla (no queda nada guardado).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enlace": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Enlace de conexión de Horus: `https://<horus>/conectar#<codigo>`"
+                  }
+                },
+                "required": [
+                  "enlace"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/consumo": {
+      "post": {
+        "operationId": "horusConsumoLotes",
+        "summary": "Consumo mensual de varios servicios (hasta 500) según Horus",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Es una lectura (POST por el tamaño de la lista).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  },
+                  "mes": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "description": "Mes `YYYY-MM` (hora de Guatemala); por defecto el actual"
+                  },
+                  "granularidad": {
+                    "type": "string",
+                    "enum": [
+                      "day",
+                      "total"
+                    ]
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consumo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumoHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/enlace": {
+      "post": {
+        "operationId": "horusEnlaceGenerar",
+        "summary": "Generar enlace de conexión para pegar en Horus (15 min, un solo uso)",
+        "description": "§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Enlace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnlaceConexionHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/envios": {
+      "get": {
+        "operationId": "horusEnviosListar",
+        "summary": "Webhooks enviados a Horus: estado, intentos y próximo reintento",
+        "description": "Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "fallido",
+                "descartado"
+              ]
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioHorus"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/probar": {
+      "post": {
+        "operationId": "horusConectorProbar",
+        "summary": "Probar la conexión con Horus (lectura autenticada y ping firmado al receptor)",
+        "description": "Con la configuración guardada, encendida o no. Responde 200 aunque falle: `ok: false` y el error real (`ECONNREFUSED`, `Horus respondió 401: …`).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPruebaHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/recibidos": {
+      "get": {
+        "operationId": "horusRecibidosListar",
+        "summary": "Webhooks recibidos de Horus",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de webhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookHorusRecibido"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/seguridad": {
+      "post": {
+        "operationId": "horusSeguridadLotes",
+        "summary": "Estado de seguridad de varios servicios (hasta 500) para la columna \"Seguridad\"",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Usa §3.5 de Horus; mientras Horus no lo tenga (H9) responde `modo: alternativa` con el último dato de la consulta 360 o de los webhooks, sin una llamada por servicio.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seguridad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeguridadHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/webhook": {
+      "post": {
+        "operationId": "horusWebhook",
+        "summary": "Receptor de webhooks de Horus (firmados con HMAC, lo llama Horus)",
+        "description": "§1.3 y §3.4. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>` con el secreto que generó Argos (401 `firma_invalida`), `X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `horus_apagado` con el conector apagado. Cuerpo `{ id, event, occurred_at, tenant, data }`. Deduplica por `id`; responde 202 y lo demás pasa por el bus (`horus.*`). `ping` y `test` solo se registran; eventos y campos desconocidos se ignoran.",
+        "tags": [
+          "integraciones"
+        ],
+        "responses": {
+          "202": {
+            "description": "Webhook recibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookHorus"
+                }
+              }
+            }
+          }
+        },
         "x-implementado": true
       }
     },
@@ -17593,6 +18610,10 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "integraciones.horus.abrir",
+                        "integraciones.horus.configurar",
+                        "integraciones.horus.probar",
+                        "integraciones.horus.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -17797,6 +18818,10 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "integraciones.horus.abrir",
+                        "integraciones.horus.configurar",
+                        "integraciones.horus.probar",
+                        "integraciones.horus.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -21031,6 +22056,184 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/horus": {
+      "get": {
+        "operationId": "horusServicio360",
+        "summary": "Consumo, salud y seguridad del servicio según Horus (consulta 360)",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Pregunta por `external_service_id` (1.2.0); si Horus no lo acepta o no conoce el servicio, por la IP actual (`consulta: address`). Incluye los últimos webhooks de Horus del servicio (`eventos_recientes`).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta 360",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Horus360Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/horus/consumo": {
+      "get": {
+        "operationId": "horusServicioConsumo",
+        "summary": "Consumo mensual del servicio según Horus (por día o total)",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "mes",
+            "in": "query",
+            "required": false,
+            "description": "Mes `YYYY-MM` (hora de Guatemala); por defecto el actual",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          },
+          {
+            "name": "granularidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "day",
+                "total"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consumo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumoHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.horus.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/limitar": {
       "post": {
         "operationId": "serviciosLimitar",
@@ -22292,6 +23495,10 @@
                             "facturas.generar",
                             "facturas.nota_credito",
                             "facturas.ver",
+                            "integraciones.horus.abrir",
+                            "integraciones.horus.configurar",
+                            "integraciones.horus.probar",
+                            "integraciones.horus.ver",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
@@ -24515,6 +25722,38 @@
           }
         }
       },
+      "CanjeConexionHorus": {
+        "type": "object",
+        "required": [
+          "token",
+          "webhook",
+          "conector_id"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token `atk_` de Argos para Horus (§1.2)"
+          },
+          "webhook": {
+            "type": "object",
+            "required": [
+              "url",
+              "secreto"
+            ],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "secreto": {
+                "type": "string"
+              }
+            }
+          },
+          "conector_id": {
+            "type": "string"
+          }
+        }
+      },
       "CategoriaEgreso": {
         "type": "object",
         "required": [
@@ -25404,6 +26643,378 @@
           }
         }
       },
+      "ConectorHorus": {
+        "type": "object",
+        "required": [
+          "activo",
+          "url_base",
+          "token",
+          "webhook_salida_url",
+          "webhook_salida_secreto",
+          "webhook_entrada_url",
+          "webhook_entrada_ruta",
+          "webhook_entrada_secreto",
+          "conector_id",
+          "conectado_por_enlace_en",
+          "ultima_prueba",
+          "salud",
+          "errores_cifrado",
+          "version"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Apagado por defecto: sin él no hay llamadas ni webhooks"
+          },
+          "url_base": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL base de Horus (https), sin `/api/v1`"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Código de conexión `hf_pat_` de Horus (`***`)"
+          },
+          "webhook_salida_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Horus (lo genera Horus)"
+          },
+          "webhook_salida_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Horus (`***`)"
+          },
+          "webhook_entrada_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública)"
+          },
+          "webhook_entrada_ruta": {
+            "type": "string",
+            "description": "Ruta del receptor de Argos"
+          },
+          "webhook_entrada_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Argos (`***`)"
+          },
+          "conector_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del conector en Argos (§1.4)"
+          },
+          "conectado_por_enlace_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Último canje de un enlace de conexión"
+          },
+          "ultima_prueba": {
+            "type": "object",
+            "required": [
+              "en",
+              "ok",
+              "error"
+            ],
+            "properties": {
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "salud": {
+            "type": "object",
+            "required": [
+              "fallos_seguidos",
+              "pausa_hasta",
+              "ultimo_error",
+              "ultimo_error_en",
+              "ultimo_exito_en"
+            ],
+            "properties": {
+              "fallos_seguidos": {
+                "type": "integer"
+              },
+              "pausa_hasta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ultimo_error_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ultimo_exito_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "errores_cifrado": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Secretos que no se pudieron descifrar (cambió la clave)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = nunca se guardó. Envíala al guardar"
+          }
+        }
+      },
+      "ConectorHorusGuardado": {
+        "type": "object",
+        "required": [
+          "activo",
+          "url_base",
+          "token",
+          "webhook_salida_url",
+          "webhook_salida_secreto",
+          "webhook_entrada_url",
+          "webhook_entrada_ruta",
+          "webhook_entrada_secreto",
+          "conector_id",
+          "conectado_por_enlace_en",
+          "ultima_prueba",
+          "salud",
+          "errores_cifrado",
+          "version",
+          "webhook_entrada_secreto_nuevo"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Apagado por defecto: sin él no hay llamadas ni webhooks"
+          },
+          "url_base": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL base de Horus (https), sin `/api/v1`"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Código de conexión `hf_pat_` de Horus (`***`)"
+          },
+          "webhook_salida_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Horus (lo genera Horus)"
+          },
+          "webhook_salida_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Horus (`***`)"
+          },
+          "webhook_entrada_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública)"
+          },
+          "webhook_entrada_ruta": {
+            "type": "string",
+            "description": "Ruta del receptor de Argos"
+          },
+          "webhook_entrada_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Argos (`***`)"
+          },
+          "conector_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del conector en Argos (§1.4)"
+          },
+          "conectado_por_enlace_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Último canje de un enlace de conexión"
+          },
+          "ultima_prueba": {
+            "type": "object",
+            "required": [
+              "en",
+              "ok",
+              "error"
+            ],
+            "properties": {
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "salud": {
+            "type": "object",
+            "required": [
+              "fallos_seguidos",
+              "pausa_hasta",
+              "ultimo_error",
+              "ultimo_error_en",
+              "ultimo_exito_en"
+            ],
+            "properties": {
+              "fallos_seguidos": {
+                "type": "integer"
+              },
+              "pausa_hasta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ultimo_error_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ultimo_exito_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "errores_cifrado": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Secretos que no se pudieron descifrar (cambió la clave)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = nunca se guardó. Envíala al guardar"
+          },
+          "webhook_entrada_secreto_nuevo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Secreto del receptor de Argos en claro, solo cuando se acaba de generar: copiarlo a Horus"
+          }
+        }
+      },
       "ConfiguracionEfectivaServicio": {
         "type": "object",
         "required": [
@@ -25772,6 +27383,140 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "ConsumoHorus": {
+        "type": "object",
+        "required": [
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "desde",
+          "hasta",
+          "granularidad",
+          "items"
+        ],
+        "properties": {
+          "conector": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "apagado"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no hay dato fresco"
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "granularidad": {
+            "type": "string",
+            "enum": [
+              "day",
+              "total"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "stale",
+                "actualizado_en",
+                "error",
+                "subida_bytes",
+                "bajada_bytes",
+                "series",
+                "direcciones"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "actualizado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "subida_bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "bajada_bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "dia",
+                      "subida_bytes",
+                      "bajada_bytes"
+                    ],
+                    "properties": {
+                      "dia": {
+                        "type": "string"
+                      },
+                      "subida_bytes": {
+                        "type": "integer"
+                      },
+                      "bajada_bytes": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "direcciones": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -26773,6 +28518,106 @@
           }
         }
       },
+      "EnlaceConexionHorus": {
+        "type": "object",
+        "required": [
+          "enlace",
+          "vence_en"
+        ],
+        "properties": {
+          "enlace": {
+            "type": "string",
+            "description": "`https://<argos>/conectar#<codigo>`: se muestra una sola vez"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EnvioHorus": {
+        "type": "object",
+        "required": [
+          "id",
+          "evento_id",
+          "evento",
+          "empresa_id",
+          "estado",
+          "intentos",
+          "proximo_intento_en",
+          "ultimo_status",
+          "ultimo_error",
+          "enviado_en",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento_id": {
+            "type": "string",
+            "description": "`id` del webhook (estable entre reintentos)"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido",
+              "descartado"
+            ]
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proximo_intento_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EnvioNotificacion": {
         "type": "object",
         "required": [
@@ -27714,6 +29559,123 @@
               "integer",
               "null"
             ]
+          }
+        }
+      },
+      "Horus360Servicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "consulta",
+          "ip",
+          "datos",
+          "eventos_recientes"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "conector": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "apagado"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no hay dato fresco"
+          },
+          "consulta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "external_service_id",
+              "address"
+            ]
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IP actual del servicio en Argos"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta)"
+          },
+          "eventos_recientes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "evento",
+                "evento_interno",
+                "ocurrido_en",
+                "recibido_en",
+                "resumen"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "evento": {
+                  "type": "string"
+                },
+                "evento_interno": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ocurrido_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "recibido_en": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "resumen": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -32790,6 +34752,85 @@
           }
         }
       },
+      "ResultadoPruebaHorus": {
+        "type": "object",
+        "required": [
+          "ok",
+          "probado_en",
+          "api",
+          "webhook"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "api": {
+            "type": "object",
+            "required": [
+              "ok",
+              "status",
+              "latencia_ms",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "latencia_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Error real (red, HTTP de Horus)"
+              }
+            }
+          },
+          "webhook": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ok",
+              "status",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
       "ResultadoVencimiento": {
         "type": "object",
         "required": [
@@ -32809,6 +34850,36 @@
           "errores": {
             "type": "integer",
             "description": "Facturas que no se pudieron procesar (ver log)"
+          }
+        }
+      },
+      "ResultadoWebhookHorus": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "estado",
+          "evento_interno"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "evento_interno": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -33409,6 +35480,132 @@
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
             },
             "description": "Saldo acumulado dentro de la empresa"
+          }
+        }
+      },
+      "SeguridadHorus": {
+        "type": "object",
+        "required": [
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "modo",
+          "items"
+        ],
+        "properties": {
+          "conector": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "apagado"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no hay dato fresco"
+          },
+          "modo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "lotes",
+              "alternativa"
+            ],
+            "description": "`alternativa` = Horus aún no tiene §3.5: último dato de la consulta 360 o de los webhooks"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "estado",
+                "hallazgos_abiertos",
+                "severidad_maxima",
+                "desde",
+                "fuente",
+                "stale",
+                "actualizado_en",
+                "error"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "estado": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "`clean`, `suspected`, `compromised`"
+                },
+                "hallazgos_abiertos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "severidad_maxima": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "fuente": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "horus",
+                    "consulta_360",
+                    "webhook"
+                  ]
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "actualizado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -34110,6 +36307,26 @@
           }
         }
       },
+      "TicketHorus": {
+        "type": "object",
+        "required": [
+          "url",
+          "expira_en"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL de Horus con el ticket (un solo uso, 60 s); el panel la abre"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "TokenApi": {
         "type": "object",
         "required": [
@@ -34584,6 +36801,70 @@
                 "description": "Con 0 se calcula como 1"
               }
             }
+          }
+        }
+      },
+      "WebhookHorusRecibido": {
+        "type": "object",
+        "required": [
+          "id",
+          "webhook_id",
+          "evento",
+          "ocurrido_en",
+          "estado",
+          "evento_interno",
+          "empresa_id",
+          "servicio_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "webhook_id": {
+            "type": "string"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "evento_interno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

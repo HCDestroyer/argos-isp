@@ -89,6 +89,14 @@ export const PERMISOS = {
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
 
+    'integraciones.horus.ver':
+        'Ver el conector con Horus Flow y sus datos (consumo, salud y seguridad de los servicios)',
+    'integraciones.horus.configurar':
+        'Configurar el conector con Horus Flow (URL, código de conexión, webhooks, enlace de conexión); solo admin',
+    'integraciones.horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
+    'integraciones.horus.abrir':
+        'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
+
     'empresas.ver': 'Ver las empresas (NIT) de la instalación',
     'empresas.crear': 'Crear empresas (NIT)',
     'empresas.editar': 'Editar los datos fiscales y de contacto de una empresa',

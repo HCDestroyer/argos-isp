@@ -111,6 +111,53 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         asunto: null,
         cuerpo: 'RESUELTO · {{alerta.descripcion}} volvió a ejecutarse\nÚltima ejecución: {{alerta.ultima}}',
     },
+    // Horus Flow (contratos/horus.md §3.4): avisos, nunca cortes.
+    {
+        evento: 'alerta.horus.hallazgo',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'HORUS · {{empresa.nombre}} · Hallazgo de seguridad {{alerta.severidad}}: {{alerta.tipo}}' +
+            '{{#alerta.servicio}}\nServicio: {{alerta.servicio}}{{/alerta.servicio}}' +
+            '{{#alerta.ip}}\nIP: {{alerta.ip}}{{/alerta.ip}}{{#alerta.resumen}}\n{{alerta.resumen}}{{/alerta.resumen}}' +
+            '\nArgos no corta el servicio por esto: revísalo en Horus.',
+    },
+    {
+        evento: 'alerta.horus.hallazgo_resuelto',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'RESUELTO · HORUS · {{empresa.nombre}} · Hallazgo {{alerta.tipo}}' +
+            '{{#alerta.servicio}}\nServicio: {{alerta.servicio}}{{/alerta.servicio}}\nAbierto: {{alerta.desde}} ({{alerta.duracion}})',
+    },
+    {
+        evento: 'alerta.horus.router',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'HORUS · Router {{alerta.nombre}} {{alerta.estado}}' +
+            '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}',
+    },
+    {
+        evento: 'alerta.horus.router_recuperado',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo: 'RESUELTO · HORUS · Router {{alerta.nombre}} {{alerta.estado}}\nCaído desde: {{alerta.desde}} ({{alerta.duracion}})',
+    },
+    {
+        evento: 'alerta.horus.infra',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo:
+            'HORUS · Servicio {{alerta.nombre}} {{alerta.estado}}' +
+            '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}',
+    },
+    {
+        evento: 'alerta.horus.infra_recuperado',
+        canal: 'telegram',
+        asunto: null,
+        cuerpo: 'RESUELTO · HORUS · Servicio {{alerta.nombre}} {{alerta.estado}}\nCon falla desde: {{alerta.desde}} ({{alerta.duracion}})',
+    },
 ]
 
 export const PLANTILLAS_BASE: PlantillaBase[] = [
