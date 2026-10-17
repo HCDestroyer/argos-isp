@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Iniciar sesión
-         * @description Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
+         * @description Límite de intentos por IP (todos, también los de cuerpo inválido) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
          */
         post: operations["authLogin"];
         delete?: never;
@@ -33,8 +33,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cerrar la sesión actual */
+        /**
+         * Cerrar la sesión actual
+         * @description Revoca el token de login (Bearer o cookie del panel). Con la cookie, la borra (`Set-Cookie` vencida) y exige `X-CSRF-Token` como todo POST.
+         */
         post: operations["authLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sesion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Iniciar sesión del panel en cookie HttpOnly
+         * @description Igual que `POST /auth/login` (mismas credenciales y límite de intentos), pero el token va en la cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. Contrato: `.claude/integration/contratos/sesion-panel.md`.
+         */
+        post: operations["authSesion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3396,6 +3419,8 @@ export interface components {
             email: string;
             roles: string[];
             permisos: string[];
+            /** @description Solo con la sesión del panel por cookie (`GET /me`): valor de `X-CSRF-Token` para POST, PUT y DELETE */
+            csrf?: string;
         };
         Movimiento: {
             id: number;
@@ -4581,6 +4606,16 @@ export interface components {
             token: string;
             usuario: components["schemas"]["Me"];
         };
+        SesionPanel: {
+            usuario: components["schemas"]["Me"];
+            /** @description Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión */
+            csrf: string;
+            /**
+             * Format: date-time
+             * @description Cuándo vence la sesión (no se renueva)
+             */
+            expira_en: string | null;
+        };
         SimulacionPromesa: {
             servicio_id: number;
             cliente_id: number;
@@ -4866,6 +4901,61 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    authSesion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada; cookie puesta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SesionPanel"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     bancosListar: {
@@ -5102,7 +5192,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso cajas.abrir */
+            /** @description Sin el permiso cajas.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5184,7 +5274,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso cajas.cerrar */
+            /** @description Sin el permiso cajas.cerrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5413,7 +5503,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.crear */
+            /** @description Sin el permiso clientes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5547,7 +5637,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.editar */
+            /** @description Sin el permiso clientes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5683,7 +5773,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.desvincular_telegram */
+            /** @description Sin el permiso clientes.desvincular_telegram; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5808,7 +5898,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.quitar_responsable_pago */
+            /** @description Sin el permiso clientes.quitar_responsable_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5886,7 +5976,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.asignar_responsable_pago */
+            /** @description Sin el permiso clientes.asignar_responsable_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5963,7 +6053,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso clientes.vincular_telegram */
+            /** @description Sin el permiso clientes.vincular_telegram; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6151,7 +6241,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso comprobantes.aprobar */
+            /** @description Sin el permiso comprobantes.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6276,7 +6366,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso comprobantes.rechazar */
+            /** @description Sin el permiso comprobantes.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6403,7 +6493,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso cuentas_bancarias.editar */
+            /** @description Sin el permiso cuentas_bancarias.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6515,7 +6605,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso cuentas_bancarias.editar */
+            /** @description Sin el permiso cuentas_bancarias.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6726,7 +6816,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso documentos.editar */
+            /** @description Sin el permiso documentos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6799,7 +6889,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso documentos.editar */
+            /** @description Sin el permiso documentos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6955,7 +7045,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso egresos.registrar */
+            /** @description Sin el permiso egresos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7071,7 +7161,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso egresos.anular */
+            /** @description Sin el permiso egresos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7229,7 +7319,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso empresa.editar */
+            /** @description Sin el permiso empresa.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7406,7 +7496,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso facturas.anular */
+            /** @description Sin el permiso facturas.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7483,7 +7573,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso facturas.generar */
+            /** @description Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7554,7 +7644,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso facturas.generar */
+            /** @description Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7625,7 +7715,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso facturas.generar */
+            /** @description Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7887,7 +7977,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso ipv6.crear */
+            /** @description Sin el permiso ipv6.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8202,7 +8292,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso libro.cerrar_periodo */
+            /** @description Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8269,7 +8359,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso libro.reabrir_periodo */
+            /** @description Sin el permiso libro.reabrir_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8465,7 +8555,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso notificaciones.editar */
+            /** @description Sin el permiso notificaciones.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8582,7 +8672,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso notificaciones.editar */
+            /** @description Sin el permiso notificaciones.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8738,7 +8828,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso pagos.registrar */
+            /** @description Sin el permiso pagos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8854,7 +8944,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso pagos.anular */
+            /** @description Sin el permiso pagos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8995,7 +9085,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso pagos.registrar */
+            /** @description Sin el permiso pagos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9169,7 +9259,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso facturas.generar */
+            /** @description Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9254,14 +9344,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description En la práctica 303 al retorno (ver descripción) */
-            200: {
+            /** @description Al retorno del cobro o a la página de la pasarela */
+            303: {
                 headers: {
+                    /** @description URL de destino de la redirección */
+                    Location: string;
                     [name: string]: unknown;
                 };
-                content: {
-                    "text/html": string;
-                };
+                content?: never;
             };
             /** @description No encontrado */
             404: {
@@ -9525,7 +9615,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso planes.crear */
+            /** @description Sin el permiso planes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9660,7 +9750,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso planes.editar */
+            /** @description Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9807,7 +9897,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso planes.editar */
+            /** @description Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9899,7 +9989,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso planes.ver */
+            /** @description Sin el permiso planes.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10076,7 +10166,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso plantillas.crear */
+            /** @description Sin el permiso plantillas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10267,7 +10357,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso plantillas.editar */
+            /** @description Sin el permiso plantillas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11364,7 +11454,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso promesas.crear */
+            /** @description Sin el permiso promesas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11431,7 +11521,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso promesas.aprobar */
+            /** @description Sin el permiso promesas.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11507,7 +11597,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso promesas.cancelar */
+            /** @description Sin el permiso promesas.cancelar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11583,7 +11673,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso promesas.rechazar */
+            /** @description Sin el permiso promesas.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11674,7 +11764,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso promesas.ver */
+            /** @description Sin el permiso promesas.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12277,7 +12367,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso roles.crear */
+            /** @description Sin el permiso roles.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12335,7 +12425,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso roles.editar */
+            /** @description Sin el permiso roles.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12493,7 +12583,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso routers.crear */
+            /** @description Sin el permiso routers.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12622,7 +12712,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso routers.editar */
+            /** @description Sin el permiso routers.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12699,7 +12789,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso routers.cambiar_control_velocidad */
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12822,7 +12912,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso ipv6.crear */
+            /** @description Sin el permiso ipv6.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12989,7 +13079,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso redes.crear */
+            /** @description Sin el permiso redes.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13237,7 +13327,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.crear */
+            /** @description Sin el permiso servicios.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13402,7 +13492,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.editar */
+            /** @description Sin el permiso servicios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13642,7 +13732,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.desconectar */
+            /** @description Sin el permiso servicios.desconectar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13718,7 +13808,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.limitar */
+            /** @description Sin el permiso servicios.limitar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13794,7 +13884,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.quitar_limite */
+            /** @description Sin el permiso servicios.quitar_limite; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13870,7 +13960,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.reactivar */
+            /** @description Sin el permiso servicios.reactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13946,7 +14036,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.retirar */
+            /** @description Sin el permiso servicios.retirar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14022,7 +14112,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso servicios.suspender */
+            /** @description Sin el permiso servicios.suspender; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14156,7 +14246,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso sesiones.desconectar */
+            /** @description Sin el permiso sesiones.desconectar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14334,7 +14424,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso tokens.crear */
+            /** @description Sin el permiso tokens.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14383,7 +14473,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso tokens.revocar */
+            /** @description Sin el permiso tokens.revocar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14500,7 +14590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso usuarios.crear */
+            /** @description Sin el permiso usuarios.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14615,7 +14705,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso usuarios.editar */
+            /** @description Sin el permiso usuarios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14724,7 +14814,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso zonas.crear */
+            /** @description Sin el permiso zonas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14781,7 +14871,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso zonas.editar */
+            /** @description Sin el permiso zonas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;

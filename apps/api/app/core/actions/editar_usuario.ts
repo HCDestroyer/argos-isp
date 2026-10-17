@@ -2,6 +2,7 @@ import hash from '@adonisjs/core/services/hash'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
+import { usuarioDelActor } from '#shared/contexto'
 import {
     asignacionesActuales,
     describirAsignaciones,
@@ -29,7 +30,7 @@ export default class EditarUsuario extends DomainAction<EntradaEditarUsuario, Us
 
     protected async handle(input: EntradaEditarUsuario, t: Transaccion): Promise<UsuarioVista> {
         t.fijarEntidad('usuario', input.id)
-        if (input.activo === false && t.ctx.actor.id === input.id) {
+        if (input.activo === false && usuarioDelActor(t.ctx.actor) === input.id) {
             throw new ReglaNegocio('No puedes desactivar tu propio usuario', 'autodesactivacion')
         }
 

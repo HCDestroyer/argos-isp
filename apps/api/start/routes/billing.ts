@@ -3,7 +3,7 @@
 | Rutas de facturación (A3): plantillas, facturas, pagos, promesas, estado de cuenta
 |--------------------------------------------------------------------------
 */
-import { definirRuta, type Ruta } from '#shared/rutas'
+import { definirRuta, redirigir, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#billing/validators'
 import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billing/plantillas'
@@ -915,12 +915,7 @@ const pasarelaRutas: Ruta[] = [
         cuerpo: v.simularPagoFalsaValidator,
         descripcion:
             'Solo con PASARELA_PROVEEDOR=falsa (404 si no). Igual que /pagar y luego 303 (como el retorno de un proveedor real): a la url_retorno del cobro con ?estado=<pagado|fallido|pendiente> o, si el cobro no la trae, de vuelta a la página de la pasarela.',
-        // `RespuestaRuta` solo declara 2xx: el OpenAPI dice 200, la respuesta real es 303 (ver handler)
-        respuesta: {
-            status: 200,
-            descripcion: 'En la práctica 303 al retorno (ver descripción)',
-            contenido: 'text/html',
-        },
+        respuesta: { status: 303, descripcion: 'Al retorno del cobro o a la página de la pasarela' },
         handler: async (ctx, { cuerpo, params }) => {
             const idProveedor = String(params.cobro)
             await simularEnFalsa(ctx, idProveedor, cuerpo)
@@ -928,10 +923,7 @@ const pasarelaRutas: Ruta[] = [
             const retorno =
                 (await falsa.urlDeRetorno(idProveedor)) ??
                 `/api/v1/pasarela/falsa/${encodeURIComponent(idProveedor)}`
-            // `despachar` (#shared/rutas) fija después el status declarado; se envía ya la
-            // redirección para que el 303 llegue al navegador. Pedido a A1 en a3.md: 3xx en RespuestaRuta.
-            ctx.response.redirect().status(303).toPath(retorno)
-            ctx.response.finish()
+            return redirigir(retorno)
         },
     }),
 ]
