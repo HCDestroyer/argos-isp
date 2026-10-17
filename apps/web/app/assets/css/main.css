@@ -471,6 +471,12 @@
     }
 }
 
+/* Papel del ticket impreso (ReciboPago): negro sobre blanco en cualquier tema. */
+:root {
+    --argos-papel: #fff;
+    --argos-tinta-papel: #000;
+}
+
 /*
  * Ticket de 80 mm: al imprimir no hay aura ni vidrio (papel blanco, sin transparencias).
  */

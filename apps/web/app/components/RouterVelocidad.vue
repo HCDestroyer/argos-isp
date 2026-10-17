@@ -179,12 +179,12 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                     >
                         Modo de colas
                     </h3>
-                    <div class="flex flex-col gap-2 surface-card p-4">
+                    <div class="surface-card flex flex-col gap-2 p-4">
                         <div class="flex flex-wrap items-center gap-2">
                             <UBadge
                                 :label="CONTROLES_VELOCIDAD[control].etiqueta"
                                 :icon="CONTROLES_VELOCIDAD[control].icono"
-                                color="primary"
+                                color="neutral"
                                 variant="subtle"
                                 data-prueba="control-actual"
                             />

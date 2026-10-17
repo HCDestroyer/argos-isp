@@ -283,7 +283,7 @@ function periodo(facturaId: number): string {
 
     html,
     body {
-        background: #fff !important;
+        background: var(--argos-papel) !important;
     }
 
     body * {
@@ -293,9 +293,9 @@ function periodo(facturaId: number): string {
     .recibo-ticket,
     .recibo-ticket * {
         visibility: visible !important;
-        color: #000 !important;
-        background: #fff !important;
-        border-color: #000 !important;
+        color: var(--argos-tinta-papel) !important;
+        background: var(--argos-papel) !important;
+        border-color: var(--argos-tinta-papel) !important;
     }
 
     .recibo-ticket {
