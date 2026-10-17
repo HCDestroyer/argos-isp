@@ -12,11 +12,29 @@ describe('semana 2 · reportes', () => {
         reiniciarFixtures()
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
+        // Una empresa: el reporte sale sin las columnas de empresa (el consolidado, abajo).
+        useEmpresaActiva().elegir(1)
     })
 
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
+        localStorage.clear()
+    })
+
+    it('con "Todas" el reporte es consolidado: columnas Empresa y Nombre de la empresa al principio', async () => {
+        useEmpresaActiva().elegir('todas')
+        const cobranza = await useReportes().reporte('cobranza-diaria', { metodo_pago: 'transferencia' })
+        expect(cobranza.ok && cobranza.data.columnas.slice(0, 2).map(c => c.clave)).toEqual(['empresa_id', 'empresa'])
+        expect(cobranza.ok && cobranza.data.filas.every(f => f.empresa === 'ArgosNet')).toBe(true)
+        // El id se oculta porque viene el nombre al lado.
+        expect(cobranza.ok && columnasVisibles(cobranza.data.columnas)[0]?.clave).toBe('empresa')
+        const csv = await useReportes().descargar('cobranza-diaria', { metodo_pago: 'caja' }, 'csv')
+        expect(csv.ok && (await csv.data.text()).split('\n')[0]).toBe('Empresa,Nombre de la empresa,Fecha,Método,Caja,Nombre de caja,Pagos,Cobrado,Anulados,Monto anulado')
+
+        useEmpresaActiva().elegir(2)
+        const sur = await useReportes().reporte('cobranza-diaria', {})
+        expect(sur.ok && sur.data.filas).toEqual([])
     })
 
     it('oculta los id con nombre al lado y la clave de la categoría; deja el turno', () => {

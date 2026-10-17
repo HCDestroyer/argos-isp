@@ -7,8 +7,41 @@ export type EleccionEmpresa = number | 'todas'
 
 const PREFIJO = 'argos_empresa_activa:'
 
-/** Rutas de lista que aceptan `?empresas=todas` (consolidado, `contratos/multiempresa.md`). */
-export const LISTAS_CONSOLIDABLES = ['/api/v1/servicios', '/api/v1/clientes', '/api/v1/routers']
+/**
+ * Rutas GET que aceptan `?empresas=todas` (consolidado, `contratos/multiempresa.md`). Con "Todas"
+ * el plugin `empresa` lo agrega; una prueba la compara con el OpenAPI.
+ */
+export const LISTAS_CONSOLIDABLES: readonly string[] = [
+    '/api/v1/cajas',
+    '/api/v1/clientes',
+    '/api/v1/comprobantes',
+    '/api/v1/cuentas-bancarias',
+    '/api/v1/dashboard/resumen',
+    '/api/v1/egresos',
+    '/api/v1/facturas',
+    '/api/v1/libro/balance',
+    '/api/v1/libro/bancos',
+    '/api/v1/libro/cuentas',
+    '/api/v1/libro/diario',
+    '/api/v1/libro/estado-resultados',
+    '/api/v1/libro/mayor',
+    '/api/v1/libro/periodos',
+    '/api/v1/notas-credito',
+    '/api/v1/pagos',
+    '/api/v1/pasarela/cobros',
+    '/api/v1/promesas',
+    '/api/v1/reportes/altas-bajas',
+    '/api/v1/reportes/cartera-vencida',
+    '/api/v1/reportes/cierres-caja',
+    '/api/v1/reportes/cobranza-diaria',
+    '/api/v1/reportes/egresos',
+    '/api/v1/reportes/facturado-vs-cobrado',
+    '/api/v1/reportes/ingresos',
+    '/api/v1/reportes/iva',
+    '/api/v1/reportes/promesas',
+    '/api/v1/routers',
+    '/api/v1/servicios',
+]
 
 function leerGuardada(usuarioId: number): EleccionEmpresa | null {
     try {

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import Decimal from 'decimal.js'
@@ -70,6 +72,20 @@ describe('multiempresa · selector y cabecera', () => {
         expect(eleccion.value).toBe(1)
         const servicios = await useServicios().listar({ limit: 200 })
         expect(servicios.ok && servicios.data.data.every(s => s.empresa_id === 1)).toBe(true)
+    })
+})
+
+describe('multiempresa · rutas consolidables', () => {
+    it('LISTAS_CONSOLIDABLES son exactamente los GET del OpenAPI que aceptan ?empresas=todas', () => {
+        const web = [process.cwd(), resolve(process.cwd(), 'apps/web')].find(ruta => existsSync(join(ruta, 'app/pages'))) ?? process.cwd()
+        const spec = JSON.parse(readFileSync(resolve(web, '../../packages/contracts/openapi.json'), 'utf8')) as {
+            paths: Record<string, { get?: { parameters?: { name: string, in: string }[] } }>
+        }
+        const conTodas = Object.entries(spec.paths)
+            .filter(([, operaciones]) => (operaciones.get?.parameters ?? []).some(p => p.name === 'empresas' && p.in === 'query'))
+            .map(([ruta]) => ruta)
+            .sort()
+        expect([...LISTAS_CONSOLIDABLES].sort()).toEqual(conTodas)
     })
 })
 
