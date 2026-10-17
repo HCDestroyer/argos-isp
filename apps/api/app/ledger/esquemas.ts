@@ -113,6 +113,7 @@ export const Asiento = definirEsquema(
                 'egreso',
                 'cierre_caja',
                 'ajuste',
+                'reclasificacion',
             ]),
             origen_id: nulable(id),
             reversa_de: {

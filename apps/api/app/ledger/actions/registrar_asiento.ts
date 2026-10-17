@@ -33,6 +33,7 @@ export const ORIGENES_ASIENTO = [
     'egreso',
     'cierre_caja',
     'ajuste',
+    'reclasificacion',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 
