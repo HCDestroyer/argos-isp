@@ -6,6 +6,7 @@
  * En fixtures el código correcto es siempre `123456`.
  */
 import type { Schema } from '@argosisp/contracts'
+import { MARCA_FIXTURE, MARCA_SUR_FIXTURE } from './empresa'
 
 export const CODIGO_FIXTURE = '123456'
 
@@ -23,6 +24,7 @@ export const SOLICITUD_POR_IP_FIXTURE: Schema<'PortalSolicitudCodigo'> = {
 export const SESION_FIXTURE: Schema<'PortalSesion'> = {
     cliente: { nombre_parcial: 'Juan P.' },
     expira_en: '2026-10-20T15:30:00.000Z',
+    empresa_principal: MARCA_FIXTURE,
 }
 
 export const CONTACTO_FIXTURE: Schema<'PortalContacto'> = {
@@ -46,9 +48,33 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
             direccion: '5a avenida 10-20 zona 1',
             promesa_activa: false,
             monto_adeudado: '550.00',
+            empresa: MARCA_FIXTURE,
         },
     ],
     monto_adeudado: '550.00',
+    empresa_principal: MARCA_FIXTURE,
+}
+
+/**
+ * Cliente con servicios en dos empresas (multiempresa): el de Red Altiplano (la principal) y uno
+ * de Fibra Sur suspendido. Escenario `?cuenta=dos_empresas` en desarrollo.
+ */
+export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
+    cliente: CONTACTO_FIXTURE,
+    servicios: [
+        { ...CUENTA_FIXTURE.servicios[0]!, estado: 'activo', monto_adeudado: '175.00' },
+        {
+            id: 57,
+            estado: 'suspendido',
+            plan: 'Fibra 50 Mbps',
+            direccion: 'Lotificación El Rosario, casa 14',
+            promesa_activa: false,
+            monto_adeudado: '398.00',
+            empresa: MARCA_SUR_FIXTURE,
+        },
+    ],
+    monto_adeudado: '573.00',
+    empresa_principal: MARCA_FIXTURE,
 }
 
 function factura(datos: Partial<Schema<'PortalFactura'>> & { id: number }): Schema<'PortalFactura'> {
@@ -69,6 +95,7 @@ function factura(datos: Partial<Schema<'PortalFactura'>> & { id: number }): Sche
         fel_uuid: null,
         fel_serie: null,
         fel_numero: null,
+        empresa: MARCA_FIXTURE,
         ...datos,
     }
 }

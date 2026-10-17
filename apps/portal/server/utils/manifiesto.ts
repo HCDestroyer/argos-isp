@@ -5,8 +5,11 @@
  * Sin service worker: el portal debe mostrar siempre el estado real (corte, saldo, reactivación),
  * nunca una copia en caché.
  *
- * Multiempresa: el nombre sale de `NUXT_PUBLIC_EMPRESA_NOMBRE` (la empresa principal). Cuando cada
- * empresa tenga su marca, el manifiesto puede tomar la empresa del Host o de la sesión aquí mismo.
+ * Multiempresa: con sesión, `/cuenta` enlaza `/manifest.webmanifest?empresa=<id>` (la empresa
+ * principal del cliente) y el nombre sale de esa empresa (`GET /portal/empresa?empresa_id=`); sin
+ * sesión (o si la API no responde), del nombre configurado (`NUXT_PUBLIC_EMPRESA_NOMBRE`). La cookie
+ * de la sesión es de `/api/v1/portal`, así que el manifiesto no la ve: por eso va el id en la URL
+ * (es un dato público, el mismo de los avisos de cobro).
  */
 export const TEMA_MARCA = '#0f766e'
 
@@ -23,6 +26,16 @@ export interface ManifiestoPwa {
     theme_color: string
     background_color: string
     icons: { src: string, sizes: string, type: string, purpose: 'any' | 'maskable' }[]
+}
+
+/** `?empresa=<id>` del manifiesto: entero positivo o `null`. */
+export function empresaDelManifiesto(valor: unknown): number | null {
+    const texto = Array.isArray(valor) ? valor[0] : valor
+    if (typeof texto !== 'string' || !/^[1-9]\d{0,15}$/.test(texto)) {
+        return null
+    }
+    const id = Number(texto)
+    return Number.isSafeInteger(id) ? id : null
 }
 
 /** El nombre corto cabe bajo el ícono (≈ 12 caracteres); si no, "Mi servicio". */

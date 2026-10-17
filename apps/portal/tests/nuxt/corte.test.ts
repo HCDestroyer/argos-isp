@@ -42,7 +42,7 @@ describe('página /corte', () => {
 
     it('sin pasarela, "Pagar en línea" se ve apagado: neutro, sin el azul primario, con la alternativa', async () => {
         fijarEmpresaFixture({ ...EMPRESA_FIXTURE, pago_en_linea: false })
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await montarCorte()
         await flushPromises()
         const pagar = wrapper.find('[data-testid="pagar-en-linea"]')

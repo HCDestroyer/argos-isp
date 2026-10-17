@@ -8,7 +8,7 @@ import PaginaContacto from '~/pages/contacto.vue'
 import DatosDeposito from '~/components/corte/DatosDeposito.vue'
 
 async function montar(componente: Parameters<typeof mountSuspended>[0], props: Record<string, unknown> = {}) {
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     clearNuxtData('portal:quien-soy')
     const wrapper = await mountSuspended(componente, { props } as Parameters<typeof mountSuspended>[1])
     await flushPromises()

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 /**
- * Encabezado y pie con los datos de la empresa configurados en el panel (`useEmpresa`).
+ * Encabezado y pie con la marca de la empresa (`useEmpresa`, multiempresa): en `/cuenta`, la
+ * empresa principal del cliente de la sesión; en el resto (`/corte` sobre todo), la que decide la
+ * API: la del servicio de la IP de origen, si no la principal de la sesión, si no la principal de
+ * la instalación. Con varias empresas, `/cuenta` además pinta una sección por empresa con su logo.
  *
  * Materiales "vidrio y luz": aura de fondo, barra superior de vidrio y el contenido encima. En
  * `/corte` el aura es la liviana (`app-aura-lite`, sin difuminado ni deriva): esa página se abre
  * en teléfonos de clientes suspendidos y tiene que ser lo más barata posible.
  */
-const { empresa, nombre } = useEmpresa()
 const route = useRoute()
+const { empresa, nombre, logoUrl } = useEmpresa({ de: () => route.path === '/cuenta' ? 'cliente' : undefined })
 const anio = new Date().getFullYear()
 
 const auraLiviana = computed(() => route.path === '/corte')
@@ -39,8 +42,16 @@ const mostrarProducto = computed(() => nombre.value !== 'ArgosIsp')
                     to="/"
                     class="flex min-h-11 min-w-0 items-center gap-2.5 font-semibold tracking-[-0.015em] text-highlighted"
                 >
-                    <LogoArgos class="size-8 shrink-0" />
-                    <span class="truncate">{{ nombre }}</span>
+                    <PortalMarcaEmpresa
+                        :nombre="nombre"
+                        :logo-url="logoUrl"
+                        respaldo="argos"
+                        class="size-8"
+                    />
+                    <span
+                        class="truncate"
+                        data-testid="marca-encabezado"
+                    >{{ nombre }}</span>
                 </NuxtLink>
 
                 <UColorModeButton />

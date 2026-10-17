@@ -1,17 +1,19 @@
 <script setup lang="ts">
 /**
- * Un grupo del inicio: los servicios de una empresa con sus accesos rápidos.
+ * Un grupo del inicio: los servicios de UNA empresa con su marca y sus accesos rápidos.
  *
- * Hoy hay un solo grupo y la cabecera de marca no se muestra (la marca ya está en la barra
- * superior). Con multiempresa, `/cuenta` pinta un grupo por empresa y `mostrarMarca` pone el logo y
- * el nombre de la empresa que factura sobre sus servicios, su saldo y sus accesos.
+ * Los accesos salen de los datos de esa empresa (`useEmpresa({ empresaId })`: pago en línea,
+ * cuentas, instrucciones y soporte), nunca de otra. Con una sola empresa la marca ya está en la barra
+ * superior y aquí no se repite; con varias, cada sección lleva el logo y el nombre de la empresa
+ * que factura sobre sus servicios, su saldo y sus accesos.
  */
 const props = defineProps<{
     grupo: GrupoEmpresa
-    accesos: AccesoRapido[]
     mostrarMarca: boolean
     /** Servicio → se le puede pedir promesa ahora (condiciones de la API). */
     promesaPorServicio: Record<number, boolean | null>
+    /** Telegram es del cliente, no de la empresa: solo un grupo lo ofrece. */
+    telegram?: { disponible: boolean, vinculado: boolean } | null
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +21,26 @@ const emit = defineEmits<{
     pedirPromesa: [servicioId: number]
 }>()
 
-const idTitulo = useId()
+// Único por empresa (dos secciones con `useId` podían repetir id tras recargar la cuenta).
+const idTitulo = computed(() => `titulo-${props.grupo.clave}`)
+const { empresa } = useEmpresa({ empresaId: () => props.grupo.empresa.id })
+
+const accesos = computed(() => {
+    const permisos = props.grupo.servicios.map(s => props.promesaPorServicio[s.id] ?? null)
+    const promesaDisponible = permisos.includes(true) ? true : permisos.includes(null) ? null : false
+    // Mientras se leen los datos de la empresa, el soporte sale de su marca (teléfono y WhatsApp).
+    const contacto = empresa.value ?? { ...props.grupo.empresa, telefono_alterno: null, correo: null }
+    return accesosRapidos({
+        modo: 'sesion',
+        empresa: empresa.value,
+        montoAdeudado: props.grupo.montoAdeudado,
+        retirado: props.grupo.servicios.every(s => s.estado === 'retirado'),
+        promesaDisponible,
+        telegram: props.telegram ?? null,
+        soporte: soporteDe(contacto, rutaContactoEmpresa(props.grupo.empresa.id)),
+        rutaTelegram: '/cuenta?seccion=cuenta#telegram',
+    })
+})
 </script>
 
 <template>
@@ -32,22 +53,26 @@ const idTitulo = useId()
             v-if="props.mostrarMarca"
             class="flex items-center gap-2"
         >
-            <img
-                v-if="props.grupo.empresa.logoUrl"
-                :src="props.grupo.empresa.logoUrl"
-                alt=""
-                class="size-8 rounded-md object-contain"
-            >
-            <LogoArgos
-                v-else
+            <PortalMarcaEmpresa
+                :nombre="props.grupo.empresa.nombre_comercial"
+                :logo-url="props.grupo.empresa.logo_url"
                 class="size-8"
             />
-            <h2
-                :id="idTitulo"
-                class="min-w-0 truncate font-semibold text-highlighted"
-            >
-                {{ props.grupo.empresa.nombre }}
-            </h2>
+            <div class="min-w-0">
+                <h2
+                    :id="idTitulo"
+                    class="truncate font-semibold text-highlighted"
+                    data-testid="marca-grupo"
+                >
+                    {{ props.grupo.empresa.nombre_comercial }}
+                </h2>
+                <p
+                    v-if="props.grupo.empresa.nit"
+                    class="truncate text-xs text-muted"
+                >
+                    NIT {{ props.grupo.empresa.nit }}
+                </p>
+            </div>
             <span class="ms-auto shrink-0 text-sm font-semibold tabular-nums text-highlighted">
                 {{ formatearQuetzales(props.grupo.montoAdeudado) }}
             </span>
@@ -57,11 +82,12 @@ const idTitulo = useId()
             :id="idTitulo"
             class="sr-only"
         >
-            Mis servicios con {{ props.grupo.empresa.nombre }}
+            Mis servicios con {{ props.grupo.empresa.nombre_comercial }}
         </h2>
 
         <PortalAccesosRapidos
-            :accesos="props.accesos"
+            :accesos="accesos"
+            :titulo="props.mostrarMarca ? `Accesos rápidos de ${props.grupo.empresa.nombre_comercial}` : 'Accesos rápidos'"
             @accion="emit('accion', $event)"
         />
 

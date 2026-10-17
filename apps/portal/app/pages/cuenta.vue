@@ -8,23 +8,19 @@ import Decimal from 'decimal.js'
  * - Cuatro secciones en la URL (`?seccion=inicio|pagar|facturas|cuenta`, `utils/navegacion.ts`)
  *   con la barra inferior del layout en el teléfono y la barra superior en escritorio.
  * - Inicio: accesos rápidos (`utils/accesos.ts`: solo lo que la API aceptaría ahora) y los
- *   servicios, agrupados por empresa (`utils/empresas.ts`, listo para multiempresa).
+ *   servicios, agrupados por la empresa que los factura (`utils/empresas.ts`). Con varias empresas,
+ *   una sección por empresa con su logo; cada acceso (pago, depósito, comprobante, soporte) usa los
+ *   datos de la empresa de ese grupo, nunca los de otra.
  *
  * Sin sesión (401) manda a `/entrar`. Si la cuenta no se puede leer, muestra el error con
  * "Reintentar" y ningún monto.
  */
-const { empresa, nombre: nombreEmpresa } = useEmpresa()
+const { nombre: nombreConfigurado } = useEmpresa({ de: 'cliente' })
 const { data: resultado, status, refresh } = useCuenta()
 const acceso = useAccesoPortal()
 const route = useRoute()
 const { condiciones: leerCondiciones } = useSolicitudPromesa()
 const telegram = useTelegram()
-
-useHead({
-    title: computed(() => `Mi cuenta · ${nombreEmpresa.value}`),
-    // El gesto de jalar es el nuestro (`PortalJalarParaActualizar`): sin el recargar nativo de Chrome.
-    htmlAttrs: { class: 'overscroll-y-contain' },
-})
 
 const seccion = computed(() => seccionDeLaRuta(route.query.seccion))
 
@@ -32,6 +28,15 @@ const seccion = computed(() => seccionDeLaRuta(route.query.seccion))
 const cargando = computed(() => !resultado.value && (status.value === 'idle' || status.value === 'pending'))
 const cuenta = computed(() => resultado.value?.ok ? resultado.value.data : null)
 const problema = computed(() => resultado.value && !resultado.value.ok ? resultado.value.problema : null)
+
+useHead({
+    // La empresa principal del cliente (la de la cuenta; mientras carga, la de la sesión).
+    title: computed(() => `Mi cuenta · ${cuenta.value?.empresa_principal.nombre_comercial ?? nombreConfigurado.value}`),
+    // El gesto de jalar es el nuestro (`PortalJalarParaActualizar`): sin el recargar nativo de Chrome.
+    htmlAttrs: { class: 'overscroll-y-contain' },
+    // "Agregar a pantalla de inicio" con el nombre de la empresa principal del cliente.
+    link: computed(() => [{ rel: 'manifest', href: urlManifiesto(cuenta.value?.empresa_principal.id), key: 'manifest' }]),
+})
 
 watch(problema, (actual) => {
     if (actual && esSinSesion(actual)) {
@@ -80,11 +85,10 @@ onMounted(() => {
     void telegram.cargar()
 })
 
-/** Servicio al que se asocia un comprobante: el primero con saldo (o el primero). Solo informativo para A3. */
-const servicioComprobante = computed(() => {
-    const servicios = cuenta.value?.servicios ?? []
+/** Servicio al que se asocia un comprobante: el primero con saldo (o el primero) de la lista dada. */
+function servicioParaComprobante(servicios: readonly { id: number, monto_adeudado: string }[]) {
     return (servicios.find(s => new Decimal(s.monto_adeudado).greaterThan(0)) ?? servicios[0])?.id
-})
+}
 
 /**
  * Pagar en línea cobra lo de UN servicio (`POST /portal/pagos/iniciar` con `servicio_id`). Con
@@ -94,7 +98,8 @@ const servicioComprobante = computed(() => {
 const serviciosConSaldo = computed(() => (cuenta.value?.servicios ?? [])
     .filter(s => new Decimal(s.monto_adeudado).greaterThan(0)))
 const opcionesPago = computed(() => serviciosConSaldo.value.map(s => ({
-    label: `${s.plan ?? 'Servicio de internet'}${s.direccion ? ` · ${s.direccion}` : ''} · ${formatearQuetzales(s.monto_adeudado)}`,
+    // Con varias empresas, cada servicio dice a quién se le paga.
+    label: `${variasEmpresas.value ? `${s.empresa.nombre_comercial} · ` : ''}${s.plan ?? 'Servicio de internet'}${s.direccion ? ` · ${s.direccion}` : ''} · ${formatearQuetzales(s.monto_adeudado)}`,
     value: s.id,
 })))
 const servicioElegido = ref<number | undefined>(undefined)
@@ -102,29 +107,33 @@ const servicioPago = computed(() => serviciosConSaldo.value.some(s => s.id === s
     ? servicioElegido.value
     : serviciosConSaldo.value[0]?.id)
 
-/** Grupos por empresa (hoy uno) y sus accesos rápidos. */
-const grupos = computed(() => agruparPorEmpresa(cuenta.value?.servicios ?? [], {
-    id: null,
-    nombre: nombreEmpresa.value,
-    logoUrl: null,
-}))
-const accesosPorGrupo = computed(() => grupos.value.map((grupo, indice) => {
-    const permisos = grupo.servicios.map(s => promesaPorServicio.value[s.id] ?? null)
-    const promesaDisponible = permisos.includes(true) ? true : permisos.includes(null) ? null : false
-    return accesosRapidos({
-        modo: 'sesion',
-        empresa: empresa.value,
-        montoAdeudado: grupo.montoAdeudado,
-        retirado: grupo.servicios.every(s => s.estado === 'retirado'),
-        promesaDisponible,
-        // Telegram es del cliente, no de la empresa: va solo en el primer grupo.
-        telegram: indice === 0 && telegram.estado.value
-            ? { disponible: telegram.estado.value.disponible, vinculado: telegram.estado.value.vinculado }
-            : null,
-        soporte: soporteDe(empresa.value),
-        rutaTelegram: '/cuenta?seccion=cuenta#telegram',
-    })
-}))
+/** Grupos por empresa (la principal primero); cada uno calcula sus accesos con su empresa. */
+const grupos = computed(() => agruparPorEmpresa(cuenta.value?.servicios ?? [], cuenta.value?.empresa_principal.id ?? null))
+const variasEmpresas = computed(() => grupos.value.length > 1)
+/** Telegram es del cliente, no de la empresa: va solo en el primer grupo. */
+const estadoTelegram = computed(() => telegram.estado.value
+    ? { disponible: telegram.estado.value.disponible, vinculado: telegram.estado.value.vinculado }
+    : null)
+
+/** Empresa del servicio que se paga en línea en "Pagar" (sus cuentas, su pasarela). */
+const grupoPago = computed(() => grupoDeServicio(grupos.value, servicioPago.value) ?? grupos.value[0] ?? null)
+const { empresa: empresaPago } = useEmpresa({ empresaId: () => grupoPago.value?.empresa.id })
+
+/** Empresa (y servicio) de los modales de depósito y comprobante: los del grupo que los abrió. */
+const empresaModal = ref<number | undefined>(undefined)
+const servicioComprobante = ref<number | undefined>(undefined)
+watch(grupoPago, (grupo) => {
+    if (empresaModal.value === undefined && grupo) {
+        empresaModal.value = grupo.empresa.id
+        servicioComprobante.value = servicioParaComprobante(grupo.servicios)
+    }
+}, { immediate: true })
+function usarGrupo(grupo: GrupoEmpresa | null) {
+    if (grupo) {
+        empresaModal.value = grupo.empresa.id
+        servicioComprobante.value = servicioParaComprobante(grupo.servicios)
+    }
+}
 const estadoGeneral = computed(() => estadoMasUrgente(cuenta.value?.servicios ?? []))
 
 const verPromesa = ref(false)
@@ -139,7 +148,13 @@ function pedirPromesa(servicioId: number) {
 }
 
 function alAcceso(grupo: GrupoEmpresa, accion: NonNullable<AccesoRapido['accion']>) {
+    usarGrupo(grupo)
     if (accion === 'pagar') {
+        // Pagar lo de esta empresa: su primer servicio con saldo queda elegido.
+        const servicio = grupo.servicios.find(s => new Decimal(s.monto_adeudado).greaterThan(0))
+        if (servicio) {
+            servicioElegido.value = servicio.id
+        }
         void navigateTo('/cuenta?seccion=pagar')
     }
     else if (accion === 'comprobante') {
@@ -283,8 +298,8 @@ watch(() => route.hash, async (hash) => {
                         v-for="(grupo, indice) in grupos"
                         :key="grupo.clave"
                         :grupo="grupo"
-                        :accesos="accesosPorGrupo[indice] ?? []"
-                        :mostrar-marca="grupos.length > 1"
+                        :mostrar-marca="variasEmpresas"
+                        :telegram="indice === 0 ? estadoTelegram : null"
                         :promesa-por-servicio="promesaPorServicio"
                         @accion="alAcceso(grupo, $event)"
                         @pedir-promesa="pedirPromesa"
@@ -323,6 +338,7 @@ watch(() => route.hash, async (hash) => {
                                 </UFormField>
                                 <PagoEnLinea
                                     :servicio-id="servicioPago"
+                                    :empresa-id="grupoPago?.empresa.id"
                                     id-ayuda="pagar-en-linea-ayuda-cuenta"
                                 />
                             </div>
@@ -335,20 +351,22 @@ watch(() => route.hash, async (hash) => {
                             No tienes saldo pendiente.
                         </p>
                         <UButton
-                            v-if="empresa && (empresa.cuentas_deposito.length > 0 || empresa.instrucciones_pago)"
-                            label="Ver datos de depósito"
+                            v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
+                            :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
                             icon="i-lucide-landmark"
                             color="neutral"
                             variant="outline"
                             size="lg"
                             block
-                            @click="verDeposito = true"
+                            data-testid="deposito-pagar"
+                            @click="usarGrupo(grupoPago); verDeposito = true"
                         />
                     </section>
 
                     <CuentaComprobantes
                         :key="`comprobantes-${recargas}`"
-                        :servicio-id="servicioComprobante"
+                        :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
+                        :empresa-id="grupoPago?.empresa.id"
                     />
                     <section
                         class="flex flex-col gap-3"
@@ -442,8 +460,12 @@ watch(() => route.hash, async (hash) => {
         <ComprobanteSubir
             v-model:open="verComprobante"
             :servicio-id="servicioComprobante"
+            :empresa-id="empresaModal"
             @enviado="recargas += 1"
         />
-        <CorteDatosDeposito v-model:open="verDeposito" />
+        <CorteDatosDeposito
+            v-model:open="verDeposito"
+            :empresa-id="empresaModal"
+        />
     </div>
 </template>
