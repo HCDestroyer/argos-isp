@@ -19,6 +19,9 @@ import { titularDeLaPeticion } from '#portal/comprobantes'
  * - `facturasAPagar`: qué se cobra. Por defecto las facturas **vencidas** con saldo del servicio
  *   (lo que `/corte` muestra como vencido); si no hay vencidas, todo lo pendiente del servicio.
  *   Con `facturas` concretas (solo con sesión), deben ser del cliente (404 si no).
+ * - **Multiempresa:** un cobro en línea es de una sola empresa (NIT). Las facturas elegidas deben
+ *   ser de una misma empresa (422 `pago_de_varias_empresas` si no); el portal lo revisa antes de
+ *   llamar a A3, que igual lo vuelve a revisar.
  * - `urlRetornoPortal`: adonde la pasarela devuelve al cliente (`/corte?pago={cobro_id}`; el
  *   proveedor agrega `estado=pagado|fallido`). El portal lo muestra, pero la verdad es el webhook.
  * - `cobroParaCliente`: la vista sin datos internos (sin cliente, comisión ni proveedor).
@@ -108,9 +111,10 @@ export async function facturasAPagar(
         const filas = (await db
             .from('billing.facturas')
             .whereIn('id', unicas)
-            .select('id', 'cliente_id', 'estado', 'total', 'pagado')) as Array<{
+            .select('id', 'cliente_id', 'empresa_id', 'estado', 'total', 'pagado')) as Array<{
             id: number
             cliente_id: number
+            empresa_id: number
             estado: string
             total: string
             pagado: string
@@ -135,6 +139,7 @@ export async function facturasAPagar(
                 'Revisa las facturas que elegiste',
             )
         }
+        exigirUnaEmpresa(filas)
         return unicas
     }
 
@@ -148,14 +153,32 @@ export async function facturasAPagar(
         .orderBy('id', 'asc')
         .select(
             'id',
+            'empresa_id',
             db.raw(
                 `(estado = 'vencida' OR vence_en < (now() AT TIME ZONE 'America/Guatemala')::date) AS vencida`,
             ),
-        )) as Array<{ id: number; vencida: boolean }>
+        )) as Array<{ id: number; empresa_id: number; vencida: boolean }>
     const vencidas = filas.filter((f) => f.vencida)
     const elegidas = vencidas.length > 0 ? vencidas : filas
     if (elegidas.length === 0) throw new SinDeuda()
+    // Un servicio que cambió de empresa solo lo hace sin saldo: sus pendientes son de una sola.
+    exigirUnaEmpresa(elegidas)
     return elegidas.map((f) => Number(f.id))
+}
+
+/** 422 `pago_de_varias_empresas`: el pago en línea nunca mezcla empresas (cada NIT cobra lo suyo). */
+export class PagoDeVariasEmpresas extends ReglaNegocio {
+    constructor() {
+        super(
+            'Esas facturas son de empresas distintas y cada una se paga por separado. Elige las ' +
+                'facturas de una sola empresa (o paga un servicio a la vez).',
+            'pago_de_varias_empresas',
+        )
+    }
+}
+
+function exigirUnaEmpresa(facturas: Array<{ empresa_id: number }>): void {
+    if (new Set(facturas.map((f) => Number(f.empresa_id))).size > 1) throw new PagoDeVariasEmpresas()
 }
 
 export class SinDeuda extends ReglaNegocio {
@@ -181,6 +204,7 @@ export function errorPagoParaCliente(error: unknown): unknown {
         return noDisponible()
     }
     if (error.code === 'E_SIN_DEUDA') return new SinDeuda()
+    if (error.code === 'E_PAGO_DE_VARIAS_EMPRESAS') return new PagoDeVariasEmpresas()
     if (error instanceof ValidacionFallida) {
         const errores = (error.errores ?? []).filter((e) => e.field.startsWith('facturas.'))
         return new ValidacionFallida(

@@ -170,3 +170,15 @@ export const empresaPortalValidator = vine.compile(
             }),
     }),
 )
+
+export const vincularTelegramValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad()
+            .optional()
+            .meta({
+                description:
+                    'Empresa (de un servicio del cliente) cuyo bot se vincula. Sin ella: la única empresa de sus ' +
+                    'servicios o, con varias, el bot global',
+            }),
+    }),
+)

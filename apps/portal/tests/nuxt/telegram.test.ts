@@ -1,10 +1,18 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BOT_FIXTURE, CODIGO_TELEGRAM_FIXTURE, fijarSesionFixture, fijarTelegramFixture } from '~~/fixtures'
+import {
+    BOT_FIXTURE,
+    BOT_SUR_FIXTURE,
+    CODIGO_TELEGRAM_FIXTURE,
+    fijarCuentaFixture,
+    fijarSesionFixture,
+    fijarTelegramFixture,
+} from '~~/fixtures'
 import CuentaTelegram from '~/components/cuenta/Telegram.vue'
 import CuentaContacto from '~/components/cuenta/Contacto.vue'
-import { CONTACTO_FIXTURE } from '~~/fixtures/cuenta'
+import { CONTACTO_FIXTURE, CUENTA_DOS_EMPRESAS_FIXTURE } from '~~/fixtures/cuenta'
+import { MARCA_FIXTURE, MARCA_SUR_FIXTURE } from '~~/fixtures/empresa'
 
 /**
  * Vincular Telegram desde "Mis datos" contra los fixtures: tras pedir el enlace, la segunda
@@ -21,8 +29,8 @@ async function esperarHasta(condicion: () => boolean, ms = 2_000) {
     }
 }
 
-async function montar(vinculado = false, intervaloMs = 20) {
-    const wrapper = await mountSuspended(CuentaTelegram, { props: { vinculado, intervaloMs } })
+async function montar(vinculado = false, intervaloMs = 20, empresa: { id: number, nombre_comercial: string } | null = null) {
+    const wrapper = await mountSuspended(CuentaTelegram, { props: { vinculado, intervaloMs, empresa } })
     await flushPromises()
     await flushPromises()
     return wrapper
@@ -32,6 +40,7 @@ afterEach(() => {
     sessionStorage.clear()
     fijarSesionFixture(false)
     fijarTelegramFixture(true)
+    fijarCuentaFixture(null)
 })
 
 describe('vincular Telegram', () => {
@@ -56,7 +65,7 @@ describe('vincular Telegram', () => {
 
     it('al recargar con un código vigente sigue esperando al bot sin mostrar el código', async () => {
         fijarSesionFixture(true)
-        await useApi().POST('/api/v1/portal/telegram/vincular')
+        await useApi().POST('/api/v1/portal/telegram/vincular', { body: {} })
         sessionStorage.setItem('argos:telegram:vence', String(Date.now() + 60_000))
         // El fixture da el chat por vinculado en la segunda consulta: con 20 ms entre consultas,
         // en una máquina rápida ya pasó antes de revisar el estado "esperando". 300 ms deja ver ese
@@ -103,5 +112,31 @@ describe('vincular Telegram', () => {
             props: { contacto: { ...CONTACTO_FIXTURE, telegram_vinculado: true } },
         })
         expect(vinculado.text()).not.toContain('Primero vincula Telegram')
+    })
+})
+
+describe('Telegram por empresa (un bot por empresa)', () => {
+    it('la tarjeta de Fibra Sur vincula SU bot; la de Red Altiplano sigue sin vincular', async () => {
+        fijarSesionFixture(true)
+        fijarCuentaFixture(CUENTA_DOS_EMPRESAS_FIXTURE)
+        const sur = await montar(false, 20, MARCA_SUR_FIXTURE)
+        expect(sur.attributes('data-testid')).toBe(`telegram-empresa-${MARCA_SUR_FIXTURE.id}`)
+        expect(sur.text()).toContain(`Telegram de ${MARCA_SUR_FIXTURE.nombre_comercial}`)
+        expect(sur.text()).toContain(`@${BOT_SUR_FIXTURE}`)
+
+        await sur.find('[data-testid="telegram-vincular"]').trigger('click')
+        await flushPromises()
+        expect(sur.find('[data-testid="telegram-abrir"]').attributes('href'))
+            .toBe(`https://t.me/${BOT_SUR_FIXTURE}?start=${CODIGO_TELEGRAM_FIXTURE}`)
+        await esperarHasta(() => sur.find('[data-testid="telegram-vinculado"]').exists())
+        expect(sur.emitted('cambio')).toEqual([[true]])
+
+        // El bot de la otra empresa no le escribe todavía: su tarjeta ofrece vincularlo
+        const norte = await montar(false, 20, MARCA_FIXTURE)
+        expect(norte.find('[data-testid="telegram-vinculado"]').exists()).toBe(false)
+        expect(norte.find('[data-testid="telegram-vincular"]').text()).toContain(`Vincular Telegram de ${MARCA_FIXTURE.nombre_comercial}`)
+        expect(norte.text()).toContain(`@${BOT_FIXTURE}`)
+        // La espera de cada tarjeta se guarda aparte
+        expect(sessionStorage.getItem('argos:telegram:vence')).toBeNull()
     })
 })

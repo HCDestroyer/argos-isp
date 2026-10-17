@@ -142,9 +142,14 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca. Código: `ma
 | Dónde | Qué empresa |
 | --- | --- |
 | `GET /portal/quien-soy` (`/corte`) | `empresa`: la del servicio de esa IP (null sin identificar) |
-| `GET /portal/cuenta` | `empresa` en cada servicio; `empresa_principal` = la que tiene más servicios sin retirar (a igualdad, la del servicio más antiguo); sin servicios, la 1 |
+| `GET /portal/cuenta` | `empresa` en cada servicio; `empresa_principal` = la que tiene más servicios sin retirar (a igualdad, la del servicio más antiguo); sin servicios, la 1. `empresas[]` (`PortalCuentaEmpresa`): una sección por empresa con `saldo` (auxiliar CxC de su libro), `saldo_a_favor` y `facturas_pendientes` (`PortalFacturaPendiente`), de `estadoCuenta(clienteId).empresas` de A3; la principal primero |
 | `POST /portal/verificar` | `empresa_principal` en la sesión |
-| `GET /portal/facturas`, `/portal/facturas/:id` | `empresa` de cada factura: `SQL_EMPRESA_FACTURA` (hoy la del servicio; sin servicio, la 1) |
+| `GET /portal/facturas`, `/portal/facturas/:id` | `empresa` de cada factura: `SQL_EMPRESA_FACTURA` = `coalesce(f.empresa_id, s.empresa_id, 1)` (la que la emitió: una factura vieja de un servicio que cambió de empresa conserva su NIT) |
+| Cuentas de depósito (`GET /portal/empresa` → `cuentas_deposito`) | `listarCuentasDeposito(trx, empresaId)` de A3: solo las de esa empresa, activas y en quetzales; una empresa sin cuentas da `[]` |
+| `POST /portal/comprobantes` | La cuenta debe ser de la empresa del servicio: A3 responde 422 `cuenta_de_otra_empresa` y el portal lo reescribe para el cliente (campo `cuenta_bancaria_id`, sin ids internos) |
+| `POST /portal/pagos/iniciar` | Un cobro es de una sola empresa: facturas de varias → 422 `pago_de_varias_empresas` (el portal lo revisa antes de A3 y reescribe el de A3); por servicio o por IP, la empresa del servicio |
+| `GET /portal/telegram`, `POST /portal/telegram/vincular` | Vinculación por bot ("Varios bots" de `contratos/telegram.md`): `empresas[]` con `telegramPorEmpresa` de A6 y `empresa_id` opcional al pedir el código (404 si el cliente no tiene servicios en ella) |
+| `POST /portal/codigo` por Telegram | Sale por un bot que el cliente inició (el de la empresa del servicio de la IP o de su principal; si ese no lo tiene, el de otra empresa suya) y con la marca de esa empresa (`EnviarMensajeDirecto` con `empresa_id`) |
 | `GET /portal/empresa` | `?empresa_id=` (404 si no existe), `?de=cliente` (principal de la sesión, 401 sin ella) o, sin parámetros, la de la IP → la principal de la sesión → la 1. Agrega `id` y `logo_url` |
 | `GET /portal/empresas/:id/logo` | El logo (PNG o SVG saneado) por el walled garden, con `ETag` y caché larga (`logo_url` lleva `?v=`) |
 | Aviso de cobro (PDF) | Logo, razón social, NIT y dirección fiscal de la empresa de la factura |
@@ -153,16 +158,9 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca. Código: `ma
 (datos públicos de la empresa, los del aviso de cobro: pueden salir por la IP). La empresa 1 sin
 guardar (`version = 0`) da los valores por defecto del entorno.
 
-**Puntos de cambio pendientes de A3** (anotados en `.claude/integration/a5.md`):
-
-- `SQL_EMPRESA_FACTURA` (`marca.ts`): pasar a `coalesce(f.empresa_id, s.empresa_id, 1)` cuando exista
-  `billing.facturas.empresa_id`. La usan la lista, el detalle y el PDF.
-- Cuentas de depósito (`cuentas_deposito.ts`): mientras las cuentas no tengan empresa, son de la
-  principal (se muestran para la 1 o con una sola empresa activa; para otra, lista vacía y el
-  portal ofrece su contacto). Si `listarCuentasDeposito` devuelve `empresa_id`, se filtra por ella
-  sin más cambios.
-- La pasarela es una sola: `pago_en_linea` es igual para todas las empresas; cada cobro lleva
-  facturas de un servicio, es decir, de una empresa.
+La pasarela es una sola: `pago_en_linea` es igual para todas las empresas. Pruebas con dos empresas:
+`tests/portal/multiempresa.spec.ts` (cuentas por empresa, comprobante a cuenta ajena, pago mezclado,
+`/cuenta` por empresa, Telegram por bot y código de acceso por el bot vinculado).
 
 ### Promesa de pago desde el portal (tarea 4)
 
@@ -225,8 +223,8 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 
 | Ruta                                                            | Acción                                                                         | Qué hace                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/portal/telegram` (sesión)                          | `acceso/telegram.ts` (`estadoTelegram`, lectura)                               | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario                                                                                                                                                                 |
-| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado`                                                                                                                                                 |
+| `GET /api/v1/portal/telegram` (sesión)                          | `acceso/telegram.ts` (`estadoTelegram`, lectura)                               | `PortalTelegram`: vinculado (general), bot global disponible y su usuario, y `empresas[]` (`PortalTelegramEmpresa`: marca, `disponible`, `bot`, `vinculado` del bot de esa empresa, de `telegramPorEmpresa`)                                                          |
+| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | Cuerpo opcional `{ empresa_id }` (el bot de esa empresa; 404 si el cliente no tiene servicios en ella). 201 `{ codigo, enlace, bot, vence_en, empresa_id }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
 | `POST /api/v1/portal/telegram/desvincular` (sesión)             | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`)              | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
 
 ### Pago en línea desde el portal (semana 2)

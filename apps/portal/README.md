@@ -257,7 +257,10 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca.
 | `/contacto?empresa=<id>`: contacto de esa empresa (el soporte sin teléfono de una sección) | `app/pages/contacto.vue` |
 | Título y manifiesto con la empresa principal del cliente | `app/pages/cuenta.vue`, `server/routes/manifest.webmanifest.get.ts` |
 | Fixtures: `MARCA_FIXTURE`, `MARCA_SUR_FIXTURE`, `EMPRESA_SUR_FIXTURE`, `CUENTA_DOS_EMPRESAS_FIXTURE` (`?cuenta=dos_empresas` en desarrollo) | `fixtures/` |
-| Pruebas | `tests/nuxt/multiempresa.test.ts` |
+| `/cuenta`: saldo y facturas pendientes de cada empresa (`PortalCuenta.empresas`, el estado de cuenta de A3); una empresa con deuda y sin servicios también tiene su sección | `agruparPorEmpresa(servicios, principal, secciones)`, `resumenFacturas` en `app/utils/empresas.ts` |
+| Telegram por empresa: con servicios en varias, una tarjeta por empresa (`CuentaTelegram` con `empresa`) que vincula el bot de esa empresa (`empresa_id`); el acceso "Vincular Telegram" de cada grupo lleva a su tarjeta (`#telegram-<id>`) | `app/components/cuenta/Telegram.vue`, `app/composables/useTelegram.ts` |
+| Comprobante a la cuenta de otra empresa (422 `cuenta_de_otra_empresa`): aviso arriba y campo marcado. Pago en línea de varias empresas (422 `pago_de_varias_empresas`): "Cada empresa se paga por separado" | `app/components/comprobante/Subir.vue`, `app/components/pago/EnLinea.vue` |
+| Pruebas | `tests/nuxt/multiempresa.test.ts`, `tests/nuxt/telegram.test.ts`; axe en `tests/e2e/accesibilidad.spec.ts` |
 
 `useEmpresa` guarda una consulta por empresa (`portal:empresa:<id>`, `portal:empresa:cliente` y
 `portal:empresa`); en pruebas se limpian con `clearNuxtData(clave => clave.startsWith('portal:empresa'))`.
@@ -283,3 +286,12 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca.
 | Layout con encabezado de la empresa y pie | `app/layouts/default.vue` |
 | Fixtures y `fetch` falso | `fixtures/`, `app/utils/fetchFixtures.ts` |
 | Formato de fechas (America/Guatemala) y quetzales; `EstadoServicioBadge` | `app/utils/`, `app/components/` |
+
+## Accesibilidad (axe en navegador)
+
+`pnpm --filter @argosisp/portal test:e2e` (Playwright, navegadores de `PLAYWRIGHT_BROWSERS_PATH`)
+levanta el portal en modo fixtures y pasa axe (WCAG 2.1 A/AA, contraste incluido) por `/corte`,
+`/entrar`, `/contacto` y las cuatro secciones de `/cuenta` (una empresa y `?cuenta=dos_empresas`),
+en claro y oscuro, a 390 px y 1280 px. Dependencias de desarrollo: `@playwright/test` 1.56.1 y
+`@axe-core/playwright` 4.11.0 (las mismas versiones que `apps/web`). `?cuenta=dos_empresas` se
+recuerda en la pestaña (`sessionStorage`) para que siga después de entrar con el código.

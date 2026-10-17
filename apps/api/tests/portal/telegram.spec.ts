@@ -87,7 +87,15 @@ test.group('Portal: vincular Telegram', (group) => {
         const c = await clienteConSesion()
 
         const inicial = await estado(client.get('/api/v1/portal/telegram').header('Cookie', c.cookie), 200)
-        assert.deepEqual(inicial.body(), { vinculado: false, disponible: true, bot: 'ArgosPruebaBot' })
+        assert.containsSubset(inicial.body(), { vinculado: false, disponible: true, bot: 'ArgosPruebaBot' })
+        // Una empresa (la del servicio): su bot es el global y aún no le escribe al cliente.
+        assert.lengthOf(inicial.body().empresas, 1)
+        assert.containsSubset(inicial.body().empresas[0], {
+            empresa: { id: 1 },
+            disponible: true,
+            bot: 'ArgosPruebaBot',
+            vinculado: false,
+        })
 
         const req = unico('req')
         const vinculo = await estado(vincular(client, c.cookie, req), 201)

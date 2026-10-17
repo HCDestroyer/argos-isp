@@ -5,7 +5,10 @@
  * - `inferior` (móvil, < md): barra fija abajo, de vidrio, con las cuatro secciones. Cada destino
  *   mide al menos 56 × 44 px y la barra deja libre la zona del indicador de inicio del iPhone
  *   (`env(safe-area-inset-bottom)`, con `viewport-fit=cover` en `nuxt.config.ts`).
- * - `superior` (escritorio, ≥ md): las mismas secciones como barra centrada sobre el contenido.
+ * - `superior` (escritorio, ≥ md): las mismas secciones como barra centrada sobre el contenido. La
+ *
+ * En las dos, la activa lleva el texto en `text-highlighted` sobre el tinte teal: el primario sobre
+ * su propio tinte, encima del vidrio, no llegaba al contraste AA (axe, `tests/e2e/accesibilidad.spec.ts`).
  */
 const props = defineProps<{
     variante: 'inferior' | 'superior'
@@ -39,10 +42,10 @@ const activa = computed(() => seccionActiva(route))
                     :data-testid="`nav-${item.seccion}`"
                     :ui="props.variante === 'inferior'
                         ? {
-                            base: 'min-h-14 flex-col gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium',
+                            base: ['min-h-14 flex-col gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium', activa === item.seccion ? 'text-highlighted' : ''].join(' '),
                             leadingIcon: 'size-6',
                         }
-                        : { base: 'min-h-11 gap-2 text-sm' }"
+                        : { base: activa === item.seccion ? 'min-h-11 gap-2 text-sm text-highlighted' : 'min-h-11 gap-2 text-sm' }"
                 />
             </li>
         </ul>

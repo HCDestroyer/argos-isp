@@ -90,3 +90,19 @@ export function mensajeProblema(problema: Problem): string {
 export function erroresDeFormulario(problema: Problem): FormError[] {
     return (problema.errors ?? []).map(error => ({ name: error.field, message: error.message }))
 }
+
+/** Tipo RFC 9457 de un problema de la API (`urn:argosisp:problema:<codigo>`). */
+export function codigoProblema(problema: Problem): string | null {
+    const prefijo = 'urn:argosisp:problema:'
+    return problema.type?.startsWith(prefijo) ? problema.type.slice(prefijo.length) : null
+}
+
+/** 422 de A3: la cuenta bancaria del comprobante es de otra empresa que la del servicio (multiempresa). */
+export function esCuentaDeOtraEmpresa(problema: Problem): boolean {
+    return problema.status === 422 && codigoProblema(problema) === 'cuenta_de_otra_empresa'
+}
+
+/** 422: el pago en línea mezclaría facturas de varias empresas (cada NIT se paga por separado). */
+export function esPagoDeVariasEmpresas(problema: Problem): boolean {
+    return problema.status === 422 && codigoProblema(problema) === 'pago_de_varias_empresas'
+}

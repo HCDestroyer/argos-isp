@@ -179,6 +179,13 @@ function mostrarProblema(problema: Problem) {
         errorEnvio.value = 'Tu sesión terminó. Vuelve a entrar con tu código para enviar el comprobante.'
         return
     }
+    if (esCuentaDeOtraEmpresa(problema)) {
+        // Multiempresa: la cuenta elegida es de otra empresa (otro NIT). El aviso arriba lo explica
+        // y el campo de la cuenta queda marcado.
+        errorEnvio.value = mensajeProblema(problema)
+        formulario.value?.setErrors(erroresDeFormulario(problema).filter(error => error.name === 'cuenta_bancaria_id'))
+        return
+    }
     const errores: FormError[] = erroresDeFormulario(problema).filter(error => error.name && CAMPOS.has(error.name))
     if (errores.length > 0) {
         formulario.value?.setErrors(errores)

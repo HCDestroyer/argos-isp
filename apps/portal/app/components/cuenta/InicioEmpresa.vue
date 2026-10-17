@@ -1,19 +1,25 @@
 <script setup lang="ts">
+import Decimal from 'decimal.js'
+
 /**
  * Un grupo del inicio: los servicios de UNA empresa con su marca y sus accesos rápidos.
  *
  * Los accesos salen de los datos de esa empresa (`useEmpresa({ empresaId })`: pago en línea,
  * cuentas, instrucciones y soporte), nunca de otra. Con una sola empresa la marca ya está en la barra
  * superior y aquí no se repite; con varias, cada sección lleva el logo y el nombre de la empresa
- * que factura sobre sus servicios, su saldo y sus accesos.
+ * que factura sobre sus servicios, su saldo y sus accesos. El saldo y las facturas pendientes son
+ * los de la sección de esa empresa en el estado de cuenta (`PortalCuenta.empresas`): cada NIT
+ * cobra lo suyo.
  */
 const props = defineProps<{
     grupo: GrupoEmpresa
     mostrarMarca: boolean
     /** Servicio → se le puede pedir promesa ahora (condiciones de la API). */
     promesaPorServicio: Record<number, boolean | null>
-    /** Telegram es del cliente, no de la empresa: solo un grupo lo ofrece. */
+    /** Telegram de este grupo: el del bot de su empresa (con varias) o el único (en el primer grupo). */
     telegram?: { disponible: boolean, vinculado: boolean } | null
+    /** Adonde lleva "Vincular Telegram" (la tarjeta de esta empresa). */
+    rutaTelegram?: string
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +30,13 @@ const emit = defineEmits<{
 // Único por empresa (dos secciones con `useId` podían repetir id tras recargar la cuenta).
 const idTitulo = computed(() => `titulo-${props.grupo.clave}`)
 const { empresa } = useEmpresa({ empresaId: () => props.grupo.empresa.id })
+
+/** Facturas pendientes de esta empresa y su saldo a favor (sección de `PortalCuenta.empresas`). */
+const facturas = computed(() => resumenFacturas(props.grupo.cuenta))
+const aFavor = computed(() => {
+    const saldo = props.grupo.cuenta?.saldo_a_favor
+    return saldo && new Decimal(saldo).greaterThan(0) ? saldo : null
+})
 
 const accesos = computed(() => {
     const permisos = props.grupo.servicios.map(s => props.promesaPorServicio[s.id] ?? null)
@@ -38,7 +51,7 @@ const accesos = computed(() => {
         promesaDisponible,
         telegram: props.telegram ?? null,
         soporte: soporteDe(contacto, rutaContactoEmpresa(props.grupo.empresa.id)),
-        rutaTelegram: '/cuenta?seccion=cuenta#telegram',
+        rutaTelegram: props.rutaTelegram ?? '/cuenta?seccion=cuenta#telegram',
     })
 })
 </script>
@@ -73,10 +86,21 @@ const accesos = computed(() => {
                     NIT {{ props.grupo.empresa.nit }}
                 </p>
             </div>
-            <span class="ms-auto shrink-0 text-sm font-semibold tabular-nums text-highlighted">
+            <span
+                class="ms-auto shrink-0 text-sm font-semibold tabular-nums text-highlighted"
+                data-testid="saldo-grupo"
+            >
                 {{ formatearQuetzales(props.grupo.montoAdeudado) }}
             </span>
         </div>
+        <p
+            v-if="props.mostrarMarca && (facturas || aFavor)"
+            class="-mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted"
+            data-testid="facturas-grupo"
+        >
+            <span v-if="facturas">{{ facturas }}</span>
+            <span v-if="aFavor">Saldo a favor {{ formatearQuetzales(aFavor) }}</span>
+        </p>
         <h2
             v-else
             :id="idTitulo"
@@ -91,7 +115,10 @@ const accesos = computed(() => {
             @accion="emit('accion', $event)"
         />
 
-        <UCard :ui="{ body: 'p-0 sm:p-0' }">
+        <UCard
+            v-if="props.grupo.servicios.length > 0"
+            :ui="{ body: 'p-0 sm:p-0' }"
+        >
             <ul class="divide-y divide-default">
                 <li
                     v-for="servicio in props.grupo.servicios"

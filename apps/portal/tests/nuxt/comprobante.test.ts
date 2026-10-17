@@ -187,6 +187,17 @@ describe('modal "Subir comprobante de pago"', () => {
         expect(texto()).toContain('Sube una foto (JPG, PNG o WebP) o un PDF del comprobante.')
     })
 
+    it('422 cuenta de otra empresa: lo explica arriba, marca la cuenta y no se envía', async () => {
+        fijarComprobanteFixture('otra_empresa')
+        const wrapper = await montarModal()
+        await llenarYEnviar()
+        expect(wrapper.emitted('enviado')).toBeUndefined()
+        const aviso = document.querySelector('[data-testid="comprobante-error-envio"]')?.textContent ?? ''
+        expect(aviso).toContain('Esa cuenta es de otra empresa, no de la que te factura este servicio')
+        expect(texto()).toContain('Elige una de las cuentas de tu servicio.')
+        expect(document.querySelector('[data-testid="comprobante-enviado"]')).toBeNull()
+    })
+
     it('archivo no permitido: no se envía', async () => {
         const wrapper = await montarModal()
         await llenarYEnviar(archivo('boleta.heic', 'image/heic'))

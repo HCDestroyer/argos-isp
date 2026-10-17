@@ -38,6 +38,20 @@ export const CONTACTO_FIXTURE: Schema<'PortalContacto'> = {
     version: 3,
 }
 
+/** Factura pendiente de la sección de una empresa (`PortalFacturaPendiente`), como la devuelve la API. */
+function pendiente(datos: Partial<Schema<'PortalFacturaPendiente'>> & { id: number }): Schema<'PortalFacturaPendiente'> {
+    return {
+        numero: String(datos.id),
+        servicio_id: 41,
+        vence_en: '2026-10-10',
+        estado: 'vencida',
+        vencida: true,
+        total: '175.00',
+        saldo: '175.00',
+        ...datos,
+    }
+}
+
 export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
     cliente: CONTACTO_FIXTURE,
     servicios: [
@@ -53,6 +67,20 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
     ],
     monto_adeudado: '550.00',
     empresa_principal: MARCA_FIXTURE,
+    // Las pendientes de `FACTURAS_FIXTURE`, la más antigua primero.
+    empresas: [
+        {
+            empresa: MARCA_FIXTURE,
+            saldo: '550.00',
+            saldo_a_favor: '0.00',
+            facturas_pendientes: [
+                pendiente({ id: 1101, vence_en: '2026-08-10' }),
+                pendiente({ id: 1150, vence_en: '2026-09-10' }),
+                pendiente({ id: 1160, vence_en: '2026-09-25', estado: 'parcial', total: '30.00', saldo: '25.00' }),
+                pendiente({ id: 1203, vence_en: '2026-10-10' }),
+            ],
+        },
+    ],
 }
 
 /**
@@ -75,6 +103,25 @@ export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
     ],
     monto_adeudado: '573.00',
     empresa_principal: MARCA_FIXTURE,
+    empresas: [
+        {
+            empresa: MARCA_FIXTURE,
+            saldo: '175.00',
+            saldo_a_favor: '0.00',
+            facturas_pendientes: [
+                pendiente({ id: 1203, vence_en: '2099-10-10', estado: 'emitida', vencida: false }),
+            ],
+        },
+        {
+            empresa: MARCA_SUR_FIXTURE,
+            saldo: '398.00',
+            saldo_a_favor: '25.00',
+            facturas_pendientes: [
+                pendiente({ id: 2201, servicio_id: 57, vence_en: '2026-09-05', total: '199.00', saldo: '199.00' }),
+                pendiente({ id: 2250, servicio_id: 57, vence_en: '2026-10-05', total: '199.00', saldo: '199.00' }),
+            ],
+        },
+    ],
 }
 
 function factura(datos: Partial<Schema<'PortalFactura'>> & { id: number }): Schema<'PortalFactura'> {

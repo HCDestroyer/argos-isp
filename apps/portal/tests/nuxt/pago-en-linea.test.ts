@@ -126,6 +126,17 @@ describe('botón "Pagar en línea"', () => {
         expect(claves[0]).not.toBe(claves[1])
     })
 
+    it('facturas de varias empresas: "Cada empresa se paga por separado" y no sale a la pasarela', async () => {
+        fijarPagoFixture('varias_empresas')
+        const wrapper = await montarBoton()
+        await wrapper.find('[data-testid="pagar-en-linea"]').trigger('click')
+        await esperar()
+        const error = wrapper.find('[data-testid="pagar-en-linea-error"]')
+        expect(error.text()).toContain('Cada empresa se paga por separado')
+        expect(error.text()).toContain('cada una se paga por separado')
+        expect(salir).not.toHaveBeenCalled()
+    })
+
     it('sin pasarela configurada se ve apagado y no llama a la API', async () => {
         fijarEmpresaFixture({ ...EMPRESA_FIXTURE, pago_en_linea: false })
         const wrapper = await montarBoton()
