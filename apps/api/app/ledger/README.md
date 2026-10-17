@@ -66,6 +66,16 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - `saldoCliente(cliente_id)`: suma del auxiliar CxC (debe − haber). Positivo = el cliente debe.
 - `libroDiario` (filtros `desde`, `hasta`, `origen_tipo`, `origen_id`; cada movimiento con `cliente_nombre`), `libroMayor` (saldo acumulado por línea, consistente entre páginas), `listarCuentas`.
 
+## Diarios y numeración guardada (`diarios.ts`, contrato de localización fiscal §10.7)
+
+- `ledger.diarios` por empresa: `VEN` ventas, `COB` cobros, `COM` compras y egresos, `IMP`, `CIE`, `VAR`, un `CAJ-<caja>` por caja y un `BAN-<cuenta>` por cuenta bancaria propia. Se crean en la migración para lo existente y, después, cuando un asiento los necesita por primera vez.
+- Diario de cada asiento (`diarioDeAsiento`): factura, mora y nota de crédito → `VEN`; ajuste → `VAR`; si toca la cuenta de una caja → `CAJ-n`; la subcuenta de una cuenta bancaria → `BAN-n`; si no, pago → `COB`, egreso → `COM`. `RegistrarAsiento` acepta `diario` (código) para fijarlo; el reverso va al diario de su original.
+- **Número** (`numerarAsiento`, en la transacción de `RegistrarAsiento`): `ledger.secuencias` (`diario_id`, `anio`, `ultimo`) con `SELECT … FOR UPDATE` y `ultimo + 1`; se guarda en `ledger.asientos_numeros` (único `diario_id, anio, numero`). Sin huecos ni repetidos: dos asientos simultáneos del mismo diario esperan su turno y un rollback deshace también la secuencia. Un trigger solo deja avanzar la secuencia de uno en uno. Un asiento con fecha anterior no cambia el número de nadie.
+- **Partida** del Libro Diario: `ledger.asientos_partidas`, correlativo por empresa y año, se asigna en `cerrarPeriodo` a los asientos del mes que no la tienen, en orden `(fecha, numero, id)`, después de la última del año. Las partidas asignadas nunca cambian. El trigger rechaza una partida de un mes abierto.
+- **Reabrir** (decisión del líder, 2026-10-17): solo si ningún mes posterior **cerrado** del mismo año tiene partidas (409 `reapertura_fuera_de_orden`: se reabre del más reciente hacia atrás). Al volver a cerrar, los asientos nuevos del mes reciben las partidas siguientes. Libros emitidos o bloqueo duro impiden reabrir (fase fiscal). **Confirmar con contador**: si las partidas de asientos agregados tras una reapertura pueden ir al final de la secuencia (con el mes posterior también reabierto, quedan después de las de ese mes).
+- `GET /libro/diario` y `GET /libro/asientos/:id` traen `diario`, `numero` y `partida` (null con el mes abierto).
+- Inmutables: `asientos_numeros` y `asientos_partidas` (trigger y `REVOKE`); `secuencias` solo admite `UPDATE (ultimo)`; `diarios` es configuración (`version`).
+
 ## Cajas y turnos (tarea 9, `cajas.ts`)
 
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |

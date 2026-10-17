@@ -4,6 +4,7 @@ import {
     auditable,
     booleano,
     definirEsquema,
+    entero,
     enumerado,
     fecha,
     id,
@@ -87,6 +88,19 @@ export const Asiento = definirEsquema(
                 description: 'Asiento que este revierte (correcciones por reverso)',
             },
             revertido_por: { ...nulable(id), description: 'Asiento de reverso de este, si ya se revirtió' },
+            diario: {
+                ...nulable(texto),
+                description: 'Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>)',
+            },
+            numero: {
+                ...nulable(entero),
+                description: 'Número del asiento en su diario y año, guardado al registrar; nunca cambia',
+            },
+            partida: {
+                ...nulable(entero),
+                description:
+                    'Partida del Libro Diario (correlativo por empresa y año), asignada al cerrar el mes; null mientras el mes esté abierto',
+            },
             revertible: {
                 ...booleano,
                 description:
@@ -100,7 +114,7 @@ export const Asiento = definirEsquema(
             created_at: instante,
             movimientos: lista(Movimiento),
         },
-        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id'],
+        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id', 'diario', 'numero', 'partida'],
     ),
 )
 
