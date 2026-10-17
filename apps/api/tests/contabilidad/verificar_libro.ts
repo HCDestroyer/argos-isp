@@ -869,7 +869,7 @@ async function verificarLibroCon(
             AND f.estado <> 'anulada' AND ${E('d.empresa_id')}`,
     )
     await revisar(
-        '12.dte_distinto_del_documento (total, IVA y empresa del DTE = los de su factura, mora o nota; el aviso va aparte; NCRE solo sobre DTE certificado)',
+        '12.dte_distinto_del_documento (empresa y tipo del DTE = los de su documento; total e IVA de la NCRE = los de su nota, referida a un DTE certificado)',
         `SELECT d.id AS dte_id, d.documento_tipo, d.documento_id, d.total::text, d.iva::text,
                 coalesce(f.total, n.monto)::text AS total_documento, coalesce(f.iva, n.iva)::text AS iva_documento
            FROM fiscal.dte d
@@ -878,9 +878,8 @@ async function verificarLibroCon(
           WHERE ${E('d.empresa_id')}
             AND (coalesce(f.id, n.id) IS NULL
                  OR d.empresa_id <> coalesce(f.empresa_id, n.empresa_id)
-                 -- el DTE de un aviso se certifica por el neto: lo revisa 12.dte_de_aviso_distinto_del_neto
-                 OR (NOT coalesce(f.aviso_cobro, false)
-                     AND (d.total <> coalesce(f.total, n.monto) OR d.iva <> coalesce(f.iva, n.iva)))
+                 -- el DTE de una factura o mora se certifica por el neto: lo revisa 12.dte_distinto_del_neto
+                 OR (d.documento_tipo = 'nota_credito' AND (d.total <> n.monto OR d.iva <> n.iva))
                  OR (d.documento_tipo = 'factura' AND f.tipo <> 'servicio')
                  OR (d.documento_tipo = 'nota_debito' AND (f.tipo <> 'mora' OR d.tipo_dte <> 'NDEB'))
                  OR (d.documento_tipo = 'nota_credito' AND (d.tipo_dte <> 'NCRE' OR NOT EXISTS (
@@ -889,7 +888,7 @@ async function verificarLibroCon(
     )
 
     await revisar(
-        '12.dte_de_aviso_distinto_del_neto (decisión del líder sobre H5: DTE del aviso = bruto − notas internas emitidas antes del DTE y sin NCRE propia, total e IVA exactos)',
+        '12.dte_distinto_del_neto (decisión del líder, H5 y H11: DTE de factura o mora = bruto − notas emitidas antes del DTE y sin NCRE propia, total e IVA exactos)',
         `WITH x AS (
              SELECT d.id AS dte_id, d.estado, f.id AS factura_id, d.total, d.iva, f.total AS bruto, f.iva AS iva_bruto,
                     coalesce((SELECT sum(n.monto) FROM billing.notas_credito n
@@ -901,7 +900,7 @@ async function verificarLibroCon(
                                  AND NOT EXISTS (SELECT 1 FROM fiscal.dte o
                                                   WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id)), 0) AS iva_notas
                FROM fiscal.dte d JOIN billing.facturas f ON f.id = d.documento_id
-              WHERE d.documento_tipo IN ('factura', 'nota_debito') AND f.aviso_cobro AND ${E('d.empresa_id')}
+              WHERE d.documento_tipo IN ('factura', 'nota_debito') AND ${E('d.empresa_id')}
          )
          SELECT dte_id, estado, factura_id, total::text, iva::text, (bruto - notas)::text AS total_neto,
                 (iva_bruto - iva_notas)::text AS iva_neto
