@@ -12,6 +12,7 @@ import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
 import { empresas } from './empresas/datos'
+import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { configuracionGlobal } from './notificaciones/datos'
 import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -109,6 +110,8 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** Localización fiscal por empresa (A3, fase 2). */
+    fiscal: FiscalFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -154,6 +157,7 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        fiscal: fiscalInicial(),
     })
     sembrarNotasCredito(datos)
     return datos
