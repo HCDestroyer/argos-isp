@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal } from '#tests/ayudas'
+import EditarCliente from '#core/actions/editar_cliente'
 import { ColaFalsa, crearCliente, crearServicio, eventoOutbox } from '#tests/notify/ayudas_notify'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { ConsumidorHorus } from '#integraciones/horus/consumidor'
@@ -186,6 +187,40 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
             const r = await entregarPendientes()
             assert.equal(r.descartados, 1)
             assert.lengthOf(horus.peticiones, 0)
+        } finally {
+            await horus.detener()
+        }
+    })
+
+    test('cliente.actualizado real de A1 (EditarCliente) llega a Horus', async ({ assert }) => {
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            horus.responder('/receptor', () => ({ status: 200 }))
+            await fijarConector({
+                url_base: horus.url,
+                webhook_salida_url: `${horus.url}/receptor`,
+                webhook_salida_secreto: SECRETO_SALIDA,
+            })
+            const clienteId = await crearCliente()
+            const fila = await db.from('core.clientes').where('id', clienteId).first()
+            await new EditarCliente().execute(
+                { id: clienteId, version: fila.version, nombre: `Renombrado ${clienteId}` },
+                contextoPrueba(),
+            )
+            const ev = await db
+                .from('audit.outbox')
+                .where('evento', 'cliente.actualizado')
+                .whereRaw("(payload->>'cliente_id')::bigint = ?", [clienteId])
+                .first()
+            assert.isNotNull(ev)
+            await consumidor.procesar({ id: ev.id, evento: ev.evento, payload: ev.payload })
+            await entregarPendientes()
+            const recibido = horus.de('/receptor')[0]!.json
+            assert.containsSubset(recibido, {
+                id: idWebhook(ev.id),
+                evento: 'cliente.actualizado',
+                payload: { cliente_id: clienteId, campos: ['nombre'] },
+            })
         } finally {
             await horus.detener()
         }

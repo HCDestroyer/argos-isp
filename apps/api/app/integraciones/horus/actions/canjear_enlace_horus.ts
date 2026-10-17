@@ -27,7 +27,7 @@ export interface SalidaCanjearEnlace {
 }
 
 /**
- * `integraciones.horus.canjear_enlace`: Horus canjea, de servidor a servidor, el enlace que generó
+ * `horus.canjear_enlace`: Horus canjea, de servidor a servidor, el enlace que generó
  * Argos (§1.4). Lo autentica el código (un solo uso, 15 min; 410 si venció, se usó o no existe).
  *
  * - Guarda cifrados el `hf_pat_`, la URL base y el receptor de Horus con su secreto.
@@ -37,7 +37,7 @@ export interface SalidaCanjearEnlace {
  *   y auditado (secretos como `***`).
  */
 export default class CanjearEnlaceHorus extends DomainAction<EntradaCanjearEnlace, SalidaCanjearEnlace> {
-    readonly nombre = 'integraciones.horus.canjear_enlace'
+    readonly nombre = 'horus.canjear_enlace'
 
     protected async handle(input: EntradaCanjearEnlace, t: Transaccion): Promise<SalidaCanjearEnlace> {
         t.fijarEmpresa(null)

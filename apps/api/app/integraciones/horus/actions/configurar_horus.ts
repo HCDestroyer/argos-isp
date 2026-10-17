@@ -37,7 +37,7 @@ function limpio(valor: string | null | undefined): string | null | undefined {
 }
 
 /**
- * `integraciones.horus.configurar`: guarda el conector Horus (una fila por instalación).
+ * `horus.configurar`: guarda el conector Horus (una fila por instalación).
  *
  * - Control optimista por `version` (409); sin fila, `version: 0` la crea (apagada por defecto).
  * - URL base y receptor de Horus solo `https://` (salvo `HORUS_PERMITIR_HTTP`, laboratorio).
@@ -47,7 +47,7 @@ function limpio(valor: string | null | undefined): string | null | undefined {
  * - Emite `horus.config_cambiada` (los procesos releen sin TTL).
  */
 export default class ConfigurarHorus extends DomainAction<EntradaConfigurarHorus, SalidaConfigurarHorus> {
-    readonly nombre = 'integraciones.horus.configurar'
+    readonly nombre = 'horus.configurar'
 
     protected async handle(input: EntradaConfigurarHorus, t: Transaccion): Promise<SalidaConfigurarHorus> {
         const antes = await bloquearConector(t)

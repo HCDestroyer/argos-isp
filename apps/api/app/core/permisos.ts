@@ -89,13 +89,12 @@ export const PERMISOS = {
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
 
-    'integraciones.horus.ver':
-        'Ver el conector con Horus Flow y sus datos (consumo, salud y seguridad de los servicios)',
-    'integraciones.horus.configurar':
+    'horus.ver':
+        'Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)',
+    'horus.configurar':
         'Configurar el conector con Horus Flow (URL, código de conexión, webhooks, enlace de conexión); solo admin',
-    'integraciones.horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
-    'integraciones.horus.abrir':
-        'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
+    'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
+    'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
 
     'empresas.ver': 'Ver las empresas (NIT) de la instalación',
     'empresas.crear': 'Crear empresas (NIT)',
@@ -118,6 +117,12 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'horus.generar_token':
+        'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
+    'horus.revocar_token': 'Revocar el token de una integración',
+    'sso.emitir':
+        'Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus)',
+    'vinculaciones.revocar': 'Revocar las vinculaciones de autologin de todos los usuarios o de uno',
 } as const satisfies Record<string, string>
 
 export type Permiso = keyof typeof PERMISOS

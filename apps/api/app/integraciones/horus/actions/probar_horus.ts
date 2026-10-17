@@ -15,7 +15,7 @@ export interface ResultadoPruebaHorus {
 }
 
 /**
- * `integraciones.horus.probar`: "Probar conexión" del panel. Usa la configuración **guardada**,
+ * `horus.probar`: "Probar conexión" del panel. Usa la configuración **guardada**,
  * esté encendido o no el conector, sin respetar la pausa de la espera exponencial.
  *
  * - Pide `GET /api/v1/routers/status` con `Authorization: Bearer hf_pat_…` y mide la latencia.
@@ -25,7 +25,7 @@ export interface ResultadoPruebaHorus {
  * - Guarda el resultado en el conector (`ultima_prueba_*`, sin tocar su `version`).
  */
 export default class ProbarHorus extends DomainAction<Record<string, never>, ResultadoPruebaHorus> {
-    readonly nombre = 'integraciones.horus.probar'
+    readonly nombre = 'horus.probar'
 
     protected async handle(_input: Record<string, never>, t: Transaccion): Promise<ResultadoPruebaHorus> {
         t.fijarEmpresa(null)

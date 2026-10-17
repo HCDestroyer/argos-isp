@@ -9,13 +9,16 @@ import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosD
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
- * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, nombre fiscal, NIT/CUI,
+ * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, código (`C-000455`) o código
+ * externo (exactos), nombre fiscal, NIT/CUI,
  * teléfono o móvil, correo, user_ppp de alguno de sus servicios o una IP (IPv4 vigente o IPv6
  * dentro de un prefijo vigente).
  */
 
 export const COLUMNAS_CLIENTE = [
     'id',
+    'codigo',
+    'codigo_externo',
     'nombre',
     'tipo',
     'nit_cui',
@@ -118,6 +121,8 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string)
     const nit = texto.replace(/[\s-]/g, '').toUpperCase()
     consulta.where((w) => {
         w.whereILike('c.nombre', patron)
+            .orWhere('c.codigo', texto.toUpperCase())
+            .orWhereRaw('lower(c.codigo_externo) = ?', [texto.toLowerCase()])
             .orWhereILike('c.nombre_fiscal', patron)
             .orWhereILike('c.email', patron)
             .orWhere('c.nit_cui', nit)

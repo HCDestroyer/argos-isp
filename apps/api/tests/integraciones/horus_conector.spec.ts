@@ -94,7 +94,7 @@ test.group('integraciones · horus · configuración', (group) => {
         assert.notInclude(JSON.stringify(fila), TOKEN_HORUS)
 
         // auditoría y outbox sin secretos
-        const acciones = await db.from('audit.acciones').where('accion', 'integraciones.horus.configurar')
+        const acciones = await db.from('audit.acciones').where('accion', 'horus.configurar')
         const cambios = await db.from('audit.cambios').where('entidad_tipo', 'conector_horus')
         const outbox = await db.from('audit.outbox').where('evento', 'horus.config_cambiada')
         const auditoria = JSON.stringify([acciones, cambios, outbox])
@@ -164,15 +164,17 @@ test.group('integraciones · horus · configuración', (group) => {
             .join('core.roles as r', 'r.id', 'rp.role_id')
             .join('core.permisos as p', 'p.id', 'rp.permiso_id')
             .where('r.nombre', 'admin')
-            .whereLike('p.nombre', 'integraciones.horus.%')
+            .whereLike('p.nombre', 'horus.%')
             .select('p.nombre')) as Array<{ nombre: string }>
         assert.sameMembers(
             admin.map((p) => p.nombre),
             [
-                'integraciones.horus.ver',
-                'integraciones.horus.configurar',
-                'integraciones.horus.probar',
-                'integraciones.horus.abrir',
+                'horus.ver',
+                'horus.configurar',
+                'horus.probar',
+                'horus.abrir',
+                'horus.generar_token',
+                'horus.revocar_token',
             ],
         )
     })

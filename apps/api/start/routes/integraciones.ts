@@ -76,7 +76,7 @@ const integraciones: Ruta[] = [
         resumen: 'Conector con Horus Flow: configuración (secretos como ***) y salud de la conexión',
         descripcion: DESCRIPCION_CONECTOR,
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         respuesta: { status: 200, descripcion: 'Conector', esquema: ConectorHorus },
         handler: () => verConector(),
     }),
@@ -91,7 +91,7 @@ const integraciones: Ruta[] = [
             'secreto del receptor de Argos y lo devuelve **una sola vez** en `webhook_entrada_secreto_nuevo`. ' +
             'Emite `horus.config_cambiada`.',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.configurar',
+        permiso: 'horus.configurar',
         cuerpo: v.configurarHorusValidator,
         versionada: true,
         respuesta: { status: 200, descripcion: 'Conector guardado', esquema: ConectorHorusGuardado },
@@ -106,7 +106,7 @@ const integraciones: Ruta[] = [
             'Con la configuración guardada, encendida o no. Responde 200 aunque falle: `ok: false` y el ' +
             'error real (`ECONNREFUSED`, `Horus respondió 401: …`).',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.probar',
+        permiso: 'horus.probar',
         respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: ResultadoPruebaHorus },
         handler: (ctx) => new ProbarHorus().execute({}, ctx.contextoAccion()),
     }),
@@ -119,7 +119,7 @@ const integraciones: Ruta[] = [
             '§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda ' +
             'solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear`.',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.configurar',
+        permiso: 'horus.configurar',
         respuesta: { status: 201, descripcion: 'Enlace', esquema: EnlaceConexionHorus },
         handler: (ctx) =>
             new GenerarEnlaceHorus().execute({ base_url: baseArgos(ctx) }, ctx.contextoAccion()),
@@ -166,7 +166,7 @@ const integraciones: Ruta[] = [
             'que devuelve. El conector queda apagado. 422 `enlace_vencido` si Horus responde 410; 502 ' +
             '`horus_error` con el error real si Horus falla (no queda nada guardado).',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.configurar',
+        permiso: 'horus.configurar',
         cuerpo: v.conectarConEnlaceValidator,
         respuesta: { status: 200, descripcion: 'Conector', esquema: ConectorHorus },
         handler: (ctx, { cuerpo }) => {
@@ -196,7 +196,7 @@ const integraciones: Ruta[] = [
             '(el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 ' +
             '`horus_error` si Horus falla. Para `servicio` y `cliente` se revisa el acceso del usuario.',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.abrir',
+        permiso: 'horus.abrir',
         cuerpo: v.abrirEnHorusValidator,
         respuesta: { status: 200, descripcion: 'URL de Horus', esquema: TicketHorus },
         handler: async (ctx, { cuerpo }) => {
@@ -245,7 +245,7 @@ const integraciones: Ruta[] = [
         resumen: 'Webhooks enviados a Horus: estado, intentos y próximo reintento',
         descripcion: 'Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`.',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         query: v.listarEnviosHorusValidator,
         respuesta: { status: 200, descripcion: 'Página de envíos', esquema: pagina(EnvioHorus) },
         handler: (ctx, { query }) => listarEnviosHorus(query, empresasDeLaLista(ctx.empresa)),
@@ -256,7 +256,7 @@ const integraciones: Ruta[] = [
         operacion: 'horusRecibidosListar',
         resumen: 'Webhooks recibidos de Horus',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         query: v.listarRecibidosHorusValidator,
         respuesta: { status: 200, descripcion: 'Página de webhooks', esquema: pagina(WebhookHorusRecibido) },
         handler: (ctx, { query }) => listarRecibidosHorus(query, empresasDeLaLista(ctx.empresa)),
@@ -272,7 +272,7 @@ const integraciones: Ruta[] = [
             'servicio, por la IP actual (`consulta: address`). Incluye los últimos webhooks de Horus ' +
             'del servicio (`eventos_recientes`).',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         respuesta: { status: 200, descripcion: 'Consulta 360', esquema: Horus360Servicio },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
@@ -287,7 +287,7 @@ const integraciones: Ruta[] = [
         resumen: 'Consumo mensual del servicio según Horus (por día o total)',
         descripcion: DESCRIPCION_LECTURA,
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         query: v.consumoServicioValidator,
         respuesta: { status: 200, descripcion: 'Consumo', esquema: ConsumoHorus },
         handler: async (ctx, { params, query }) => {
@@ -303,7 +303,7 @@ const integraciones: Ruta[] = [
         resumen: 'Consumo mensual de varios servicios (hasta 500) según Horus',
         descripcion: DESCRIPCION_LECTURA + ' Es una lectura (POST por el tamaño de la lista).',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         cuerpo: v.consumoLotesValidator,
         respuesta: { status: 200, descripcion: 'Consumo', esquema: ConsumoHorus },
         handler: async (ctx, { cuerpo }) => {
@@ -321,7 +321,7 @@ const integraciones: Ruta[] = [
             ' Usa §3.5 de Horus; mientras Horus no lo tenga (H9) responde `modo: alternativa` con el ' +
             'último dato de la consulta 360 o de los webhooks, sin una llamada por servicio.',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.horus.ver',
+        permiso: 'horus.ver',
         cuerpo: v.seguridadLotesValidator,
         respuesta: { status: 200, descripcion: 'Seguridad', esquema: SeguridadHorus },
         handler: async (ctx, { cuerpo }) => {

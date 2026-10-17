@@ -36,7 +36,7 @@ export function partirEnlace(enlace: string): { url_horus: string; codigo: strin
 }
 
 /**
- * `integraciones.horus.conectar_enlace` (permiso `integraciones.horus.configurar`): "Conectar
+ * `horus.conectar_enlace` (permiso `horus.configurar`): "Conectar
  * con enlace de Horus" (§1.4, Argos es el sistema B). Argos emite su token `atk_` y su secreto de
  * receptor, llama a `POST <horus>/api/v1/integrations/argosisp/conexion/canjear` y guarda lo que
  * Horus devuelve (`hf_pat_`, receptor y secreto), cifrado.
@@ -45,7 +45,7 @@ export function partirEnlace(enlace: string): { url_horus: string; codigo: strin
  * El conector queda **apagado**. Solo `https` (salvo `HORUS_PERMITIR_HTTP`).
  */
 export default class ConectarConEnlaceHorus extends DomainAction<EntradaConectarConEnlace, VistaConector> {
-    readonly nombre = 'integraciones.horus.conectar_enlace'
+    readonly nombre = 'horus.conectar_enlace'
 
     protected async handle(input: EntradaConectarConEnlace, t: Transaccion): Promise<VistaConector> {
         const urlHorus = input.url_horus.replace(/\/+$/, '')

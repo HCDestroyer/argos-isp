@@ -23,13 +23,13 @@ export function hashCodigo(codigo: string): string {
 }
 
 /**
- * `integraciones.horus.generar_enlace` (permiso `integraciones.horus.configurar`): enlace de
+ * `horus.generar_enlace` (permiso `horus.configurar`): enlace de
  * conexión de §1.4. Código aleatorio de 32 bytes; en la base solo su SHA-256, con vencimiento a
  * los 15 min y un solo uso. El código va en el fragmento (`#`), que el navegador no envía.
  * El código no queda en la auditoría (la salida no se audita).
  */
 export default class GenerarEnlaceHorus extends DomainAction<EntradaGenerarEnlace, SalidaGenerarEnlace> {
-    readonly nombre = 'integraciones.horus.generar_enlace'
+    readonly nombre = 'horus.generar_enlace'
 
     protected async handle(input: EntradaGenerarEnlace, t: Transaccion): Promise<SalidaGenerarEnlace> {
         t.fijarEmpresa(null)

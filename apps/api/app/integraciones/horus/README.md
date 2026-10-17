@@ -33,22 +33,22 @@ compartido: `.claude/integration/contratos/horus.md` (1.2.0-propuesta, ADR-0030)
 | `receptor.ts`, `actions/recibir_webhook_horus.ts` | Webhooks Horus → Argos: firma, desfase ±5 min, dedupe por `id`, eventos `horus.*` |
 | `actions/generar_enlace_horus.ts`, `actions/canjear_enlace_horus.ts`, `actions/conectar_con_enlace_horus.ts` | Enlace de conexión (§1.4) en los dos sentidos |
 | `actions/abrir_en_horus.ts` | "Ver en Horus" (§1.5, lado emisor): ticket pedido por el servidor |
-| `token_argos.ts` | Interfaz `EmisorTokenHorus` del token `atk_` (implementación provisional hasta A1) |
+| `token_argos.ts` | Token `atk_` del canje: `GenerarTokenHorus` y `RevocarTokenHorus` de A1, anidadas (cada canje revoca el anterior) |
 | `firma.ts` | HMAC-SHA256 `v1=` de `timestamp + "." + cuerpo` |
 
 ## Acciones y permisos
 
 | Acción | Permiso de la ruta | Ruta |
 | --- | --- | --- |
-| `integraciones.horus.configurar` | `integraciones.horus.configurar` | `PUT /integraciones/horus` |
-| `integraciones.horus.probar` | `integraciones.horus.probar` | `POST /integraciones/horus/probar` |
-| `integraciones.horus.generar_enlace` | `integraciones.horus.configurar` | `POST /integraciones/horus/enlace` |
-| `integraciones.horus.conectar_enlace` | `integraciones.horus.configurar` | `POST /integraciones/horus/conexion/conectar` |
-| `integraciones.horus.canjear_enlace` | público (código del enlace) | `POST /integraciones/horus/conexion/canjear` |
-| `integraciones.horus.abrir` | `integraciones.horus.abrir` | `POST /integraciones/horus/abrir` |
-| `integraciones.horus.recibir_webhook` | público (firma HMAC) | `POST /integraciones/horus/webhook` |
+| `horus.configurar` | `horus.configurar` | `PUT /integraciones/horus` |
+| `horus.probar` | `horus.probar` | `POST /integraciones/horus/probar` |
+| `horus.generar_enlace` | `horus.configurar` | `POST /integraciones/horus/enlace` |
+| `horus.conectar_enlace` | `horus.configurar` | `POST /integraciones/horus/conexion/conectar` |
+| `horus.canjear_enlace` | público (código del enlace) | `POST /integraciones/horus/conexion/canjear` |
+| `horus.abrir` | `horus.abrir` | `POST /integraciones/horus/abrir` |
+| `horus.recibir_webhook` | público (firma HMAC) | `POST /integraciones/horus/webhook` |
 
-Lecturas (`integraciones.horus.ver`): `GET /integraciones/horus`, `GET /integraciones/horus/envios`,
+Lecturas (`horus.ver`): `GET /integraciones/horus`, `GET /integraciones/horus/envios`,
 `GET /integraciones/horus/recibidos`, `GET /servicios/:id/horus`, `GET /servicios/:id/horus/consumo`,
 `POST /integraciones/horus/consumo`, `POST /integraciones/horus/seguridad`. Revisan el acceso al
 servicio (alcance y empresa).

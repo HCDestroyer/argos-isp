@@ -89,6 +89,25 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
         const servicioId = await crearServicio(await crearCliente())
         await estado(client.get(`/api/v1/servicios/${servicioId}`).bearerToken(cuerpo.token), 200)
         await estado(client.get('/api/v1/integraciones/horus').bearerToken(cuerpo.token), 403)
+        // lo emitió A1: usuario técnico Horus con el rol integracion_horus
+        const dueno = await db
+            .from('core.tokens_api as t')
+            .join('core.usuarios as u', 'u.id', 't.usuario_id')
+            .join('core.usuarios_roles as ur', 'ur.usuario_id', 'u.id')
+            .join('core.roles as r', 'r.id', 'ur.role_id')
+            .where('t.id', conector.token_argos_id)
+            .select('u.email', 'r.nombre as rol', 't.alcances')
+        assert.deepEqual(
+            dueno.map((d: { rol: string }) => d.rol),
+            ['integracion_horus'],
+        )
+        assert.equal(dueno[0].email, 'horus@integraciones.argosisp.local')
+        assert.sameMembers(dueno[0].alcances.permisos, [
+            'ip.resolver',
+            'clientes.ver',
+            'servicios.ver',
+            'sso.emitir',
+        ])
 
         // un solo uso
         await estado(client.post('/api/v1/integraciones/horus/conexion/canjear').json(canje(codigo)), 410)
@@ -96,7 +115,7 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
         // auditado sin secretos ni el código
         const acciones = await db
             .from('audit.acciones')
-            .whereIn('accion', ['integraciones.horus.canjear_enlace', 'integraciones.horus.generar_enlace'])
+            .whereIn('accion', ['horus.canjear_enlace', 'horus.generar_enlace'])
         const cambios = await db.from('audit.cambios').where('entidad_tipo', 'conector_horus')
         const texto = JSON.stringify([acciones, cambios])
         assert.isAbove(acciones.length, 2)
@@ -204,7 +223,7 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
             assert.equal(descifrar(conector.webhook_entrada_secreto_cifrado), enviado.webhook.secreto)
             assert.equal(descifrar(conector.token_cifrado), TOKEN_HORUS)
             const auditoria = JSON.stringify(
-                await db.from('audit.acciones').where('accion', 'integraciones.horus.conectar_enlace'),
+                await db.from('audit.acciones').where('accion', 'horus.conectar_enlace'),
             )
             assert.notInclude(auditoria, 'Q'.repeat(43))
 
@@ -264,7 +283,7 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
             })
             const auditada = await db
                 .from('audit.acciones')
-                .where('accion', 'integraciones.horus.abrir')
+                .where('accion', 'horus.abrir')
                 .where('actor_id', usuario.id)
                 .first()
             assert.equal(auditada.entidad_id, servicioId)

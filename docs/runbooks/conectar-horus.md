@@ -41,8 +41,10 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 3. El primer guardado muestra **una sola vez** el secreto del receptor de Argos y su URL
    (`<API_PUBLIC_URL>/api/v1/integraciones/horus/webhook`): pégalos en Horus (canal `webhook`).
    Si lo pierdes: **Regenerar secreto** y vuelve a pegarlo en Horus.
-4. En Argos → Usuarios crea el token `atk_` para Horus con `ip.resolver`, `clientes.ver`,
-   `servicios.ver` (y `sso.emitir`) y pégalo en Horus.
+4. En Argos → Integraciones → Horus → Tokens genera el token `atk_` de Horus
+   (`POST /integraciones/horus/tokens`, permiso `horus.generar_token`; o `node ace
+   integraciones:horus-token`): usuario técnico `horus@integraciones.argosisp.local`, rol
+   `integracion_horus` (`ip.resolver`, `clientes.ver`, `servicios.ver`, `sso.emitir`). Pégalo en Horus.
 
 ## Encender y verificar
 
@@ -72,4 +74,4 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 ## Desconectar
 
 Apaga el interruptor (deja de llamar, de enviar y de aceptar webhooks). Para cortar del todo:
-revoca el token `atk_` de Horus en Argos (Usuarios → Tokens) y el `hf_pat_` en Horus.
+revoca el token `atk_` de Horus en Argos (Integraciones → Horus → Tokens, `horus.revocar_token`) y el `hf_pat_` en Horus.

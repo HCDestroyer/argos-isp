@@ -19,7 +19,7 @@ export interface SalidaAbrirEnHorus {
 }
 
 /**
- * `integraciones.horus.abrir`: "Ver en Horus" (§1.5, paso 1, Argos es el origen). El **servidor**
+ * `horus.abrir`: "Ver en Horus" (§1.5, paso 1, Argos es el origen). El **servidor**
  * de Argos pide el ticket a Horus con el `hf_pat_` (scope `sso.issue`), con el usuario de la
  * sesión (`id_externo` = `u-<id>`, correo y nombre) y el destino, y devuelve al panel solo la URL.
  * El navegador nunca pide el ticket. Horus aplica su propio ACL al entrar.
@@ -28,7 +28,7 @@ export interface SalidaAbrirEnHorus {
  * configurada (no se abre otra cosa).
  */
 export default class AbrirEnHorus extends DomainAction<EntradaAbrirEnHorus, SalidaAbrirEnHorus> {
-    readonly nombre = 'integraciones.horus.abrir'
+    readonly nombre = 'horus.abrir'
 
     protected async handle(input: EntradaAbrirEnHorus, t: Transaccion): Promise<SalidaAbrirEnHorus> {
         const config = await configHorus()

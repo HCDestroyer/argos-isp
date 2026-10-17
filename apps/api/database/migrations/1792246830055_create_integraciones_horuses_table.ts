@@ -22,12 +22,6 @@ export default class extends BaseSchema {
         this.schema.raw(`
             CREATE SCHEMA IF NOT EXISTS integraciones;
 
-            -- Permisos de tres partes (\`integraciones.horus.ver\`): el nombre sigue siendo el de la
-            -- acción, con el módulo y la integración.
-            ALTER TABLE core.permisos DROP CONSTRAINT permisos_nombre_check;
-            ALTER TABLE core.permisos ADD CONSTRAINT permisos_nombre_check
-                CHECK (nombre ~ '^[a-z0-9_]+(\\.[a-z0-9_]+){1,2}$');
-
             CREATE TABLE integraciones.horus_conector (
                 id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
                 activo boolean NOT NULL DEFAULT false,
@@ -138,12 +132,6 @@ export default class extends BaseSchema {
     }
 
     async down() {
-        this.schema.raw(`
-            DROP SCHEMA IF EXISTS integraciones CASCADE;
-            DELETE FROM core.permisos WHERE nombre ~ '^[a-z0-9_]+\\.[a-z0-9_]+\\.[a-z0-9_]+$';
-            ALTER TABLE core.permisos DROP CONSTRAINT permisos_nombre_check;
-            ALTER TABLE core.permisos ADD CONSTRAINT permisos_nombre_check
-                CHECK (nombre ~ '^[a-z0-9_]+\\.[a-z0-9_]+$');
-        `)
+        this.schema.raw(`DROP SCHEMA IF EXISTS integraciones CASCADE;`)
     }
 }

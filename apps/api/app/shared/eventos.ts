@@ -97,6 +97,10 @@ interface PayloadSesion {
     prefijos_v6: string[]
 }
 
+/** Campos de `core.clientes` que emiten `cliente.actualizado` (los que Horus muestra). */
+export const CAMPOS_CLIENTE_ACTUALIZADO = ['nombre', 'tipo', 'codigo'] as const
+export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -197,6 +201,16 @@ export interface CatalogoEventos {
     'aaa.caido': { nodo: string; desde: string; ultimo_error?: string | null }
     /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
     'aaa.recuperado': { nodo: string; desde: string; hasta: string; ultimo_error: string | null }
+
+    /**
+     * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
+     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro). Sin `empresa_id`: el
+     * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
+     */
+    'cliente.actualizado': {
+        cliente_id: number
+        campos: CampoClienteActualizado[]
+    }
 
     // billing (A3)
     'factura.emitida': PayloadFactura
@@ -317,6 +331,7 @@ export const EVENTOS = [
     'asignacion.cambiada',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',
     'sesion.desconexion_solicitada',

@@ -106,7 +106,7 @@ export default class RecibirWebhookHorus extends DomainAction<
     EntradaRecibirWebhook,
     ResultadoRecibirWebhook
 > {
-    readonly nombre = 'integraciones.horus.recibir_webhook'
+    readonly nombre = 'horus.recibir_webhook'
 
     protected async handle(input: EntradaRecibirWebhook, t: Transaccion): Promise<ResultadoRecibirWebhook> {
         const { trx } = t

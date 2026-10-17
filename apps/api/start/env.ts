@@ -170,6 +170,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_COOKIE_SEGURA: Env.schema.enum.optional(['auto', 'siempre'] as const),
     /** URL pública del portal para el retorno de la pasarela (`app/portal/pagos_en_linea.ts`). */
     PORTAL_URL_PUBLICA: Env.schema.string.optional(),
+    /** URL pública del panel: los tickets de autologin de Horus abren `<PANEL_URL_PUBLICA>/sso/entrar#…` (`app/core/sso.ts`). */
+    PANEL_URL_PUBLICA: Env.schema.string.optional(),
 
     /*
     |----------------------------------------------------------

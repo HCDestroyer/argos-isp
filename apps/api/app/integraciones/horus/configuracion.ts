@@ -7,7 +7,7 @@ import { nuevaConexionRedis, prefijoColas, redis } from '#shared/redis'
 
 /**
  * Configuración del conector Horus (`integraciones.horus_conector`, una sola fila), editable
- * desde el panel (`integraciones.horus.configurar`). Contrato `contratos/horus.md`.
+ * desde el panel (`horus.configurar`). Contrato `contratos/horus.md`.
  *
  * - **Apagado por defecto.** Sin fila, o con `activo = false`, Argos no llama a Horus, no le envía
  *   webhooks y rechaza los que lleguen (503).
