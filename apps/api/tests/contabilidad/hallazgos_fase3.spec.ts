@@ -124,6 +124,42 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
         assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
     }).fails('H5: el DTE del aviso lleva el bruto (IVA 24.00) y la reclasificación solo 21.43')
 
+    test('H11 · con FEL opcional, una factura (no aviso) con nota interna certificada a mano después va por el neto', async ({
+        assert,
+    }) => {
+        // Decisión del líder: la regla del neto aplica a todo DTE de factura o mora. Producto hoy: el DTE va por el
+        // bruto (app/fiscal/actions/solicitar_certificacion.ts y app/fiscal/fel/dte.ts) aunque la nota interna ya
+        // bajó 2.1.02: el libro de ventas declara IVA 24.00 y 2.1.02 tiene 21.43.
+        const e = await empresasFel('opcional')
+        const s = await servicioFel(e, 'emitir', '224.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        const origen = await factura(f.id)
+        assert.isFalse(origen.aviso_cobro)
+        const interna = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '24.00', motivo: 'descuento' },
+            e.ctx,
+        )
+        assert.lengthOf(await dtesDe('nota_credito', interna.id), 0)
+        await new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx)
+        await cola(e)
+        const [dte] = await dtesDe('factura', f.id)
+        assert.equal(dte!.estado, 'certificado')
+        const ivaNeto = dec(f.iva).minus(interna.iva).toFixed(2)
+        assert.equal(dte!.total, '200.00')
+        assert.equal(dte!.iva, ivaNeto)
+        const envio = await dteParaEnviar(db.connection(), await verDte(Number(dte!.id)))
+        const sumaLineas = envio.lineas.reduce((t, l) => t.plus(l.total), dec('0')).toFixed(2)
+        assert.equal(sumaLineas, '200.00')
+        assert.equal(envio.total, '200.00')
+        assert.equal(envio.iva, ivaNeto)
+        // sin aviso no hay reclasificación: el IVA ya estaba en 2.1.02
+        assert.lengthOf(await lineas('reclasificacion', Number(dte!.id)), 0)
+        assert.equal(await saldo(e.B, IVA_DEBITO), await ivaDeDteCertificados(e.B), 'IVA de los DTE ≠ 2.1.02')
+        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
+    }).fails(
+        'H11: el DTE de una factura con nota interna previa lleva el bruto (IVA 24.00) y 2.1.02 tiene 21.43',
+    )
+
     test('H6 · un pago registrado mientras la anulación del DTE está pendiente deja el DTE anulado en la SAT y vivo en el libro', async ({
         assert,
     }) => {
