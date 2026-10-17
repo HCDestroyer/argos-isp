@@ -79,7 +79,8 @@ export async function reclasificarIva(
         .whereNull('a.reversa_de')
         .first()
     if (previa) return CERO
-    const monto = await ivaPorCertificarDe(t.trx, factura.id)
+    // H5: exactamente el IVA del DTE (el neto de las notas internas, que es lo que queda en 2.1.11)
+    const monto = dec(dte.iva)
     if (monto.lte(0)) return CERO
     await new RegistrarAsiento().execute(
         {

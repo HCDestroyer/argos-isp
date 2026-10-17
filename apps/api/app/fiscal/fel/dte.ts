@@ -343,8 +343,8 @@ export function fechaGt(instante: Date): string {
 /**
  * Plazo de anulación de un DTE (`dte_anulacion_plazo`, regla `mes_emision_hasta_vencimiento_iva`;
  * contrato §8.3, inv. C.3): hasta el vencimiento de la declaración mensual del IVA del mes de
- * emisión, que tomamos como el último día del mes siguiente. **Confirmar con contador**: días
- * hábiles y feriados (fase 6, calendario).
+ * **emisión del documento** (decisión del líder), que tomamos como el último día del mes siguiente.
+ * Ajuste a día hábil y feriados: fase 6 (calendario); **confirmar con contador**.
  */
 export function finPlazoAnulacion(fechaEmision: Date): string {
     return DateTime.fromJSDate(fechaEmision)
@@ -429,6 +429,7 @@ export async function insertarDte(trx: TransactionClientContract, datos: DatosNu
 */
 
 interface LineaDocumento {
+    id?: number
     concepto: string
     tipo: string
     cantidad: string
@@ -436,11 +437,16 @@ interface LineaDocumento {
     gravable: boolean
     iva: string
     total: string
+    /** lo acreditado por notas internas antes del DTE (H5): va como `Descuento` del ítem */
+    descuento?: string
+    iva_descontado?: string
 }
 
 function lineaDte(numero: number, l: LineaDocumento): LineaDte {
-    const total = dec(l.total)
-    const iva = dec(l.iva)
+    const precio = dec(l.total)
+    const descuento = dec(l.descuento ?? '0')
+    const total = precio.minus(descuento)
+    const iva = dec(l.iva).minus(dec(l.iva_descontado ?? '0'))
     return {
         numero,
         bien_o_servicio: l.tipo === 'producto' ? 'B' : 'S',
@@ -448,12 +454,117 @@ function lineaDte(numero: number, l: LineaDocumento): LineaDte {
         cantidad: dec(l.cantidad).toString(),
         unidad: 'UNI',
         precio_unitario: aTexto(dec(l.precio_unitario)),
-        precio: aTexto(total),
-        descuento: '0.00',
+        precio: aTexto(precio),
+        descuento: aTexto(descuento),
         gravable: aTexto(total.minus(iva)),
         iva: aTexto(iva),
         total: aTexto(total),
     }
+}
+
+/** Reparte `monto` entre `pesos` en proporción, a centavos, con el resto en el de mayor peso. */
+function repartir(monto: Dec, pesos: Dec[]): Dec[] {
+    const suma = pesos.reduce((a, b) => a.plus(b), CERO)
+    if (suma.isZero()) return pesos.map(() => CERO)
+    const partes = pesos.map((p) => redondear(p.times(monto).div(suma)))
+    const resto = monto.minus(partes.reduce((a, b) => a.plus(b), CERO))
+    let mayor = 0
+    pesos.forEach((p, i) => {
+        if (p.gt(pesos[mayor]!)) mayor = i
+    })
+    partes[mayor] = partes[mayor]!.plus(resto)
+    return partes
+}
+
+/**
+ * Neto de un aviso al certificarse (H5, decisión del líder): el DTE se certifica por el total y el
+ * IVA de la factura **menos sus notas internas** (las notas de la factura sin DTE propio; después de
+ * un DTE solo se admiten NCRE). La reclasificación lleva exactamente el IVA del DTE.
+ */
+export async function netoParaDte(
+    cliente: QueryClientContract,
+    facturaId: number,
+): Promise<{ total: Dec; iva: Dec }> {
+    const f = (await cliente
+        .from('billing.facturas')
+        .where('id', facturaId)
+        .select('total', 'iva')
+        .firstOrFail()) as { total: string; iva: string }
+    const notas = (await cliente
+        .from('billing.notas_credito as n')
+        .where('n.factura_id', facturaId)
+        .whereNotExists((q) =>
+            q
+                .from('fiscal.dte as d')
+                .where('d.documento_tipo', 'nota_credito')
+                .whereRaw('d.documento_id = n.id'),
+        )
+        .select(
+            cliente.raw('coalesce(sum(n.monto), 0)::text as monto'),
+            cliente.raw('coalesce(sum(n.iva), 0)::text as iva'),
+        )
+        .first()) as { monto: string; iva: string }
+    return { total: dec(f.total).minus(notas.monto), iva: dec(f.iva).minus(notas.iva) }
+}
+
+/** Líneas de la factura con lo acreditado por sus notas internas como descuento de cada ítem. */
+async function lineasNetas(cliente: QueryClientContract, facturaId: number): Promise<LineaDocumento[]> {
+    const lineas = (await cliente
+        .from('billing.facturas_lineas')
+        .where('factura_id', facturaId)
+        .orderBy('id')
+        .select(
+            'id',
+            'concepto',
+            'tipo',
+            cliente.raw('cantidad::text as cantidad'),
+            'precio_unitario',
+            'gravable',
+            'iva',
+            'total',
+        )) as LineaDocumento[]
+    const notas = (await cliente
+        .from('billing.notas_credito as n')
+        .where('n.factura_id', facturaId)
+        .whereNotExists((q) =>
+            q
+                .from('fiscal.dte as d')
+                .where('d.documento_tipo', 'nota_credito')
+                .whereRaw('d.documento_id = n.id'),
+        )
+        .orderBy('n.id')
+        .select('n.id', 'n.monto', 'n.iva')) as Array<{ id: number; monto: string; iva: string }>
+    if (notas.length === 0) return lineas
+    const descuento = new Map<number, Dec>()
+    const ivaDescontado = new Map<number, Dec>()
+    const sumar = (m: Map<number, Dec>, id: number, v: Dec) => m.set(id, (m.get(id) ?? CERO).plus(v))
+    for (const nota of notas) {
+        const porLinea = (await cliente
+            .from('billing.notas_credito_lineas')
+            .where('nota_id', nota.id)
+            .select('linea_id', 'monto', 'iva')) as Array<{ linea_id: number; monto: string; iva: string }>
+        if (porLinea.length > 0) {
+            for (const l of porLinea) {
+                sumar(descuento, Number(l.linea_id), dec(l.monto))
+                sumar(ivaDescontado, Number(l.linea_id), dec(l.iva))
+            }
+            continue
+        }
+        // nota proporcional: monto e IVA repartidos según lo que le queda a cada línea
+        const restos = lineas.map((l) => dec(l.total).minus(descuento.get(Number(l.id)) ?? CERO))
+        const montos = repartir(dec(nota.monto), restos)
+        const restosIva = lineas.map((l) => dec(l.iva).minus(ivaDescontado.get(Number(l.id)) ?? CERO))
+        const ivas = repartir(dec(nota.iva), restosIva)
+        lineas.forEach((l, i) => {
+            sumar(descuento, Number(l.id), montos[i]!)
+            sumar(ivaDescontado, Number(l.id), ivas[i]!)
+        })
+    }
+    return lineas.map((l) => ({
+        ...l,
+        descuento: aTexto(descuento.get(Number(l.id)) ?? CERO),
+        iva_descontado: aTexto(ivaDescontado.get(Number(l.id)) ?? CERO),
+    }))
 }
 
 /** Líneas de una nota: las suyas (nota por línea) o una sola por el monto. */
@@ -530,25 +641,16 @@ export async function dteParaEnviar(cliente: QueryClientContract, dte: DteFila):
     if (dte.documento_tipo === 'nota_credito') {
         lineas = await lineasNota(cliente, dte.documento_id).then((r) => r.lineas)
     } else {
-        lineas = (await cliente
-            .from('billing.facturas_lineas')
-            .where('factura_id', dte.documento_id)
-            .orderBy('id')
-            .select(
-                'concepto',
-                'tipo',
-                cliente.raw('cantidad::text as cantidad'),
-                'precio_unitario',
-                'gravable',
-                'iva',
-                'total',
-            )) as LineaDocumento[]
+        lineas = await lineasNetas(cliente, dte.documento_id)
     }
     const vigentes = await frasesVigentes(dte.empresa_id, fecha, cliente)
     const frases = vigentes
         .filter((f) => f.tipos_dte.includes(dte.tipo_dte) && f.tipo_frase !== null && f.escenario !== null)
         .map((f) => ({ tipo: Number(f.tipo_frase), escenario: Number(f.escenario) }))
-    const totalIva = lineas.reduce((s: Dec, l) => s.plus(dec(l.iva)), CERO)
+    const totalIva = lineas.reduce(
+        (s: Dec, l) => s.plus(dec(l.iva)).minus(dec(l.iva_descontado ?? '0')),
+        CERO,
+    )
     return {
         identificador: dte.identificador,
         tipo: dte.tipo_dte,

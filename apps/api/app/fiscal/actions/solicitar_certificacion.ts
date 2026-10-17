@@ -10,6 +10,7 @@ import {
     ERROR_RECEPTOR,
     dteVigente,
     insertarDte,
+    netoParaDte,
     receptorDe,
     receptorFaltante,
     referenciaA,
@@ -158,11 +159,13 @@ export default class SolicitarCertificacion extends DomainAction<
             referencia = referenciaA(origen!, `Recargo por mora de la factura ${factura.factura_origen_id}`)
         }
 
+        // H5: un aviso con notas internas se certifica por el neto
+        const neto = await netoParaDte(t.trx, factura.id)
         const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor)
-        const falta = await receptorFaltante(empresaId, receptor, factura.total, hoy, t.trx)
+        const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)
         if (falta && !input.automatico) {
             const limite = await valorParametro<string>(empresaId, 'consumidor_final_limite', hoy, t.trx)
-            throw new ReceptorRequerido(aTexto(dec(factura.total)), aTexto(dec(limite)))
+            throw new ReceptorRequerido(aTexto(neto.total), aTexto(dec(limite)))
         }
         const dte = await insertarDte(t.trx, {
             empresa_id: empresaId,
@@ -173,8 +176,8 @@ export default class SolicitarCertificacion extends DomainAction<
             ambiente: config.ambiente,
             receptor,
             referencia,
-            total: aTexto(dec(factura.total)),
-            iva: aTexto(dec(factura.iva)),
+            total: aTexto(neto.total),
+            iva: aTexto(neto.iva),
             estado: falta ? 'rechazado' : config.contingencia_activa ? 'contingencia' : 'pendiente',
             contingencia: config.contingencia_activa && !falta,
             ultimo_error: falta ? ERROR_RECEPTOR : null,
