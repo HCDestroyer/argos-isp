@@ -40,6 +40,10 @@ export interface ReporteImportacion {
     origen: string
     /** archivo o directorio leído */
     fuente: string | null
+    /** empresa a la que se asignó lo importado (`--empresa` o la única activa) */
+    empresa: { id: number; nombre: string; nit: string | null }
+    /** tablas del origen que no se archivaron ni se cuentan (`--excluir-tablas`) */
+    tablas_excluidas: Array<{ tabla: string; filas: number }>
     resumen: {
         routers: ConteoEntidad
         redes: ConteoEntidad
@@ -174,6 +178,8 @@ export interface ReporteImportacion {
             importado: string
             diferencia: string
         }>
+        /** servicio ya importado en otra empresa: no se mueve (`servicios.cambiar_empresa` en el panel) */
+        servicios_otra_empresa: Array<{ servicio_origen: string; servicio_id: number; empresa_id: number }>
     }
     /** filas con formato inválido (omitidas) o campos descartados (avisos) */
     formato: ProblemaFila[]
@@ -193,6 +199,14 @@ export function formatearReporte(r: ReporteImportacion): string {
     lineas.push(`Importación desde ${r.origen} · ${titulo}`)
     lineas.push(`request_id ${r.request_id} · ${r.inicio} → ${r.fin}`)
     if (r.fuente) lineas.push(`fuente ${r.fuente}`)
+    lineas.push(
+        `empresa ${r.empresa.id} · ${r.empresa.nombre}${r.empresa.nit ? ` · NIT ${r.empresa.nit}` : ''}`,
+    )
+    if (r.tablas_excluidas.length > 0) {
+        lineas.push(
+            `tablas excluidas del archivo: ${r.tablas_excluidas.map((t) => `${t.tabla} (${t.filas} filas)`).join(', ')}`,
+        )
+    }
     lineas.push('')
     lineas.push('Entidad            origen  creados  existentes  omitidos')
     for (const [nombre, c] of Object.entries(r.resumen)) {
@@ -370,6 +384,12 @@ export function formatearReporte(r: ReporteImportacion): string {
         d.saldos_distintos.map(
             (x) =>
                 `cliente ${x.cliente_origen}${x.nombre ? ` ${x.nombre}` : ''}: origen Q ${x.origen} · ArgosIsp Q ${x.importado} · diferencia Q ${x.diferencia}`,
+        ),
+    )
+    seccion(
+        'Servicios ya importados en otra empresa (no se movieron)',
+        d.servicios_otra_empresa.map(
+            (x) => `servicio ${x.servicio_origen} → ${x.servicio_id} (empresa ${x.empresa_id})`,
         ),
     )
     seccion(

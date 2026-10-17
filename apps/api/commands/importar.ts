@@ -9,7 +9,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * (`app/importacion/origenes/`) traduce la fuente al formato canónico y el núcleo
  * (`app/importacion/importador.ts`) crea todo por las acciones de dominio. En seco no guarda nada
  * y produce el reporte de diferencias (texto en pantalla; con `--salida`, también Markdown, CSV y
- * JSON). Detalle en `app/importacion/README.md` y `docs/runbooks/importacion.md`.
+ * JSON). `--empresa=<id|nit>` asigna todo a esa empresa (obligatoria con varias activas) y
+ * `--excluir-tablas=radacct,logs` deja esas tablas fuera del archivo del origen. Detalle en `app/importacion/README.md` y `docs/runbooks/importacion.md`.
  */
 export default class Importar extends BaseCommand {
     static commandName = 'importar'
@@ -62,6 +63,18 @@ export default class Importar extends BaseCommand {
     })
     declare plantilla?: number
 
+    @flags.string({
+        description:
+            'Empresa (id o NIT) a la que se asigna todo lo importado. Obligatoria si hay varias empresas activas; con una sola, esa',
+    })
+    declare empresa?: string
+
+    @flags.string({
+        description:
+            'Tablas del volcado que no se guardan en el archivo del origen, separadas por coma (p. ej. radacct,logs). Por defecto se archiva todo',
+    })
+    declare excluirTablas?: string
+
     async run() {
         const { esOrigen, leerOrigen, ORIGENES } = await import('#importacion/origenes/index')
         const { reporteCsv, reporteMarkdown } = await import('#importacion/reporte_salidas')
@@ -104,6 +117,11 @@ export default class Importar extends BaseCommand {
                 soloPlanesExistentes: this.soloPlanesExistentes,
                 plantillaId: this.plantilla,
                 fuente: ruta,
+                empresa: this.empresa ?? null,
+                excluirTablas: (this.excluirTablas ?? '')
+                    .split(',')
+                    .map((t) => t.trim())
+                    .filter(Boolean),
             })
         } catch (error) {
             // p. ej. FilasSinContar: el cuadre por tabla no cerró y no se guardó nada

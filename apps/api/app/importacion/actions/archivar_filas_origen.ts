@@ -19,6 +19,8 @@ export interface EntradaArchivar {
     tabla: string
     /** cuántas filas trae el lote (las filas van en el constructor: no se auditan una por una) */
     filas: number
+    /** empresa a la que se asignó lo importado (`--empresa`); null en archivos anteriores */
+    empresa_id?: number | null
 }
 
 export interface ResultadoArchivar {
@@ -46,6 +48,7 @@ export default class ArchivarFilasOrigen extends DomainAction<EntradaArchivar, R
             ])
         }
         if (this.lote.length === 0) return { escritas: 0 }
+        if (input.empresa_id) t.fijarEmpresa(input.empresa_id)
         await t.trx
             .knexQuery()
             .table('importacion.filas_origen')
@@ -62,6 +65,7 @@ export default class ArchivarFilasOrigen extends DomainAction<EntradaArchivar, R
                     motivo: f.motivo,
                     huella: f.huella,
                     request_id: t.ctx.requestId,
+                    empresa_id: input.empresa_id ?? null,
                 })),
             )
             .onConflict(['origen', 'tabla', 'id_externo'])
@@ -74,6 +78,7 @@ export default class ArchivarFilasOrigen extends DomainAction<EntradaArchivar, R
                 'motivo',
                 'huella',
                 'request_id',
+                'empresa_id',
                 'updated_at',
             ])
         return { escritas: this.lote.length }
