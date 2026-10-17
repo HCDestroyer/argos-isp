@@ -53,6 +53,20 @@ export default class ReintentarDte extends DomainAction<EntradaReintentarDte, Dt
                 'DTE no reintentable',
             )
         }
+        if (dte.documento_tipo !== 'nota_credito') {
+            const doc = (await t.trx
+                .from('billing.facturas')
+                .where('id', dte.documento_id)
+                .select('estado')
+                .firstOrFail()) as { estado: string }
+            if (doc.estado === 'anulada') {
+                throw new Conflicto(
+                    `La factura ${dte.documento_id} está anulada: su DTE no se reintenta`,
+                    'factura_anulada',
+                    'Factura anulada',
+                )
+            }
+        }
         const vigente = await dteVigente(t.trx, dte.documento_tipo, dte.documento_id)
         if (vigente) return vigente
 

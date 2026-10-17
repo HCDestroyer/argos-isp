@@ -33,13 +33,23 @@ export class CertificarAlIncompatible extends Problema {
     }
 }
 
+const ESTADO_EN_PROCESO: Record<string, string> = {
+    enviando: 'se está enviando al certificador; intenta de nuevo en un momento',
+    pendiente: 'está pendiente de certificar (en cola)',
+    error_temporal: 'está en cola por un error temporal del certificador',
+    contingencia: 'está en contingencia, esperando transmitirse',
+    anulacion_pendiente: 'tiene la anulación pendiente de confirmar con el certificador',
+}
+
+/** 409: el DTE del documento no está en un estado final; el mensaje dice el estado real. */
 export class DteEnProceso extends Problema {
-    constructor(dteId: number) {
+    constructor(dteId: number, estado: string = 'enviando') {
         super(
             409,
             'dte_en_proceso',
             'DTE en proceso',
-            `El DTE ${dteId} se está enviando al certificador; intenta de nuevo en un momento`,
+            `El DTE ${dteId} ${ESTADO_EN_PROCESO[estado] ?? `está ${estado}`}`,
+            [{ field: 'dte_id', message: estado, rule: 'dte_en_proceso' }],
         )
     }
 }
@@ -66,6 +76,16 @@ export class TipoDteNoPermitido extends Problema {
     constructor(detalle: string) {
         super(422, 'tipo_dte_no_permitido', 'Tipo de DTE no permitido', detalle, [
             { field: 'factura_id', message: detalle, rule: 'tipo_dte_no_permitido' },
+        ])
+    }
+}
+
+/** 422 (H8): desactivar la FEL con avisos de cobro vivos sin certificar. */
+export class AvisosPorCertificar extends Problema {
+    constructor(avisos: number) {
+        const detalle = `La empresa tiene ${avisos} avisos de cobro sin DTE certificado: su IVA está en 2.1.11 y quedaría sin declarar. Certifícalos o anúlalos antes de desactivar la FEL (la reclasificación masiva la decide el contador)`
+        super(422, 'avisos_por_certificar', 'Avisos por certificar', detalle, [
+            { field: 'modo', message: `${avisos} avisos por certificar`, rule: 'avisos_por_certificar' },
         ])
     }
 }

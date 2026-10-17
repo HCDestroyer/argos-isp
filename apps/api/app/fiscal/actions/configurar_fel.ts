@@ -7,7 +7,7 @@ import {
     type ConfiguracionFel,
     type ModoFel,
 } from '#fiscal/fel/configuracion'
-import { CertificarAlIncompatible } from '#fiscal/fel/errores'
+import { AvisosPorCertificar, CertificarAlIncompatible } from '#fiscal/fel/errores'
 import type { AmbienteFel } from '#fiscal/fel/proveedor'
 
 /**
@@ -64,6 +64,20 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
                     rule: 'proveedor_de_pruebas',
                 },
             ])
+        }
+        // H8: con avisos de cobro vivos sin DTE certificado, desactivar dejaría su IVA en 2.1.11
+        if (input.modo === 'desactivada' && antes.modo !== 'desactivada') {
+            const { rows } = (await t.trx.rawQuery(
+                `SELECT count(*)::int AS n FROM billing.facturas f
+                  WHERE f.empresa_id = ? AND f.aviso_cobro AND f.estado <> 'anulada'
+                    AND NOT EXISTS (SELECT 1 FROM fiscal.dte d
+                                     WHERE d.documento_id = f.id
+                                       AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                                       AND d.estado IN ('certificado', 'anulacion_pendiente'))`,
+                [empresaId],
+            )) as { rows: Array<{ n: number }> }
+            const avisos = Number(rows[0]?.n ?? 0)
+            if (avisos > 0) throw new AvisosPorCertificar(avisos)
         }
         if (input.modo === 'obligatoria') {
             const conNunca = (await t.trx

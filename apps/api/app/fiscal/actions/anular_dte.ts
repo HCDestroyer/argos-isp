@@ -6,6 +6,7 @@ import {
     TOPE_REINTENTOS,
     dteCertificado,
     esperaReintento,
+    huboEnvio,
     nitEmisor,
     registrarIntento,
     verDte,
@@ -60,23 +61,58 @@ export default class AnularDte extends DomainAction<
         }
         const motivo = dte.motivo_anulacion ?? 'Anulación'
         const inicio = Date.now()
-        await registrarIntento(db.connection(), dte.id, 'anular', 'enviando', {})
-        const certificado = { ...dteCertificado(dte), emisor_nit: await nitEmisor(t.trx, dte.empresa_id) }
-        const resultado: ResultadoAnulacion = await proveedor
-            .anular(certificado, motivo, cred, dte.ambiente)
-            .catch((error) => ({
+        // H6: si ya se envió una anulación (la transacción local pudo fallar después de que el
+        // certificador anuló), primero se consulta: un DTE anulado allá se completa aquí y nunca
+        // vuelve a `certificado`
+        const consultarAnulado = async (): Promise<boolean | null> => {
+            const consulta = await proveedor
+                .consultar(dte.identificador, cred, dte.ambiente)
+                .catch((error) => ({
+                    encontrado: null as null,
+                    error: (error as Error).message,
+                    respuesta: {},
+                }))
+            await registrarIntento(
+                t.trx,
+                dte.id,
+                'consultar',
+                consulta.encontrado === true ? (consulta.anulado ? 'anulado' : 'vigente') : 'error',
+                consulta.respuesta,
+                Date.now() - inicio,
+            )
+            return consulta.encontrado === true ? consulta.anulado : null
+        }
+        const yaAnulado: ResultadoAnulacion = {
+            resultado: 'anulado',
+            fecha: new Date(),
+            xml: null,
+            respuesta: { consultado: true },
+        }
+        let resultado: ResultadoAnulacion | null = null
+        if ((await huboEnvio(t.trx, dte.id, 'anular')) && (await consultarAnulado()) === true) {
+            resultado = yaAnulado
+        }
+        if (!resultado) {
+            await registrarIntento(db.connection(), dte.id, 'anular', 'enviando', {})
+            const certificado = { ...dteCertificado(dte), emisor_nit: await nitEmisor(t.trx, dte.empresa_id) }
+            resultado = await proveedor.anular(certificado, motivo, cred, dte.ambiente).catch((error) => ({
                 resultado: 'error_temporal' as const,
                 error: (error as Error).message,
                 respuesta: {},
             }))
-        await registrarIntento(
-            t.trx,
-            dte.id,
-            'anular',
-            resultado.resultado,
-            resultado.respuesta,
-            Date.now() - inicio,
-        )
+            await registrarIntento(
+                t.trx,
+                dte.id,
+                'anular',
+                resultado.resultado,
+                resultado.respuesta,
+                Date.now() - inicio,
+            )
+            // un rechazo puede ser "ya estaba anulado": se confirma con el certificador antes de revertir
+            if (resultado.resultado === 'rechazado' && (await consultarAnulado()) === true) {
+                resultado = yaAnulado
+            }
+        }
 
         if (resultado.resultado === 'error_temporal') return this.reintentar(t, dte, resultado.error)
         if (resultado.resultado === 'rechazado') {
@@ -113,7 +149,8 @@ export default class AnularDte extends DomainAction<
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
-        if (dte.documento_tipo === 'factura') {
+        // la factura o la mora (NDEB, H7) se anula con su asiento y su reclasificación
+        if (dte.documento_tipo === 'factura' || dte.documento_tipo === 'nota_debito') {
             await new AnularFactura().execute(
                 { factura_id: dte.documento_id, motivo, tras_anular_dte: true },
                 t.ctx,

@@ -101,10 +101,13 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             )
         }
         const conNotas = await t.trx
-            .from('billing.notas_credito')
+            .from('billing.notas_credito as n')
             .whereIn(
-                'factura_id',
+                'n.factura_id',
                 facturas.map((f) => f.id),
+            )
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'),
             )
             .orderBy('id', 'asc')
             .select('id', 'factura_id')
@@ -156,7 +159,13 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                     'Anulación en proceso',
                 )
             }
-            const limite = finPlazoAnulacion(principal.certificado_en ?? principal.fecha_emision)
+            // el plazo corre desde la emisión del documento (decisión del líder; días hábiles en la fase 6)
+            const emision = (await t.trx
+                .from('billing.facturas')
+                .where('id', factura.id)
+                .select('emitida_en')
+                .firstOrFail()) as { emitida_en: Date }
+            const limite = finPlazoAnulacion(new Date(emision.emitida_en))
             if (hoyGuatemala() > limite) throw new AnulacionFueraDePlazo(limite)
             await bloquearDte(t, principal.id)
             await t.trx

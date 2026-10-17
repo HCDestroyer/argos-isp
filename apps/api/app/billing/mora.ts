@@ -91,9 +91,25 @@ export async function crearMora(
     const conIva = await valorParametro<boolean>(factura.empresa_id, 'mora_con_iva', hoy, t.trx).catch(
         () => false,
     )
-    const avisoCobro =
-        conIva === true &&
-        (await configuracionFel(factura.empresa_id, t.trx).then((r) => r.modo)) !== 'desactivada'
+    // H9: es aviso solo si su factura es aviso de cobro o lleva DTE; si la factura no va por FEL, la mora
+    // tampoco (su IVA va a 2.1.02 como el de su factura)
+    const origenConFel = (await t.trx
+        .from('billing.facturas as f')
+        .where('f.id', factura.id)
+        .where((q) =>
+            q
+                .where('f.aviso_cobro', true)
+                .orWhereExists((d) =>
+                    d
+                        .from('fiscal.dte as d')
+                        .whereRaw('d.documento_id = f.id')
+                        .where('d.documento_tipo', 'factura')
+                        .whereNot('d.estado', 'rechazado'),
+                ),
+        )
+        .first()) as unknown
+    const felActiva = await configuracionFel(factura.empresa_id, t.trx).then((c) => c.modo !== 'desactivada')
+    const avisoCobro = conIva === true && felActiva && Boolean(origenConFel)
     const linea = lineaConIva({
         concepto,
         tipo: 'mora',
