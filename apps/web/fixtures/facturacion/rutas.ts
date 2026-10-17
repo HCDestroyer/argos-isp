@@ -19,6 +19,7 @@ import { nombreCuentaDestino } from '../bancos/datos'
 import { asientoPago, asientoReverso } from '../libro/datos'
 import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
+import { notasDeFactura, rutasNotasCredito } from './notasCredito'
 
 type Factura = Schema<'Factura'>
 type FacturaDetalle = Schema<'FacturaDetalle'>
@@ -72,6 +73,8 @@ function detalle(factura: Factura): FacturaDetalle {
     const mora = factura.tipo === 'mora'
     return {
         ...factura,
+        acreditado: factura.acreditado ?? '0.00',
+        notas_credito: notasDeFactura(factura.id),
         lineas: [{
             id: factura.id * 10 + 1,
             concepto: mora
@@ -387,6 +390,8 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
 }
 
 export const rutasFacturacion: RutasFixture = {
+    ...rutasNotasCredito(evaluarServicios, detalle),
+
     'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia(procesarPago)),
 
     'GET /api/v1/pagos': conPermiso('pagos.ver', (solicitud) => {

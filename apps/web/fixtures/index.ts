@@ -26,6 +26,7 @@ import { sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
+import { rutasRed } from './red/rutas'
 import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
 import { rutasRouters } from './routers/rutas'
@@ -222,6 +223,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasServicios,
     ...rutasAsignaciones,
     ...rutasRouters,
+    ...rutasRed,
     ...rutasPlanes,
     ...rutasPlantillas,
     ...rutasBitacora,

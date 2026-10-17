@@ -18,6 +18,7 @@ import { planes, planesPorRouter } from './planes/datos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, redesIpv4, routers } from './routers/datos'
 import { servicios } from './servicios/datos'
+import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
@@ -64,6 +65,12 @@ interface BaseFixtures {
      * `csrf: null` = sesión puesta por una prueba con `sesionFixture()`, sin comprobar CSRF.
      */
     sesion: { token: string | null, csrf: string | null }
+    /** `GET /red/eventos` (audit.red). */
+    eventosRed: Schema<'EventoRed'>[]
+    /** Migración al nuevo `aaa` por router (sin entrada = sin marcar). */
+    migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
+    /** Notas de crédito internas (A3). */
+    notasCredito: Schema<'NotaCredito'>[]
 }
 
 function inicial(): BaseFixtures {
@@ -99,6 +106,9 @@ function inicial(): BaseFixtures {
         fallas: {},
         sesionesCerradas: [],
         sesion: { token: null, csrf: null },
+        eventosRed,
+        migracionesAaa: {},
+        notasCredito: [],
     })
 }
 

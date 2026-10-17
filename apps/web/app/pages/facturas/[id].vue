@@ -60,6 +60,25 @@ async function abrirAvisoPdf() {
 
 useHead(() => ({ title: `Factura #${route.params.id} · ArgosIsp` }))
 
+/** Nota de crédito: factura con saldo (emitida, parcial o vencida) y `facturas.nota_credito`. */
+const notaAbierta = ref(false)
+const puedeNotaCredito = computed(() => puede('facturas.nota_credito') && factura.value !== null
+    && ['emitida', 'parcial', 'vencida'].includes(factura.value.estado) && saldoFactura(factura.value).gt(0))
+/** Servicios que la última nota de crédito reactivó (o dejó igual, con el motivo). */
+const evaluadosNota = shallowRef<ServicioEvaluado[]>([])
+
+function alEmitirNota(nota: NotaCreditoEmitida) {
+    const reactivados = nota.servicios.filter(s => s.cambiado && s.estado === 'activo')
+    evaluadosNota.value = nota.servicios
+    toast.add({
+        title: `Nota de crédito #${nota.id} emitida`,
+        description: `${formatearQuetzales(nota.monto)} · saldo ${formatearQuetzales(saldoFactura(nota.factura))}${reactivados.length ? ' · servicio reactivado' : ''}`,
+        icon: 'i-lucide-file-minus',
+        color: 'success',
+    })
+    void cargar()
+}
+
 const puedeAnular = computed(() => puede('facturas.anular') && factura.value !== null && factura.value.estado !== 'anulada')
 
 const pendiente = computed(() => (factura.value && factura.value.estado !== 'anulada' ? saldoFactura(factura.value) : null))
@@ -113,9 +132,13 @@ async function cargarAsientos(actual: Factura) {
     // El asiento lleva la fecha contable de la emisión; los reversos, la de la anulación.
     const desde = sumarDiasFecha(fechaGuatemala(actual.emitida_en), -1)
     const resultado = await useLibro().asientosDe(actual.tipo === 'mora' ? 'mora' : 'factura', actual.id, desde)
+    // Los asientos de sus notas de crédito (`NotaCredito.asiento_id`), uno por uno.
+    const deNotas = await Promise.all((factura.value?.notas_credito ?? [])
+        .flatMap(nota => (nota.asiento_id === null ? [] : [useLibro().asiento(nota.asiento_id)])))
     cargandoAsientos.value = false
-    asientos.value = resultado.ok ? resultado.data : []
-    problemaAsientos.value = resultado.ok ? null : resultado.problema
+    const fallo = (!resultado.ok ? resultado.problema : null) ?? deNotas.flatMap(r => (r.ok ? [] : [r.problema]))[0] ?? null
+    asientos.value = resultado.ok && !fallo ? [...resultado.data, ...deNotas.flatMap(r => (r.ok ? [r.data] : []))] : []
+    problemaAsientos.value = fallo
 }
 
 async function cargar() {
@@ -262,6 +285,15 @@ onMounted(cargar)
                         @click="abrirAvisoPdf"
                     />
                     <UButton
+                        v-if="puedeNotaCredito"
+                        label="Nota de crédito"
+                        icon="i-lucide-file-minus"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="abrir-nota-credito"
+                        @click="notaAbierta = true"
+                    />
+                    <UButton
                         v-if="puedeAnular"
                         label="Anular"
                         icon="i-lucide-ban"
@@ -298,6 +330,18 @@ onMounted(cargar)
                         <DatoFicha
                             etiqueta="Pendiente"
                             :valor="pendiente ? formatearQuetzales(pendiente) : 'Anulada'"
+                        />
+                        <DatoFicha
+                            v-if="factura.acreditado && factura.acreditado !== '0.00'"
+                            etiqueta="De lo pagado, notas de crédito"
+                            :valor="formatearQuetzales(factura.acreditado)"
+                            data-prueba="factura-acreditado"
+                        />
+                        <DatoFicha
+                            v-if="factura.origen"
+                            etiqueta="Importada de"
+                            :valor="`${factura.origen}${factura.id_externo ? ` · ${factura.id_externo}` : ''}`"
+                            mono
                         />
                     </dl>
                 </UPageCard>
@@ -473,6 +517,54 @@ onMounted(cargar)
                     />
                 </div>
             </section>
+
+            <UAlert
+                v-for="evaluado in evaluadosNota.filter(e => e.cambiado)"
+                :key="`nc${evaluado.servicio_id}`"
+                color="success"
+                variant="subtle"
+                icon="i-lucide-wifi"
+                :title="`Servicio #${evaluado.servicio_id}: ${evaluado.de} → ${evaluado.estado}`"
+                :description="evaluado.motivo"
+                data-prueba="nota-reactivacion"
+            />
+
+            <section
+                v-if="factura.notas_credito?.length"
+                class="flex flex-col gap-2"
+                aria-labelledby="titulo-notas"
+                data-prueba="notas-credito"
+            >
+                <h3
+                    id="titulo-notas"
+                    class="text-sm font-semibold text-highlighted"
+                >
+                    Notas de crédito
+                </h3>
+                <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
+                    <li
+                        v-for="nota in factura.notas_credito"
+                        :key="nota.id"
+                        class="flex flex-wrap items-start justify-between gap-2 px-3 py-2"
+                    >
+                        <div class="flex min-w-0 flex-col">
+                            <span class="text-sm font-medium text-highlighted">Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}</span>
+                            <span class="text-xs text-muted">{{ nota.motivo }}<template v-if="nota.created_by_nombre"> · {{ nota.created_by_nombre }}</template></span>
+                        </div>
+                        <div class="flex flex-col items-end">
+                            <span class="font-medium tabular-nums">{{ formatearQuetzales(nota.monto) }}</span>
+                            <span class="text-xs tabular-nums text-muted">IVA {{ formatearQuetzales(nota.iva) }}</span>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <NotaCreditoModal
+                v-if="puedeNotaCredito"
+                v-model:open="notaAbierta"
+                :factura="factura"
+                @hecho="alEmitirNota"
+            />
 
             <AccionMotivoModal
                 v-model:open="anularAbierto"

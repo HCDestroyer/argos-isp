@@ -338,6 +338,8 @@ onMounted(async () => {
                             v-for="asiento in diario.filas.value"
                             :key="asiento.id"
                             :asiento="asiento"
+                            con-reverso
+                            @revertido="diario.recargar"
                         />
                     </div>
 

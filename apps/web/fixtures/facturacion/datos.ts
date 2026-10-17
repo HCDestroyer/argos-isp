@@ -108,6 +108,8 @@ const pagoHistorico: Pago = {
     nota: null,
     registrado_por: 1,
     historico: true,
+    origen: 'mikrowisp',
+    id_externo: 'mikrowisp:pago:987',
     aplicaciones: [],
     anulado_en: null,
     motivo_anulacion: null,

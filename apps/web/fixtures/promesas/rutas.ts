@@ -75,7 +75,8 @@ function cerrar(solicitud: SolicitudFixture, estado: 'rechazada' | 'cancelada', 
     const momento = ahora()
     Object.assign(promesa, {
         estado,
-        resultado_evaluacion: { ...(promesa.resultado_evaluacion ?? {}), cierre: { estado, en: momento, motivo: texto, por: usuario(solicitud) } },
+        // Sin evaluación (no pasa con promesas creadas por la API) no se inventa una: queda null.
+        resultado_evaluacion: promesa.resultado_evaluacion ? { ...promesa.resultado_evaluacion, cierre: { estado, en: momento, motivo: texto, por: usuario(solicitud) } } : null,
         version: promesa.version + 1,
         updated_at: momento,
     })
@@ -193,7 +194,7 @@ export const rutasPromesas: RutasFixture = {
         Object.assign(promesa, {
             estado: 'activa',
             aprobada_por: usuario(solicitud),
-            resultado_evaluacion: { ...(promesa.resultado_evaluacion ?? {}), aprobacion },
+            resultado_evaluacion: promesa.resultado_evaluacion ? { ...promesa.resultado_evaluacion, aprobacion } : null,
             version: promesa.version + 1,
             updated_at: momento,
         })

@@ -71,6 +71,17 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
             abono: dinero(abono),
         })
     }
+    // Notas de crédito (A3): abonan la CxC del dueño de la factura.
+    for (const nota of bd.notasCredito.filter(n => n.cliente_id === clienteId)) {
+        eventos.push({
+            fecha: nota.fecha,
+            tipo: 'nota_credito',
+            referencia_id: nota.id,
+            descripcion: `Nota de crédito ${nota.id} · factura ${nota.factura_id} · ${nota.motivo}`,
+            cargo: '0.00',
+            abono: nota.monto,
+        })
+    }
     eventos.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.referencia_id - b.referencia_id)
 
     let saldo = new Decimal(0)

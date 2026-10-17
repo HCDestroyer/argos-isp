@@ -1,15 +1,44 @@
-import type { Schema } from '@argosisp/contracts'
+import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RutasFixture } from '~/utils/fetchFixtures'
-import { bd } from '../bd'
-import { conPermiso, datosInvalidos, noEncontrado, numeroQuery, paginar } from '../comun'
-import { bancosLibro } from './datos'
+import { bd, siguienteId } from '../bd'
+import { conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { asientoReverso, bancosLibro } from './datos'
 
 type Cuenta = Schema<'Cuenta'>
 type LineaMayor = Schema<'LineaMayor'>
 
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
 const ORIGENES = ['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste']
+
+/** Como `bloqueoReversoDirecto` (A3, `ledger/reversos.ts`): los asientos con documento se corrigen anulándolo. */
+const POR_DOCUMENTO: Record<string, string> = {
+    factura: 'la factura (POST /facturas/:id/anular)',
+    mora: 'la factura de mora (POST /facturas/:id/anular)',
+    pago: 'el pago (POST /pagos/:id/anular)',
+    nota_credito: 'la nota de crédito (emitiendo un cargo o anulando la factura)',
+    egreso: 'el egreso (POST /egresos/:id/anular)',
+}
+
+/** Como `conReverso` de `ledger/consultas.ts`: `revertido_por`, `revertible` y `motivo_no_revertible`. */
+export function vistaAsiento(asiento: Schema<'Asiento'>): Schema<'Asiento'> {
+    const revertidoPor = bd.asientos.find(a => a.reversa_de === asiento.id)?.id ?? null
+    const documento = POR_DOCUMENTO[asiento.origen_tipo]
+    let bloqueo: string | null = null
+    if (asiento.reversa_de !== null) {
+        bloqueo = 'Es un reverso'
+    }
+    else if (revertidoPor !== null) {
+        bloqueo = `Revertido por el asiento ${revertidoPor}`
+    }
+    else if (documento) {
+        bloqueo = `El asiento ${asiento.id} es de origen ${asiento.origen_tipo} ${asiento.origen_id ?? ''}`.trimEnd() + `: no se revierte directo; anula ${documento}`
+    }
+    else if (asiento.origen_tipo === 'ajuste' && asiento.origen_id !== null) {
+        bloqueo = `El asiento ${asiento.id} es del saldo inicial ${asiento.origen_id}: no se revierte directo; anula el saldo inicial`
+    }
+    return { ...asiento, revertido_por: revertidoPor, revertible: bloqueo === null, motivo_no_revertible: bloqueo }
+}
 
 /** Saldo según la naturaleza de la cuenta, como `saldoSegunNaturaleza` de la API. */
 function saldoNatural(cuenta: Cuenta, debe: string, haber: string): Decimal {
@@ -53,8 +82,39 @@ export const rutasLibro: RutasFixture = {
             .filter(a => !hasta || a.fecha <= hasta)
             .filter(a => !origen || a.origen_tipo === origen)
             .sort((a, b) => b.id - a.id)
+            .map(vistaAsiento)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
+
+    'GET /api/v1/libro/asientos/:id': conPermiso('libro.ver', (solicitud) => {
+        const asiento = bd.asientos.find(a => a.id === idDe(solicitud))
+        return asiento ? { status: 200, cuerpo: vistaAsiento(asiento) } : noEncontrado('el asiento')
+    }),
+
+    /** Como `RevertirAsiento` (A3): motivo 3..500; 422 `reverso_por_documento`, `asiento_revertido`, `asiento_es_reverso`. */
+    'POST /api/v1/libro/asientos/:id/revertir': conPermiso('libro.revertir_asiento', conIdempotencia((solicitud) => {
+        const original = bd.asientos.find(a => a.id === idDe(solicitud))
+        if (!original) {
+            return noEncontrado('el asiento')
+        }
+        const { motivo } = cuerpoObjeto(solicitud)
+        const texto = typeof motivo === 'string' ? motivo.trim() : ''
+        if (texto.length < 3 || texto.length > 500) {
+            return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener entre 3 y 500 caracteres', rule: 'minLength' }])
+        }
+        const vista = vistaAsiento(original)
+        if (!vista.revertible) {
+            const codigo = original.reversa_de !== null ? 'asiento_es_reverso' : vista.revertido_por !== null ? 'asiento_revertido' : 'reverso_por_documento'
+            const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: 'Regla de negocio', status: 422, detail: vista.motivo_no_revertible ?? 'No se puede revertir' }
+            return { status: 422, cuerpo }
+        }
+        const momento = new Date().toISOString()
+        const usuario = solicitud.token ? (usuariosPorToken[solicitud.token]?.id ?? null) : null
+        const reverso = asientoReverso(siguienteId(bd.asientos), original, `Reverso del asiento ${original.id}: ${texto}`, momento, usuario)
+        bd.asientos.push(reverso)
+        registrarAccion(solicitud, 'libro.revertir_asiento', { tipo: 'asiento', id: original.id }, { motivo: texto })
+        return { status: 201, cuerpo: vistaAsiento(reverso) }
+    })),
 
     'GET /api/v1/libro/mayor': conPermiso('libro.ver', (solicitud) => {
         const cuentaId = numeroQuery(solicitud, 'cuenta_id')

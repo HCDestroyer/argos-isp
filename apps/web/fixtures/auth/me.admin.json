@@ -87,6 +87,9 @@
     "egresos.ver",
     "egresos.registrar",
     "egresos.anular",
-    "reportes.ver"
+    "reportes.ver",
+    "facturas.nota_credito",
+    "red.ver",
+    "routers.marcar_migrado"
   ]
 }
