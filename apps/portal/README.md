@@ -227,6 +227,23 @@ primaria (una por vista, solo en oscuro). Nunca colores crudos de Tailwind: toke
 Sin `backdrop-filter` (Android viejo) el vidrio pasa a sólido. El tema no agrega peticiones: el logo va
 en línea y no hay fuentes externas. El PDF del aviso de cobro no lleva logo (ver `.claude/integration/a5.md`).
 
+## Inicio del cliente (dashboard móvil) y PWA
+
+| Pieza | Dónde |
+| --- | --- |
+| `/cuenta?seccion=inicio\|pagar\|facturas\|cuenta`: secciones en la URL ("Atrás" vuelve), transición corta apagada con movimiento reducido | `app/pages/cuenta.vue`, `app/utils/navegacion.ts` |
+| Barra inferior de vidrio con sesión (móvil, destinos de 56 × 44 px, `env(safe-area-inset-bottom)` con `viewport-fit=cover`) y barra de secciones centrada en escritorio | `app/components/portal/Navegacion.vue`, `app/layouts/default.vue` |
+| Encabezado compacto: total, estado más urgente y "Actualizar" | `app/components/cuenta/Resumen.vue` |
+| Jalar para actualizar sin dependencias (touch pasivo; "Actualizar" es la alternativa de un toque) | `app/composables/useJalarParaActualizar.ts`, `app/components/portal/JalarParaActualizar.vue` |
+| Accesos rápidos: solo lo que la API aceptaría ahora (tabla en el archivo) | `app/utils/accesos.ts`, `app/components/portal/AccesosRapidos.vue` |
+| Servicios agrupados por empresa (hoy uno; multiempresa cambia solo `agruparPorEmpresa`) | `app/utils/empresas.ts`, `app/components/cuenta/InicioEmpresa.vue` |
+| ¿Hay sesión? Estado compartido + pista `argos:portal:sesion` en `localStorage` (solo `1`): `/corte` pregunta por la cuenta solo si hubo sesión en el dispositivo | `app/composables/useSesionPortal.ts` |
+| Manifiesto PWA (`standalone`, teal, nombre de la empresa), íconos de la marca; sin service worker | `server/routes/manifest.webmanifest.get.ts`, `server/utils/manifiesto.ts`, `public/iconos/` |
+
+Los íconos PNG salen de la marca (`LogoArgos`): cuadro redondeado para `any` y fondo a sangre con el
+ojo en la zona segura para `maskable` y `apple-touch-icon`. El manifiesto y `/iconos/` se sirven
+también con Host ajeno (portal cautivo) y la CSP lleva `manifest-src 'self'`.
+
 ## Datos de la empresa y contacto (configurables desde el panel)
 
 | Pieza | Dónde |
