@@ -154,16 +154,16 @@ function normalizarSello(f: SelloFila): SelloFila {
 export async function pendientesDeSellar(
     cliente: QueryClientContract = db.connection(),
     empresaId?: number | null,
-): Promise<Array<{ empresa_id: number; pendientes: number }>> {
+): Promise<Array<{ empresa_id: number; asientos: number }>> {
     const { rows } = (await cliente.rawQuery(
-        `SELECT a.empresa_id, count(*)::int AS pendientes
+        `SELECT a.empresa_id, count(*)::int AS asientos
            FROM ledger.asientos a
           WHERE NOT EXISTS (SELECT 1 FROM ledger.asientos_sellos s WHERE s.asiento_id = a.id)
             ${empresaId ? 'AND a.empresa_id = ?' : ''}
           GROUP BY a.empresa_id ORDER BY a.empresa_id`,
         empresaId ? [empresaId] : [],
-    )) as { rows: Array<{ empresa_id: number; pendientes: number }> }
-    return rows.map((r) => ({ empresa_id: Number(r.empresa_id), pendientes: Number(r.pendientes) }))
+    )) as { rows: Array<{ empresa_id: number; asientos: number }> }
+    return rows.map((r) => ({ empresa_id: Number(r.empresa_id), asientos: Number(r.asientos) }))
 }
 
 /**
