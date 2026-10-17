@@ -140,7 +140,7 @@ El IVA se calcula sobre el neto (`150.00 − 150.00 / 1.12 = 16.07`) y se repart
 
 ## 6. Contabilidad
 
-Decisión del PM: los puntos son pasivo (ingreso diferido). `programas.diferimiento` viene encendido; se apaga solo si el contador concluye que los puntos no dan un **derecho material** (inv. F.3, B41). `canje_esperado_pct` empieza en 100 % hasta que el contador estime otro. El valor de un punto para el pasivo es `valor_punto × canje_esperado_pct`. Cuentas del contrato de localización fiscal.
+Decisión del PM (2026-10-17): los puntos son, por defecto, **solo un indicador** (`programas.diferimiento = false`): no generan asientos al acumular ni al vencer. Cada empresa decide si trabaja el programa y si lo contabiliza como pasivo NIIF 15 (`diferimiento = true`, recomendado cuando el contador concluya que los puntos dan un **derecho material**; inv. F.3, B41). `canje_esperado_pct` empieza en 100 % hasta que el contador estime otro. El valor de un punto para el pasivo es `valor_punto × canje_esperado_pct`. Cuentas del contrato de localización fiscal.
 
 | Momento                    | Asiento (origen `lealtad`)                                                                           | Nota                                                                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -170,7 +170,7 @@ Al final `2.1.10` queda en cero, igual que el saldo de puntos. El reporte `lealt
 
 ### 6.1 Regla de vencimiento
 
-- Cada acumulación es un lote con `vence_en = fecha + vencimiento_meses` (por defecto 12).
+- Cada acumulación es un lote con `vence_en = fecha + vencimiento_meses`. Cada empresa lo estipula en su programa (por defecto 12; `null` = los puntos no vencen). Decisión del PM.
 - Los canjes consumen primero el lote que vence antes (`lealtad.consumos`).
 - El cron diario `lealtad:vencer` procesa todo lo vencido hasta hoy (no "lo de hoy"), con clave `vencimiento:lote:<id>` y lock (regla 6).
 - `aviso_vencimiento_dias` antes, emite `lealtad.puntos_por_vencer` una vez por lote (A6 avisa al cliente).
