@@ -55,7 +55,7 @@ export interface paths {
         put?: never;
         /**
          * Iniciar sesión del panel en cookie HttpOnly
-         * @description Igual que `POST /auth/login` (mismas credenciales y límite de intentos), pero el token va en la cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. Contrato: `.claude/integration/contratos/sesion-panel.md`.
+         * @description Igual que `POST /auth/login` (mismas credenciales y límite de intentos), pero el token va en la cookie `argos_sesion` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api`) y nunca en el cuerpo. El cuerpo trae `csrf`: el panel lo manda en `X-CSRF-Token` en POST, PUT y DELETE. Si llega `Origin`, debe ser un origen permitido (`CORS_ORIGINS`): si no, 403 `csrf_invalido`. La sesión se renueva sola mientras se usa (`PANEL_SESION_INACTIVIDAD_H`, 12 h) hasta el tope `PANEL_SESION_MAXIMA_H` (72 h desde el login); vencida, 401 `sesion_expirada`. Contrato: `.claude/integration/contratos/sesion-panel.md`.
          */
         post: operations["authSesion"];
         delete?: never;
@@ -3630,6 +3630,16 @@ export interface components {
             permisos: string[];
             /** @description Solo con la sesión del panel por cookie (`GET /me`): valor de `X-CSRF-Token` para POST, PUT y DELETE */
             csrf?: string;
+            /**
+             * Format: date-time
+             * @description Solo en `GET /me`: cuándo vence la credencial actual. Con la cookie del panel se renueva sola mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; null con tokens de API (no vencen)
+             */
+            expira_en?: string | null;
+            /**
+             * Format: date-time
+             * @description Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)
+             */
+            expira_max_en?: string | null;
         };
         MigracionAaaRouter: {
             router_id: number;
@@ -4926,9 +4936,14 @@ export interface components {
             csrf: string;
             /**
              * Format: date-time
-             * @description Cuándo vence la sesión (no se renueva)
+             * @description Cuándo vence la sesión si no se usa. Cada petición la renueva hasta `ahora + PANEL_SESION_INACTIVIDAD_H` sin pasar de `expira_max_en`
              */
             expira_en: string | null;
+            /**
+             * Format: date-time
+             * @description Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use. La API siempre lo manda; opcional en el esquema para no romper clientes ya generados
+             */
+            expira_max_en?: string | null;
         };
         SimulacionPromesa: {
             servicio_id: number;

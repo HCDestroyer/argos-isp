@@ -17,8 +17,14 @@ test.group('OpenAPI', () => {
 
     test('conserva Me y Problem de la semilla, y los operationId del login', async ({ assert }) => {
         const doc = JSON.parse(await construirOpenApi())
-        // la semilla se conserva; `csrf` es opcional y solo llega con la cookie del panel
-        const { csrf, ...propiedades } = doc.components.schemas.Me.properties
+        // la semilla se conserva; `csrf` (solo con la cookie del panel), `expira_en` y `expira_max_en`
+        // (solo en GET /me) son opcionales
+        const {
+            csrf,
+            expira_en: expiraEn,
+            expira_max_en: expiraMaxEn,
+            ...propiedades
+        } = doc.components.schemas.Me.properties
         assert.deepEqual(
             { ...doc.components.schemas.Me, properties: propiedades },
             {
@@ -34,6 +40,8 @@ test.group('OpenAPI', () => {
             },
         )
         assert.equal(csrf.type, 'string')
+        assert.deepEqual(expiraEn.type, ['string', 'null'])
+        assert.deepEqual(expiraMaxEn.type, ['string', 'null'])
         assert.deepEqual(doc.components.schemas.Problem.required, ['type', 'title', 'status'])
         assert.equal(doc.paths['/api/v1/auth/login'].post.operationId, 'authLogin')
         assert.equal(doc.paths['/api/v1/me'].get.operationId, 'me')

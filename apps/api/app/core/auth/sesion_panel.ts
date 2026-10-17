@@ -1,14 +1,20 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
-import { Secret } from '@adonisjs/core/helpers'
 import { errors, symbols } from '@adonisjs/auth'
 import type { AuthClientResponse, GuardContract } from '@adonisjs/auth/types'
-import type { AccessToken } from '@adonisjs/auth/access_tokens'
-import Usuario from '#core/models/usuario'
+import { AccessToken } from '@adonisjs/auth/access_tokens'
+import db from '@adonisjs/lucid/services/db'
+import Usuario, { TOKENS_SESION } from '#core/models/usuario'
 import { appKey } from '#config/app'
 import { Problema } from '#shared/errores'
 import { origenPermitido } from '#core/auth/origenes'
 import { COOKIE_SESION_PANEL } from '#shared/rutas'
+import {
+    NOMBRE_TOKEN_PANEL,
+    configSesionPanel,
+    decidirRenovacion,
+    relojSesion,
+} from '#core/auth/sesion_deslizante'
 
 /**
  * Sesión del panel en cookie `HttpOnly` (semana 3, tanda 2). Contrato:
@@ -28,6 +34,11 @@ import { COOKIE_SESION_PANEL } from '#shared/rutas'
  *   2. `Origin`, si viene, debe ser un origen permitido (`app/core/auth/origenes.ts`).
  *   `SameSite=Strict` ya impide que la cookie viaje desde otro sitio; las dos capas cubren los
  *   orígenes del mismo sitio (otro subdominio) y navegadores sin `SameSite`.
+ * - Vencimiento deslizante (semana 3, tanda 3; `app/core/auth/sesion_deslizante.ts`): cada petición
+ *   lleva el vencimiento a `ahora + PANEL_SESION_INACTIVIDAD_H` sin pasar de
+ *   `login + PANEL_SESION_MAXIMA_H`; guarda y vuelve a emitir la cookie solo cuando avanza al menos
+ *   el umbral (15 min). El `csrf` no cambia al renovar: es el HMAC del token, y el token es el mismo.
+ *   Vencida (por inactividad o por el tope): 401 `sesion_expirada` y se borra la cookie.
  */
 
 export { COOKIE_SESION_PANEL }
@@ -69,7 +80,9 @@ function iguales(a: string, b: string): boolean {
 }
 
 export function ponerCookieSesionPanel(ctx: HttpContext, token: string, expiraEn: Date | null): void {
-    const maxAge = expiraEn ? Math.max(1, Math.floor((expiraEn.getTime() - Date.now()) / 1000)) : undefined
+    const maxAge = expiraEn
+        ? Math.max(1, Math.floor((expiraEn.getTime() - relojSesion.ahora().getTime()) / 1000))
+        : undefined
     ctx.response.plainCookie(COOKIE_SESION_PANEL, token, {
         ...opcionesCookiePanel(),
         ...(maxAge ? { maxAge } : {}),
@@ -84,6 +97,13 @@ export function borrarCookieSesionPanel(ctx: HttpContext): void {
 export function tokenDeCookie(ctx: HttpContext): string | null {
     const valor = ctx.request.plainCookie(COOKIE_SESION_PANEL, { encoded: false })
     return typeof valor === 'string' && valor.length > 0 ? valor : null
+}
+
+/** 401 cuando la sesión del panel venció (inactividad o tope absoluto). El panel vuelve al login. */
+export class SesionExpirada extends Problema {
+    constructor() {
+        super(401, 'sesion_expirada', 'Sesión expirada', 'La sesión del panel venció; inicia sesión de nuevo')
+    }
 }
 
 export class CsrfInvalido extends Problema {
@@ -129,6 +149,11 @@ export class SesionCookieGuard implements GuardContract<Usuario> {
     user?: Usuario & { currentAccessToken: AccessToken }
     /** valor del token de la cookie (para el CSRF y el logout) */
     tokenSesion?: string
+    /** la cookie traía una sesión real pero vencida: el middleware responde 401 `sesion_expirada` */
+    expirada = false
+    /** vencimiento vigente y tope absoluto de la sesión (para `GET /me`) */
+    expiraEn: Date | null = null
+    expiraMaxEn: Date | null = null
     isAuthenticated = false
     authenticationAttempted = false
 
@@ -152,7 +177,7 @@ export class SesionCookieGuard implements GuardContract<Usuario> {
         const valor = tokenDeCookie(this.ctx)
         if (!valor) return this.getUserOrFail()
 
-        const token = await Usuario.accessTokens.verify(new Secret(valor))
+        const token = await this.#verificar(valor)
         if (!token) return this.getUserOrFail()
         const usuario = await Usuario.find(token.tokenableId)
         if (!usuario) return this.getUserOrFail()
@@ -163,6 +188,67 @@ export class SesionCookieGuard implements GuardContract<Usuario> {
         this.tokenSesion = valor
         this.isAuthenticated = true
         return conToken
+    }
+
+    /**
+     * Como `DbAccessTokensProvider.verify`, pero sin escribir `last_used_at` en cada petición: la
+     * fila solo se toca al renovar el vencimiento (como mucho cada 15 min por sesión activa).
+     */
+    async #verificar(valor: string): Promise<AccessToken | null> {
+        const decodificado = AccessToken.decode(TOKENS_SESION.prefijo, valor)
+        if (!decodificado) return null
+        const fila = await db
+            .from(TOKENS_SESION.tabla)
+            .where({ id: decodificado.identifier, type: TOKENS_SESION.tipo })
+            .first()
+        if (!fila) return null
+        const token = new AccessToken({
+            identifier: fila.id,
+            tokenableId: fila.tokenable_id,
+            type: fila.type,
+            name: fila.name,
+            hash: fila.hash,
+            abilities: typeof fila.abilities === 'string' ? JSON.parse(fila.abilities) : fila.abilities,
+            createdAt: new Date(fila.created_at),
+            updatedAt: new Date(fila.updated_at),
+            lastUsedAt: fila.last_used_at ? new Date(fila.last_used_at) : null,
+            expiresAt: fila.expires_at ? new Date(fila.expires_at) : null,
+        })
+        if (!token.verify(decodificado.secret)) return null
+
+        const ahora = relojSesion.ahora()
+        // un token de login Bearer metido en la cookie no se desliza: vence a ACCESS_TOKEN_EXPIRA
+        if (token.name !== NOMBRE_TOKEN_PANEL) {
+            if (token.expiresAt && token.expiresAt <= ahora) {
+                this.expirada = true
+                return null
+            }
+            this.expiraEn = token.expiresAt
+            this.expiraMaxEn = token.expiresAt
+            return token
+        }
+
+        const decision = decidirRenovacion(
+            { creadaEn: token.createdAt, expiraEn: token.expiresAt },
+            ahora,
+            configSesionPanel(),
+        )
+        if (decision.estado === 'expirada') {
+            this.expirada = true
+            return null
+        }
+        if (decision.renovar) {
+            await db
+                .from(TOKENS_SESION.tabla)
+                .where({ id: fila.id, type: TOKENS_SESION.tipo })
+                .update({ expires_at: decision.expiraEn, last_used_at: ahora, updated_at: ahora })
+            token.expiresAt = decision.expiraEn
+            token.lastUsedAt = ahora
+            ponerCookieSesionPanel(this.ctx, valor, decision.expiraEn)
+        }
+        this.expiraEn = decision.expiraEn
+        this.expiraMaxEn = decision.expiraMaxEn
+        return token
     }
 
     async check(): Promise<boolean> {

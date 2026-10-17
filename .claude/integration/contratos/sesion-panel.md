@@ -2,6 +2,7 @@
 
 Expone: A1 (`apps/api/app/core/auth/sesion_panel.ts`, `origenes.ts`). Consume: A4 (`apps/web`).
 Decisión del PM (semana 3, tanda 2): el token del panel pasa a la opción más segura sin cambiar el flujo.
+Decisión del PM (semana 3, tanda 3): la sesión se renueva sola mientras se usa, con un tope absoluto de 3 días (§4).
 
 ## Resumen
 
@@ -32,11 +33,12 @@ Respuesta `200` (`SesionPanel`):
 {
     "usuario": { "id": 7, "nombre": "…", "email": "…", "roles": ["cajero"], "permisos": ["…"], "csrf": "…" },
     "csrf": "Q2x…",
-    "expira_en": "2026-10-18T06:00:00.000Z"
+    "expira_en": "2026-10-18T06:00:00.000Z",
+    "expira_max_en": "2026-10-20T18:00:00.000Z"
 }
 ```
 
-y la cabecera:
+`expira_en` = login + `PANEL_SESION_INACTIVIDAD_H` (12 h); `expira_max_en` = login + `PANEL_SESION_MAXIMA_H` (72 h). Y la cabecera:
 
 ```
 Set-Cookie: argos_sesion=oat_…; Max-Age=43200; Path=/api; HttpOnly; Secure; SameSite=Strict
@@ -71,11 +73,23 @@ Errores: 401 `credenciales_invalidas`, 422 validación, 429 `demasiados_intentos
 - Nunca se refleja un origen cualquiera.
 - En desarrollo por http con una IP o nombre que no sea `localhost`, `PANEL_COOKIE_SEGURA=false` quita `Secure` (los navegadores ya aceptan `Secure` en `http://localhost`).
 
-## 4. Vencimiento y renovación
+## 4. Vencimiento y renovación (sesión deslizante)
 
-- La sesión vence a las `ACCESS_TOKEN_EXPIRA` (por defecto `12h`) del login; la cookie tiene el mismo `Max-Age`. `expira_en` lo dice.
-- **No se renueva sola** (sin sesión deslizante). Cuando la API responde 401 (`no_autenticado`) el panel limpia su estado y vuelve al login. Puede avisar unos minutos antes de `expira_en`.
-- Desactivar al usuario corta la sesión en la siguiente petición (401).
+Código: `apps/api/app/core/auth/sesion_deslizante.ts` (reglas) y el guard `panel` de `sesion_panel.ts`.
+
+| Variable (`apps/api/.env`) | Por defecto | Qué es |
+| --- | --- | --- |
+| `PANEL_SESION_INACTIVIDAD_H` | `12` | Horas sin peticiones tras las que vence la sesión |
+| `PANEL_SESION_MAXIMA_H` | `72` (3 días) | Tope absoluto desde el login: ahí vence aunque se use |
+
+- **Cada petición autenticada con la cookie** lleva el vencimiento a `min(ahora + inactividad, login + máxima)`.
+- **Sin escribir en la base en cada petición.** Solo se guarda (`expires_at` y `last_used_at` del token) cuando el vencimiento nuevo supera al guardado en al menos el **umbral**: 10 % de la ventana de inactividad, entre 1 y 15 min (con 12 h: **15 min**). Una sesión activa escribe como mucho 4 veces por hora, y la ventana real de inactividad queda entre 11 h 45 min y 12 h desde la última petición. Al acercarse al tope se hace una última escritura que lo alcanza exacto. Las peticiones sin renovación no escriben nada (el guard ya no actualiza `last_used_at` en cada una).
+- **Al renovar**, la respuesta vuelve a traer `Set-Cookie: argos_sesion=<mismo token>; Max-Age=<segundos hasta el nuevo vencimiento>; …`. El navegador la reemplaza solo; el panel no hace nada.
+- **El `csrf` no cambia al renovar.** Es `HMAC(APP_KEY, token)` y el token es el mismo; rotarlo obligaría al panel a leer un `csrf` nuevo de una respuesta cualquiera y haría fallar con 403 las peticiones en vuelo con el valor viejo, sin ganar nada (el `csrf` ya muere con la sesión y cambia en cada login).
+- **Vencida** (por inactividad o por el tope): `401 application/problem+json` con `type: urn:argosisp:problema:sesion_expirada` y la cookie borrada (`Max-Age` vencido). Sin cookie, con un token inválido o revocado sigue siendo `401 no_autenticado`. El panel trata los dos igual (limpia su estado y va al login); puede usar el `type` para decir "Tu sesión expiró".
+- `GET /me` trae `expira_en` (vencimiento vigente, ya renovado por esa misma petición) y `expira_max_en` (tope) para avisar si se quiere. Con Bearer de login los dos son el vencimiento fijo; con tokens de API, `null`.
+- **Bearer sin cambios:** los tokens de `POST /auth/login` (API, agentes, aaa/coa, pruebas) vencen a `ACCESS_TOKEN_EXPIRA` (12 h) y no se renuevan; los tokens de API (`atk_`) no vencen; el portal tiene su propia cookie. Un token de `POST /auth/login` puesto a mano en la cookie tampoco se desliza: solo los tokens creados por `POST /auth/sesion` (nombre `sesion panel` en `core.auth_access_tokens`).
+- Desactivar al usuario corta la sesión en la siguiente petición (401 `no_autenticado`).
 
 ## 5. Logout
 
