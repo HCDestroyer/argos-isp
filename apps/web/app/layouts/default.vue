@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import type { NavigationMenuItem } from '@nuxt/ui'
+import type { CommandPaletteGroup, CommandPaletteItem, NavigationMenuItem } from '@nuxt/ui'
 
 const { puede } = usePermisos()
 const comprobantes = useComprobantes()
+const route = useRoute()
 
+/** Menú del teléfono (USlideover) abierto. */
 const abierto = ref(false)
+/** Barra compacta (solo iconos), recordada por usuario. */
+const { compacto } = useMenuCompacto()
+/** Buscador de secciones (Ctrl/Cmd+K). */
+const buscando = ref(false)
 
 /** Contadores junto a una sección del menú (hoy, los comprobantes pendientes de verificar). */
 const contadores = computed<Record<string, string | undefined>>(() => ({
@@ -17,43 +23,70 @@ onMounted(() => {
     }
 })
 
-const items = computed<NavigationMenuItem[][]>(() => {
-    const inicio: NavigationMenuItem[] = [{
-        label: 'Inicio',
-        icon: 'i-lucide-house',
-        to: '/',
-        onSelect: () => {
-            abierto.value = false
-        },
-    }]
+function cerrarMovil() {
+    abierto.value = false
+}
 
-    const grupos = GRUPOS_PANEL
-        .map((grupo) => {
-            const visibles = grupo.secciones.filter(seccion => puede(seccion.permiso))
-            if (!visibles.length) {
-                return []
-            }
-            return [
-                { label: grupo.etiqueta, type: 'label' as const },
-                ...visibles.map(seccion => ({
-                    label: seccion.etiqueta,
-                    icon: seccion.icono,
-                    to: seccion.ruta,
-                    badge: contadores.value[seccion.id] ? { label: contadores.value[seccion.id], color: 'warning' as const, variant: 'subtle' as const } : undefined,
-                    onSelect: () => {
-                        abierto.value = false
-                    },
-                })),
-            ]
-        })
-        .filter(grupo => grupo.length > 0)
+/** Grupos con al menos una sección permitida; sin ninguna, el grupo no aparece. */
+const gruposVisibles = computed(() => GRUPOS_PANEL
+    .map(grupo => ({ ...grupo, secciones: grupo.secciones.filter(seccion => puede(seccion.permiso)) }))
+    .filter(grupo => grupo.secciones.length > 0))
 
-    return [inicio, ...grupos]
-})
+/** El grupo de la página actual se abre solo (al cambiar de grupo, el menú se vuelve a montar). */
+const grupoActual = computed(() => grupoDeRuta(route.path)?.id ?? null)
+
+const items = computed<NavigationMenuItem[]>(() => [
+    {
+        'label': 'Inicio',
+        'icon': 'i-lucide-house',
+        'to': '/',
+        'aria-label': 'Inicio',
+        'onSelect': cerrarMovil,
+    },
+    ...gruposVisibles.value.map((grupo) => {
+        const pendientes = grupo.secciones.map(seccion => contadores.value[seccion.id]).find(Boolean)
+        return {
+            'label': grupo.etiqueta,
+            'icon': grupo.icono,
+            'aria-label': grupo.etiqueta,
+            'defaultOpen': grupo.id === grupoActual.value,
+            'badge': pendientes ? { label: pendientes, color: 'warning' as const, variant: 'subtle' as const } : undefined,
+            'children': grupo.secciones.map(seccion => ({
+                'label': seccion.etiqueta,
+                'icon': seccion.icono,
+                'to': seccion.ruta,
+                'aria-label': seccion.etiqueta,
+                'badge': contadores.value[seccion.id] ? { label: contadores.value[seccion.id], color: 'warning' as const, variant: 'subtle' as const } : undefined,
+                'onSelect': cerrarMovil,
+            })),
+        }
+    }),
+])
+
+/** Buscador: las mismas secciones permitidas, por grupo, con su descripción. */
+const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => [
+    {
+        id: 'inicio',
+        items: [{ label: 'Inicio', suffix: 'Tablero y accesos', icon: 'i-lucide-house', to: '/' }],
+    },
+    ...gruposVisibles.value.map(grupo => ({
+        id: grupo.id,
+        label: grupo.etiqueta,
+        items: grupo.secciones.map(seccion => ({
+            label: seccion.etiqueta,
+            suffix: seccion.descripcion,
+            icon: seccion.icono,
+            to: seccion.ruta,
+        })),
+    })),
+])
 </script>
 
 <template>
-    <UDashboardGroup unit="rem">
+    <UDashboardGroup
+        unit="rem"
+        :persistent="false"
+    >
         <!-- Aura: fondo de color difuminado bajo toda la app, para que el vidrio tenga qué reflejar. -->
         <div
             class="app-aura"
@@ -63,8 +96,8 @@ const items = computed<NavigationMenuItem[][]>(() => {
         <UDashboardSidebar
             id="principal"
             v-model:open="abierto"
+            v-model:collapsed="compacto"
             collapsible
-            resizable
             class="glass-material"
             :ui="{
                 footer: 'lg:border-t lg:border-default',
@@ -73,7 +106,7 @@ const items = computed<NavigationMenuItem[][]>(() => {
             <template #header="{ collapsed }">
                 <NuxtLink
                     to="/"
-                    class="flex items-center gap-2 px-1 font-semibold text-highlighted"
+                    class="flex min-w-0 items-center gap-2 px-1 font-semibold text-highlighted"
                     aria-label="ArgosIsp, inicio"
                 >
                     <LogoArgos class="size-7 shrink-0" />
@@ -85,15 +118,21 @@ const items = computed<NavigationMenuItem[][]>(() => {
             </template>
 
             <template #default="{ collapsed }">
-                <UNavigationMenu
-                    v-for="(grupo, indice) in items"
-                    :key="indice"
+                <UDashboardSearchButton
                     :collapsed="collapsed"
-                    :items="grupo"
+                    label="Buscar"
+                    aria-label="Buscar sección (Ctrl+K)"
+                    class="bg-transparent ring-default"
+                />
+                <UNavigationMenu
+                    :key="`${grupoActual}-${collapsed}`"
+                    :collapsed="collapsed"
+                    :items="items"
                     orientation="vertical"
                     tooltip
                     popover
-                    :class="indice > 0 ? 'mt-2' : undefined"
+                    aria-label="Menú principal"
+                    data-prueba="menu-principal"
                 />
             </template>
 
@@ -101,6 +140,15 @@ const items = computed<NavigationMenuItem[][]>(() => {
                 <MenuUsuario :collapsed="collapsed" />
             </template>
         </UDashboardSidebar>
+
+        <UDashboardSearch
+            v-model:open="buscando"
+            :groups="gruposBusqueda"
+            :color-mode="false"
+            placeholder="Ir a una sección…"
+            title="Buscar sección"
+            description="Escribe el nombre de una sección y pulsa Enter"
+        />
 
         <slot />
 

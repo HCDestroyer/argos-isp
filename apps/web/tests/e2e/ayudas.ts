@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 /**
  * Piezas comunes de las pruebas de flujo. En modo fixtures los datos viven en memoria: después
@@ -24,7 +24,20 @@ export async function menu(page: Page) {
     }
     // En teléfono el menú se abre en un panel aparte con los mismos enlaces.
     const abierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
-    return (await lateral.isVisible()) ? lateral : abierto
+    const contenedor = (await lateral.isVisible()) ? lateral : abierto
+    await expandirGrupos(contenedor)
+    return contenedor
+}
+
+/**
+ * El menú va en grupos plegables (solo el de la página actual abierto): abre todos para que las
+ * pruebas vean cada enlace permitido. Un grupo sin secciones permitidas no existe.
+ */
+export async function expandirGrupos(contenedor: Locator): Promise<void> {
+    const cerrados = contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]')
+    while (await cerrados.count()) {
+        await cerrados.first().click()
+    }
 }
 
 /** Va a una sección por el menú lateral. */

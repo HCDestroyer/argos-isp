@@ -31,6 +31,21 @@ Los tokens de la marca son `--argos-marca-fondo` (`primary-700`) y `--argos-marc
   `:ui="{ root: 'rounded-none bg-transparent ring-0 dark:shadow-none' }"` (tabla alternativa de las gráficas).
 - Con `prefers-reduced-transparency` todo el vidrio y las tarjetas pasan a sólido y no hay aura.
 
+## Menú (decisión del PM: resumido)
+
+- Seis grupos plegables en `GRUPOS_PANEL` (`utils/navegacion.ts`): Operación (clientes, servicios,
+  migración de router), Cobros (cobrar, facturas, pagos, comprobantes, promesas, notas de crédito),
+  Contabilidad (caja, libro con sus cierres, egresos), Red (routers, planes), Reportes y bitácora,
+  y Configuración (usuarios, plantillas, cuentas bancarias, empresa, plantilla del aviso).
+- Un grupo sin ninguna sección permitida no aparece; el de la página actual se abre solo
+  (`grupoDeRuta`). Cada enlace pide el mismo permiso que su página (`pnpm verificar:permisos`).
+- Barra compacta (solo iconos con tooltip y `aria-label`; cada grupo abre sus secciones en un
+  popover). Se compacta con el botón de la barra superior y se recuerda por usuario en
+  `localStorage` (`argos_menu_compacto:<id>`, con try/catch: sin almacenamiento arranca expandida).
+- En el teléfono el menú vive en un `USlideover` (vidrio fuerte) y no ocupa espacio.
+- Buscador de secciones (`UDashboardSearch`, un `UCommandPalette` en modal) con Ctrl/Cmd+K o el
+  botón "Buscar": las mismas secciones permitidas, por grupo, con su descripción.
+
 ## Luz
 
 - **Acción primaria con halo:** clase `glow-brand` en una sola acción por vista (solo se ve en

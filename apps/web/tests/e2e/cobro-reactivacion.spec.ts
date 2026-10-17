@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { ir } from './ayudas'
 
 /**
  * Prueba obligatoria 3 del brief de A4: "Registrar pago y ver el servicio reactivarse".
@@ -15,18 +16,9 @@ test('registrar pago y ver el servicio reactivarse', async ({ page }) => {
     await page.getByRole('button', { name: 'Entrar' }).click()
     await expect(page).not.toHaveURL(/\/login/)
 
-    // Navegación dentro de la SPA: los fixtures viven en memoria y un page.goto los reiniciaría.
-    // "Cobrar" está en el menú lateral (escritorio) y en la tarjeta de inicio (teléfono, donde
-    // el menú va plegado).
-    const menu = page.locator('#dashboard-sidebar-principal').getByRole('link', { name: 'Cobrar' })
-    if (await menu.isVisible()) {
-        await menu.click()
-    }
-    else {
-        // El enlace de la tarjeta cubre toda la tarjeta con un span transparente.
-        await page.getByText('Cobro rápido: buscar cliente').click({ force: true })
-    }
-    await expect(page).toHaveURL(/\/cobro/)
+    // Navegación dentro de la SPA (los fixtures viven en memoria y un page.goto los reiniciaría):
+    // "Cobrar" por el menú lateral, que en el teléfono va en un panel aparte.
+    await ir(page, 'Cobrar', /\/cobro/)
 
     await page.getByPlaceholder('Buscar cliente…').fill('Juan Carlos')
     await page.getByRole('option', { name: /Juan Carlos Ramírez/ }).click()
