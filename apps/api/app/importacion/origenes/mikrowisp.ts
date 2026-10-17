@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { Decimal } from 'decimal.js'
+import { CERO, D, type Dec } from '#ledger/dinero'
 import { leerDumpMysql, type FilaSql } from '#importacion/mysql_dump'
 import {
     normalizarFuente,
@@ -12,7 +12,7 @@ import {
 import {
     agrupar,
     filasCanonicas,
-    montoSeguro,
+    montoOrigen,
     normalizarId,
     ProblemasOrigen,
     tablasDelEsquema,
@@ -216,7 +216,7 @@ export function filasDesdeDump(
 
     // Pagos (en quetzales) por factura, para comparar con facturas.cobrado
     const operaciones: Array<{ fila: FilaSql; linea: number }> = []
-    const pagadoPorFactura = new Map<string, Decimal>()
+    const pagadoPorFactura = new Map<string, Dec>()
     t.operaciones.filas.forEach((op, i) => {
         const id = normalizarId(op.id)
         const ajena = monedaAjena(op.idmoneda)
@@ -229,11 +229,16 @@ export function filasDesdeDump(
             )
             return
         }
+        const cobrado = montoOrigen(op, 'cobrado')
+        if (!cobrado.ok) {
+            problemas.omitir(ESQUEMA.operaciones.tabla, i + 1, id, cobrado.motivo)
+            return
+        }
         operaciones.push({ fila: op, linea: i + 1 })
         traza.vincular(ESQUEMA.operaciones.tabla, i + 1, 'pagos', id)
         const f = normalizarId(op.nfactura)
         if (!f || f === '0') return
-        pagadoPorFactura.set(f, (pagadoPorFactura.get(f) ?? new Decimal(0)).plus(montoSeguro(op.cobrado)))
+        pagadoPorFactura.set(f, (pagadoPorFactura.get(f) ?? CERO).plus(cobrado.valor))
     })
 
     const conceptos = agrupar(t.items.filas, 'idfactura')
@@ -242,7 +247,7 @@ export function filasDesdeDump(
     // operación que la cubra, el importador la marca saldada en el origen.
     const facturas: FilaOrigen[] = []
     const estadoFactura = new Map<string, string>()
-    const pendientePorCliente = new Map<string, Decimal>()
+    const pendientePorCliente = new Map<string, Dec>()
     const duenosFacturas = new Map<string, string>()
     /** cliente + mes de vencimiento de las facturas de servicio, para la segunda del mismo mes */
     const periodosUsados = new Set<string>()
@@ -268,14 +273,24 @@ export function filasDesdeDump(
             )
             return
         }
-        const total = montoSeguro(f.total)
-        let pagado: Decimal
+        const leidoTotal = montoOrigen(f, 'total')
+        if (!leidoTotal.ok && (estado === 'pagado' || estado === 'no pagado')) {
+            problemas.omitir(tabla, linea, id, leidoTotal.motivo)
+            return
+        }
+        const total = leidoTotal.ok ? leidoTotal.valor : CERO
+        let pagado: Dec
         if (estado === 'pagado') {
             pagado = total
         } else if (estado === 'no pagado') {
-            const cobrado = montoSeguro(f.cobrado)
-            pagado = Decimal.min(total, cobrado)
-            const operado = pagadoPorFactura.get(id) ?? new Decimal(0)
+            const leidoCobrado = montoOrigen(f, 'cobrado')
+            if (!leidoCobrado.ok) {
+                problemas.omitir(tabla, linea, id, leidoCobrado.motivo)
+                return
+            }
+            const cobrado = leidoCobrado.valor
+            pagado = D.min(total, cobrado)
+            const operado = pagadoPorFactura.get(id) ?? CERO
             if (!operado.eq(cobrado)) {
                 problemas.avisar(
                     tabla,
@@ -326,16 +341,13 @@ export function filasDesdeDump(
         traza.vincular(tabla, linea, 'facturas', id)
         const pendiente = total.minus(pagado)
         if (pendiente.gt(0)) {
-            pendientePorCliente.set(
-                cliente,
-                (pendientePorCliente.get(cliente) ?? new Decimal(0)).plus(pendiente),
-            )
+            pendientePorCliente.set(cliente, (pendientePorCliente.get(cliente) ?? CERO).plus(pendiente))
         }
     })
 
     // Saldo a favor: saldos sin aplicar (`no cobrado`) del cliente, en quetzales. En los datos
     // reales solo hay `facturado` (traslados entre facturas, ya reflejados en cobrado).
-    const favorPorCliente = new Map<string, Decimal>()
+    const favorPorCliente = new Map<string, Dec>()
     t.saldos.filas.forEach((s, i) => {
         const tabla = ESQUEMA.saldos.tabla
         const estado = texto(s.estado).toLowerCase()
@@ -355,11 +367,13 @@ export function filasDesdeDump(
             problemas.omitir(tabla, i + 1, cliente, `saldo a favor en ${ajena}: no se importa`)
             return
         }
+        const monto = montoOrigen(s, 'monto')
+        if (!monto.ok) {
+            problemas.omitir(tabla, i + 1, cliente, `saldo a favor: ${monto.motivo}`)
+            return
+        }
         traza.soloArchivo(tabla, i + 1, 'saldo a favor: entra en el saldo inicial del cliente')
-        favorPorCliente.set(
-            cliente,
-            (favorPorCliente.get(cliente) ?? new Decimal(0)).plus(montoSeguro(s.monto)),
-        )
+        favorPorCliente.set(cliente, (favorPorCliente.get(cliente) ?? CERO).plus(monto.valor))
     })
 
     // Saldo del origen: lo pendiente de sus facturas menos su saldo a favor. Solo se exporta
@@ -370,7 +384,7 @@ export function filasDesdeDump(
         const cliente = normalizarId(u.id)
         const favor = favorPorCliente.get(cliente)
         if (!favor || favor.isZero()) continue
-        const saldo = (pendientePorCliente.get(cliente) ?? new Decimal(0)).minus(favor)
+        const saldo = (pendientePorCliente.get(cliente) ?? CERO).minus(favor)
         saldos.push({ cliente_id: cliente, saldo: saldo.toFixed(2) })
     }
 
@@ -465,13 +479,16 @@ export function filasDesdeDump(
             )
         }
         const plan = perfiles.get(normalizarId(s.idperfil))
-        const costo = montoSeguro(s.costo)
-        if (plan && !costo.isZero() && !costo.eq(montoSeguro(plan.costo))) {
+        const costo = montoOrigen(s, 'costo')
+        const costoPlan = plan ? montoOrigen(plan, 'costo') : null
+        if (!costo.ok) {
+            problemas.avisar(tabla, i + 1, id, `${costo.motivo}; entra con el precio del plan`)
+        } else if (costoPlan?.ok && !costo.valor.isZero() && !costo.valor.eq(costoPlan.valor)) {
             problemas.avisar(
                 tabla,
                 i + 1,
                 id,
-                `precio del servicio ${costo.toFixed(2)} distinto al del plan ${montoSeguro(plan.costo).toFixed(2)}; ` +
+                `precio del servicio ${costo.valor.toFixed(2)} distinto al del plan ${costoPlan.valor.toFixed(2)}; ` +
                     'entra con el precio del plan',
             )
         }
