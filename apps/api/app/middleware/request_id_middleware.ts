@@ -36,6 +36,10 @@ export default class RequestIdMiddleware {
                 // la cookie del panel implica canal `panel` si no llega `X-Canal`
                 canal: canalForzado ?? canal ?? (guard === 'panel' ? 'panel' : 'api'),
                 requestId,
+                // multiempresa: empresa activa y alcance (middleware `empresa`, rutas con sesión)
+                ...(ctx.empresa
+                    ? { empresaId: ctx.empresa.activa, empresasPermitidas: ctx.empresa.permitidas }
+                    : {}),
             }
         }
         ctx.contextoCliente = (clienteId: number, canalForzado: Canal = 'portal'): ContextoAccion =>

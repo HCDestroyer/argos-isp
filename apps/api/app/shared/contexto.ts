@@ -36,6 +36,18 @@ export interface ContextoAccion {
     actor: Actor
     canal: Canal
     requestId: string
+    /**
+     * Empresa activa de la petición (`contratos/multiempresa.md`): la cabecera `X-Empresa-Id` o la
+     * única empresa del usuario. null/ausente = sin empresa activa (crons, workers, consola o un
+     * usuario con varias empresas que no eligió). Las acciones que la necesitan y no la pueden
+     * deducir del servicio responden 422 `empresa_requerida` (`exigirEmpresaActivaDelContexto`).
+     */
+    empresaId?: number | null
+    /**
+     * Empresas a las que el actor tiene acceso. null/ausente = todas (alcance global, sistema).
+     * Las acciones lo revisan con `exigirAccesoEmpresa` (`#shared/empresa_activa`).
+     */
+    empresasPermitidas?: number[] | null
 }
 
 /** Contexto para crons, workers y consola. */

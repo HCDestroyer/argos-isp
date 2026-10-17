@@ -48,6 +48,8 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
     return {
         id,
         cliente_id: cliente.id,
+        // Multiempresa (A1): con una sola empresa, todo es de la 1.
+        empresa_id: 1,
         router_id: router,
         plan_id: plan,
         plantilla_facturacion_id: cliente.tipo === 'empresa' ? 2 : 1,

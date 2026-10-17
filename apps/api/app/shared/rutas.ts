@@ -57,6 +57,11 @@ export interface RespuestaRuta {
      * y no lleva `esquema`.
      */
     contenido?: string
+    /**
+     * Respuesta con `ETag`: el handler puede devolver `sinCambios()` cuando `If-None-Match`
+     * coincide y la ruta responde 304 sin cuerpo. El OpenAPI declara el 304.
+     */
+    etag?: boolean
 }
 
 /**
@@ -141,6 +146,24 @@ export function redirigir(url: string): Redireccion {
     return { [REDIRECCION]: url }
 }
 
+const SIN_CAMBIOS = Symbol('sin_cambios')
+
+/** Lo devuelve el handler de una ruta con `respuesta.etag` cuando `If-None-Match` coincide (304). */
+export function sinCambios(): { readonly [SIN_CAMBIOS]: true } {
+    return { [SIN_CAMBIOS]: true }
+}
+
+/** ¿El `If-None-Match` de la petición incluye este ETag (sin comillas)? */
+export function etagCoincide(ctx: HttpContext, etag: string): boolean {
+    const cabecera = ctx.request.header('if-none-match')
+    if (!cabecera) return false
+    if (cabecera.trim() === '*') return true
+    return cabecera
+        .split(',')
+        .map((valor) => valor.trim().replace(/^W\//, '').replace(/^"|"$/g, ''))
+        .includes(etag)
+}
+
 function esRedireccion(valor: unknown): valor is Redireccion {
     return typeof valor === 'object' && valor !== null && REDIRECCION in valor
 }
@@ -164,6 +187,15 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
             throw new Error(`${ruta.operacion}: una ruta ${status} debe devolver redirigir(url)`)
         }
         return ctx.response.redirect().status(status).toPath(resultado[REDIRECCION])
+    }
+    if (
+        ruta.respuesta.etag &&
+        typeof resultado === 'object' &&
+        resultado !== null &&
+        SIN_CAMBIOS in resultado
+    ) {
+        ctx.response.status(304)
+        return ctx.response.send('')
     }
     ctx.response.status(status)
     if (status === 204) return ctx.response.send('')

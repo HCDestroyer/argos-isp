@@ -114,7 +114,8 @@ largas siguen en otra página.
 | `GET /api/v1/empresa`        | `empresa.ver`            | `Empresa` con `version` (0 = nunca se guardó)                                                                                                                                                                                                |
 | `PUT /api/v1/empresa`        | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id 1) |
 
-- `core.empresa` es una sola fila (`id = 1`). Sin fila: `nombre` de `NOTIFY_EMPRESA_NOMBRE`, `telefono` de
+- Multiempresa (A1): los datos son la empresa 1 de `core.empresas` (antes `core.empresa`, una fila). Sin
+  guardar (versión 0): `nombre` de `NOTIFY_EMPRESA_NOMBRE`, `telefono` de
   `NOTIFY_EMPRESA_TELEFONO`, lo demás vacío. Un campo `null` o vacío se borra (salvo `nombre`).
 - La usan `/corte`, `/contacto`, el encabezado del portal, el mensaje del código de acceso y `{{empresa.*}}`
   de los documentos (`empresa.ts`).

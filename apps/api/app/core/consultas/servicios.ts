@@ -6,6 +6,7 @@ import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { EstadoServicio } from '#shared/eventos'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
  * Lecturas de servicios. La vista incluye la IPv4 y los prefijos IPv6 vigentes y la bandera
@@ -24,6 +25,8 @@ export type TipoConexion = (typeof TIPOS_CONEXION)[number]
 export interface ServicioVista {
     id: number
     cliente_id: number
+    /** empresa (NIT) que factura el servicio (`core.empresas`) */
+    empresa_id: number
     router_id: number
     plan_id: number
     plantilla_facturacion_id: number | null
@@ -62,6 +65,7 @@ function columnas(cliente: QueryClientContract) {
     return [
         's.id',
         's.cliente_id',
+        's.empresa_id',
         's.router_id',
         's.plan_id',
         's.plantilla_facturacion_id',
@@ -146,9 +150,13 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     con_deuda_vencida?: boolean
 }
 
+/**
+ * `empresas`: filtro de `empresasDeLaLista` (multiempresa); null o ausente = todas.
+ */
 export async function listarServicios(
     filtros: FiltrosServicios,
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Promise<Pagina<ServicioVista>> {
     const cliente = db.connection()
     const consulta = cliente.from('core.servicios as s').select(columnas(cliente))
@@ -209,6 +217,7 @@ export async function listarServicios(
         }
     }
     filtrarPorAlcance(consulta, alcance, dimensionesServicio)
+    filtrarPorEmpresa(consulta, empresas, servicioEnEmpresas)
     return paginar<ServicioVista>(consulta, filtros, { columna: 's.id' })
 }
 
@@ -225,4 +234,9 @@ export async function dimensionesDeServicio(
         .first()) as { router_id: number; zona_id: number | null } | null
     if (!fila) throw new NoEncontrado(`El servicio ${id} no existe`)
     return { router: [fila.router_id], zona: [fila.zona_id] }
+}
+
+/** `core.servicios as s` en alguna de esas empresas. */
+export function servicioEnEmpresas(q: DatabaseQueryBuilderContract<any>, ids: number[]) {
+    q.whereIn('s.empresa_id', ids)
 }

@@ -32,7 +32,8 @@ import {
     respuestaTelegramOk,
 } from '#tests/notify/ayudas_notify'
 import { SmtpFalso } from '#tests/notify/smtp_falso'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { crearEmpresaFila } from '#tests/core/fabricas'
 
 /**
  * Configuración de canales desde el panel: herencia global/empresa, interruptores, secretos que
@@ -68,8 +69,9 @@ async function configurar(entrada: Partial<EntradaConfigurar> & { empresa_id?: n
     )
 }
 
-function empresaUnica(): number {
-    return 900_000 + randomInt(0, 99_999)
+/** Empresa real de `core.empresas` (la valida la acción); `soloEmpresaPrincipal()` la desactiva al terminar. */
+function empresaUnica(): Promise<number> {
+    return crearEmpresaFila()
 }
 
 async function textoAuditoria(requestIds: string[] = []): Promise<string> {
@@ -90,6 +92,7 @@ async function textoAuditoria(requestIds: string[] = []): Promise<string> {
 }
 
 test.group('notify · configuración de canales · API y secretos', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     group.each.setup(async () => {
         await limpiar()
         return () => limpiar()
@@ -255,7 +258,7 @@ test.group('notify · configuración de canales · API y secretos', (group) => {
         const config3 = await configPara(null)
         assert.isNull(config3.correo.password)
 
-        const empresa = empresaUnica()
+        const empresa = await empresaUnica()
         const vista = await estado(
             client.get(`/api/v1/notificaciones/configuracion/empresas/${empresa}`).bearerToken(admin),
             200,
@@ -271,6 +274,7 @@ test.group('notify · configuración de canales · API y secretos', (group) => {
 })
 
 test.group('notify · configuración de canales · herencia e interruptores', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     let correo: CanalFalso
     let telegram: CanalFalso
 
@@ -285,7 +289,7 @@ test.group('notify · configuración de canales · herencia e interruptores', (g
 
     async function facturaEmitida(opciones: { empresaId?: number; evento?: string } = {}) {
         const clienteId = await crearCliente({ canal_preferido: 'telegram', telegram_chat_id: '424242' })
-        const servicioId = await crearServicio(clienteId)
+        const servicioId = await crearServicio(clienteId, undefined, opciones.empresaId)
         const facturaId = await crearFactura(clienteId, servicioId)
         const evento = opciones.evento ?? 'factura.emitida'
         const payload: Record<string, unknown> = {
@@ -314,7 +318,7 @@ test.group('notify · configuración de canales · herencia e interruptores', (g
     }
 
     test('la empresa hereda la global hasta tener la suya; con la suya manda la suya', async ({ assert }) => {
-        const empresa = empresaUnica()
+        const empresa = await empresaUnica()
         await configurar({ correo: { host: 'smtp.global.example', nombre_visible: 'Grupo' } })
         const config4 = await configPara(empresa)
         assert.equal(config4.origen, 'global')
@@ -347,12 +351,14 @@ test.group('notify · configuración de canales · herencia e interruptores', (g
             deEmpresa.envios[0]!.motivo,
             `Correo apagado en la configuración de la empresa ${empresa}`,
         )
+        // Sin empresa en el evento, el aviso toma la del servicio (la principal, 1), que no tiene
+        // configuración propia: sale con la global.
         const global = await facturaEmitida()
         assert.deepEqual(
             global.envios.map((e) => [e.canal, e.estado, e.empresa_id]),
             [
-                ['correo', 'encolado', null],
-                ['telegram', 'encolado', null],
+                ['correo', 'encolado', 1],
+                ['telegram', 'encolado', 1],
             ],
         )
     })
@@ -624,6 +630,7 @@ test.group('notify · configuración de canales · prueba de envío', (group) =>
 })
 
 test.group('notify · configuración de canales · webhook por bot', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     group.each.setup(async () => {
         await limpiar()
         return () => limpiar()
@@ -632,7 +639,7 @@ test.group('notify · configuración de canales · webhook por bot', (group) => 
     test('cada bot tiene su URL y su secreto; responde por el mismo bot', async ({ client, assert }) => {
         const api = fetchTelegramFalso((_metodo, cuerpo) => respuestaTelegramOk(cuerpo))
         fijarTransporteTelegram({ fetch: api.fetch, apiRoot: 'http://telegram.prueba' })
-        const empresa = empresaUnica()
+        const empresa = await empresaUnica()
         await configurar({ telegram: { token: TOKEN, webhook_secreto: SECRETO_WEBHOOK } })
         await configurar({
             empresa_id: empresa,

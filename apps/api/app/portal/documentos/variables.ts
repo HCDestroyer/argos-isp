@@ -133,6 +133,7 @@ export async function variablesAvisoCobro(
             'c.direccion as cliente_direccion',
             'c.email',
             's.direccion as servicio_direccion',
+            's.empresa_id',
             'p.nombre as plan',
         )
         .first()) as Record<string, any> | null
@@ -156,7 +157,9 @@ export async function variablesAvisoCobro(
     const id = Number(fila.id)
 
     return {
-        empresa: await leerEmpresa(cliente),
+        // multiempresa (A1): la empresa del servicio de la factura; sin servicio, la principal.
+        // Cuando A3 agregue `billing.facturas.empresa_id`, usar esa.
+        empresa: await leerEmpresa(cliente, fila.empresa_id ? Number(fila.empresa_id) : undefined),
         cliente: {
             nombre: fila.nombre_fiscal || fila.cliente_nombre,
             nit: fila.nit_cui || 'CF',

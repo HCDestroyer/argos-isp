@@ -86,6 +86,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         } = input
         t.fijarEntidad('servicio', id)
         const antes = await verServicio(id, t.trx)
+        t.fijarEmpresa(antes.empresa_id)
         if (antes.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado: no se edita', 'servicio_retirado')
         }
@@ -218,11 +219,16 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         }
         if (campos.length > 0) {
             await registrarTramo(t.trx, id, `edicion: ${campos.join(', ')}`)
-            await t.emit('servicio.config_cambiada', { servicio_id: id, campos })
+            await t.emit('servicio.config_cambiada', {
+                servicio_id: id,
+                empresa_id: despues.empresa_id,
+                campos,
+            })
         }
         if (campos.includes('ips') || campos.includes('prefijo_v6')) {
             await t.emit('asignacion.cambiada', {
                 servicio_id: id,
+                empresa_id: despues.empresa_id,
                 ipv4: asignaciones.ipv4 ? [asignaciones.ipv4] : [],
                 prefijo_enlace_v6: asignaciones.prefijo_enlace_v6,
                 prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,

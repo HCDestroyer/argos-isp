@@ -36,6 +36,9 @@
       "name": "empresa"
     },
     {
+      "name": "empresas"
+    },
+    {
       "name": "facturacion"
     },
     {
@@ -1122,6 +1125,18 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
             }
           },
           {
@@ -4628,6 +4643,917 @@
           }
         },
         "x-permiso": "empresa.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas": {
+      "get": {
+        "operationId": "empresasListar",
+        "summary": "Empresas (NIT) de la instalación",
+        "description": "La principal (id 1) primero; sin alcance global, solo las del usuario. Contrato: `.claude/integration/contratos/multiempresa.md`.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activas",
+            "in": "query",
+            "required": false,
+            "description": "Solo las activas (true) o todas (omitido)",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmpresaGrupo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "empresasCrear",
+        "summary": "Crear empresa (NIT)",
+        "description": "409 `nit_duplicado` si otra empresa activa tiene el mismo NIT. El logo se sube aparte.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nit": {
+                    "type": "string",
+                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
+                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                  },
+                  "razon_social": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "nombre_comercial": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "direccion_fiscal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "municipio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "departamento": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "telefono_alterno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "whatsapp": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "correo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "email",
+                    "maxLength": 200
+                  },
+                  "sitio_web": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "format": "uri"
+                  },
+                  "horario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "instrucciones_pago": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  },
+                  "color_marca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^#[0-9A-Fa-f]{6}$",
+                    "description": "Color de marca `#RRGGBB`, solo para el PDF y el correo"
+                  },
+                  "regimen_isr": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "sujeto_pagos_trimestrales",
+                          "retencion_definitiva",
+                          "pequeno_contribuyente"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Régimen de ISR para las frases de FEL"
+                  },
+                  "codigo_establecimiento": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 999999,
+                    "description": "Código de establecimiento en la SAT (FEL)"
+                  }
+                },
+                "required": [
+                  "nit",
+                  "razon_social",
+                  "nombre_comercial"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Empresa creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/{id}": {
+      "get": {
+        "operationId": "empresasVer",
+        "summary": "Ver empresa",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "empresasEditar",
+        "summary": "Editar datos fiscales y de contacto de la empresa",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si la empresa 1 nunca se guardó); si cambió responde 409"
+                  },
+                  "nit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(\\d{13}|\\d{1,12}-?[0-9K])$",
+                    "description": "NIT con dígito verificador (o CUI de 13 dígitos); único entre las empresas activas"
+                  },
+                  "razon_social": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "nombre_comercial": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "direccion_fiscal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "municipio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "departamento": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "telefono_alterno": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "whatsapp": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "pattern": "^\\+?[\\d\\s()-]{7,30}$"
+                  },
+                  "correo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "email",
+                    "maxLength": 200
+                  },
+                  "sitio_web": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "format": "uri"
+                  },
+                  "horario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "instrucciones_pago": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1000
+                  },
+                  "color_marca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^#[0-9A-Fa-f]{6}$",
+                    "description": "Color de marca `#RRGGBB`, solo para el PDF y el correo"
+                  },
+                  "regimen_isr": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "sujeto_pagos_trimestrales",
+                          "retencion_definitiva",
+                          "pequeno_contribuyente"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Régimen de ISR para las frases de FEL"
+                  },
+                  "codigo_establecimiento": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 999999,
+                    "description": "Código de establecimiento en la SAT (FEL)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/{id}/desactivar": {
+      "post": {
+        "operationId": "empresasDesactivar",
+        "summary": "Desactivar empresa (no se borra)",
+        "description": "422 `empresa_principal` (la 1 no se desactiva), `empresa_inactiva` o `empresa_con_servicios` (primero se mueven sus servicios con `POST /servicios/:id/cambiar-empresa`).",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa desactivada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/{id}/logo": {
+      "get": {
+        "operationId": "empresasLogo",
+        "summary": "Logo de la empresa (público, con ETag)",
+        "description": "Sin login: lo usan el portal, los correos y los PDF. `Content-Type` image/png o image/svg+xml, `ETag` y `Cache-Control`; con `If-None-Match` igual responde 304. 404 si la empresa no tiene logo.",
+        "tags": [
+          "empresas"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen del logo",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "empresasCambiarLogo",
+        "summary": "Subir o quitar el logo de la empresa",
+        "description": "`multipart/form-data` con el archivo `logo`: PNG o SVG de hasta 512 KB. El tipo se decide por el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni referencias externas; con DOCTYPE, entidades o mal formado, 422 en `logo`. `quitar=true` sin archivo lo quita.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída de la empresa; si cambió responde 409"
+                  },
+                  "quitar": {
+                    "description": "true = quitar el logo actual (sin archivo)",
+                    "type": "boolean"
+                  },
+                  "logo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG o SVG, hasta 512 KB"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa con su logo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.cambiar_logo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.cambiar_logo",
         "x-implementado": true
       }
     },
@@ -15746,6 +16672,11 @@
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
+                        "empresas.cambiar_logo",
+                        "empresas.crear",
+                        "empresas.desactivar",
+                        "empresas.editar",
+                        "empresas.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.nota_credito",
@@ -15788,6 +16719,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.cambiar_empresa",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -15803,6 +16735,7 @@
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
+                        "usuarios.asignar_empresas",
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
@@ -15942,6 +16875,11 @@
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
+                        "empresas.cambiar_logo",
+                        "empresas.crear",
+                        "empresas.desactivar",
+                        "empresas.editar",
+                        "empresas.ver",
                         "facturas.anular",
                         "facturas.generar",
                         "facturas.nota_credito",
@@ -15984,6 +16922,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.cambiar_empresa",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -15999,6 +16938,7 @@
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
+                        "usuarios.asignar_empresas",
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
@@ -16126,6 +17066,18 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
             }
           }
         ],
@@ -16257,6 +17209,14 @@
                       "radius",
                       "api"
                     ]
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "control_velocidad": {
                     "type": "string",
@@ -16533,6 +17493,14 @@
                       "radius",
                       "api"
                     ]
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "capacidad_bajada_kbps": {
                     "type": [
@@ -17673,6 +18641,18 @@
             }
           },
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -17856,6 +18836,11 @@
                   "cliente_id": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) que factura el servicio. Sin ella: la sugerida de la zona del cliente, la del router o la empresa activa (X-Empresa-Id); 422 empresa_requerida si no se puede deducir"
                   },
                   "router_id": {
                     "type": "integer",
@@ -18725,6 +19710,143 @@
           }
         },
         "x-permiso": "servicios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/cambiar-empresa": {
+      "post": {
+        "operationId": "serviciosCambiarEmpresa",
+        "summary": "Pasar el servicio a otra empresa (NIT)",
+        "description": "Solo sin saldo pendiente (422 `servicio_con_saldo`). Hace falta acceso a las dos empresas (403 `empresa_no_permitida`); la nueva debe estar activa. Emite `servicio.config_cambiada` con `campos: [empresa]`. Misma empresa: 200 sin cambios.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) nueva del servicio"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "empresa_id",
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio en su nueva empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_empresa; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_empresa",
         "x-implementado": true
       }
     },
@@ -20247,6 +21369,11 @@
                             "egresos.ver",
                             "empresa.editar",
                             "empresa.ver",
+                            "empresas.cambiar_logo",
+                            "empresas.crear",
+                            "empresas.desactivar",
+                            "empresas.editar",
+                            "empresas.ver",
                             "facturas.anular",
                             "facturas.generar",
                             "facturas.nota_credito",
@@ -20289,6 +21416,7 @@
                             "routers.editar",
                             "routers.marcar_migrado",
                             "routers.ver",
+                            "servicios.cambiar_empresa",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
@@ -20304,6 +21432,7 @@
                             "tokens.crear",
                             "tokens.revocar",
                             "tokens.ver",
+                            "usuarios.asignar_empresas",
                             "usuarios.crear",
                             "usuarios.editar",
                             "usuarios.ver",
@@ -20940,6 +22069,134 @@
         "x-implementado": true
       }
     },
+    "/api/v1/usuarios/{id}/empresas": {
+      "put": {
+        "operationId": "usuariosAsignarEmpresas",
+        "summary": "Definir las empresas del usuario o su alcance global",
+        "description": "Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).",
+        "tags": [
+          "acl"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "alcance_global": {
+                    "description": "true = todas las empresas y los consolidados; la lista se ignora",
+                    "type": "boolean"
+                  },
+                  "empresas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 100,
+                    "description": "Empresas que puede operar sin alcance global (al menos una)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "alcance_global"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuario con su alcance por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usuario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso usuarios.asignar_empresas; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "usuarios.asignar_empresas",
+        "x-implementado": true
+      }
+    },
     "/api/v1/zonas": {
       "get": {
         "operationId": "zonasListar",
@@ -21018,6 +22275,14 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 100
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   }
                 },
                 "required": [
@@ -21111,6 +22376,14 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 100
+                  },
+                  "empresa_sugerida_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
                   },
                   "version": {
                     "type": "integer",
@@ -23777,6 +25050,177 @@
           }
         }
       },
+      "EmpresaGrupo": {
+        "type": "object",
+        "required": [
+          "id",
+          "nit",
+          "razon_social",
+          "nombre_comercial",
+          "direccion_fiscal",
+          "municipio",
+          "departamento",
+          "telefono",
+          "telefono_alterno",
+          "whatsapp",
+          "correo",
+          "sitio_web",
+          "horario",
+          "instrucciones_pago",
+          "color_marca",
+          "regimen_isr",
+          "codigo_establecimiento",
+          "logo_url",
+          "logo_tipo",
+          "activa",
+          "principal",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "razon_social": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "direccion_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "municipio": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "departamento": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono_alterno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sitio_web": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instrucciones_pago": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color_marca": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`#RRGGBB`; solo PDF y correo"
+          },
+          "regimen_isr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "sujeto_pagos_trimestrales",
+              "retencion_definitiva",
+              "pequeno_contribuyente"
+            ]
+          },
+          "codigo_establecimiento": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo"
+          },
+          "logo_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "image/png",
+              "image/svg+xml"
+            ]
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "principal": {
+            "type": "boolean",
+            "description": "La empresa 1 (la de la instalación original)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EmpresaPublica": {
         "type": "object",
         "required": [
@@ -23857,6 +25301,36 @@
           "pago_en_linea": {
             "type": "boolean",
             "description": "Hay pasarela de pago en línea configurada (el botón \"Pagar en línea\" se habilita)"
+          }
+        }
+      },
+      "EmpresaResumen": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre_comercial",
+          "nit",
+          "logo_url"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -24816,6 +26290,24 @@
             ],
             "format": "date-time",
             "description": "Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
+          },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "Multiempresa: ve y opera todas las empresas y los consolidados (`?empresas=todas`)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmpresaResumen"
+            },
+            "description": "Multiempresa: empresas activas que el usuario puede operar (selector). Con una sola, el selector no aparece"
+          },
+          "empresa_activa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió"
           }
         }
       },
@@ -29642,6 +31134,7 @@
           "dhcp_servidor",
           "interfaz_clientes",
           "modo_velocidad",
+          "empresa_sugerida_id",
           "activo",
           "version",
           "created_at",
@@ -29743,6 +31236,14 @@
             "deprecated": true,
             "description": "Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad"
           },
+          "empresa_sugerida_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa por defecto de los servicios nuevos del router (después de la de la zona)"
+          },
           "activo": {
             "type": "boolean"
           },
@@ -29766,6 +31267,7 @@
         "required": [
           "id",
           "cliente_id",
+          "empresa_id",
           "router_id",
           "plan_id",
           "plantilla_facturacion_id",
@@ -29804,6 +31306,11 @@
           "cliente_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) que factura el servicio"
           },
           "router_id": {
             "type": "integer",
@@ -30639,6 +32146,18 @@
               "$ref": "#/components/schemas/AsignacionRol"
             }
           },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "Ve y opera todas las empresas (multiempresa); siempre presente"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Empresas asignadas (vacía con alcance global); siempre presente"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -30923,6 +32442,7 @@
         "required": [
           "id",
           "nombre",
+          "empresa_sugerida_id",
           "version",
           "created_at",
           "updated_at"
@@ -30934,6 +32454,14 @@
           },
           "nombre": {
             "type": "string"
+          },
+          "empresa_sugerida_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa por defecto de los servicios nuevos de clientes de esta zona"
           },
           "version": {
             "type": "integer",

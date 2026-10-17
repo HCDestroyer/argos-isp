@@ -16,7 +16,13 @@ export interface EntradaCrearUsuario {
     roles?: AsignacionRolEntrada[]
 }
 
-/** Crea un usuario del panel (o la identidad de un token de API) con sus roles y alcances. */
+/**
+ * Crea un usuario del panel (o la identidad de un token de API) con sus roles y alcances.
+ *
+ * Multiempresa: lo crea con alcance global (como siempre) si quien lo crea lo tiene; si no, queda
+ * acotado a la empresa activa de quien lo crea (o a todas las de su alcance). Después se ajusta con
+ * `usuarios.asignar_empresas`.
+ */
 export default class CrearUsuario extends DomainAction<EntradaCrearUsuario, UsuarioVista> {
     readonly nombre = 'usuarios.crear'
 
@@ -24,6 +30,13 @@ export default class CrearUsuario extends DomainAction<EntradaCrearUsuario, Usua
         const email = input.email.toLowerCase()
         const repetido = await t.trx.from('core.usuarios').whereRaw('lower(email) = ?', [email]).first()
         if (repetido) throw new Conflicto(`Ya existe un usuario con el correo ${email}`, 'email_duplicado')
+        const permitidas = t.ctx.empresasPermitidas
+        const acotadas =
+            permitidas === null || permitidas === undefined
+                ? null
+                : t.ctx.empresaId
+                  ? [t.ctx.empresaId]
+                  : permitidas
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -33,10 +46,17 @@ export default class CrearUsuario extends DomainAction<EntradaCrearUsuario, Usua
                 email,
                 password_hash: await hash.use('scrypt').make(input.password),
                 activo: input.activo ?? true,
+                alcance_global: acotadas === null,
             })
             .returning('id')) as Array<{ id: number }>
         const id = fila!.id
         t.fijarEntidad('usuario', id)
+        if (acotadas && acotadas.length > 0) {
+            await t.trx
+                .insertQuery()
+                .table('core.usuarios_empresas')
+                .multiInsert(acotadas.map((empresaId) => ({ usuario_id: id, empresa_id: empresaId })))
+        }
 
         await reemplazarAsignaciones(t.trx, id, input.roles ?? [])
         const usuario = await verUsuario(id, t.trx)
@@ -45,6 +65,8 @@ export default class CrearUsuario extends DomainAction<EntradaCrearUsuario, Usua
             email: usuario.email,
             activo: usuario.activo,
             roles: describirAsignaciones(usuario.roles),
+            alcance_global: usuario.alcance_global,
+            empresas: usuario.empresas,
         })
         return usuario
     }

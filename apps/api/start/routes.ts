@@ -4,7 +4,8 @@
 |--------------------------------------------------------------------------
 |
 | Monta el registro de rutas (`start/routes/index.ts`) con su cadena de middleware:
-| auth → autorizar(permiso) → idempotencia → validación VineJS → handler (o 501).
+| auth → empresa (X-Empresa-Id) → autorizar(permiso) → idempotencia → validación VineJS → handler
+| (o 501).
 |
 */
 import router from '@adonisjs/core/services/router'
@@ -28,6 +29,8 @@ for (const ruta of registroRutas) {
     const cadena = []
     if (seguridad === 'sesion') {
         cadena.push(middleware.auth())
+        // multiempresa: `X-Empresa-Id` → ctx.empresa (403 empresa_no_permitida)
+        cadena.push(middleware.empresa())
         if (ruta.permiso) cadena.push(middleware.autorizar({ permiso: ruta.permiso }))
     }
     if (seguridad === 'interno') cadena.push(middleware.interno())

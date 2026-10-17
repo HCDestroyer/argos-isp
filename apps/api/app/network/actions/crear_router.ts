@@ -3,6 +3,7 @@ import { cifrarOpcional } from '#shared/cifrado'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import type { ControlVelocidad } from '#network/velocidad'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
+import { exigirEmpresaActiva } from '#core/empresas'
 
 export interface DatosRouter {
     nombre?: string
@@ -19,6 +20,8 @@ export interface DatosRouter {
     api_ca?: string | null
     dhcp_servidor?: string | null
     interfaz_clientes?: string | null
+    /** empresa sugerida para los servicios nuevos del router (multiempresa) */
+    empresa_sugerida_id?: number | null
     activo?: boolean
 }
 
@@ -67,6 +70,9 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
 
     protected async handle(input: EntradaCrearRouter, t: Transaccion): Promise<RouterVista> {
         const { externo, ...datos } = input
+        if (datos.empresa_sugerida_id) {
+            await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
+        }
         const [fila] = (await t.trx
             .insertQuery()
             .table('network.routers')

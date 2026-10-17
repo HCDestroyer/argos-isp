@@ -59,6 +59,10 @@ export const Router = definirEsquema(
             deprecated: true,
             description: 'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
         },
+        empresa_sugerida_id: {
+            ...nulable(id),
+            description: 'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
+        },
         activo: booleano,
         ...auditable,
     }),

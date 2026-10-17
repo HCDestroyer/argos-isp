@@ -44,3 +44,42 @@ export async function estado(peticion: PromiseLike<ApiResponse>, status: number)
     respuesta.assertStatus(status)
     return respuesta
 }
+
+/**
+ * Deja la empresa 1 como recién migrada sin datos guardados (`version = 0`: las lecturas usan los
+ * valores por defecto del entorno). Reemplaza al antiguo `DELETE FROM core.empresa`.
+ */
+export async function restablecerEmpresaPrincipal() {
+    await db.from('core.empresas').where('id', 1).update({
+        nit: null,
+        razon_social: null,
+        nombre_comercial: 'ArgosIsp',
+        direccion_fiscal: null,
+        municipio: null,
+        departamento: null,
+        telefono: null,
+        telefono_alterno: null,
+        whatsapp: null,
+        correo: null,
+        sitio_web: null,
+        horario: null,
+        instrucciones_pago: null,
+        color_marca: null,
+        regimen_isr: null,
+        codigo_establecimiento: null,
+        logo: null,
+        logo_tipo: null,
+        logo_etag: null,
+        activa: true,
+        version: 0,
+    })
+}
+
+/**
+ * Desactiva todas las empresas salvo la 1. Las pruebas de multiempresa lo llaman al terminar: con
+ * una sola empresa activa, el resto de la suite se comporta como siempre (servicios sin
+ * `empresa_id` van a la única activa).
+ */
+export async function soloEmpresaPrincipal() {
+    await db.from('core.empresas').whereNot('id', 1).where('activa', true).update({ activa: false })
+}
