@@ -32,7 +32,7 @@ async function esperar() {
 }
 
 async function montarBoton() {
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     const wrapper = await montar(PagoEnLinea)
     await esperar()
     return wrapper
@@ -43,7 +43,7 @@ async function montarRetorno(id: number | string, estado?: string) {
     const ruta = `/corte?pago=${id}${estado ? `&estado=${estado}` : ''}`
     window.history.replaceState({}, '', ruta)
     clearNuxtData('portal:quien-soy')
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     const wrapper = await montar(PaginaCorte, { route: ruta })
     await esperar()
     return wrapper
@@ -98,7 +98,7 @@ describe('botón "Pagar en línea"', () => {
     it('con sesión manda el servicio de /cuenta', async () => {
         fijarSesionFixture(true)
         const post = vi.spyOn(useApi(), 'POST')
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await montar(PagoEnLinea, { props: { servicioId: 7 } })
         await esperar()
         await wrapper.find('[data-testid="pagar-en-linea"]').trigger('click')

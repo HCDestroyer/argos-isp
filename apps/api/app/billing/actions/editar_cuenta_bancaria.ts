@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import {
@@ -31,10 +32,22 @@ export default class EditarCuentaBancaria extends DomainAction<
             .from('billing.cuentas_bancarias')
             .where('id', input.id)
             .forUpdate()
-            .select('id', 'banco_id', 'numero', 'alias', 'moneda', 'activa', 'cuenta_id', 'version')
+            .select(
+                'id',
+                'empresa_id',
+                'banco_id',
+                'numero',
+                'alias',
+                'moneda',
+                'activa',
+                'cuenta_id',
+                'version',
+            )
             .first()) as
             (Omit<CuentaBancariaVista, 'banco_nombre' | 'cuenta_codigo'> & { version: number }) | null
         if (!previa) throw new NoEncontrado(`La cuenta bancaria ${input.id} no existe`)
+        exigirAccesoEmpresa(t.ctx, Number(previa.empresa_id))
+        t.fijarEmpresa(Number(previa.empresa_id))
         if (previa.version !== input.version) throw new ConflictoVersion('La cuenta bancaria', input.id)
 
         const despues = {

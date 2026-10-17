@@ -85,8 +85,9 @@ export async function exigirPeriodoAbierto(
     cliente: QueryClientContract,
     fecha: string,
     que: string,
+    empresaId: number,
 ): Promise<void> {
-    if (await periodoCerrado(cliente, fecha)) {
+    if (await periodoCerrado(cliente, fecha, empresaId)) {
         throw new ReglaNegocio(
             `${que}: la fecha ${fecha} cae en el periodo ${fecha.slice(0, 7)}, que está cerrado en el libro. ` +
                 'Use una fecha de un periodo abierto o pida a contabilidad reabrir ese mes ' +

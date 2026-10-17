@@ -1,4 +1,5 @@
 import { listarCuentasDeposito } from '#billing/cuentas_bancarias'
+import { EMPRESA_PRINCIPAL, unicaEmpresaActiva } from '#core/empresas'
 
 /**
  * Cuentas bancarias para depósito que muestran `/corte` y el portal.
@@ -16,6 +17,14 @@ import { listarCuentasDeposito } from '#billing/cuentas_bancarias'
  *
  * Solo salen id, banco, alias, número y moneda: nada del libro (cuenta contable, código). El `id`
  * es el `cuenta_bancaria_id` que pide el comprobante de depósito.
+ *
+ * **Multiempresa:** las cuentas son de una empresa (`contratos/multiempresa.md`: no se cruzan
+ * dineros entre NIT), así que se piden por empresa y una empresa nunca muestra las de otra.
+ * Mientras A3 no agregue `empresa_id` a las cuentas (pedido en `a5.md`), todas se consideran de la
+ * empresa principal (la migración de A3 las dejará ahí): se muestran para la principal o cuando
+ * hay una sola empresa activa; para otra empresa la lista sale vacía y `/corte` ofrece el contacto
+ * de esa empresa. **Punto de cambio:** en cuanto `listarCuentasDeposito` devuelva `empresa_id` (o
+ * acepte el filtro), se filtra por ella y la regla provisional deja de aplicarse sola.
  */
 
 export interface CuentaDeposito {
@@ -28,15 +37,22 @@ export interface CuentaDeposito {
 }
 
 export interface FuenteCuentasDeposito {
-    /** Cuentas activas, en el orden en que se muestran. */
-    activas(): Promise<CuentaDeposito[]>
+    /** Cuentas activas de la empresa, en el orden en que se muestran. */
+    activas(empresaId: number): Promise<CuentaDeposito[]>
 }
 
 /** Adaptador sobre la consulta de solo lectura de A3: activas y en quetzales, en el orden de A3. */
 export class CuentasDepositoBilling implements FuenteCuentasDeposito {
-    async activas(): Promise<CuentaDeposito[]> {
-        const cuentas = await listarCuentasDeposito()
+    async activas(empresaId: number): Promise<CuentaDeposito[]> {
+        const cuentas = (await listarCuentasDeposito()) as Array<
+            Awaited<ReturnType<typeof listarCuentasDeposito>>[number] & {
+                empresa_id?: number | string | null
+            }
+        >
+        const porEmpresa = cuentas.some((cuenta) => cuenta.empresa_id !== undefined)
+        if (!porEmpresa && !(await deLaEmpresaPrincipal(empresaId))) return []
         return cuentas
+            .filter((cuenta) => !porEmpresa || Number(cuenta.empresa_id) === empresaId)
             .filter((cuenta) => cuenta.moneda === 'GTQ')
             .map((cuenta) => ({
                 id: Number(cuenta.id),
@@ -46,6 +62,12 @@ export class CuentasDepositoBilling implements FuenteCuentasDeposito {
                 moneda: cuenta.moneda,
             }))
     }
+}
+
+/** Regla provisional: cuentas sin empresa = de la principal (o de la única empresa activa). */
+async function deLaEmpresaPrincipal(empresaId: number): Promise<boolean> {
+    if (empresaId === EMPRESA_PRINCIPAL) return true
+    return (await unicaEmpresaActiva()) === empresaId
 }
 
 let actual: FuenteCuentasDeposito | undefined

@@ -1,9 +1,10 @@
 import { DateTime } from 'luxon'
 import { usuarioDelActor } from '#shared/contexto'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import type { ContextoAccion } from '#shared/contexto'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { Conflicto, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { bloquearCliente } from '#billing/cobros'
@@ -157,12 +158,14 @@ export default class RegistrarComprobante extends DomainAction<
                 rule: 'exists',
             })
         }
+        let empresaServicio: number | null = null
         if (input.servicio_id) {
             const servicio = await t.trx
                 .from('core.servicios')
                 .where('id', input.servicio_id)
-                .select('cliente_id')
+                .select('cliente_id', 'empresa_id')
                 .first()
+            if (servicio) empresaServicio = Number(servicio.empresa_id)
             if (!servicio || servicio.cliente_id !== input.cliente_id) {
                 errores.push({
                     field: 'servicio_id',
@@ -184,12 +187,37 @@ export default class RegistrarComprobante extends DomainAction<
             if (!(error instanceof ValidacionFallida)) throw error
             errores.push(...(error.errores ?? []))
         }
+        if (
+            bancario?.empresaCuenta &&
+            empresaServicio !== null &&
+            errores.length === 0 &&
+            bancario.empresaCuenta !== empresaServicio
+        ) {
+            // el depósito va a la cuenta de la empresa del servicio: no se cruzan dineros entre NIT
+            throw new Problema(
+                422,
+                'cuenta_de_otra_empresa',
+                'Cuenta de otra empresa',
+                `La cuenta bancaria ${bancario.cuentaBancariaId} es de la empresa ${bancario.empresaCuenta} y el servicio ${input.servicio_id} es de la empresa ${empresaServicio}`,
+                [
+                    {
+                        field: 'cuenta_bancaria_id',
+                        message: 'La cuenta bancaria es de otra empresa que el servicio',
+                        rule: 'cuenta_de_otra_empresa',
+                    },
+                ],
+            )
+        }
         if (errores.length > 0 || !bancario || !monto || !tipo || !contenido) {
             throw new ValidacionFallida(errores)
         }
+        // el comprobante es de la empresa de la cuenta bancaria de destino
+        const empresaId = bancario.empresaCuenta!
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
 
         await bloquearCliente(t.trx, input.cliente_id)
-        await exigirReferenciaLibre(t.trx, input.metodo, referencia, bancario.cuentaBancariaId)
+        await exigirReferenciaLibre(t.trx, input.metodo, referencia, bancario.cuentaBancariaId, empresaId)
         await this.exigirSinPendiente(t, input.metodo, referencia!, bancario.cuentaBancariaId!)
 
         const ruta = nuevaRutaComprobante(tipo)
@@ -199,6 +227,7 @@ export default class RegistrarComprobante extends DomainAction<
                 .insertQuery()
                 .table('billing.comprobantes')
                 .insert({
+                    empresa_id: empresaId,
                     cliente_id: input.cliente_id,
                     servicio_id: input.servicio_id ?? null,
                     metodo: input.metodo,
@@ -235,6 +264,7 @@ export default class RegistrarComprobante extends DomainAction<
         try {
             await t.emit('comprobante.recibido', {
                 comprobante_id: id,
+                empresa_id: empresaId,
                 cliente_id: input.cliente_id,
                 pago_id: null,
                 motivo: null,

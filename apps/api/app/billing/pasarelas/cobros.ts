@@ -8,6 +8,8 @@ import type { EstadoCobroProveedor } from '#billing/pasarelas/pasarela'
 
 export interface CobroPasarelaVista {
     id: number
+    /** el pago en línea es de una sola empresa */
+    empresa_id: number
     proveedor: string
     id_proveedor: string | null
     cliente_id: number
@@ -36,6 +38,7 @@ function consultaCobros(cliente: QueryClientContract) {
         .join('core.clientes as c', 'c.id', 'pc.cliente_id')
         .select(
             'pc.id',
+            'pc.empresa_id',
             'pc.proveedor',
             'pc.id_proveedor',
             'pc.cliente_id',
@@ -67,10 +70,12 @@ export async function verCobroPasarela(id: number, cliente: QueryClientContract 
 
 export async function listarCobrosPasarela(
     filtros: OpcionesPaginacion & { cliente_id?: number; estado?: EstadoCobroProveedor },
+    empresas: number[] | null = null,
 ) {
     const consulta = consultaCobros(db.connection())
         .if(filtros.cliente_id, (q) => q.where('pc.cliente_id', filtros.cliente_id!))
         .if(filtros.estado, (q) => q.where('pc.estado', filtros.estado!))
+        .if(empresas !== null, (q) => q.whereIn('pc.empresa_id', empresas!))
     return paginar<CobroPasarelaVista>(consulta, filtros, { columna: 'pc.id' })
 }
 
@@ -79,10 +84,10 @@ export async function dimensionesDeCobroPasarela(id: number) {
         .from('billing.pasarela_cobros as pc')
         .join('core.clientes as c', 'c.id', 'pc.cliente_id')
         .where('pc.id', id)
-        .select('c.zona_id')
+        .select('c.zona_id', 'pc.empresa_id')
         .first()
     if (!fila) throw new NoEncontrado(`El cobro en línea ${id} no existe`)
-    return { zona: [fila.zona_id as number | null] }
+    return { zona: [fila.zona_id as number | null], empresa_id: Number(fila.empresa_id) }
 }
 
 export async function listarConciliaciones(filtros: OpcionesPaginacion & { fecha?: string }) {

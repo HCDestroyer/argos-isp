@@ -113,6 +113,12 @@ export const Factura = definirEsquema(
     objeto(
         {
             id,
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            empresa_nombre: { ...texto, description: 'Nombre comercial de la empresa que emite' },
             cliente_id: id,
             cliente_nombre: texto,
             servicio_id: nulable(id),
@@ -162,27 +168,58 @@ export const Factura = definirEsquema(
             'acreditado',
             'origen',
             'id_externo',
+            'empresa_id',
+            'empresa_nombre',
         ],
     ),
 )
 
 export const NotaCredito = definirEsquema(
     'NotaCredito',
+    objeto(
+        {
+            id,
+            empresa_id: { ...id, description: 'Empresa de la factura (multiempresa)' },
+            factura_id: id,
+            cliente_id: id,
+            cliente_nombre: texto,
+            servicio_id: nulable(id),
+            fecha: { ...fecha, description: 'Fecha contable (Guatemala)' },
+            subtotal: Dinero,
+            iva: { ...Dinero, description: 'IVA acreditado, proporcional al de la factura' },
+            monto: { ...Dinero, description: 'subtotal + iva' },
+            motivo: texto,
+            asiento_id: {
+                ...nulable(id),
+                description: 'Asiento nota_credito (Debe ingresos/IVA, Haber CxC)',
+            },
+            created_by: nulable(id),
+            created_by_nombre: nulable(texto),
+            created_at: instante,
+        },
+        ['empresa_id'],
+    ),
+)
+
+/** Datos fiscales del emisor de una factura (su empresa): lo que FEL necesita (semana 5). */
+export const EmisorFactura = definirEsquema(
+    'EmisorFactura',
     objeto({
-        id,
-        factura_id: id,
-        cliente_id: id,
-        cliente_nombre: texto,
-        servicio_id: nulable(id),
-        fecha: { ...fecha, description: 'Fecha contable (Guatemala)' },
-        subtotal: Dinero,
-        iva: { ...Dinero, description: 'IVA acreditado, proporcional al de la factura' },
-        monto: { ...Dinero, description: 'subtotal + iva' },
-        motivo: texto,
-        asiento_id: { ...nulable(id), description: 'Asiento nota_credito (Debe ingresos/IVA, Haber CxC)' },
-        created_by: nulable(id),
-        created_by_nombre: nulable(texto),
-        created_at: instante,
+        empresa_id: id,
+        nit: nulable(texto),
+        razon_social: nulable(texto),
+        nombre_comercial: texto,
+        direccion_fiscal: nulable(texto),
+        municipio: nulable(texto),
+        departamento: nulable(texto),
+        correo: nulable(texto),
+        regimen_isr: {
+            ...nulable(
+                enumerado(['sujeto_pagos_trimestrales', 'retencion_definitiva', 'pequeno_contribuyente']),
+            ),
+            description: 'Régimen ISR del emisor (frases de FEL)',
+        },
+        codigo_establecimiento: nulable(entero),
     }),
 )
 
@@ -194,8 +231,12 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
                 lineas: lista(FacturaLinea),
                 reglas_snapshot: jsonLibre,
                 notas_credito: { ...lista(NotaCredito), description: 'Notas de crédito de la factura' },
+                emisor: {
+                    ...EmisorFactura,
+                    description: 'Empresa que emite la factura con sus datos fiscales (FEL)',
+                },
             },
-            ['notas_credito'],
+            ['notas_credito', 'emisor'],
         ),
     ],
 })
@@ -278,6 +319,22 @@ export const Pago = definirEsquema(
     objeto(
         {
             id,
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            cobro_id: {
+                ...nulable(id),
+                description:
+                    'Cobro de caja repartido por empresa (GET /cobros/:id); null si no vino de un cobro',
+            },
+            pagos: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/Pago' },
+                description:
+                    'Solo al registrar (POST /pagos): todos los pagos del cobro, uno por empresa; la raíz es el primero',
+            },
             cliente_id: id,
             cliente_nombre: { ...texto, description: 'Nombre del pagador' },
             metodo: enumerado([...METODOS_PAGO]),
@@ -332,6 +389,9 @@ export const Pago = definirEsquema(
             'banco_origen_nombre',
             'cuenta_bancaria_id',
             'cuenta_bancaria_nombre',
+            'empresa_id',
+            'cobro_id',
+            'pagos',
         ],
     ),
 )
@@ -441,6 +501,7 @@ export const Promesa = definirEsquema(
     objeto(
         {
             id,
+            empresa_id: { ...id, description: 'Empresa del servicio (multiempresa)' },
             servicio_id: id,
             cliente_id: id,
             cliente_nombre: texto,
@@ -470,20 +531,42 @@ export const Promesa = definirEsquema(
             },
             ...auditable,
         },
-        ['servicio', 'cliente_nombre'],
+        ['servicio', 'cliente_nombre', 'empresa_id'],
     ),
 )
 
 export const MovimientoEstadoCuenta = definirEsquema(
     'MovimientoEstadoCuenta',
+    objeto(
+        {
+            empresa_id: { ...id, description: 'Empresa (libro) del asiento' },
+            fecha: fecha,
+            tipo: enumerado(['factura', 'pago', 'mora', 'nota_credito', 'ajuste']),
+            referencia_id: id,
+            descripcion: texto,
+            cargo: Dinero,
+            abono: Dinero,
+            saldo: Dinero,
+        },
+        ['empresa_id'],
+    ),
+)
+
+export const SeccionEstadoCuenta = definirEsquema(
+    'SeccionEstadoCuenta',
     objeto({
-        fecha: fecha,
-        tipo: enumerado(['factura', 'pago', 'mora', 'nota_credito', 'ajuste']),
-        referencia_id: id,
-        descripcion: texto,
-        cargo: Dinero,
-        abono: Dinero,
-        saldo: Dinero,
+        empresa_id: id,
+        nombre_comercial: texto,
+        razon_social: nulable(texto),
+        nit: nulable(texto),
+        logo_url: nulable(texto),
+        saldo: { ...Dinero, description: 'Auxiliar CxC del cliente en esta empresa (positivo = debe)' },
+        saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en esta empresa' },
+        facturas_pendientes: lista(Factura),
+        movimientos: {
+            ...lista(MovimientoEstadoCuenta),
+            description: 'Saldo acumulado dentro de la empresa',
+        },
     }),
 )
 
@@ -502,8 +585,13 @@ export const EstadoCuenta = definirEsquema(
                 ...lista(MovimientoEstadoCuenta),
                 description: 'Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`',
             },
+            empresas: {
+                ...lista(SeccionEstadoCuenta),
+                description:
+                    'Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo',
+            },
         },
-        ['saldo_a_favor'],
+        ['saldo_a_favor', 'empresas'],
     ),
 )
 
@@ -511,18 +599,25 @@ export const Banco = definirEsquema('Banco', objeto({ id, nombre: texto, activo:
 
 export const CuentaBancaria = definirEsquema(
     'CuentaBancaria',
-    objeto({
-        id,
-        banco_id: id,
-        banco_nombre: texto,
-        numero: texto,
-        alias: texto,
-        moneda: enumerado(['GTQ', 'USD']),
-        activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
-        cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
-        cuenta_codigo: texto,
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            empresa_id: {
+                ...id,
+                description: 'Empresa dueña de la cuenta: sus depósitos son pagos de esa empresa',
+            },
+            banco_id: id,
+            banco_nombre: texto,
+            numero: texto,
+            alias: texto,
+            moneda: enumerado(['GTQ', 'USD']),
+            activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
+            cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
+            cuenta_codigo: texto,
+            ...auditable,
+        },
+        ['empresa_id'],
+    ),
 )
 
 export const Comprobante = definirEsquema(
@@ -530,6 +625,11 @@ export const Comprobante = definirEsquema(
     objeto(
         {
             id,
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
             cliente_id: id,
             cliente_nombre: texto,
             servicio_id: nulable(id),
@@ -556,7 +656,7 @@ export const Comprobante = definirEsquema(
             pago: { ...Pago, description: 'Solo al aprobar: el pago registrado (aplicaciones y servicios)' },
             ...auditable,
         },
-        ['pago', 'verificado_por_nombre'],
+        ['pago', 'verificado_por_nombre', 'empresa_id'],
     ),
 )
 
@@ -596,6 +696,11 @@ export const CobroPasarela = definirEsquema(
     objeto(
         {
             id,
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
             proveedor: texto,
             id_proveedor: { ...nulable(texto), description: 'Id del cobro en el proveedor' },
             cliente_id: id,
@@ -619,7 +724,7 @@ export const CobroPasarela = definirEsquema(
             conciliado_en: nulable(instante),
             ...auditable,
         },
-        ['url_retorno'],
+        ['url_retorno', 'empresa_id'],
     ),
 )
 
@@ -749,6 +854,43 @@ export const SimulacionPromesa = definirEsquema(
         suspension_manual: {
             ...booleano,
             description: 'Suspendido a mano: la promesa no lo reactivaría',
+        },
+    }),
+)
+
+/** Marca de la empresa en un recibo (multiempresa: el recibo lleva una sección por empresa). */
+export const EmpresaRecibo = definirEsquema(
+    'EmpresaRecibo',
+    objeto({
+        id,
+        nombre_comercial: texto,
+        razon_social: nulable(texto),
+        nit: nulable(texto),
+        direccion_fiscal: nulable(texto),
+        telefono: nulable(texto),
+        correo: nulable(texto),
+        logo_url: nulable(texto),
+    }),
+)
+
+export const Cobro = definirEsquema(
+    'Cobro',
+    objeto({
+        id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        metodo: enumerado([...METODOS_PAGO]),
+        monto: { ...Dinero, description: 'Total cobrado (suma de los pagos de todas las empresas)' },
+        registrado_por: nulable(id),
+        created_at: instante,
+        secciones: {
+            ...lista(
+                objeto({
+                    empresa: EmpresaRecibo,
+                    pago: Pago,
+                }),
+            ),
+            description: 'Un pago por empresa con su marca (las del alcance del usuario)',
         },
     }),
 )

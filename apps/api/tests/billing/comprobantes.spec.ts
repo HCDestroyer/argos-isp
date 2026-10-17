@@ -118,6 +118,7 @@ test.group('billing · comprobantes de depósito', () => {
 
         const [evento] = await eventosDe('comprobante.recibido', 'comprobante_id', comprobante.id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
             pago_id: null,
@@ -226,6 +227,7 @@ test.group('billing · comprobantes de depósito', () => {
 
         const [evento] = await eventosDe('comprobante.aprobado', 'comprobante_id', comprobante.id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
             pago_id: aprobado.pago.id,
@@ -354,6 +356,7 @@ test.group('billing · comprobantes de depósito', () => {
         // notify: el evento genera el aviso con el motivo (plantilla comprobante.rechazado)
         const [evento] = await eventosDe('comprobante.rechazado', 'comprobante_id', comprobante.id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
             pago_id: null,

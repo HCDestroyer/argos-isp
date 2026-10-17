@@ -2,6 +2,15 @@
 
 Libro de doble partida inmutable, plan de cuentas, cajas, bancos y egresos. Todo lo que mueve dinero termina aquí.
 
+## Libro por empresa (multiempresa)
+
+- Catálogo de cuentas **común**; cada asiento es de **una** empresa (`ledger.asientos.empresa_id`) y sus saldos son de esa empresa. `registrarAsiento` recibe `empresa_id` (sin él, la empresa activa o la única activa) y rechaza movimientos en subcuentas de otra empresa (`ledger.cuentas.empresa_id`: cajas y cuentas bancarias; 422 rule `cuenta_de_otra_empresa`, también por trigger). Debe = Haber por asiento ⇒ por empresa. Un reverso va al libro del original.
+- Periodos por empresa: `ledger.periodo_cerrado(fecha, empresa_id)`; `cerrarPeriodo`/`reabrirPeriodo` reciben `empresa_id` (por defecto la activa) y el resumen del cierre es del libro de esa empresa.
+- Cajas por empresa: `POST /cajas` (`cajas.crear`) crea la caja y su subcuenta `1.1.01.NN` de la empresa; el cierre de caja va al libro de su empresa y `caja.cerrada` lleva `empresa_id`. Un cajero que cobra para varias empresas abre una caja en cada una.
+- Egresos: la empresa de su caja, cuenta bancaria o banco del libro.
+- Consultas: diario, mayor, periodos, bancos y cuentas filtran por las empresas de la petición; `GET /libro/balance` y `GET /libro/estado-resultados` (`estados_financieros.ts`) dan una sección por empresa y el total del grupo (`?empresas=todas`).
+- `saldoCliente(cliente, trx?, empresaId?)`: con empresa, el auxiliar de esa empresa; sin ella, el consolidado. `saldoClientePorEmpresa(cliente)`.
+
 ## Plan de cuentas
 
 `plan_cuentas.ts` define el plan base y lo siembra `database/seeders/plan_cuentas_seeder.ts` (idempotente). El código se refiere a las cuentas por **código** (`CUENTAS.CXC_CLIENTES`), nunca por id.
@@ -100,10 +109,12 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 | GET    | `/api/v1/libro/mayor?cuenta_id&cliente_id&desde&hasta&cursor&limit`   | `libro.ver`    |
 | GET    | `/api/v1/libro/bancos` (origen `banco_id` de los egresos)             | `egresos.ver`  |
 | GET    | `/api/v1/cajas`                                                       | `cajas.ver`    |
+| POST   | `/api/v1/cajas`                                                       | `cajas.crear`  |
+| GET    | `/api/v1/libro/balance?hasta`, `/api/v1/libro/estado-resultados`      | `libro.ver`    |
 | POST   | `/api/v1/cajas/:id/abrir`                                             | `cajas.abrir`  |
 | POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
 | GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                               | `cajas.ver`    |
 
 ## Eventos
 
-Emite: `caja.cerrada` (`caja_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`). Consume: ninguno.
+Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`). Consume: ninguno.

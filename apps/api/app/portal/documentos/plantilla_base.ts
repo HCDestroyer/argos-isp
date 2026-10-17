@@ -3,11 +3,13 @@
  * edite desde el panel (y el seeder la deja como primera versión en `core.plantillas_documentos`).
  * Variables y subconjunto de HTML: `app/portal/README.md`.
  */
-export const PLANTILLA_AVISO_COBRO = `<table class="sin-borde">
+export const PLANTILLA_AVISO_COBRO = `{{#empresa.logo}}<img src="empresa:logo" height="48">{{/empresa.logo}}
+<table class="sin-borde">
     <tr>
         <td width="58%">
             <h1>{{empresa.nombre}}</h1>
             <p class="tenue">
+                {{#empresa.razon_social}}{{empresa.razon_social}}<br>{{/empresa.razon_social}}
                 {{#empresa.nit}}NIT {{empresa.nit}}<br>{{/empresa.nit}}
                 {{#empresa.direccion}}{{empresa.direccion}}<br>{{/empresa.direccion}}
                 {{#empresa.telefono}}Tel. {{empresa.telefono}}{{/empresa.telefono}}

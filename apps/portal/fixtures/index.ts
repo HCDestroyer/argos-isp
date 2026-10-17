@@ -12,6 +12,7 @@ import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } fr
 import {
     CODIGO_FIXTURE,
     CONTACTO_FIXTURE,
+    CUENTA_DOS_EMPRESAS_FIXTURE,
     CUENTA_FIXTURE,
     FACTURAS_FIXTURE,
     PAGOS_FIXTURE,
@@ -20,7 +21,7 @@ import {
     SOLICITUD_FIXTURE,
     SOLICITUD_POR_IP_FIXTURE,
 } from './cuenta'
-import { EMPRESA_FIXTURE } from './empresa'
+import { EMPRESA_FIXTURE, EMPRESA_SUR_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import {
@@ -220,6 +221,12 @@ export function fijarCuentaFixture(respuesta: Schema<'PortalCuenta'> | null): vo
     cuentaFija.respuesta = respuesta
 }
 
+/** Desarrollo: `?cuenta=dos_empresas` en la URL muestra un cliente con servicios en dos empresas. */
+function cuentaDeLaUrl(): Schema<'PortalCuenta'> | null {
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('cuenta')
+    return pedido === 'dos_empresas' ? CUENTA_DOS_EMPRESAS_FIXTURE : null
+}
+
 /** Error del proxy de Nitro cuando la API no responde (`server/api/v1/portal/[...ruta].ts`). */
 export const API_CAIDA_FIXTURE: RespuestaFixture = {
     status: 502,
@@ -258,9 +265,22 @@ const rutasBase: RutasFixture = {
         return { status: 200, cuerpo: estadoDe(ESCENARIOS_CORTE[escenario]) }
     },
 
-    'GET /api/v1/portal/empresa': () => empresa.respuesta
-        ? { status: 200, cuerpo: empresa.respuesta }
-        : problema(500, 'interno', 'Error interno', 'No se pudo leer la configuración.'),
+    // Multiempresa: `empresa_id=2` es Fibra Sur; lo demás (la 1, `de=cliente` y por IP), Red Altiplano.
+    'GET /api/v1/portal/empresa': ({ query }) => {
+        if (!empresa.respuesta) {
+            return problema(500, 'interno', 'Error interno', 'No se pudo leer la configuración.')
+        }
+        if (query.get('de') === 'cliente' && !sesion.abierta) {
+            return SIN_SESION()
+        }
+        if (query.get('empresa_id') === String(EMPRESA_SUR_FIXTURE.id)) {
+            return { status: 200, cuerpo: EMPRESA_SUR_FIXTURE }
+        }
+        if (query.has('empresa_id') && query.get('empresa_id') !== String(empresa.respuesta.id)) {
+            return problema(404, 'no_encontrado', 'No encontrado', 'La empresa no existe')
+        }
+        return { status: 200, cuerpo: empresa.respuesta }
+    },
 
     'POST /api/v1/portal/codigo': ({ cuerpo }) => {
         const datos = (cuerpo ?? {}) as { identificador?: string, por_ip?: boolean }
@@ -292,8 +312,8 @@ const rutasBase: RutasFixture = {
         sesion.abierta = false
         return { status: 204 }
     },
-    'GET /api/v1/portal/cuenta': conSesion(() => cuentaFija.respuesta
-        ? { status: 200, cuerpo: cuentaFija.respuesta }
+    'GET /api/v1/portal/cuenta': conSesion(() => cuentaFija.respuesta ?? cuentaDeLaUrl()
+        ? { status: 200, cuerpo: cuentaFija.respuesta ?? cuentaDeLaUrl() }
         : {
                 status: 200,
                 cuerpo: {

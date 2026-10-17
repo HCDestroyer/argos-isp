@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
@@ -17,6 +18,8 @@ export type EstadoEgreso = 'registrado' | 'anulado'
 
 export interface EgresoVista {
     id: number
+    /** empresa (NIT) que paga el egreso */
+    empresa_id: number
     fecha: string
     categoria: ClaveCategoriaEgreso
     categoria_nombre: string
@@ -67,6 +70,7 @@ function consultaEgresos(cliente: QueryClientContract) {
             .leftJoin('core.usuarios as ur', 'ur.id', 'e.registrado_por')
             .select(
                 'e.id',
+                'e.empresa_id',
                 cliente.raw(`to_char(e.fecha, 'YYYY-MM-DD') as fecha`),
                 'ec.clave as categoria',
                 'ec.nombre as categoria_nombre',
@@ -117,7 +121,11 @@ export interface FiltrosEgresos extends OpcionesPaginacion {
 }
 
 /** Un usuario con alcance por caja solo ve los egresos en efectivo de su caja. */
-export async function listarEgresos(filtros: FiltrosEgresos, alcance?: Alcance) {
+export async function listarEgresos(
+    filtros: FiltrosEgresos,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
     const consulta = consultaEgresos(db.connection())
         .if(filtros.desde, (q) => q.where('e.fecha', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('e.fecha', '<=', filtros.hasta!))
@@ -128,13 +136,14 @@ export async function listarEgresos(filtros: FiltrosEgresos, alcance?: Alcance) 
         .if(filtros.estado === 'anulado', (q) => q.whereNotNull('an.id'))
         .if(filtros.estado === 'registrado', (q) => q.whereNull('an.id'))
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('e.caja_id', ids) })
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('e.empresa_id', ids))
     return paginar<EgresoVista>(consulta, filtros, { columna: 'e.id' })
 }
 
 export async function dimensionesDeEgreso(id: number) {
-    const fila = await db.from('ledger.egresos').where('id', id).select('caja_id').first()
+    const fila = await db.from('ledger.egresos').where('id', id).select('caja_id', 'empresa_id').first()
     if (!fila) throw new NoEncontrado(`El egreso ${id} no existe`)
-    return { caja: [fila.caja_id as number | null] }
+    return { caja: [fila.caja_id as number | null], empresa_id: Number(fila.empresa_id) }
 }
 
 export async function listarCategoriasEgreso() {

@@ -207,4 +207,19 @@ Corte: cuentan las facturas importadas **con servicio** (de periodo o cargo úni
 
 Orden por cliente: facturas (todas) → pagos históricos → saldo inicial (solo si queda diferencia) → promesas. Cuadre: `saldoCliente − saldoAnticipos` = saldo del origen.
 
-Multiempresa: cuando `core.empresas` y `empresa_id` lleguen a `main` (contrato `multiempresa.md`), las facturas tomarán la empresa del servicio y los cargos sin servicio aceptarán `empresa_id` opcional. Hoy no se pide.
+## Multiempresa (A3, 2026-10-17)
+
+Las cinco acciones aceptan `empresa_id` opcional (contrato `multiempresa.md`). Todo lo importado (factura, saldo inicial, pago histórico, promesa, sus asientos) queda en el libro de una sola empresa:
+
+| Acción | Sin `empresa_id` | Con `empresa_id` |
+| --- | --- | --- |
+| `ImportarFacturaPendiente` | la del servicio; sin servicio, la de los servicios del cliente si es una sola, la activa del contexto, la única activa o la 1 | con servicio debe ser la suya (422 `empresa_id`, rule `empresa_servicio`) |
+| `RegistrarSaldoInicial` | la de los servicios del cliente si es una sola, la activa, la única activa o la 1 | esa (422 si no existe o está desactivada) |
+| `RegistrarPagoHistorico` | la de las `facturas` pedidas (si son de una sola), si no como el saldo inicial; aplica solo a facturas de esa empresa (422 `facturas`, rule `factura_de_otra_empresa`) | esa |
+| `ImportarPromesa` | la del servicio | debe ser la del servicio (422 `empresa_servicio`) |
+| `AnularSaldoInicial` | la del saldo (los reversos van a su libro) | — |
+
+- `--empresa=<id|nit>` del importador (A6) se pasa como `empresa_id` a cada acción; el mapa por zona o router lo resuelve A6 y pasa el id.
+- Periodo cerrado: el 422 `periodo_cerrado` mira el cierre **de esa empresa** (`ledger.periodo_cerrado(fecha, empresa_id)`).
+- El saldo a favor (anticipo) de un saldo inicial negativo o de un pago histórico solo se aplica a facturas de su misma empresa.
+- Cuadre del importador: `saldoCliente(cliente)` y `saldoAnticipos(trx, cliente)` sin empresa siguen siendo el consolidado del cliente; con un tercer argumento `empresa_id`, el de esa empresa.

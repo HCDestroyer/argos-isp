@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
@@ -41,6 +42,7 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             // simultáneos los resuelve el índice único `asientos_reversa_unica` (→ 409).
             .select(
                 'id',
+                'empresa_id',
                 t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
                 'origen_tipo',
                 'origen_id',
@@ -49,6 +51,7 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             )
             .first()) as {
             id: number
+            empresa_id: number
             fecha: string
             origen_tipo: OrigenAsiento
             origen_id: number | null
@@ -57,6 +60,9 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
         } | null
         if (!original) throw new NoEncontrado(`El asiento ${input.asiento_id} no existe`)
         t.fijarEntidad('asiento', original.id)
+        // el reverso va al libro de la empresa del original (403 si está fuera del alcance)
+        exigirAccesoEmpresa(t.ctx, Number(original.empresa_id))
+        t.fijarEmpresa(Number(original.empresa_id))
 
         const motivo = input.motivo?.trim() ?? ''
         if (motivo.length < 3) {
@@ -112,6 +118,7 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
 
         return new RegistrarAsiento().execute(
             {
+                empresa_id: Number(original.empresa_id),
                 fecha,
                 descripcion: `Reverso del asiento ${original.id}: ${motivo}`,
                 origen_tipo: original.origen_tipo,

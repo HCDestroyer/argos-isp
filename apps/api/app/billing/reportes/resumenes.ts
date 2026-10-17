@@ -90,29 +90,42 @@ export interface ResumenDashboard {
     actualizado_en: Record<VistaResumen, string | null>
 }
 
-/** Lee solo las vistas materializadas (nada en vivo): lo que muestran es lo del último evento. */
-export async function resumenDashboard(ahora: Date = new Date()): Promise<ResumenDashboard> {
+/**
+ * Lee solo las vistas materializadas (nada en vivo): lo que muestran es lo del último evento.
+ * Multiempresa: las vistas van por empresa; se suman las de `empresas` (null = todas, el
+ * consolidado). Un cliente con servicios en dos empresas cuenta en cada una.
+ */
+export async function resumenDashboard(
+    ahora: Date = new Date(),
+    empresas: number[] | null = null,
+): Promise<ResumenDashboard> {
+    const deEmpresas = <Q extends { whereIn: (c: string, v: number[]) => Q }>(q: Q) =>
+        empresas === null ? q : q.whereIn('empresa_id', empresas)
     const hoy = hoyGuatemala(ahora)
     const inicioMes = DateTime.fromISO(hoy, { zone: ZONA_NEGOCIO }).startOf('month')
     const meses = Array.from({ length: 12 }, (_, i) => inicioMes.minus({ months: 11 - i }).toISODate()!)
 
-    const servicios = (await db
-        .from('billing.resumen_servicios')
-        .select('estado', 'servicios', 'clientes')) as Array<{
+    const servicios = (await deEmpresas(db.from('billing.resumen_servicios'))
+        .groupBy('estado')
+        .select(
+            'estado',
+            db.raw('sum(servicios)::int as servicios'),
+            db.raw('sum(clientes)::int as clientes'),
+        )) as Array<{
         estado: string
         servicios: number
         clientes: number
     }>
     const porEstado = (estado: string) => servicios.find((s) => s.estado === estado)
-    const mensual = (await db
-        .from('billing.resumen_mensual')
+    const mensual = (await deEmpresas(db.from('billing.resumen_mensual'))
         .whereIn('mes', meses)
+        .groupBy('mes')
         .select(
             db.raw(`to_char(mes, 'YYYY-MM-DD') as mes`),
-            'facturas',
-            db.raw('facturado::text as facturado'),
-            'pagos',
-            db.raw('cobrado::text as cobrado'),
+            db.raw('sum(facturas)::int as facturas'),
+            db.raw('sum(facturado)::text as facturado'),
+            db.raw('sum(pagos)::int as pagos'),
+            db.raw('sum(cobrado)::text as cobrado'),
         )) as Array<{ mes: string; facturas: number; facturado: string; pagos: number; cobrado: string }>
     const series = meses.map((mes) => {
         const fila = mensual.find((m) => m.mes === mes)
@@ -125,13 +138,12 @@ export async function resumenDashboard(ahora: Date = new Date()): Promise<Resume
         }
     })
     const actual = series.at(-1)!
-    const cartera = (await db
-        .from('billing.resumen_cartera')
+    const cartera = (await deEmpresas(db.from('billing.resumen_cartera'))
         .select(
-            db.raw('vencida::text as vencida'),
-            'facturas_vencidas',
-            'clientes_morosos',
-            db.raw('pendiente::text as pendiente'),
+            db.raw('coalesce(sum(vencida), 0)::text as vencida'),
+            db.raw('coalesce(sum(facturas_vencidas), 0)::int as facturas_vencidas'),
+            db.raw('coalesce(sum(clientes_morosos), 0)::int as clientes_morosos'),
+            db.raw('coalesce(sum(pendiente), 0)::text as pendiente'),
         )
         .first()) as {
         vencida: string
@@ -139,15 +151,19 @@ export async function resumenDashboard(ahora: Date = new Date()): Promise<Resume
         clientes_morosos: number
         pendiente: string
     } | null
-    const diario = (await db
-        .from('billing.resumen_cobros_diarios')
+    const diario = (await deEmpresas(db.from('billing.resumen_cobros_diarios'))
         .where('dia', hoy)
-        .select('pagos', db.raw('cobrado::text as cobrado'))
+        .select(
+            db.raw('coalesce(sum(pagos), 0)::int as pagos'),
+            db.raw('coalesce(sum(cobrado), 0)::text as cobrado'),
+        )
         .first()) as { pagos: number; cobrado: string } | null
-    const promesa = (await db
-        .from('billing.resumen_promesas')
+    const promesa = (await deEmpresas(db.from('billing.resumen_promesas'))
         .where('estado', 'activa')
-        .select('promesas', db.raw('monto::text as monto'))
+        .select(
+            db.raw('coalesce(sum(promesas), 0)::int as promesas'),
+            db.raw('coalesce(sum(monto), 0)::text as monto'),
+        )
         .first()) as { promesas: number; monto: string } | null
     const refrescos = (await db
         .from('billing.resumenes_refrescos')

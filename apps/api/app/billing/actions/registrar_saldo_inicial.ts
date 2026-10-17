@@ -1,3 +1,4 @@
+import { empresaDeImportacion } from '#billing/empresa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
@@ -38,6 +39,11 @@ export interface EntradaSaldoInicial {
     /** fecha contable YYYY-MM-DD (por defecto hoy en Guatemala) */
     fecha?: string
     descripcion?: string | null
+    /**
+     * empresa del saldo (multiempresa): el saldo de un cliente es por empresa. Sin ella: la de los
+     * servicios del cliente (si es una sola), la activa o la 1.
+     */
+    empresa_id?: number | null
 }
 
 export interface ResultadoSaldoInicial {
@@ -113,7 +119,12 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
             }
         }
 
-        await exigirPeriodoAbierto(t.trx, fecha, `Saldo inicial ${texto}`)
+        const empresaId = await empresaDeImportacion(t.trx, t.ctx, {
+            empresa_id: input.empresa_id,
+            cliente_id: input.cliente_id,
+        })
+        t.fijarEmpresa(empresaId)
+        await exigirPeriodoAbierto(t.trx, fecha, `Saldo inicial ${texto}`, empresaId)
 
         const descripcion = input.descripcion?.trim() || `Saldo inicial importado (${texto})`
         let facturaId: number | null = null
@@ -122,6 +133,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                 .insertQuery()
                 .table('billing.facturas')
                 .insert({
+                    empresa_id: empresaId,
                     cliente_id: input.cliente_id,
                     servicio_id: null,
                     tipo: 'servicio',
@@ -162,6 +174,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
             .insertQuery()
             .table('billing.saldos_iniciales')
             .insert({
+                empresa_id: empresaId,
                 cliente_id: input.cliente_id,
                 origen: claveOrigen.origen,
                 clave_externa: clave,
@@ -179,6 +192,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
         await new RegistrarAsiento().execute(
             facturaId
                 ? {
+                      empresa_id: empresaId,
                       fecha,
                       descripcion: `${descripcion} · factura de apertura ${facturaId}`,
                       origen_tipo: 'factura',
@@ -189,6 +203,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                       ],
                   }
                 : {
+                      empresa_id: empresaId,
                       fecha,
                       descripcion: `${descripcion} · saldo a favor`,
                       origen_tipo: 'ajuste',
@@ -201,7 +216,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
             t.ctx,
             { trx: t.trx },
         )
-        await aplicarAnticipos(t, input.cliente_id)
+        await aplicarAnticipos(t, input.cliente_id, empresaId)
 
         return {
             saldo_inicial_id: saldoId,

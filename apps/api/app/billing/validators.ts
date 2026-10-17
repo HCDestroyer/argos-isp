@@ -1,6 +1,14 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { dinero, fechaIso, idEntidad, instanteIso, motivo, versionEsperada } from '#shared/validadores'
+import {
+    dinero,
+    empresasConsulta,
+    fechaIso,
+    idEntidad,
+    instanteIso,
+    motivo,
+    versionEsperada,
+} from '#shared/validadores'
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
 import { METODOS_PAGO } from '#shared/eventos'
 import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
@@ -77,6 +85,7 @@ export const editarPlantillaValidator = vine.compile(
 
 export const listarFacturasValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         servicio_id: idEntidad().optional(),
@@ -135,6 +144,7 @@ export const notaCreditoValidator = vine.compile(
 
 export const listarNotasCreditoValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         factura_id: idEntidad().optional(),
@@ -151,8 +161,10 @@ export const listarNotasCreditoValidator = vine.compile(
 
 export const listarPagosValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
+        cobro_id: idEntidad().optional().meta({ description: 'Pagos de un cobro repartido por empresa' }),
         caja_id: idEntidad().optional(),
         cuenta_bancaria_id: idEntidad().optional(),
         metodo: vine.enum(METODOS_PAGO).optional(),
@@ -187,6 +199,10 @@ export const registrarPagoValidator = vine.compile(
             .array(idEntidad())
             .optional()
             .meta({ description: 'Facturas a las que aplicar; por defecto la más antigua primero' }),
+        empresa_id: idEntidad().nullable().optional().meta({
+            description:
+                'Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id)',
+        }),
     }),
 )
 
@@ -200,6 +216,7 @@ export const anularPagoValidator = vine.compile(vine.object({ motivo: motivo() }
 
 export const listarPromesasValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         servicio_id: idEntidad().optional(),
         cliente_id: idEntidad().optional(),
@@ -243,7 +260,14 @@ const camposCuentaBancaria = {
     activa: vine.boolean().optional(),
 }
 
-export const crearCuentaBancariaValidator = vine.compile(vine.object(camposCuentaBancaria))
+export const crearCuentaBancariaValidator = vine.compile(
+    vine.object({
+        ...camposCuentaBancaria,
+        empresa_id: idEntidad().nullable().optional().meta({
+            description: 'Empresa dueña de la cuenta; por defecto la activa (X-Empresa-Id)',
+        }),
+    }),
+)
 
 export const editarCuentaBancariaValidator = vine.compile(
     vine.object({
@@ -258,6 +282,7 @@ export const editarCuentaBancariaValidator = vine.compile(
 
 export const listarCuentasBancariasValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         activa: vine.boolean().optional().meta({ description: 'Solo activas (true) o inactivas' }),
     }),
 )
@@ -270,6 +295,7 @@ export const listarCuentasBancariasValidator = vine.compile(
 
 export const listarComprobantesValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         estado: vine.enum(['pendiente', 'aprobado', 'rechazado'] as const).optional(),
         cliente_id: idEntidad().optional(),
@@ -324,6 +350,7 @@ const dimensiones = {
 
 export const reporteCarteraValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...dimensiones,
         corte: fechaIso()
@@ -343,6 +370,7 @@ const origenReporte = vine
 
 export const reporteIngresosValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...rango,
         cliente_id: idEntidad().optional(),
@@ -355,6 +383,7 @@ export const reporteIngresosValidator = vine.compile(
 
 export const reporteFacturadoValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...rango,
         ...dimensiones,
@@ -365,6 +394,7 @@ export const reporteFacturadoValidator = vine.compile(
 
 export const reporteCobranzaValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         desde: fechaIso().optional().meta({ description: 'Por defecto: el día 1 del mes de hasta' }),
         hasta: fechaIso().optional(),
@@ -373,10 +403,25 @@ export const reporteCobranzaValidator = vine.compile(
     }),
 )
 
-export const reporteIvaValidator = vine.compile(vine.object({ formato, ...rango }))
+export const reporteIvaValidator = vine.compile(
+    vine.object({ formato, ...rango, empresas: empresasConsulta() }),
+)
+
+/** `GET /dashboard/resumen`: la empresa activa o el consolidado. */
+export const dashboardValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+/** `GET /clientes/:id/estado-cuenta`: todas sus empresas del alcance, o una. */
+export const estadoCuentaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().optional().meta({
+            description: 'Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance',
+        }),
+    }),
+)
 
 export const reportePromesasValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...rango,
         ...dimensiones,
@@ -386,6 +431,7 @@ export const reportePromesasValidator = vine.compile(
 
 export const reporteAltasValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...rango,
         zona_id: idEntidad().optional(),
@@ -396,6 +442,7 @@ export const reporteAltasValidator = vine.compile(
 
 export const reporteEgresosValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         formato,
         ...rango,
         categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
@@ -426,6 +473,7 @@ export const crearCobroPasarelaValidator = vine.compile(
 
 export const listarCobrosPasarelaValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         estado: vine.enum(['pendiente', 'pagado', 'fallido', 'expirado'] as const).optional(),

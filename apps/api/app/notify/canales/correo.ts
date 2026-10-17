@@ -1,5 +1,11 @@
 import nodemailer, { type Transporter } from 'nodemailer'
-import { ErrorCanal, type Canal, type EstadoEntrega, type ResultadoEnvio } from '#notify/canales/canal'
+import {
+    ErrorCanal,
+    type Canal,
+    type EstadoEntrega,
+    type OpcionesEnvio,
+    type ResultadoEnvio,
+} from '#notify/canales/canal'
 
 /** Remitente: `ArgosIsp <no-responder@dominio>` o nombre visible y dirección por separado. */
 export type Remitente = string | { name: string; address: string }
@@ -45,10 +51,15 @@ export class CanalCorreo implements Canal {
         this.#remitente = config.remitente
     }
 
-    async enviar(destino: string, asunto: string | null, cuerpo: string): Promise<ResultadoEnvio> {
+    async enviar(
+        destino: string,
+        asunto: string | null,
+        cuerpo: string,
+        opciones: OpcionesEnvio = {},
+    ): Promise<ResultadoEnvio> {
         try {
             const info = (await this.#transporte.sendMail({
-                from: this.#remitente,
+                from: conNombre(this.#remitente, opciones.remitenteNombre),
                 to: destino,
                 subject: asunto ?? '',
                 text: cuerpo,
@@ -74,4 +85,13 @@ export class CanalCorreo implements Canal {
     async cerrar() {
         this.#transporte.close()
     }
+}
+
+/** El remitente con otro nombre visible (la dirección no cambia). */
+export function conNombre(remitente: Remitente, nombre: string | null | undefined): Remitente {
+    const visible = nombre?.replace(/[\r\n"<>]/g, ' ').trim()
+    if (!visible) return remitente
+    if (typeof remitente !== 'string') return { name: visible, address: remitente.address }
+    const direccion = /<([^>]+)>\s*$/.exec(remitente)?.[1] ?? remitente.trim()
+    return { name: visible, address: direccion }
 }

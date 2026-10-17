@@ -236,19 +236,37 @@ en línea y no hay fuentes externas. El PDF del aviso de cobro no lleva logo (ve
 | Encabezado compacto: total, estado más urgente y "Actualizar" | `app/components/cuenta/Resumen.vue` |
 | Jalar para actualizar sin dependencias (touch pasivo; "Actualizar" es la alternativa de un toque) | `app/composables/useJalarParaActualizar.ts`, `app/components/portal/JalarParaActualizar.vue` |
 | Accesos rápidos: solo lo que la API aceptaría ahora (tabla en el archivo) | `app/utils/accesos.ts`, `app/components/portal/AccesosRapidos.vue` |
-| Servicios agrupados por empresa (hoy uno; multiempresa cambia solo `agruparPorEmpresa`) | `app/utils/empresas.ts`, `app/components/cuenta/InicioEmpresa.vue` |
+| Servicios agrupados por la empresa que los factura (`servicio.empresa`), la principal primero | `app/utils/empresas.ts`, `app/components/cuenta/InicioEmpresa.vue` |
 | ¿Hay sesión? Estado compartido + pista `argos:portal:sesion` en `localStorage` (solo `1`): `/corte` pregunta por la cuenta solo si hubo sesión en el dispositivo | `app/composables/useSesionPortal.ts` |
-| Manifiesto PWA (`standalone`, teal, nombre de la empresa), íconos de la marca; sin service worker | `server/routes/manifest.webmanifest.get.ts`, `server/utils/manifiesto.ts`, `public/iconos/` |
+| Manifiesto PWA (`standalone`, teal, nombre de la empresa principal del cliente con `?empresa=<id>` desde `/cuenta`, o el configurado), íconos de la marca; sin service worker | `server/routes/manifest.webmanifest.get.ts`, `server/utils/manifiesto.ts`, `public/iconos/` |
 
 Los íconos PNG salen de la marca (`LogoArgos`): cuadro redondeado para `any` y fondo a sangre con el
 ojo en la zona segura para `maskable` y `apple-touch-icon`. El manifiesto y `/iconos/` se sirven
 también con Host ajeno (portal cautivo) y la CSP lleva `manifest-src 'self'`.
 
+## Multiempresa: la marca de la empresa de cada servicio
+
+Contrato: `.claude/integration/contratos/multiempresa.md` § Marca.
+
+| Qué | Dónde |
+| --- | --- |
+| Encabezado: en `/cuenta` la empresa principal del cliente (`de=cliente`); en `/corte` y el resto, la que decide la API (la del servicio de la IP, luego la principal de la sesión, luego la configurada). Logo de `logo_url` o, sin él, el ojo de ArgosIsp | `app/layouts/default.vue`, `app/components/portal/MarcaEmpresa.vue` |
+| Una empresa: sin secciones de marca. Varias: una sección por empresa con su logo (o sus iniciales), nombre y NIT | `app/components/cuenta/InicioEmpresa.vue` |
+| Accesos de cada sección (pagar, comprobante, depósito, soporte) con los datos de SU empresa (`useEmpresa({ empresaId })`), nunca mezclados; el modal de depósito y el de comprobante reciben `empresa-id` | `app/pages/cuenta.vue`, `app/components/corte/DatosDeposito.vue`, `app/components/comprobante/Subir.vue`, `app/components/pago/EnLinea.vue` |
+| Sección Pagar: cada servicio dice de qué empresa es; depósito y pago en línea de la empresa del servicio elegido | `app/pages/cuenta.vue` |
+| `/contacto?empresa=<id>`: contacto de esa empresa (el soporte sin teléfono de una sección) | `app/pages/contacto.vue` |
+| Título y manifiesto con la empresa principal del cliente | `app/pages/cuenta.vue`, `server/routes/manifest.webmanifest.get.ts` |
+| Fixtures: `MARCA_FIXTURE`, `MARCA_SUR_FIXTURE`, `EMPRESA_SUR_FIXTURE`, `CUENTA_DOS_EMPRESAS_FIXTURE` (`?cuenta=dos_empresas` en desarrollo) | `fixtures/` |
+| Pruebas | `tests/nuxt/multiempresa.test.ts` |
+
+`useEmpresa` guarda una consulta por empresa (`portal:empresa:<id>`, `portal:empresa:cliente` y
+`portal:empresa`); en pruebas se limpian con `clearNuxtData(clave => clave.startsWith('portal:empresa'))`.
+
 ## Datos de la empresa y contacto (configurables desde el panel)
 
 | Pieza | Dónde |
 | --- | --- |
-| `GET /api/v1/portal/empresa` una sola vez (clave `portal:empresa`), solo en el navegador; el nombre de `NUXT_PUBLIC_EMPRESA_NOMBRE` solo mientras carga | `app/composables/useEmpresa.ts` |
+| `GET /api/v1/portal/empresa` una vez por empresa (claves `portal:empresa*`), solo en el navegador; el nombre de `NUXT_PUBLIC_EMPRESA_NOMBRE` solo mientras carga | `app/composables/useEmpresa.ts` |
 | Encabezado y pie con el nombre y el teléfono; el pie lleva a `/contacto` | `app/layouts/default.vue` |
 | `/contacto`: teléfonos (`tel:`), WhatsApp (`wa.me`, no funciona con el servicio suspendido), correo, horario y oficina; error con "Reintentar" | `app/pages/contacto.vue`, `app/utils/contacto.ts` |
 | `/corte`: "Llamar a soporte" con el teléfono configurado (si no hay, a `/contacto`); "Ver datos de depósito" se oculta si no hay cuentas ni instrucciones | `app/pages/corte.vue` |

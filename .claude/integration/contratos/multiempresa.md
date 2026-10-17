@@ -70,10 +70,10 @@ Este contrato manda sobre lo que choque con él en `modelo-datos.md` y en los ot
   - Con sesión y servicios de varias empresas, `/cuenta` agrupa por empresa y cada sección lleva su marca, sus cuentas bancarias y su pago en línea.
   - El pago en línea no mezcla empresas.
 - **Notificaciones (A6).**
-  - `{{empresa.*}}` sale de la empresa del servicio o de la factura del evento.
-  - El remitente es único en la fase 1 y lleva el nombre comercial de la empresa en el nombre visible.
-  - Telegram también es único: el mensaje lleva el nombre de la empresa.
-- **Importación (A6).** `--empresa=<id|nit>` asigna la empresa a todo lo importado, o se asigna por zona o router con un mapa en el archivo de origen.
+  - `{{empresa.*}}` sale de la empresa del servicio o de la factura del evento (A6: `nombre`, `nombre_comercial`, `razon_social`, `nit`, `direccion_fiscal`, `logo_url`, `soporte.*` y los de siempre; detalle en `apps/api/app/notify/README.md`).
+  - El remitente es único en la fase 1 y lleva el nombre comercial de la empresa en el nombre visible (una empresa con configuración de correo propia y nombre visible propio usa el suyo).
+  - Telegram: cada empresa avisa por el bot de su configuración (el global si hereda) y el mensaje lleva el nombre de la empresa. La vinculación es por bot (`contratos/telegram.md`, "Varios bots"): un cliente con servicios en dos empresas con bots distintos puede quedar vinculado a los dos.
+- **Importación (A6).** `node ace importar --empresa=<id|nit>` asigna la empresa a todo lo importado: servicios (y con ellos sus facturas, pagos y promesas), `empresa_sugerida_id` de las zonas y routers que crea, la auditoría (`audit.acciones.empresa_id`) y el archivo del origen (`importacion.filas_origen.empresa_id`). Sin `--empresa`: con una sola empresa activa, esa; con varias, la corrida falla antes de tocar nada con la lista de empresas. Un servicio ya importado en otra empresa no se mueve (diferencia `servicios_otra_empresa`). El mapa por zona o router en el archivo de origen queda para cuando un ISP lo necesite.
 - **PDF del aviso de cobro (A5).** Lleva el logo, la razón social, el NIT y la dirección fiscal de la empresa de la factura.
 
 ## Configuración de canales de notificación (decisión del PM, 17 oct)
@@ -148,3 +148,65 @@ Lo que A1 ya cumple y cómo usarlo desde los otros módulos. Las desviaciones de
 - Esquemas OpenAPI `EmpresaGrupo` (la empresa completa) y `EmpresaResumen` (la de `GET /me`): el nombre `Empresa` ya era del portal (A5). En `Me`, `alcance_global`, `empresas` y `empresa_activa_id` son opcionales en el OpenAPI para no romper fixtures, pero `GET /me` siempre los envía.
 - Permisos extra: `empresas.ver` y `empresas.cambiar_logo` (subir el logo es una acción propia, con su auditoría).
 - Una lista sin empresa activa (usuario con varias empresas y sin `X-Empresa-Id`) no responde 422: muestra la unión de las empresas del usuario (todas con alcance global). El 422 `empresa_requerida` queda para las altas que la necesitan.
+
+## Implementación de billing y ledger (A3, 17 de octubre)
+
+Lo que A3 ya cumple. Migración `1792227842514_alter_billing_ledger_multiempresas_table`; helpers en `#billing/empresa`.
+
+### Datos
+
+- `empresa_id NOT NULL` (FK a `core.empresas`) en `billing.facturas`, `notas_credito`, `pagos`, `comprobantes`, `pasarela_cobros`, `promesas`, `saldos_iniciales`, `cuentas_bancarias` y `ledger.asientos`, `cajas`, `bancos`, `egresos`, `cierres_mensuales`. Lo existente quedó en la empresa 1.
+- Una inserción directa sin `empresa_id` (fixtures, scripts) la toma del servicio, de la factura, de la caja o de la cuenta bancaria; si no, de la única empresa activa; con varias falla (`empresa_requerida`). Las acciones siempre la mandan.
+- `ledger.cuentas.empresa_id` (nulable): el catálogo es común (null) y las subcuentas de una caja o de una cuenta bancaria son de su empresa. La caja principal (`1.1.01.01`) es de la empresa 1; el banco principal (`1.1.02.01`) es común: cada empresa lo usa como su banco por defecto.
+- `billing.cobros` + `billing.pagos.cobro_id`: un cobro de `POST /pagos` (inmutable) con sus pagos, a lo sumo uno por empresa.
+- La referencia de un pago es única por (empresa, método, cuenta bancaria). Los nombres de caja, por empresa.
+
+### Restricciones en base de datos
+
+- Un pago (o un saldo inicial) solo se aplica a facturas de su empresa (trigger en `pagos_aplicaciones` y `saldos_iniciales_aplicaciones`).
+- La caja, el turno y la cuenta bancaria de un pago o egreso, el banco de un egreso, la factura de una nota de crédito y la subcuenta de una caja, banco o cuenta bancaria son de la misma empresa.
+- Un asiento es de una empresa y nunca mezcla empresas: un movimiento en una subcuenta de otra empresa se rechaza (`cuenta_de_otra_empresa`, también en `registrarAsiento` como 422 por campo). El cuadre por asiento implica Debe = Haber por empresa. Un reverso va al libro del original.
+- Periodos por empresa: `ledger.periodo_cerrado(fecha, empresa_id)`; cerrar marzo en B no cierra A.
+
+### De dónde sale la empresa
+
+| Documento | Empresa |
+| --- | --- |
+| Factura, mora, nota de crédito, promesa | la del servicio (la nota y la mora, la de su factura) |
+| Pago | la de sus facturas (ver cobro repartido); con cuenta bancaria, la de la cuenta; pasarela, la del cobro en línea |
+| Comprobante | la de la cuenta bancaria de destino (422 `cuenta_de_otra_empresa` si el servicio es de otra) |
+| Cobro en línea | la de las facturas (422 `pago_de_varias_empresas` si son de varias), la del servicio o la activa |
+| Caja, cuenta bancaria | `empresa_id` del cuerpo o la activa (`resolverEmpresaActiva`) |
+| Egreso | la de su caja, cuenta bancaria o banco; sin banco, el principal de la activa |
+| Asiento manual, cierre y reapertura de mes | `empresa_id` o la activa |
+| Importación | ver `contratos/importacion.md` § Multiempresa |
+
+### Cobro repartido (`POST /pagos`)
+
+- Efectivo (`caja`) sin `empresa_id`: reparte el monto por el orden de siempre (facturas pedidas, luego la más antigua) entre las empresas del alcance del actor; el excedente queda en la empresa activa (o la de la última factura cubierta). Un pago por empresa en la misma transacción, con el mismo `cobro_id`, cada uno con su asiento, su evento `pago.registrado` (`empresa_id`, `cobro_id`) y la caja abierta del cajero en esa empresa (`caja_id` del cuerpo vale para su empresa). Sin caja abierta en alguna → 422 `caja_no_abierta` con `errors[0].field = 'empresa_id'` y `rule` = el id de la empresa. Con una sola empresa en el cobro se conserva la caja principal como respaldo (empresa 1).
+- Respuesta: `Pago` (el primero) + `cobro_id` + `pagos[]` (todos, uno por empresa) + `servicios[]`.
+- `deposito`, `transferencia`, `ach`, `remesa`: la empresa es la de la cuenta; facturas de otra → 422 `cuenta_de_otra_empresa`. `pasarela`, `agente`, `debito`: una sola empresa (422 `pago_de_varias_empresas`). `empresa_id` en el cuerpo fija la empresa y no reparte.
+- `GET /cobros/:id` (`pagos.ver`): recibo con `secciones[]` = `{ empresa: EmpresaRecibo (nombre comercial, razón social, NIT, dirección fiscal, teléfono, correo, logo_url), pago }`, solo las empresas del alcance.
+- Anular un pago anula solo ese pago; los demás del cobro siguen vigentes.
+
+### Lectura y alcance
+
+- Listas (`/facturas`, `/notas-credito`, `/pagos`, `/promesas`, `/comprobantes`, `/pasarela/cobros`, `/cuentas-bancarias`, `/cajas`, `/egresos`, `/libro/diario`, `/libro/mayor`, `/libro/periodos`, `/libro/bancos`, `/libro/cuentas`) con `empresasDeLaLista` + `filtrarPorEmpresa` y `?empresas=todas` (403 sin alcance global).
+- Un documento concreto (`/facturas/:id`, `/pagos/:id`, `/promesas/:id/*`, `/comprobantes/:id`, `/notas-credito/:id`, `/pasarela/cobros/:id`, `/cajas/:id/*`, `/egresos/:id`, `/cuentas-bancarias/:id`, `/libro/asientos/:id`) se abre si su empresa está en el alcance del usuario; si no, 403 `empresa_no_permitida`. Las acciones lo vuelven a revisar (`exigirAccesoEmpresa`).
+- `POST /promesas` y `/promesas/simular` usan `exigirServicio`; `POST /pasarela/cobros` y `/clientes/:id/estado-cuenta`, `exigirCliente` (pedido de A1).
+- Todas las respuestas traen `empresa_id` (en el OpenAPI opcional para no romper fixtures; la API siempre lo envía). `Factura` trae `empresa_nombre`; `FacturaDetalle.emisor` = datos fiscales de la empresa (NIT, razón social, dirección, régimen ISR, establecimiento) para FEL.
+
+### Saldos, estado de cuenta, libro y reportes
+
+- `saldoCliente(cliente, trx?, empresaId?)` y `saldoAnticipos(trx, cliente, empresaId?)`: con empresa, el de esa empresa; sin ella, el consolidado. `saldoClientePorEmpresa(cliente)`. `saldoPendienteServicio(servicioId, trx?)` en `#billing/facturas` (reemplaza a `app/core/saldo_servicio.ts`).
+- Anticipos por empresa: el saldo a favor de una empresa solo paga facturas de esa empresa.
+- `GET /clientes/:id/estado-cuenta?empresa_id=`: `empresas[]` = una sección por empresa del alcance (`empresa_id`, `nombre_comercial`, `razon_social`, `nit`, `logo_url`, `saldo`, `saldo_a_favor`, `facturas_pendientes`, `movimientos` con saldo propio); la raíz conserva los campos de siempre con el total (informativo) y cada movimiento lleva `empresa_id`.
+- `GET /libro/balance?hasta=` y `GET /libro/estado-resultados?desde=&hasta=` (`libro.ver`): una sección por empresa y `total` del grupo; `?empresas=todas` = consolidado.
+- `POST /libro/periodos/cerrar|reabrir` aceptan `empresa_id` (por defecto la activa). El resumen del cierre es del libro de esa empresa.
+- Reportes (`/reportes/*`) y `GET /dashboard/resumen` aceptan `?empresas=todas`. Con una empresa activa: sin cambios. Consolidado (o varias empresas): columnas `empresa_id` y `empresa` al principio y una fila por empresa y grupo; los totales son los del grupo. El IVA se calcula por NIT. Las vistas del dashboard van por empresa y se suman al leer (un cliente con servicios en dos empresas cuenta en cada una).
+
+### Desviaciones y motivo
+
+- Series y numeración por empresa: hoy las facturas no tienen serie ni número propios (solo `id`); la serie y el número los asigna FEL por empresa (semana 5).
+- La conciliación de la pasarela sigue siendo una sola corrida por proveedor (no por empresa): compara cobros del proveedor contra pagos, y cada pago ya tiene su empresa.
+- Permiso nuevo `cajas.crear` (`POST /cajas`), en `admin` y `contabilidad`: antes las cajas solo existían por seed.

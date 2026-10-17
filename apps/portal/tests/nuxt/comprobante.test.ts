@@ -31,7 +31,7 @@ async function esperar() {
 /** Una sola cuenta: el formulario la deja elegida y no hay que abrir el `USelect`. */
 async function montarModal(props: Record<string, unknown> = {}) {
     fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [EMPRESA_FIXTURE.cuentas_deposito[0]!] })
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     const wrapper = await montar(SubirComprobante, { props: { open: true, ...props } })
     await esperar()
     return wrapper
@@ -195,7 +195,7 @@ describe('modal "Subir comprobante de pago"', () => {
     })
 
     it('cuentas de destino con el número completo a la vista (nada truncado en el teléfono)', async () => {
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         await montar(SubirComprobante, { props: { open: true } })
         await esperar()
         const cuentas = document.querySelector('[data-testid="comprobante-cuentas"]')!.textContent ?? ''
@@ -207,7 +207,7 @@ describe('modal "Subir comprobante de pago"', () => {
 
     it('sin cuentas para depósito: lo dice y no muestra el formulario', async () => {
         fijarEmpresaFixture({ ...EMPRESA_FIXTURE, cuentas_deposito: [] })
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         await montar(SubirComprobante, { props: { open: true } })
         await esperar()
         expect(document.querySelector('[data-testid="comprobante-sin-cuentas"]')).not.toBeNull()
@@ -219,7 +219,7 @@ describe('comprobantes en /corte y /cuenta', () => {
     it('/corte: el botón "Subir comprobante de pago" está habilitado', async () => {
         window.history.replaceState({}, '', '/corte')
         clearNuxtData('portal:quien-soy')
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await montar(PaginaCorte)
         await esperar()
         const boton = wrapper.find('[data-testid="subir-comprobante"]')

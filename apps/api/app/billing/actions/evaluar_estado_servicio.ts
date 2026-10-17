@@ -68,6 +68,7 @@ export default class EvaluarEstadoServicio extends DomainAction<
     protected async handle(input: EntradaEvaluarEstado, t: Transaccion): Promise<ResultadoEvaluarEstado> {
         t.fijarEntidad('servicio', input.servicio_id)
         const servicio = await leerServicio(t.trx, input.servicio_id)
+        t.fijarEmpresa(servicio.empresa_id)
         const base = {
             servicio_id: servicio.id,
             de: servicio.estado,

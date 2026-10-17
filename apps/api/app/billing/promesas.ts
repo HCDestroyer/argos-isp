@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
@@ -565,6 +566,8 @@ export async function avanceDePromesa(
 
 export interface PromesaVista {
     id: number
+    /** la empresa del servicio */
+    empresa_id: number
     servicio_id: number
     cliente_id: number
     cliente_nombre: string
@@ -581,6 +584,7 @@ export interface PromesaVista {
 
 const COLUMNAS = [
     'p.id',
+    'p.empresa_id',
     'p.servicio_id',
     'p.cliente_id',
     db.raw('(select cl.nombre from core.clientes cl where cl.id = p.cliente_id) as cliente_nombre'),
@@ -620,7 +624,11 @@ const dimensionesPromesa: FiltrosDimension = {
     router: (q, ids) => q.whereIn('s.router_id', ids),
 }
 
-export async function listarPromesas(filtros: FiltrosPromesas, alcance?: Alcance) {
+export async function listarPromesas(
+    filtros: FiltrosPromesas,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
     const consulta = db
         .from('billing.promesas as p')
         .join('core.clientes as c', 'c.id', 'p.cliente_id')
@@ -630,6 +638,7 @@ export async function listarPromesas(filtros: FiltrosPromesas, alcance?: Alcance
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
         .if(filtros.estado, (q) => q.where('p.estado', filtros.estado!))
     filtrarPorAlcance(consulta, alcance, dimensionesPromesa)
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('p.empresa_id', ids))
     return paginar<PromesaVista>(consulta, filtros, { columna: 'p.id' })
 }
 
@@ -639,14 +648,17 @@ export async function dimensionesDeServicio(servicioId: number) {
         .from('core.servicios as s')
         .join('core.clientes as c', 'c.id', 's.cliente_id')
         .where('s.id', servicioId)
-        .select('c.zona_id', 's.router_id')
-        .first()) as { zona_id: number | null; router_id: number | null } | null
+        .select('c.zona_id', 's.router_id', 's.empresa_id')
+        .first()) as { zona_id: number | null; router_id: number | null; empresa_id: number } | null
     if (!fila) throw new NoEncontrado(`El servicio ${servicioId} no existe`)
-    return { zona: [fila.zona_id], router: [fila.router_id] }
+    return { zona: [fila.zona_id], router: [fila.router_id], empresa_id: Number(fila.empresa_id) }
 }
 
 export async function dimensionesDePromesa(id: number) {
-    const fila = await db.from('billing.promesas').where('id', id).select('servicio_id').first()
+    const fila = await db.from('billing.promesas').where('id', id).select('servicio_id', 'empresa_id').first()
     if (!fila) throw new NoEncontrado(`La promesa ${id} no existe`)
-    return dimensionesDeServicio(fila.servicio_id as number)
+    return {
+        ...(await dimensionesDeServicio(fila.servicio_id as number)),
+        empresa_id: Number(fila.empresa_id),
+    }
 }

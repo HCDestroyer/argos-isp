@@ -18,7 +18,8 @@ const portal = '{{#empresa.portal_url}}\nConsulta y paga en {{empresa.portal_url
 function ambos(evento: string, asunto: string, cuerpo: string): PlantillaBase[] {
     return [
         { evento, canal: 'correo', asunto, cuerpo: `Hola {{cliente.nombre}}:\n\n${cuerpo}${pie}` },
-        { evento, canal: 'telegram', asunto: null, cuerpo: `${asunto}\n\n${cuerpo}` },
+        // Telegram: el bot puede ser único para varias empresas; el mensaje firma con la empresa.
+        { evento, canal: 'telegram', asunto: null, cuerpo: `${asunto}\n\n${cuerpo}\n\n{{empresa.nombre}}` },
     ]
 }
 

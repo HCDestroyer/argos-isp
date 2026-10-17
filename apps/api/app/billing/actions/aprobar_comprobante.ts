@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
@@ -31,6 +32,7 @@ export interface ResultadoAprobarComprobante extends ComprobanteVista {
 
 interface FilaComprobante {
     id: number
+    empresa_id: number
     cliente_id: number
     servicio_id: number | null
     metodo: 'deposito' | 'transferencia' | 'ach' | 'remesa'
@@ -53,6 +55,7 @@ export async function bloquearComprobante(t: Transaccion, id: number): Promise<F
         .forUpdate()
         .select(
             'id',
+            'empresa_id',
             'cliente_id',
             'servicio_id',
             'metodo',
@@ -64,6 +67,9 @@ export async function bloquearComprobante(t: Transaccion, id: number): Promise<F
             'estado',
         )
         .firstOrFail()) as FilaComprobante
+    fila.empresa_id = Number(fila.empresa_id)
+    exigirAccesoEmpresa(t.ctx, fila.empresa_id)
+    t.fijarEmpresa(fila.empresa_id)
     if (fila.estado !== 'pendiente') {
         throw new Conflicto(
             `El comprobante ${id} ya fue ${fila.estado}; solo se revisan los pendientes`,
@@ -90,7 +96,7 @@ export default class AprobarComprobante extends DomainAction<
             input.facturas && input.facturas.length > 0
                 ? input.facturas
                 : comprobante.servicio_id
-                  ? await this.pendientesDelServicio(t, comprobante.servicio_id)
+                  ? await this.pendientesDelServicio(t, comprobante.servicio_id, comprobante.empresa_id)
                   : undefined
         const nota = [`Comprobante ${comprobante.id}`, input.nota?.trim() || comprobante.nota]
             .filter(Boolean)
@@ -105,11 +111,13 @@ export default class AprobarComprobante extends DomainAction<
                 banco_origen_id: comprobante.banco_origen_id,
                 nota: nota.slice(0, 500),
                 facturas,
+                empresa_id: comprobante.empresa_id,
             },
             t.ctx,
             { trx: t.trx },
         )
         t.fijarEntidad('comprobante', comprobante.id)
+        t.fijarEmpresa(comprobante.empresa_id)
 
         await t.trx
             .from('billing.comprobantes')
@@ -129,6 +137,7 @@ export default class AprobarComprobante extends DomainAction<
         )
         await t.emit('comprobante.aprobado', {
             comprobante_id: comprobante.id,
+            empresa_id: comprobante.empresa_id,
             cliente_id: comprobante.cliente_id,
             pago_id: pago.id,
             motivo: null,
@@ -137,10 +146,15 @@ export default class AprobarComprobante extends DomainAction<
     }
 
     /** Facturas con saldo del servicio, de la más antigua a la más nueva. */
-    private async pendientesDelServicio(t: Transaccion, servicioId: number): Promise<number[] | undefined> {
+    private async pendientesDelServicio(
+        t: Transaccion,
+        servicioId: number,
+        empresaId: number,
+    ): Promise<number[] | undefined> {
         const filas = (await t.trx
             .from('billing.facturas')
             .where('servicio_id', servicioId)
+            .where('empresa_id', empresaId)
             .whereIn('estado', ['emitida', 'parcial', 'vencida'])
             .whereRaw('total > pagado')
             .orderBy([

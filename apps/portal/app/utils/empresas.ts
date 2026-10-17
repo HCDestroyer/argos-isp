@@ -2,20 +2,16 @@ import Decimal from 'decimal.js'
 import type { Schema } from '@argosisp/contracts'
 
 /**
- * Servicios del cliente agrupados por la empresa que los factura.
+ * Servicios del cliente agrupados por la empresa que los factura (multiempresa,
+ * `.claude/integration/contratos/multiempresa.md`): cada servicio trae su `empresa` (la marca de la
+ * API) y cada grupo lleva la marca, el saldo y los accesos de esa empresa, nunca mezclados.
  *
- * Hoy hay una sola empresa (`GET /portal/empresa`) y todo cae en un grupo. Con multiempresa
- * (`.claude/integration/contratos/multiempresa.md`) cada servicio traerá su `empresa_id` y la
- * cuenta, las empresas con su marca: este es el único lugar que cambia. El inicio ya pinta una
- * sección por grupo, y la cabecera con la marca de la empresa aparece cuando hay más de uno.
+ * Orden: la empresa principal del cliente primero (la del encabezado); las demás, en el orden de
+ * sus servicios.
  */
 
-/** Marca de la empresa que factura (nombre y logo). `id` null = la única empresa de hoy. */
-export interface MarcaEmpresa {
-    id: number | null
-    nombre: string
-    logoUrl: string | null
-}
+/** Marca de la empresa que factura (`PortalMarcaEmpresa`): nombre, logo, NIT y soporte. */
+export type MarcaEmpresa = Schema<'PortalMarcaEmpresa'>
 
 export interface GrupoEmpresa {
     clave: string
@@ -27,18 +23,43 @@ export interface GrupoEmpresa {
 
 export function agruparPorEmpresa(
     servicios: readonly Schema<'PortalServicio'>[],
-    empresaUnica: MarcaEmpresa,
+    principalId: number | null = null,
 ): GrupoEmpresa[] {
-    if (servicios.length === 0) {
-        return []
+    const grupos = new Map<number, GrupoEmpresa>()
+    const totales = new Map<number, Decimal>()
+    for (const servicio of servicios) {
+        const id = servicio.empresa.id
+        let grupo = grupos.get(id)
+        if (!grupo) {
+            grupo = { clave: `empresa-${id}`, empresa: servicio.empresa, servicios: [], montoAdeudado: '0.00' }
+            grupos.set(id, grupo)
+            totales.set(id, new Decimal(0))
+        }
+        grupo.servicios.push(servicio)
+        totales.set(id, totales.get(id)!.plus(servicio.monto_adeudado))
     }
-    const total = servicios.reduce((suma, s) => suma.plus(s.monto_adeudado), new Decimal(0))
-    return [{
-        clave: `empresa-${empresaUnica.id ?? 'principal'}`,
-        empresa: empresaUnica,
-        servicios: [...servicios],
-        montoAdeudado: total.toFixed(2),
-    }]
+    const lista = [...grupos.values()].map(grupo => ({
+        ...grupo,
+        montoAdeudado: totales.get(grupo.empresa.id)!.toFixed(2),
+    }))
+    const principal = lista.findIndex(grupo => grupo.empresa.id === principalId)
+    if (principal > 0) {
+        lista.unshift(...lista.splice(principal, 1))
+    }
+    return lista
+}
+
+/** Grupo (empresa) al que pertenece un servicio, o `null`. */
+export function grupoDeServicio(grupos: readonly GrupoEmpresa[], servicioId: number | undefined): GrupoEmpresa | null {
+    return grupos.find(grupo => grupo.servicios.some(s => s.id === servicioId)) ?? null
+}
+
+/**
+ * Manifiesto PWA con el nombre de la empresa principal del cliente (`server/routes/
+ * manifest.webmanifest.get.ts`); sin ella, el de siempre (nombre configurado).
+ */
+export function urlManifiesto(empresaId: number | null | undefined): string {
+    return empresaId ? `/manifest.webmanifest?empresa=${empresaId}` : '/manifest.webmanifest'
 }
 
 /** Estado más urgente entre los servicios (lo que se muestra en el encabezado compacto). */

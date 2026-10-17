@@ -1,4 +1,3 @@
-import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { ContextoAccion } from '#shared/contexto'
 import { Problema } from '#shared/errores'
@@ -6,8 +5,8 @@ import { fechaHora, quetzales } from '#notify/formato'
 import type { Canal } from '#notify/canales/canal'
 import { configPara, construirCanal } from '#notify/configuracion'
 import CanjearCodigoTelegram, { CodigoTelegramInvalido } from '#notify/actions/canjear_codigo_telegram'
-import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_cliente'
-import AnularCodigosTelegram from '#notify/actions/anular_codigos_telegram'
+import DesvincularTelegramBot from '#notify/actions/desvincular_telegram_bot'
+import { botGlobalId, clientesDelChat } from '#notify/telegram/vinculos'
 import { cuentasDelChat, type CuentaChat } from '#notify/telegram/estado'
 import { configBot } from '#notify/telegram/config'
 
@@ -113,6 +112,12 @@ export interface OpcionesBot {
      * él, el bot de la configuración global.
      */
     canal?: Canal | null
+    /**
+     * Id del bot que recibió la actualización (Telegram por empresa): `/start` vincula ese bot,
+     * `/estado` muestra lo de sus empresas y `/desvincular` solo lo desvincula de él. Sin él, el
+     * bot global.
+     */
+    botId?: string | null
 }
 
 export async function procesarActualizacion(
@@ -126,6 +131,7 @@ export async function procesarActualizacion(
     const canal =
         opciones.canal !== undefined ? opciones.canal : construirCanal(await configPara(null), 'telegram')
     const responder = (comando: Comando, texto: string) => responderPor(canal, chatId, comando, texto)
+    const botId = opciones.botId !== undefined ? opciones.botId : await botGlobalId()
 
     if (mensaje.chat.type !== 'private') {
         // En grupos solo responde si le hablan con un comando (no a cada mensaje del grupo).
@@ -139,7 +145,7 @@ export async function procesarActualizacion(
             if (!leido.argumento) return responder('start', MENSAJES.bienvenida())
             try {
                 const canje = await new CanjearCodigoTelegram().execute(
-                    { token_vinculacion: leido.argumento, chat_id: chatId },
+                    { token_vinculacion: leido.argumento, chat_id: chatId, bot_id: botId },
                     ctx,
                 )
                 return responder('vincular', MENSAJES.vinculado(canje.nombre))
@@ -153,7 +159,7 @@ export async function procesarActualizacion(
         case 'estado': {
             let cuentas: CuentaChat[]
             try {
-                cuentas = await cuentasDelChat(chatId)
+                cuentas = await cuentasDelChat(chatId, botId)
             } catch (error) {
                 logger.error(
                     { err: error, request_id: ctx.requestId },
@@ -165,16 +171,13 @@ export async function procesarActualizacion(
             return responder('estado', textoEstado(cuentas))
         }
         case 'desvincular': {
-            const cuentas = await cuentasDelChat(chatId).catch(() => null)
-            if (cuentas === null) return responder('desvincular', MENSAJES.errorTemporal())
-            if (cuentas.length === 0) return responder('desvincular', MENSAJES.noVinculado())
-            for (const cuenta of cuentas) {
-                // Misma transacción: desvincular y anular sus códigos pendientes (un enlace viejo
-                // no debe volver a vincular el chat).
-                await db.transaction(async (trx) => {
-                    await new DesvincularTelegramCliente().execute({ id: cuenta.cliente_id }, ctx, { trx })
-                    await new AnularCodigosTelegram().execute({ cliente_id: cuenta.cliente_id }, ctx, { trx })
-                })
+            const clientes = await clientesDelChat(chatId, botId).catch(() => null)
+            if (clientes === null) return responder('desvincular', MENSAJES.errorTemporal())
+            if (clientes.length === 0) return responder('desvincular', MENSAJES.noVinculado())
+            for (const clienteId of clientes) {
+                // Misma transacción: desvincular de este bot (y del todo si era el último) y anular
+                // sus códigos pendientes (un enlace viejo no debe volver a vincular el chat).
+                await new DesvincularTelegramBot().execute({ cliente_id: clienteId, bot_id: botId }, ctx)
             }
             return responder('desvincular', MENSAJES.desvinculado())
         }

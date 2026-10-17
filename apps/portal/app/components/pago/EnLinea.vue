@@ -17,12 +17,15 @@ const props = withDefaults(defineProps<{
     servicioId?: number
     /** id único del texto de ayuda (hay un botón en `/corte` y otro en `/cuenta`) */
     idAyuda?: string
+    /** Empresa del servicio (`/cuenta`); sin ella, la que decide la API (la de la IP en `/corte`). */
+    empresaId?: number
 }>(), {
     servicioId: undefined,
+    empresaId: undefined,
     idAyuda: 'pagar-en-linea-ayuda',
 })
 
-const { empresa, cargando } = useEmpresa()
+const { empresa, cargando } = useEmpresa({ empresaId: () => props.empresaId })
 const { iniciar } = usePagoEnLinea()
 
 const disponible = computed(() => empresa.value?.pago_en_linea === true)

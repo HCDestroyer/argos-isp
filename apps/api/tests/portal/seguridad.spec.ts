@@ -156,6 +156,7 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalIniciarPago: () => ({}),
     portalPagoEnLinea: () => undefined,
     portalEmpresa: () => undefined,
+    portalEmpresaLogo: () => undefined,
 }
 
 test.group('Portal seguridad: límite de peticiones en todas las rutas', (group) => {

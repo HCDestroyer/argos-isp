@@ -1,6 +1,8 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { resolverEmpresaActiva } from '#core/empresas'
 import { periodoDe, verCierre, type CierreVista } from '#ledger/cierres'
 import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
 
@@ -13,6 +15,8 @@ import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  */
 
 export interface EntradaReabrirPeriodo {
+    /** empresa cuyo libro se reabre; por defecto la activa (o la única) */
+    empresa_id?: number | null
     anio: number
     mes: number
     motivo: string
@@ -29,10 +33,14 @@ export default class ReabrirPeriodo extends DomainAction<EntradaReabrirPeriodo, 
                 { field: 'motivo', message: 'El motivo es obligatorio', rule: 'required' },
             ])
         }
-        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_CIERRES, 0])
+        const empresaId = input.empresa_id ?? (await resolverEmpresaActiva(t.ctx, t.trx))
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_CIERRES, empresaId])
         const cierre = await t.trx
             .from('ledger.cierres_mensuales as c')
             .where('c.periodo', periodo)
+            .where('c.empresa_id', empresaId)
             .whereNotExists((q) => q.from('ledger.reaperturas_mensuales as r').whereRaw('r.cierre_id = c.id'))
             .select('c.id')
             .first()

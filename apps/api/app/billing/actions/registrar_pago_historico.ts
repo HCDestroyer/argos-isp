@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { usuarioDelActor } from '#shared/contexto'
+import { empresaDeImportacion } from '#billing/empresa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { METODOS_PAGO, type MetodoPago } from '#shared/eventos'
@@ -52,6 +53,11 @@ export interface EntradaPagoHistorico {
     referencia?: string | null
     nota?: string | null
     facturas?: number[]
+    /**
+     * empresa del pago (multiempresa). Sin ella: la de las facturas pedidas, la de los servicios
+     * del cliente (si es una sola), la activa o la 1. Solo aplica a facturas de esa empresa.
+     */
+    empresa_id?: number | null
     /** día de referencia para "no futura" (pruebas); por defecto hoy en Guatemala */
     hoy?: string
 }
@@ -127,7 +133,9 @@ export default class RegistrarPagoHistorico extends DomainAction<
             return { ...(await verPago(existente.id, t.trx)), creado: false }
         }
 
-        await exigirPeriodoAbierto(t.trx, fecha, `Pago histórico ${texto}`)
+        const empresaId = await this.empresa(t, input)
+        t.fijarEmpresa(empresaId)
+        await exigirPeriodoAbierto(t.trx, fecha, `Pago histórico ${texto}`, empresaId)
 
         const referencia = input.referencia?.trim() || null
         // el pago queda "hecho" el día del origen (mediodía en Guatemala: sin saltar de día en UTC)
@@ -136,6 +144,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
             .insertQuery()
             .table('billing.pagos')
             .insert({
+                empresa_id: empresaId,
                 cliente_id: input.cliente_id,
                 metodo: input.metodo,
                 monto: aTexto(monto),
@@ -153,7 +162,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
         const pagoId = pago!.id
         t.fijarEntidad('pago', pagoId)
 
-        const facturas = await facturasPendientes(t.trx, input.cliente_id, input.facturas ?? [])
+        const facturas = await facturasPendientes(t.trx, input.cliente_id, input.facturas ?? [], [empresaId])
         const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, monto, facturas)
 
         const movimientos: LineaAsiento[] = [{ cuenta: CUENTAS.SALDOS_APERTURA, debe: aTexto(monto) }]
@@ -173,6 +182,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
         }
         await new RegistrarAsiento().execute(
             {
+                empresa_id: empresaId,
                 fecha,
                 descripcion:
                     `Pago histórico ${pagoId} (${texto}) · ${input.metodo}` +
@@ -189,5 +199,33 @@ export default class RegistrarPagoHistorico extends DomainAction<
         )
 
         return { ...(await verPago(pagoId, t.trx)), creado: true }
+    }
+
+    /** Empresa del pago histórico; 422 si las facturas pedidas son de otra (o de varias). */
+    private async empresa(t: Transaccion, input: EntradaPagoHistorico): Promise<number> {
+        const pedidas = input.facturas ?? []
+        const filas = pedidas.length
+            ? ((await t.trx.from('billing.facturas').whereIn('id', pedidas).distinct('empresa_id')) as Array<{
+                  empresa_id: number
+              }>)
+            : []
+        const deFacturas = [...new Set(filas.map((f) => Number(f.empresa_id)))]
+        const empresaId =
+            input.empresa_id ??
+            (deFacturas.length === 1
+                ? deFacturas[0]!
+                : await empresaDeImportacion(t.trx, t.ctx, { cliente_id: input.cliente_id }))
+        if (input.empresa_id) await empresaDeImportacion(t.trx, t.ctx, { empresa_id: input.empresa_id })
+        const ajena = deFacturas.find((id) => id !== empresaId)
+        if (ajena !== undefined) {
+            throw new ValidacionFallida([
+                {
+                    field: 'facturas',
+                    message: `Hay facturas de la empresa ${ajena}: un pago es de una sola empresa (${empresaId})`,
+                    rule: 'factura_de_otra_empresa',
+                },
+            ])
+        }
+        return empresaId
     }
 }

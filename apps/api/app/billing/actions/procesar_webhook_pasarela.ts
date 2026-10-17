@@ -111,9 +111,10 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             .where('proveedor', proveedor)
             .where('id_proveedor', aviso.id_proveedor)
             .forUpdate()
-            .select('id', 'cliente_id', 'estado', 'pago_id', 'facturas')
+            .select('id', 'empresa_id', 'cliente_id', 'estado', 'pago_id', 'facturas')
             .first()) as {
             id: number
+            empresa_id: number
             cliente_id: number
             estado: string
             pago_id: number | null
@@ -121,6 +122,7 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         } | null
         if (!cobro) return { ...base, cobro_id: null, pago_id: null, ignorado: 'cobro_desconocido' }
         t.fijarEntidad('cobro_pasarela', cobro.id)
+        t.fijarEmpresa(Number(cobro.empresa_id))
 
         if (cobro.estado === 'pagado') {
             return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'cobro_ya_pagado' }
@@ -149,6 +151,8 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 referencia: aviso.id_proveedor,
                 facturas: cobro.facturas.map(Number),
                 nota: `Pago en línea (cobro ${cobro.id})`,
+                // el pago es de la empresa del cobro en línea (no mezcla empresas)
+                empresa_id: Number(cobro.empresa_id),
             },
             t.ctx,
             { trx: t.trx },

@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, dec, redondear, type Dec } from '#ledger/dinero'
@@ -17,6 +18,8 @@ import { dimensionesFactura } from '#billing/facturas'
 
 export interface NotaCreditoFila {
     id: number
+    /** la empresa de su factura */
+    empresa_id: number
     factura_id: number
     cliente_id: number
     cliente_nombre: string
@@ -35,6 +38,7 @@ export interface NotaCreditoFila {
 export function columnasNota(cliente: QueryClientContract) {
     return [
         'n.id',
+        'n.empresa_id',
         'n.factura_id',
         'n.cliente_id',
         cliente.raw('(select cl.nombre from core.clientes cl where cl.id = n.cliente_id) as cliente_nombre'),
@@ -81,7 +85,11 @@ export interface FiltrosNotas extends OpcionesPaginacion {
     hasta?: string
 }
 
-export async function listarNotasCredito(filtros: FiltrosNotas, alcance?: Alcance) {
+export async function listarNotasCredito(
+    filtros: FiltrosNotas,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
     const consulta = db
         .from('billing.notas_credito as n')
         .join('billing.facturas as f', 'f.id', 'n.factura_id')
@@ -93,6 +101,7 @@ export async function listarNotasCredito(filtros: FiltrosNotas, alcance?: Alcanc
         .if(filtros.desde, (q) => q.where('n.fecha', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('n.fecha', '<=', filtros.hasta!))
     filtrarPorAlcance(consulta, alcance, dimensionesFactura)
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('n.empresa_id', ids))
     return paginar<NotaCreditoFila>(consulta, filtros, { columna: 'n.id' })
 }
 

@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
@@ -86,6 +87,9 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
 
         t.fijarEntidad('servicio', input.servicio_id)
         const servicio = await leerServicio(t.trx, input.servicio_id)
+        // la promesa es de la empresa del servicio (403 si está fuera del alcance del actor)
+        exigirAccesoEmpresa(t.ctx, servicio.empresa_id)
+        t.fijarEmpresa(servicio.empresa_id)
         if (servicio.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado', 'servicio_retirado')
         }
@@ -130,6 +134,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
             .insertQuery()
             .table('billing.promesas')
             .insert({
+                empresa_id: servicio.empresa_id,
                 servicio_id: servicio.id,
                 cliente_id: servicio.cliente_id,
                 vence_en: input.vence_en,
@@ -150,6 +155,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
 
         await t.emit('promesa.creada', {
             promesa_id: promesaId,
+            empresa_id: servicio.empresa_id,
             servicio_id: servicio.id,
             vence: input.vence_en.toISOString(),
             monto: aTexto(monto),

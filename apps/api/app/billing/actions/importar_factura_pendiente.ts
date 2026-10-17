@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { empresaDeImportacion } from '#billing/empresa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
@@ -74,6 +75,11 @@ export interface EntradaImportarFactura {
     vence_en?: string
     concepto?: string | null
     aplicar_mora?: boolean
+    /**
+     * empresa de la factura (multiempresa). Sin ella: la del servicio, la de los servicios del
+     * cliente (si es una sola), la activa o la 1. Con servicio, debe ser la suya.
+     */
+    empresa_id?: number | null
     /** día de referencia para decidir si ya venció (pruebas); por defecto hoy en Guatemala */
     hoy?: string
 }
@@ -236,7 +242,24 @@ export default class ImportarFacturaPendiente extends DomainAction<
         const sinCargo = total.isZero()
         const saldada = !sinCargo && input.saldada_en_origen === true
         const conAsiento = !sinCargo && !saldada
-        if (conAsiento && emitida) await exigirPeriodoAbierto(t.trx, emitida, `Factura importada ${texto}`)
+        const empresaId = await empresaDeImportacion(t.trx, t.ctx, {
+            empresa_id: input.empresa_id,
+            servicio_id: servicioId,
+            cliente_id: clienteId,
+        })
+        if (servicio && empresaId !== servicio.empresa_id) {
+            throw new ValidacionFallida([
+                {
+                    field: 'empresa_id',
+                    message: `El servicio ${servicio.id} es de la empresa ${servicio.empresa_id}`,
+                    rule: 'empresa_servicio',
+                },
+            ])
+        }
+        t.fijarEmpresa(empresaId)
+        if (conAsiento && emitida) {
+            await exigirPeriodoAbierto(t.trx, emitida, `Factura importada ${texto}`, empresaId)
+        }
 
         const venceEn = input.vence_en
             ? fechaValida(input.vence_en, 'vence_en')
@@ -274,6 +297,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
             .insertQuery()
             .table('billing.facturas')
             .insert({
+                empresa_id: empresaId,
                 cliente_id: clienteId,
                 servicio_id: servicioId,
                 tipo: 'servicio',
@@ -302,6 +326,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
         if (conAsiento) {
             await new RegistrarAsiento().execute(
                 {
+                    empresa_id: empresaId,
                     ...(emitida ? { fecha: emitida } : {}),
                     descripcion:
                         `Factura importada ${facturaId} (${texto})` +
@@ -317,7 +342,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
                 t.ctx,
                 { trx: t.trx },
             )
-            await aplicarAnticipos(t, clienteId)
+            await aplicarAnticipos(t, clienteId, empresaId)
         }
         const final = await t.trx
             .from('billing.facturas')

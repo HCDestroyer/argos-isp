@@ -4,7 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
 import { htmlAPdf } from '#portal/documentos/html_a_pdf'
 import { PLANTILLA_AVISO_COBRO } from '#portal/documentos/plantilla_base'
-import { variablesAvisoCobro, type VistaAvisoCobro } from '#portal/documentos/variables'
+import { imagenesDocumento, variablesAvisoCobro, type VistaAvisoCobro } from '#portal/documentos/variables'
 
 /**
  * Plantillas de documentos (HTML + Mustache) → PDF. Mustache escapa el HTML de cada variable
@@ -85,6 +85,8 @@ export async function pdfDesdePlantilla(
     return htmlAPdf(renderizarHtml(html, vista), {
         titulo: `${vista.factura.documento} ${vista.factura.numero}`,
         comprimir: opciones.comprimir,
+        // Solo el logo de la empresa del documento: `<img>` nunca descarga nada de afuera.
+        imagenes: await imagenesDocumento(vista),
     })
 }
 

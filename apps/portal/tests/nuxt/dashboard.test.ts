@@ -28,7 +28,7 @@ async function esperar() {
 
 async function montarCuenta(ruta = '/cuenta') {
     clearNuxtData('portal:cuenta')
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     const wrapper = await mountSuspended(PaginaCuenta, { route: ruta })
     montados.push(wrapper)
     await esperar()
@@ -122,15 +122,16 @@ describe('accesos rápidos: solo lo que la API aceptaría ahora', () => {
     })
 })
 
-describe('grupos por empresa (listo para multiempresa)', () => {
-    it('hoy un solo grupo con el total de sus servicios', () => {
+describe('grupos por empresa', () => {
+    it('con una sola empresa, un grupo con el total de sus servicios', () => {
         const grupos = agruparPorEmpresa([
             { ...CUENTA_FIXTURE.servicios[0]!, id: 1, monto_adeudado: '100.10' },
             { ...CUENTA_FIXTURE.servicios[0]!, id: 2, monto_adeudado: '0.20' },
-        ], { id: null, nombre: 'Red Altiplano', logoUrl: null })
+        ], 1)
         expect(grupos).toHaveLength(1)
         expect(grupos[0]!.montoAdeudado).toBe('100.30')
-        expect(agruparPorEmpresa([], { id: null, nombre: 'x', logoUrl: null })).toEqual([])
+        expect(grupos[0]!.empresa.nombre_comercial).toBe('Red Altiplano')
+        expect(agruparPorEmpresa([], null)).toEqual([])
     })
 
     it('estado más urgente para el encabezado', () => {
@@ -232,7 +233,7 @@ describe('/corte y la sesión', () => {
     async function montarCorte() {
         window.history.replaceState({}, '', '/corte')
         clearNuxtData('portal:quien-soy')
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await mountSuspended(PaginaCorte)
         montados.push(wrapper)
         await esperar()

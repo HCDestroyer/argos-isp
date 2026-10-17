@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { resolverIp } from '#network/consultas/ip'
+import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
 
 /**
  * Lecturas públicas del portal por IP de origen (`quien-soy` y `estado`). Son de solo lectura;
@@ -22,6 +23,8 @@ export interface QuienSoy {
     promesa_activa: boolean | null
     monto_adeudado: string | null
     facturas_vencidas: { cantidad: number; total: string } | null
+    /** Empresa del servicio de esa IP (marca y soporte de `/corte`) */
+    empresa: MarcaEmpresa | null
 }
 
 /** Espejo del schema `EstadoPortal` (`app/portal/esquemas.ts`). */
@@ -54,7 +57,7 @@ export async function leerQuienSoy(
               .from('core.servicios as s')
               .join('core.clientes as c', 'c.id', 's.cliente_id')
               .where('s.id', servicioId)
-              .select('s.id', 's.estado', 'c.nombre')
+              .select('s.id', 's.estado', 's.empresa_id', 'c.nombre')
               .select(
                   cliente.raw(
                       `EXISTS (SELECT 1 FROM billing.promesas p WHERE p.servicio_id = s.id AND p.estado = 'activa') AS promesa_activa`,
@@ -63,6 +66,7 @@ export async function leerQuienSoy(
               .first()) as {
               id: number
               estado: EstadoServicio
+              empresa_id: number
               nombre: string
               promesa_activa: boolean
           } | null)
@@ -78,6 +82,7 @@ export async function leerQuienSoy(
                 promesa_activa: null,
                 monto_adeudado: null,
                 facturas_vencidas: null,
+                empresa: null,
             },
         }
     }
@@ -93,6 +98,7 @@ export async function leerQuienSoy(
             promesa_activa: Boolean(servicio.promesa_activa),
             monto_adeudado: adeudado.toFixed(2),
             facturas_vencidas: { cantidad: vencidas, total: vencidoTotal.toFixed(2) },
+            empresa: await marcaDeEmpresa(Number(servicio.empresa_id), cliente),
         },
     }
 }

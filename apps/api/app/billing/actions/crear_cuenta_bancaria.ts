@@ -1,3 +1,5 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -28,6 +30,16 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
                 { field: 'banco_id', message: `El banco ${input.banco_id} no existe`, rule: 'exists' },
             ])
         }
+        // la cuenta (y su subcuenta del libro) es de una empresa: la indicada o la activa
+        let empresaId: number
+        if (input.empresa_id) {
+            await exigirEmpresaActiva(t.trx, input.empresa_id)
+            empresaId = input.empresa_id
+        } else {
+            empresaId = await resolverEmpresaActiva(t.ctx, t.trx)
+        }
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
         const numero = input.numero.trim()
         const repetida = await t.trx
             .from('billing.cuentas_bancarias')
@@ -65,6 +77,7 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
                 padre_id: padre.id,
                 imputable: true,
                 auxiliar_cliente: false,
+                empresa_id: empresaId,
             })
             .returning('id')) as Array<{ id: number }>
 
@@ -72,6 +85,7 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
             .insertQuery()
             .table('billing.cuentas_bancarias')
             .insert({
+                empresa_id: empresaId,
                 banco_id: input.banco_id,
                 numero,
                 alias: input.alias.trim(),
@@ -82,6 +96,7 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
             .returning('id')) as Array<{ id: number }>
         const creada = await verCuentaBancaria(fila!.id, t.trx)
         await t.registrarCambios({ tipo: 'cuenta_bancaria', id: creada.id }, null, {
+            empresa_id: creada.empresa_id,
             banco_id: creada.banco_id,
             numero: creada.numero,
             alias: creada.alias,
