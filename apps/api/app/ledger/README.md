@@ -77,6 +77,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
 - Nombres para el panel: `CajaTurno.abierto_por_nombre`/`cerrado_por_nombre`; `Caja.cajero_nombre`, `turno_abierto_por` y `turno_abierto_por_nombre`.
 - Un pago anulado después de cerrar su turno no cambia ese cierre (el reverso sale de la caja en el libro).
+- Un turno cerrado es inmutable (hallazgo H3): el trigger `cajas_turnos_inmutable` rechaza DELETE, cualquier UPDATE de un turno con `cerrado_en` y, en el abierto, todo UPDATE que no sea su cierre o que cambie los datos de apertura; TRUNCATE también se rechaza. `argosisp_app` no tiene DELETE ni TRUNCATE y su UPDATE se limita a las columnas del cierre.
 
 ## Cierre mensual (`cierres.ts`)
 
@@ -86,7 +87,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 | `libro.reabrir_periodo` | `actions/reabrir_periodo.ts` | `libro.reabrir_periodo` | Con motivo obligatorio; agrega `ledger.reaperturas_mensuales` (no borra el cierre). 409 `periodo_abierto`. Se puede volver a cerrar (cierre nuevo)                                        |
 
 - Un mes está cerrado si tiene un cierre sin reapertura: `ledger.periodo_cerrado(fecha)`, la misma función en la acción (`registrarAsiento`) y en los triggers de asientos y movimientos. Después del cierre ningún asiento puede tener fecha en el mes, **ni siquiera un reverso**: `RevertirAsiento` usa la fecha de hoy (periodo abierto) y con una fecha del mes cerrado responde 422.
-- `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
+- `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger de UPDATE/DELETE/TRUNCATE y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
 - `cerrar_periodo` está en `contabilidad`; `reabrir_periodo` solo en `admin`.
 
 ## Egresos (`egresos.ts`)
