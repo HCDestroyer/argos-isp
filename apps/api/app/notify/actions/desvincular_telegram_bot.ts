@@ -36,6 +36,13 @@ export default class DesvincularTelegramBot extends DomainAction<
         // Serializa contra un canje simultáneo del mismo cliente
         await t.trx.from('core.clientes').where('id', input.cliente_id).forUpdate().select('id').first()
         if (input.bot_id) {
+            // Auditoría: la empresa del vínculo con ese bot (null = el bot global)
+            const vinculo = (await t.trx
+                .from('notify.telegram_vinculos')
+                .where({ cliente_id: input.cliente_id, bot_id: input.bot_id })
+                .select('empresa_id')
+                .first()) as { empresa_id: number | null } | null
+            if (vinculo) t.fijarEmpresa(vinculo.empresa_id === null ? null : Number(vinculo.empresa_id))
             await t.trx
                 .from('notify.telegram_vinculos')
                 .where({ cliente_id: input.cliente_id, bot_id: input.bot_id })

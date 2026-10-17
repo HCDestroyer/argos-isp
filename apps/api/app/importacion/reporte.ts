@@ -92,6 +92,38 @@ export interface ReporteImportacion {
         diferencia: string
         cuadra: boolean
     }
+    /**
+     * Multiempresa: dónde quedó lo importado (creado o ya existente), leído de la base (no de lo
+     * que se pidió). `fuera_de_empresa` lista lo creado por esta corrida que quedó en otra empresa
+     * que la esperada (la de `--empresa`, o la del servicio cuando ya estaba importado en otra:
+     * `servicios_otra_empresa`). Lo ya importado por una corrida anterior no se mueve: se cuenta
+     * en su empresa.
+     * `por_empresa[].saldo` es CxC − anticipos de los clientes del cuadre en esa empresa; la suma
+     * debe ser `saldos.suma_importada`.
+     */
+    empresas: {
+        /** empresa de la corrida (`--empresa`) */
+        corrida: number
+        por_empresa: Array<{
+            empresa_id: number
+            facturas: number
+            pagos: number
+            promesas: number
+            saldos_iniciales: number
+            saldo: string
+        }>
+        fuera_de_empresa: Array<{
+            entidad: 'factura' | 'pago' | 'promesa' | 'saldo_inicial'
+            id_origen: string
+            id: number
+            empresa_id: number
+            esperada: number
+        }>
+        /** suma de `por_empresa[].saldo` */
+        suma: string
+        /** nada fuera de su empresa y `suma` = `saldos.suma_importada` */
+        cuadra: boolean
+    }
     diferencias: {
         /** router sin usuario/clave de la API o sin secreto RADIUS: se importa igual */
         routers_sin_credenciales: Array<{ router_origen: string; nombre: string; faltan: string[] }>
@@ -221,6 +253,20 @@ export function formatearReporte(r: ReporteImportacion): string {
         `Saldos (${r.saldos.clientes} clientes): origen Q ${r.saldos.suma_origen} · ArgosIsp Q ${r.saldos.suma_importada} · ` +
             (r.saldos.cuadra ? 'CUADRA' : `DIFERENCIA Q ${r.saldos.diferencia}`),
     )
+    lineas.push(
+        `Empresas (${r.empresas.cuadra ? 'CUADRA' : 'NO CUADRA'}): ` +
+            r.empresas.por_empresa
+                .map(
+                    (e) =>
+                        `empresa ${e.empresa_id}${e.empresa_id === r.empresas.corrida ? ' (corrida)' : ''}: ${e.facturas} facturas, ${e.pagos} pagos, ${e.promesas} promesas, ${e.saldos_iniciales} saldos iniciales, saldo Q ${e.saldo}`,
+                )
+                .join(' · '),
+    )
+    for (const x of r.empresas.fuera_de_empresa) {
+        lineas.push(
+            `  - ${x.entidad} ${x.id_origen} → ${x.id}: quedó en la empresa ${x.empresa_id}, se esperaba la ${x.esperada}`,
+        )
+    }
     lineas.push(
         `Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales (sin core.ids_externos)'}`,
     )

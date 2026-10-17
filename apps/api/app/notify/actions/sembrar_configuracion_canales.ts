@@ -58,6 +58,7 @@ export default class SembrarConfiguracionCanales extends DomainAction<EntradaSem
     }
 
     protected async handle(_input: EntradaSembrar, t: Transaccion): Promise<ResultadoSembrar> {
+        t.fijarEmpresa(null) // la configuración global
         const entorno = this.entorno
         const variables = VARIABLES.filter((nombre) => Boolean(entorno[nombre]))
         if (!entorno.SMTP_HOST && !entorno.TELEGRAM_BOT_TOKEN) {

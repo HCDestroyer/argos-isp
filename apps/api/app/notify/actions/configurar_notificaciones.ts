@@ -75,6 +75,8 @@ export default class ConfigurarNotificaciones extends DomainAction<EntradaConfig
 
     protected async handle(input: EntradaConfigurar, t: Transaccion): Promise<VistaConfiguracion> {
         const empresaId = input.empresa_id
+        // Auditoría: la empresa de la configuración (null = la global, de ninguna empresa)
+        t.fijarEmpresa(empresaId)
         const errores: ErrorCampo[] = []
         if (empresaId === null && input.hereda !== undefined && input.hereda !== false) {
             errores.push({ field: 'hereda', message: 'La configuración global no hereda', rule: 'global' })

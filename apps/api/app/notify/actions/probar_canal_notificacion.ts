@@ -39,6 +39,7 @@ export default class ProbarCanalNotificacion extends DomainAction<EntradaProbar,
     readonly nombre = 'notificaciones.probar'
 
     protected async handle(input: EntradaProbar, t: Transaccion): Promise<ResultadoProbar> {
+        t.fijarEmpresa(input.empresa_id ?? null)
         const config = await this.configuracion(t, input.empresa_id)
         const destino =
             (input.destino?.trim() || null) ??
