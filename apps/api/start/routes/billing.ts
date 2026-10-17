@@ -33,6 +33,7 @@ import type { EmpresasReporte } from '#billing/reportes/reportes'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { NoEncontrado, Prohibido } from '#shared/errores'
 import SustituirFactura from '#billing/actions/sustituir_factura'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import { dteVigente } from '#fiscal/fel/dte'
 import db from '@adonisjs/lucid/services/db'
 import { dimensionesDePromesa, listarPromesas, verPromesa } from '#billing/promesas'
@@ -295,6 +296,28 @@ const notasCredito: Ruta[] = [
             exigirAcceso(ctx, await dimensionesDeFactura(id))
             return new EmitirNotaCredito().execute(
                 { factura_id: id, monto: cuerpo.monto, motivo: cuerpo.motivo, lineas: cuerpo.lineas },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/notas-credito/:id/anular',
+        operacion: 'notasCreditoAnular',
+        resumen: 'Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.anular_nota_credito',
+        cuerpo: v.anularNotaCreditoValidator,
+        idempotente: true,
+        descripcion:
+            'Reverso espejo del asiento de la nota; el monto vuelve al saldo de la factura y el servicio se reevalúa. Emite nota_credito.anulada. 409 nota_anulada, ncre_certificada, dte_en_proceso (la NCRE sigue en cola), nota_sin_ncre_rechazada.',
+        respuesta: { status: 200, descripcion: 'Nota anulada', esquema: NotaCredito },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            const nota = await verNotaCredito(id)
+            exigirAcceso(ctx, await dimensionesDeFactura(nota.factura_id))
+            return new AnularNotaCredito().execute(
+                { nota_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
             )
         },

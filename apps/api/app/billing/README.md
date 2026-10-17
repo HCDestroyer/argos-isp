@@ -80,6 +80,10 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 - Estado de cuenta: abono con `tipo: nota_credito` y `referencia_id` = la nota. `GET /facturas/:id` trae `notas_credito[]`; `GET /notas-credito` (`cliente_id`, `factura_id`, `desde`, `hasta`) y `GET /notas-credito/:id` con `facturas.ver`.
 - Su asiento no se revierte directo (`reverso_por_documento`).
 
+## Anular una nota de crédito (NCRE rechazada)
+
+`actions/anular_nota_credito.ts` (`facturas.anular_nota_credito`, `POST /notas-credito/:id/anular { motivo }`): solo una nota cuya NCRE la SAT rechazó en definitivo. Reverso espejo de su asiento, fila en `billing.notas_credito_anulaciones` (solo inserción, una por nota), el monto vuelve al saldo de la factura y se reevalúa el servicio; evento `nota_credito.anulada`. 409 `nota_anulada`, `ncre_certificada`, `dte_en_proceso`, `nota_sin_ncre_rechazada`. Las notas anuladas no cuentan en `acreditado`. El cierre del mes responde 409 `ncre_sin_certificar` mientras haya NCRE del mes o anteriores sin certificar.
+
 ## Sustituir factura
 
 `actions/sustituir_factura.ts` (`facturas.sustituir`, `POST /facturas/:id/sustituir { motivo, cliente_fiscal? }`, contrato §10.9): para un dato mal emitido cuando el periodo ya está ocupado. Sin pagos (409 `sustitucion_no_permitida`). Sin DTE certificado anula la original; con DTE, la acredita con una NCRE por todo su saldo. Emite la nueva con las mismas líneas, periodo y vencimiento, `clave_unica = <clave>#s<n>` y el receptor corregido en su `reglas_snapshot`. `billing.sustituciones` (solo inserción) traza la relación; evento `factura.sustituida`.

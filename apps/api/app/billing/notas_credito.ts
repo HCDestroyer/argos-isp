@@ -35,6 +35,8 @@ export interface NotaCreditoFila {
     created_by: number | null
     created_by_nombre: string | null
     created_at: Date
+    /** la NCRE la rechazó la SAT en definitivo y la nota se anuló (fase 3); null si sigue vigente */
+    anulada_en?: Date | null
 }
 
 export function columnasNota(cliente: QueryClientContract) {
@@ -55,6 +57,9 @@ export function columnasNota(cliente: QueryClientContract) {
         ),
         'n.created_by',
         cliente.raw('(select u.nombre from core.usuarios u where u.id = n.created_by) as created_by_nombre'),
+        cliente.raw(
+            '(select x.anulado_en from billing.notas_credito_anulaciones x where x.nota_id = n.id) as anulada_en',
+        ),
         'n.created_at',
     ]
 }
@@ -110,9 +115,10 @@ export async function listarNotasCredito(
 /** Total acreditado por notas a una factura. */
 export async function acreditadoDe(cliente: QueryClientContract, facturaId: number): Promise<Dec> {
     const fila = (await cliente
-        .from('billing.notas_credito')
-        .where('factura_id', facturaId)
-        .select(cliente.raw('coalesce(sum(monto), 0)::text as total'))
+        .from('billing.notas_credito as n')
+        .where('n.factura_id', facturaId)
+        .whereNotExists((q) => q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'))
+        .select(cliente.raw('coalesce(sum(n.monto), 0)::text as total'))
         .first()) as { total: string }
     return dec(fila.total)
 }

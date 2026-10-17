@@ -151,7 +151,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('total'),
         c('pagado'),
         cliente.raw(
-            `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = ${alias}.id) as acreditado`,
+            `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = ${alias}.id
+               and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = n.id)) as acreditado`,
         ),
         ...columnasDte(cliente, alias),
         c('aviso_cobro'),

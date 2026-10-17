@@ -214,8 +214,13 @@ export const NotaCredito = definirEsquema(
             created_by: nulable(id),
             created_by_nombre: nulable(texto),
             created_at: instante,
+            anulada_en: {
+                ...nulable(instante),
+                description:
+                    'Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente',
+            },
         },
-        ['empresa_id'],
+        ['empresa_id', 'anulada_en'],
     ),
 )
 

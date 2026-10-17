@@ -220,6 +220,15 @@ export interface CatalogoEventos {
     'pago.anulado': PayloadPago
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
+    /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
+    'nota_credito.anulada': {
+        nota_credito_id: number
+        empresa_id: number
+        factura_id: number
+        cliente_id: number
+        monto: Dinero
+        motivo: string
+    }
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
@@ -358,6 +367,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'nota_credito.emitida',
+    'nota_credito.anulada',
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',

@@ -13143,6 +13143,131 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notas-credito/{id}/anular": {
+      "post": {
+        "operationId": "notasCreditoAnular",
+        "summary": "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo",
+        "description": "Reverso espejo del asiento de la nota; el monto vuelve al saldo de la factura y el servicio se reevalúa. Emite nota_credito.anulada. 409 nota_anulada, ncre_certificada, dte_en_proceso (la NCRE sigue en cola), nota_sin_ncre_rechazada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nota anulada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaCredito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.anular_nota_credito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.anular_nota_credito",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/configuracion": {
       "get": {
         "operationId": "notificacionesConfiguracionVer",
@@ -22118,6 +22243,7 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
+                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.sustituir",
@@ -22358,6 +22484,7 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
+                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.sustituir",
@@ -26889,6 +27016,7 @@
                             "empresas.editar",
                             "empresas.ver",
                             "facturas.anular",
+                            "facturas.anular_nota_credito",
                             "facturas.generar",
                             "facturas.nota_credito",
                             "facturas.sustituir",
@@ -34592,6 +34720,14 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "anulada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente"
           }
         }
       },

@@ -135,7 +135,13 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
         }
 
         const dte = await dteVigente(t.trx, 'factura', f.id)
-        const conNotas = await t.trx.from('billing.notas_credito').where('factura_id', f.id).first()
+        const conNotas = await t.trx
+            .from('billing.notas_credito as n')
+            .where('n.factura_id', f.id)
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'),
+            )
+            .first()
         let tipo: 'anulacion' | 'nota_credito' = 'anulacion'
         let notaId: number | null = null
         if (dte?.estado === 'certificado' || conNotas) {

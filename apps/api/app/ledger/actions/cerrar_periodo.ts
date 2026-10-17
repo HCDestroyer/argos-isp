@@ -65,6 +65,32 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
             )
         }
 
+        // FEL (condición del líder a la NCRE inmediata, contrato §17): ninguna NCRE del mes o anterior
+        // sin certificar; una rechazada en definitivo se anula antes (facturas.anular_nota_credito)
+        const { rows: ncre } = (await t.trx.rawQuery(
+            `SELECT d.id AS dte_id, d.documento_id AS nota_id, d.estado
+               FROM fiscal.dte d JOIN billing.notas_credito n ON n.id = d.documento_id
+              WHERE d.documento_tipo = 'nota_credito' AND d.empresa_id = ?
+                AND n.fecha < (?::date + interval '1 month')
+                AND NOT EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones x WHERE x.nota_id = n.id)
+                AND NOT EXISTS (SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo = 'nota_credito'
+                                  AND o.documento_id = n.id AND o.estado = 'certificado')
+                AND d.id = (SELECT max(o.id) FROM fiscal.dte o
+                             WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id)
+              ORDER BY d.id`,
+            [empresaId, periodo],
+        )) as { rows: Array<{ dte_id: number; nota_id: number; estado: string }> }
+        if (ncre.length > 0) {
+            throw new Conflicto(
+                `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre
+                    .slice(0, 20)
+                    .map((x) => `nota ${x.nota_id}: ${x.estado}`)
+                    .join(', ')}): certifícalas o anula las rechazadas antes de cerrar el mes`,
+                'ncre_sin_certificar',
+                'NCRE sin certificar',
+            )
+        }
+
         // todos los asientos del mes sellados y la cadena verificada (§10.10)
         for (;;) {
             const sellado = await new SellarAsientos().execute(

@@ -110,6 +110,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'fel.reintentar': 'DTE reintentado',
     'facturas.confirmar_emision': 'Factura emitida al certificarse',
     'facturas.sustituir': 'Factura sustituida',
+    'facturas.anular_nota_credito': 'Nota de crédito anulada (NCRE rechazada)',
     'fiscal.crear_establecimiento': 'Establecimiento creado',
     'fiscal.editar_establecimiento': 'Establecimiento editado',
     'facturas.importar_pendiente': 'Aviso de cobro importado',

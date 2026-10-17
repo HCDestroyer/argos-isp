@@ -151,7 +151,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             factura.id,
         )
         if (dteFactura && dteFactura.estado !== 'certificado') {
-            throw new DteEnProceso(dteFactura.id)
+            throw new DteEnProceso(dteFactura.id, dteFactura.estado)
         }
         const fecha = hoyGuatemala()
         if (dteFactura) {
@@ -226,7 +226,15 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
 
         if (dteFactura) {
             const config = await configuracionFel(empresaId, t.trx)
-            if (config.modo !== 'desactivada') {
+            if (config.modo === 'desactivada') {
+                // después de un DTE solo hay NCRE: una nota interna sobre un documento certificado no existe
+                throw new Conflicto(
+                    `La factura ${factura.id} está certificada y la FEL de la empresa está desactivada: la nota debe ser una NCRE; activa la FEL para emitirla`,
+                    'nota_requiere_ncre',
+                    'Nota requiere NCRE',
+                )
+            }
+            {
                 await insertarDte(t.trx, {
                     empresa_id: empresaId,
                     documento_tipo: 'nota_credito',
@@ -322,6 +330,9 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .from('billing.notas_credito as n')
             .where('n.factura_id', factura.id)
             .whereNotExists((q) => q.from('billing.notas_credito_lineas as l').whereRaw('l.nota_id = n.id'))
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'),
+            )
             .first()
         if (proporcionales) {
             throw new Conflicto(
@@ -340,10 +351,10 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 'l.total',
                 'l.iva',
                 t.trx.raw(
-                    '(select coalesce(sum(nl.monto), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id)::text as acreditado',
+                    '(select coalesce(sum(nl.monto), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = nl.nota_id))::text as acreditado',
                 ),
                 t.trx.raw(
-                    '(select coalesce(sum(nl.iva), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id)::text as iva_acreditado',
+                    '(select coalesce(sum(nl.iva), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = nl.nota_id))::text as iva_acreditado',
                 ),
             )) as Array<{
             id: number

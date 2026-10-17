@@ -158,6 +158,8 @@ export const notaCreditoValidator = vine.compile(
     }),
 )
 
+export const anularNotaCreditoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
 export const sustituirFacturaValidator = vine.compile(
     vine.object({
         motivo: motivo(),
