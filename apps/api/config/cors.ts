@@ -11,7 +11,8 @@ export default defineConfig({
     origin: (origen) => origenPermitido(origen),
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
     headers: true,
-    exposeHeaders: ['x-request-id', 'idempotent-replayed'],
+    // `retry-after`: el panel lee los segundos del 429 de login (`POST /auth/sesion`) desde otro origen
+    exposeHeaders: ['x-request-id', 'idempotent-replayed', 'retry-after'],
     credentials: true,
     maxAge: 90,
 })
