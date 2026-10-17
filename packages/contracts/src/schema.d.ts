@@ -887,6 +887,257 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Instalar o actualizar la localización fiscal de una empresa
+         * @description Inserta solo lo que falta (cuentas, parámetros, valores e impuestos del paquete; inicio_libros, régimen de core.empresas.regimen_isr y establecimiento de codigo_establecimiento): instalar dos veces no agrega nada. Emite fiscal.localizacion_instalada y fiscal.parametros_cambiados. 422 pais_no_soportado; 422 en codigo si no existe o es anterior a la instalada.
+         */
+        post: operations["fiscalActualizarLocalizacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/empresas/{id}/localizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Localización instalada en una empresa y su historial */
+        get: operations["fiscalLocalizacionEmpresa"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/establecimientos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Establecimientos de la SAT de la empresa */
+        get: operations["fiscalEstablecimientos"];
+        put?: never;
+        /**
+         * Dar de alta un establecimiento de la SAT
+         * @description El primero de la empresa queda por defecto; por_defecto en otro le quita la marca al anterior. 409 establecimiento_duplicado.
+         */
+        post: operations["fiscalCrearEstablecimiento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/establecimientos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un establecimiento */
+        get: operations["fiscalVerEstablecimiento"];
+        /**
+         * Editar un establecimiento
+         * @description El código de la SAT no se edita. 422 establecimiento_por_defecto si se desmarca o desactiva el por defecto (marque otro primero).
+         */
+        put: operations["fiscalEditarEstablecimiento"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/frases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Frases vigentes (del régimen y manuales) y el historial de las manuales */
+        get: operations["fiscalFrases"];
+        put?: never;
+        /**
+         * Agregar o retirar una frase manual
+         * @description Solo inserción; activa = false la retira desde vigente_desde. Las del régimen salen del régimen (422 frase_del_regimen). 422 frase_inactiva, vigencia_en_periodo_bloqueado; 409 vigencia_duplicada.
+         */
+        post: operations["fiscalAgregarFrase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/impuestos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Impuestos vigentes en una fecha (IVA, retenciones, ISR, ISO, pequeño contribuyente)
+         * @description Cada impuesto con la versión vigente (empresa → global → paquete): tasa con signo (las retenciones son negativas), cálculo, cuentas y cuadrículas de base y cuota.
+         */
+        get: operations["fiscalImpuestos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/impuestos/{codigo}/historial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Versiones de un impuesto */
+        get: operations["fiscalImpuestoHistorial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/impuestos/{codigo}/versiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agregar una versión del impuesto (tasa o activo) con su vigencia
+         * @description Copia cálculo, cuentas y cuadrículas de la versión vigente en esa fecha. Una retención lleva tasa negativa (422 parametro_fuera_de_rango, regla signo). 422 vigencia_en_periodo_bloqueado; 409 vigencia_duplicada. Emite fiscal.parametros_cambiados (clave impuesto:<codigo>).
+         */
+        post: operations["fiscalEditarImpuesto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/localizaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Paquetes de localización publicados */
+        get: operations["fiscalLocalizaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/parametros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Parámetros fiscales vigentes en una fecha, con su origen y fuente
+         * @description Cadena empresa → instalación → global → paquete, con la fila más reciente de cada nivel con vigente_desde ≤ fecha. valor null = sin valor (el cálculo que lo necesite responde 422 parametro_sin_confirmar). 422 localizacion_no_instalada.
+         */
+        get: operations["fiscalParametros"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/parametros/{clave}/historial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historial de un parámetro (todas sus vigencias) */
+        get: operations["fiscalParametroHistorial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/parametros/{clave}/valores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agregar un valor del parámetro con su vigencia
+         * @description Solo inserción: lo vigente antes de vigente_desde no cambia. 422 parametro_no_editable (alcance N o con acción propia, como regimen), parametro_fuera_de_rango (errors[] por campo), vigencia_en_periodo_bloqueado, localizacion_no_instalada; 403 alcance_global_requerido con ambito global; 409 vigencia_duplicada. Emite fiscal.parametros_cambiados.
+         */
+        post: operations["fiscalEditarParametro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/regimen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Configurar o cambiar el régimen de la empresa
+         * @description Primera configuración: cualquier fecha. Cambio: vigente_desde = 1 de enero de un año futuro y aviso_sat de diciembre del año anterior (LAT, art. 51); si no, 422 regimen_fuera_de_plazo. Las frases del régimen cambian con él. Emite fiscal.parametros_cambiados y fiscal.config_cambiada.
+         */
+        post: operations["fiscalCambiarRegimen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -3297,7 +3548,9 @@ export interface components {
                     codigo: string;
                     nombre: string;
                     /** @enum {string} */
-                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    tipo: "activo" | "pasivo" | "patrimonio" | "ingreso" | "gasto";
+                    /** @enum {string} */
+                    naturaleza?: "deudora" | "acreedora";
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
                     /** @description Según la naturaleza de la cuenta */
@@ -3306,13 +3559,15 @@ export interface components {
                 totales: {
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
+                    /** @description Neto: las contracuentas (depreciación acumulada) restan */
                     activo: components["schemas"]["Dinero"];
                     pasivo: components["schemas"]["Dinero"];
+                    patrimonio?: components["schemas"]["Dinero"];
                     ingresos: components["schemas"]["Dinero"];
                     gastos: components["schemas"]["Dinero"];
                     /** @description ingresos − gastos */
                     resultado: components["schemas"]["Dinero"];
-                    /** @description debe = haber y activo = pasivo + resultado */
+                    /** @description debe = haber y activo = pasivo + patrimonio + resultado */
                     cuadra: boolean;
                 };
             }[];
@@ -3323,7 +3578,9 @@ export interface components {
                     codigo: string;
                     nombre: string;
                     /** @enum {string} */
-                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    tipo: "activo" | "pasivo" | "patrimonio" | "ingreso" | "gasto";
+                    /** @enum {string} */
+                    naturaleza?: "deudora" | "acreedora";
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
                     /** @description Según la naturaleza de la cuenta */
@@ -3332,13 +3589,15 @@ export interface components {
                 totales: {
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
+                    /** @description Neto: las contracuentas (depreciación acumulada) restan */
                     activo: components["schemas"]["Dinero"];
                     pasivo: components["schemas"]["Dinero"];
+                    patrimonio?: components["schemas"]["Dinero"];
                     ingresos: components["schemas"]["Dinero"];
                     gastos: components["schemas"]["Dinero"];
                     /** @description ingresos − gastos */
                     resultado: components["schemas"]["Dinero"];
-                    /** @description debe = haber y activo = pasivo + resultado */
+                    /** @description debe = haber y activo = pasivo + patrimonio + resultado */
                     cuadra: boolean;
                 };
             };
@@ -3743,13 +4002,31 @@ export interface components {
             codigo: string;
             nombre: string;
             /** @enum {string} */
-            tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+            tipo: "activo" | "pasivo" | "patrimonio" | "ingreso" | "gasto";
             padre_id: number | null;
             /** @description Recibe movimientos (false = cuenta de agrupación) */
             imputable: boolean;
             /** @description Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id */
             auxiliar_cliente: boolean;
             activa: boolean;
+            /** @description País del catálogo (GT); el código es único por país */
+            pais?: string;
+            /**
+             * @description Lado en que crece el saldo (al revés del tipo en las contracuentas)
+             * @enum {string}
+             */
+            naturaleza?: "deudora" | "acreedora";
+            contracuenta?: boolean;
+            /** @description El saldo vuelve a cero cada ejercicio (ingresos y gastos) */
+            reinicia_anual?: boolean;
+            auxiliar_proveedor?: boolean;
+            categoria_fiscal?: string | null;
+            libro_inventario?: boolean;
+            /**
+             * @description Clasificación del flujo de efectivo (método indirecto)
+             * @enum {string|null}
+             */
+            categoria_flujo?: "efectivo" | "operacion" | "inversion" | "financiamiento" | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3987,6 +4264,23 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EstablecimientoFiscal: {
+            id: number;
+            empresa_id: number;
+            /** @description Código de establecimiento de la SAT */
+            codigo: number;
+            nombre: string;
+            direccion: string | null;
+            municipio: string | null;
+            departamento: string | null;
+            activo: boolean;
+            por_defecto: boolean;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         EstadoCuenta: {
             cliente_id: number;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
@@ -4023,7 +4317,9 @@ export interface components {
                     codigo: string;
                     nombre: string;
                     /** @enum {string} */
-                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    tipo: "activo" | "pasivo" | "patrimonio" | "ingreso" | "gasto";
+                    /** @enum {string} */
+                    naturaleza?: "deudora" | "acreedora";
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
                     /** @description Según la naturaleza de la cuenta */
@@ -4041,7 +4337,9 @@ export interface components {
                     codigo: string;
                     nombre: string;
                     /** @enum {string} */
-                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    tipo: "activo" | "pasivo" | "patrimonio" | "ingreso" | "gasto";
+                    /** @enum {string} */
+                    naturaleza?: "deudora" | "acreedora";
                     debe: components["schemas"]["Dinero"];
                     haber: components["schemas"]["Dinero"];
                     /** @description Según la naturaleza de la cuenta */
@@ -4205,12 +4503,110 @@ export interface components {
             /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
         };
+        FraseFiscal: {
+            /** @description null en las del régimen (se derivan del régimen vigente) */
+            id: number | null;
+            empresa_id: number;
+            clave: string;
+            tipo_frase: number | null;
+            escenario: number | null;
+            texto: string;
+            tipos_dte: string[];
+            /** @enum {string} */
+            origen: "regimen" | "manual";
+            activa: boolean;
+            /** Format: date */
+            vigente_desde: string | null;
+            resolucion: {
+                numero: string;
+                /** Format: date */
+                fecha: string;
+            } | null;
+            confirmar_contador: boolean;
+            fuente: string | null;
+            motivo: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string | null;
+        };
+        FrasesFiscales: {
+            empresa_id: number;
+            /** Format: date */
+            fecha: string;
+            /** @description Las del régimen vigente y las manuales activas */
+            vigentes: components["schemas"]["FraseFiscal"][];
+            /** @description Todas las filas de frases manuales */
+            historial: components["schemas"]["FraseFiscal"][];
+        };
+        HistorialImpuestoFiscal: {
+            vigente: components["schemas"]["ImpuestoFiscal"] | null;
+            versiones: components["schemas"]["ImpuestoFiscal"][];
+        };
+        HistorialParametroFiscal: {
+            parametro: components["schemas"]["ParametroFiscal"];
+            /** @description Todas las versiones (empresa y globales), por vigencia */
+            valores: components["schemas"]["ValorParametroFiscal"][];
+        };
         HistorialPromesas: {
             /** @description Cuántas promesas resueltas se miran */
             ventana: number;
             resueltas: number;
             cumplidas: number;
             cumplimiento_pct: number | null;
+        };
+        ImpuestoFiscal: {
+            id: number;
+            pais: string;
+            codigo: string;
+            /** @enum {string} */
+            grupo: "iva" | "retencion_iva" | "retencion_isr" | "isr" | "iso" | "pequeno_contribuyente";
+            /** @enum {string} */
+            uso: "venta" | "compra" | "declaracion";
+            empresa_id: number | null;
+            /** Format: date */
+            vigente_desde: string;
+            /** @enum {string} */
+            origen: "paquete" | "usuario";
+            nombre: string;
+            /** @enum {string} */
+            calculo: "precio_incluido" | "sobre_base" | "sobre_impuesto" | "sobre_total";
+            /** @description Impuesto sobre cuya cuota se calcula (sobre_impuesto) */
+            base_impuesto: string | null;
+            /**
+             * @description Por ciento con signo (las retenciones son negativas), como string
+             * @example 12.00
+             * @example -15.00
+             */
+            tasa: string;
+            incluido: boolean;
+            /** @enum {string} */
+            exigibilidad: "factura" | "pago";
+            /** @description Código de la cuenta de la cuota */
+            cuenta_cuota: string;
+            /** @description Cuenta mientras no es exigible (IVA por certificar) */
+            cuenta_transicion: string | null;
+            /** @description Etiqueta de los movimientos de la base */
+            cuadricula_base: string;
+            /** @description Etiqueta de los movimientos de la cuota */
+            cuadricula_cuota: string;
+            descripcion: string;
+            fuente: string;
+            confianza: string;
+            confirmar_contador: boolean;
+            activo: boolean;
+            motivo: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            nivel: "empresa" | "global" | "paquete";
+        };
+        ImpuestosFiscales: {
+            empresa_id: number;
+            /** Format: date */
+            fecha: string;
+            pais: string;
+            impuestos: components["schemas"]["ImpuestoFiscal"][];
         };
         Ipv6Bloque: {
             id: number;
@@ -4251,6 +4647,44 @@ export interface components {
             haber: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
             cliente_id: number | null;
+        };
+        LocalizacionEmpresa: {
+            empresa_id: number;
+            /** @description false: las operaciones fiscales responden 422 localizacion_no_instalada */
+            instalada: boolean;
+            pais: string | null;
+            codigo: string | null;
+            version: string | null;
+            /** @description Versión más reciente para su país */
+            disponible: string | null;
+            actualizacion_disponible: boolean;
+            /** @description La vigente primero */
+            instalaciones: {
+                id: number;
+                localizacion_codigo: string;
+                de_codigo: string | null;
+                /** Format: date-time */
+                instalada_en: string;
+                instalada_por: number | null;
+                instalada_por_nombre: string | null;
+                /** @description Qué agregó: cuentas, parámetros, valores, impuestos, establecimientos */
+                resumen: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        LocalizacionFiscal: {
+            /** @description Versión del paquete, p. ej. gt-2026.1 */
+            codigo: string;
+            pais: string;
+            /** @description semver */
+            version: string;
+            /** Format: date */
+            publicada_en: string;
+            /** @description sha256 del contenido del paquete */
+            checksum: string;
+            /** @description La que instala actualizar-localizacion sin codigo */
+            mas_reciente: boolean;
         };
         Mayor: {
             cuenta: components["schemas"]["Cuenta"];
@@ -4313,6 +4747,10 @@ export interface components {
             cliente_id: number | null;
             /** @description Cliente del auxiliar (CxC, anticipos) */
             cliente_nombre?: string | null;
+            /** @description Impuesto de la partida (fiscal.impuestos) */
+            impuesto_codigo?: string | null;
+            /** @description Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro */
+            cuadricula?: string | null;
         };
         MovimientoEstadoCuenta: {
             /** @description Empresa (libro) del asiento */
@@ -4414,6 +4852,51 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ParametroFiscal: {
+            pais: string;
+            clave: string;
+            /** @enum {string} */
+            tipo: "porcentaje" | "monto" | "entero" | "fecha" | "texto" | "enum" | "bool" | "json";
+            /**
+             * @description N = la ley (no editable), G = global, E = empresa
+             * @enum {string}
+             */
+            alcance: "N" | "G" | "E";
+            descripcion: string;
+            /** @description Cita de la investigación (inv. X.n) con el artículo */
+            fuente: string;
+            /** @enum {string} */
+            confianza: "alta" | "media-alta" | "media" | "baja-media" | "baja" | "no_verificado" | "diseno";
+            /** @description En la tabla «Confirmar con contador» */
+            confirmar_contador: boolean;
+            opciones: string[] | null;
+            minimo: string | null;
+            maximo: string | null;
+            /** @description Acción propia con que se cambia (regimen → fiscal.cambiar_regimen) */
+            accion: string | null;
+            /** @description Sin valor propio se deriva de otros parámetros */
+            derivado: boolean;
+            tope_por_clave: boolean;
+            /** @description Valor vigente en la fecha; null = sin valor (parametro_sin_confirmar) */
+            valor: unknown;
+            /** Format: date */
+            vigente_desde: string | null;
+            /** @enum {string|null} */
+            nivel: "empresa" | "instalacion" | "global" | "paquete" | "derivado" | null;
+            /** @enum {string|null} */
+            origen: "paquete" | "instalacion" | "usuario" | "derivado" | null;
+            /** @description Marcado contador y el valor vigente es el provisional del paquete (o no hay) */
+            pendiente_confirmar: boolean;
+            editable: boolean;
+        };
+        ParametrosFiscales: {
+            empresa_id: number;
+            /** Format: date */
+            fecha: string;
+            pais: string;
+            localizacion: string;
+            parametros: components["schemas"]["ParametroFiscal"][];
         };
         Permiso: {
             id: number;
@@ -4970,6 +5453,21 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        RegimenCambiado: {
+            empresa_id: number;
+            regimen: string;
+            /** Format: date */
+            vigente_desde: string;
+            anterior: string | null;
+            primera_configuracion: boolean;
+            aviso_sat: {
+                numero: string;
+                /** Format: date */
+                fecha: string;
+            } | null;
+            valor_id: number;
+            frases: components["schemas"]["FraseFiscal"][];
+        };
         ReglaEvaluada: {
             /**
              * @description Nombre estable de la regla (contratos/promesas.md)
@@ -5426,6 +5924,50 @@ export interface components {
             /** @description Servicios que no se pudieron facturar (ver log) */
             errores?: number;
         };
+        ResultadoInstalacionFiscal: {
+            empresa_id: number;
+            /** @description false: las operaciones fiscales responden 422 localizacion_no_instalada */
+            instalada: boolean;
+            pais: string | null;
+            codigo: string | null;
+            version: string | null;
+            /** @description Versión más reciente para su país */
+            disponible: string | null;
+            actualizacion_disponible: boolean;
+            /** @description La vigente primero */
+            instalaciones: {
+                id: number;
+                localizacion_codigo: string;
+                de_codigo: string | null;
+                /** Format: date-time */
+                instalada_en: string;
+                instalada_por: number | null;
+                instalada_por_nombre: string | null;
+                /** @description Qué agregó: cuentas, parámetros, valores, impuestos, establecimientos */
+                resumen: {
+                    [key: string]: unknown;
+                };
+            }[];
+            resumen: {
+                empresa_id: number;
+                codigo: string;
+                de_codigo: string | null;
+                /** @description true: la empresa ya tenía esta versión; no se agregó nada */
+                ya_instalada: boolean;
+                cuentas: string[];
+                parametros: string[];
+                valores: {
+                    clave: string;
+                    /** Format: date */
+                    vigente_desde: string;
+                    empresa_id: number | null;
+                }[];
+                /** @description codigo@vigente_desde */
+                impuestos: string[];
+                establecimientos: number[];
+                instalacion_id: number | null;
+            };
+        };
         ResultadoPruebaCanal: {
             /** @enum {string} */
             estado: "enviado" | "fallido";
@@ -5857,6 +6399,44 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ValorParametroCreado: {
+            id: number;
+            pais: string;
+            empresa_id: number | null;
+            clave: string;
+            /** @description JSON según el tipo del parámetro (string, número, booleano, objeto o lista) */
+            valor: unknown;
+            /** Format: date */
+            vigente_desde: string;
+            /** @enum {string} */
+            origen: "paquete" | "instalacion" | "usuario";
+            motivo: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            nivel: "empresa" | "global";
+            /** @description Valor vigente en vigente_desde antes de este (null si no había) */
+            anterior: unknown;
+        };
+        ValorParametroFiscal: {
+            id: number;
+            pais: string;
+            empresa_id: number | null;
+            clave: string;
+            /** @description JSON según el tipo del parámetro (string, número, booleano, objeto o lista) */
+            valor: unknown;
+            /** Format: date */
+            vigente_desde: string;
+            /** @enum {string} */
+            origen: "paquete" | "instalacion" | "usuario";
+            motivo: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            nivel: "empresa" | "instalacion" | "global" | "paquete";
         };
         VariableDocumento: {
             nombre: string;
@@ -9562,6 +10142,1041 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso facturas.generar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalActualizarLocalizacion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Versión del paquete (gt-2026.1); por defecto la más reciente del país */
+                    codigo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Localización y lo que agregó */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoInstalacionFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.instalar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalLocalizacionEmpresa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Localización de la empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalizacionEmpresa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalEstablecimientos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Establecimientos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstablecimientoFiscal"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalCrearEstablecimiento: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Código de establecimiento asignado por la SAT */
+                    codigo: number;
+                    nombre: string;
+                    direccion?: string | null;
+                    municipio?: string | null;
+                    departamento?: string | null;
+                    /** @description Establecimiento con el que se emite (uno por empresa) */
+                    por_defecto?: boolean;
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Establecimiento creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstablecimientoFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalVerEstablecimiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Establecimiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstablecimientoFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalEditarEstablecimiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    direccion?: string | null;
+                    municipio?: string | null;
+                    departamento?: string | null;
+                    activo?: boolean;
+                    /** @description Establecimiento con el que se emite (uno por empresa) */
+                    por_defecto?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Establecimiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstablecimientoFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalFrases: {
+        parameters: {
+            query?: {
+                /** @description Fecha de vigencia (YYYY-MM-DD); por defecto hoy en Guatemala */
+                fecha?: string;
+                /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Frases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrasesFiscales"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalAgregarFrase: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tipo_frase: number;
+                    escenario: number;
+                    /** @description Obligatorio al agregar; al retirar (activa = false) se toma el vigente */
+                    texto?: string | null;
+                    tipos_dte?: string[] | null;
+                    /** Format: date */
+                    vigente_desde: string;
+                    /** @description false = la frase deja de aplicar desde vigente_desde */
+                    activa?: boolean;
+                    /** @description Resolución de la SAT (pago directo) */
+                    resolucion?: {
+                        numero: string;
+                        /** Format: date */
+                        fecha: string;
+                    } | null;
+                    motivo: string;
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Frase agregada o retirada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FraseFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalImpuestos: {
+        parameters: {
+            query?: {
+                /** @description Fecha de vigencia (YYYY-MM-DD); por defecto hoy en Guatemala */
+                fecha?: string;
+                /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Impuestos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpuestosFiscales"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalImpuestoHistorial: {
+        parameters: {
+            query?: {
+                /** @description Fecha de vigencia (YYYY-MM-DD); por defecto hoy en Guatemala */
+                fecha?: string;
+                /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+            };
+            header?: never;
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historial */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistorialImpuestoFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalEditarImpuesto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por ciento con signo: las retenciones son negativas ("-15.00") */
+                    tasa: string;
+                    /** Format: date */
+                    vigente_desde: string;
+                    motivo: string;
+                    /** @description false = el impuesto deja de aplicar desde vigente_desde */
+                    activo?: boolean;
+                    /**
+                     * @description empresa (por defecto): de la empresa activa o empresa_id. global: de toda la instalación (alcance global; no en parámetros de alcance E)
+                     * @enum {string}
+                     */
+                    ambito?: "empresa" | "global";
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Versión agregada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpuestoFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.editar_parametros; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalLocalizaciones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versiones por país */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalizacionFiscal"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalParametros: {
+        parameters: {
+            query?: {
+                /** @description Fecha de vigencia (YYYY-MM-DD); por defecto hoy en Guatemala */
+                fecha?: string;
+                /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parámetros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParametrosFiscales"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalParametroHistorial: {
+        parameters: {
+            query?: {
+                /** @description Fecha de vigencia (YYYY-MM-DD); por defecto hoy en Guatemala */
+                fecha?: string;
+                /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+            };
+            header?: never;
+            path: {
+                clave: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historial */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistorialParametroFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalEditarParametro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                clave: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Valor según el tipo del parámetro: porcentaje y monto como string decimal ("12.00", "2500.00"), entero, bool, fecha YYYY-MM-DD, texto, una de las opciones (enum) u objeto/lista con la forma del valor del paquete (json) */
+                    valor: string | number | boolean | unknown[] | Record<string, never>;
+                    /** Format: date */
+                    vigente_desde: string;
+                    motivo: string;
+                    /**
+                     * @description empresa (por defecto): de la empresa activa o empresa_id. global: de toda la instalación (alcance global; no en parámetros de alcance E)
+                     * @enum {string}
+                     */
+                    ambito?: "empresa" | "global";
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Valor agregado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValorParametroCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.editar_parametros; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalCambiarRegimen: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    regimen: "utilidades" | "opcional_simplificado" | "pequeno_contribuyente";
+                    /** Format: date */
+                    vigente_desde: string;
+                    /** @description Aviso a la SAT (LAT, art. 51); obligatorio en un cambio */
+                    aviso_sat?: {
+                        numero: string;
+                        /** Format: date */
+                        fecha: string;
+                    } | null;
+                    motivo?: string | null;
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Régimen registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegimenCambiado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.cambiar_regimen; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15333,7 +16948,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -15391,7 +17006,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -17722,7 +19337,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

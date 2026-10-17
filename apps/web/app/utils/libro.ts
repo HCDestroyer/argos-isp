@@ -17,6 +17,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {
     activo: 'Activo',
     pasivo: 'Pasivo',
+    patrimonio: 'Patrimonio',
     ingreso: 'Ingreso',
     gasto: 'Gasto',
 }

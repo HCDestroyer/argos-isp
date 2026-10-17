@@ -242,6 +242,28 @@ export interface CatalogoEventos {
         empresa_id: number | null
         campos: string[]
     }
+
+    // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
+    'fiscal.localizacion_instalada': {
+        empresa_id: number
+        pais: string
+        /** versión instalada, p. ej. `gt-2026.1` */
+        codigo: string
+        /** versión anterior; null en la primera instalación */
+        de_codigo: string | null
+    }
+    /** invalida la caché de parámetros (regla 5); null = valor global de la instalación */
+    'fiscal.parametros_cambiados': {
+        empresa_id: number | null
+        claves: string[]
+        /** YYYY-MM-DD: la vigencia más antigua de lo insertado */
+        vigente_desde: string
+    }
+    /** nunca lleva valores secretos */
+    'fiscal.config_cambiada': {
+        empresa_id: number
+        campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
+    }
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -277,6 +299,9 @@ export const EVENTOS = [
     'caja.cerrada',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'fiscal.localizacion_instalada',
+    'fiscal.parametros_cambiados',
+    'fiscal.config_cambiada',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

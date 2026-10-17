@@ -13,7 +13,14 @@ import { EMPRESA_PRINCIPAL } from '#core/empresas'
  *  - Cada caja y cada banco tiene su propia cuenta hija de `1.1.01 Cajas` / `1.1.02 Bancos`.
  */
 
-export type TipoCuenta = 'activo' | 'pasivo' | 'ingreso' | 'gasto'
+export type TipoCuenta = 'activo' | 'pasivo' | 'patrimonio' | 'ingreso' | 'gasto'
+
+/**
+ * País del catálogo de cuentas (`ledger.cuentas.pais`): el código es único por país. Hoy todas las
+ * empresas son de Guatemala; cuando haya otro país, se resuelve con el de la empresa del asiento
+ * (contrato de localización fiscal §3.3).
+ */
+export const PAIS_PLAN = 'GT'
 
 export interface DefinicionCuenta {
     codigo: string
@@ -296,10 +303,12 @@ export interface CuentaResuelta {
 export async function cuentasPorCodigo(
     cliente: QueryClientContract,
     codigos: readonly string[],
+    pais: string = PAIS_PLAN,
 ): Promise<Map<string, CuentaResuelta>> {
     const unicos = [...new Set(codigos)]
     const filas = (await cliente
         .from('ledger.cuentas')
+        .where('pais', pais)
         .whereIn('codigo', unicos)
         .select(
             'id',

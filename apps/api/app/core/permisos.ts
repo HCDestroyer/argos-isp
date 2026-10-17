@@ -82,6 +82,13 @@ export const PERMISOS = {
     'egresos.anular': 'Anular egresos con asiento de reverso',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
 
+    // localización fiscal (A3, contratos/localizacion-fiscal.md §10.2; fase 2)
+    'fiscal.ver': 'Ver la localización fiscal: parámetros, impuestos, régimen, establecimientos y frases',
+    'fiscal.configurar': 'Configurar establecimientos y frases de la empresa',
+    'fiscal.instalar': 'Instalar o actualizar la localización fiscal de una empresa',
+    'fiscal.editar_parametros': 'Agregar valores de parámetros y versiones de impuestos con su vigencia',
+    'fiscal.cambiar_regimen': 'Cambiar el régimen de la empresa (rige el 1 de enero, con aviso a la SAT)',
+
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
     'notificaciones.configurar':
@@ -255,6 +262,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
+            'fiscal.ver',
+            'fiscal.configurar',
+            'fiscal.editar_parametros',
+            'fiscal.cambiar_regimen',
         ],
     },
     lectura: {

@@ -29,7 +29,7 @@ export const Cuenta = definirEsquema(
             id,
             codigo: texto,
             nombre: texto,
-            tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
+            tipo: enumerado(['activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto']),
             padre_id: nulable(id),
             imputable: { ...booleano, description: 'Recibe movimientos (false = cuenta de agrupación)' },
             auxiliar_cliente: {
@@ -37,9 +37,36 @@ export const Cuenta = definirEsquema(
                 description: 'Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id',
             },
             activa: booleano,
+            pais: { ...texto, description: 'País del catálogo (GT); el código es único por país' },
+            naturaleza: {
+                ...enumerado(['deudora', 'acreedora']),
+                description: 'Lado en que crece el saldo (al revés del tipo en las contracuentas)',
+            },
+            contracuenta: booleano,
+            reinicia_anual: {
+                ...booleano,
+                description: 'El saldo vuelve a cero cada ejercicio (ingresos y gastos)',
+            },
+            auxiliar_proveedor: booleano,
+            categoria_fiscal: nulable(texto),
+            libro_inventario: booleano,
+            categoria_flujo: {
+                ...nulable(enumerado(['efectivo', 'operacion', 'inversion', 'financiamiento'])),
+                description: 'Clasificación del flujo de efectivo (método indirecto)',
+            },
             ...auditable,
         },
-        ['empresa_id'],
+        [
+            'empresa_id',
+            'pais',
+            'naturaleza',
+            'contracuenta',
+            'reinicia_anual',
+            'auxiliar_proveedor',
+            'categoria_fiscal',
+            'libro_inventario',
+            'categoria_flujo',
+        ],
     ),
 )
 
@@ -55,8 +82,13 @@ export const Movimiento = definirEsquema(
             haber: Dinero,
             cliente_id: nulable(id),
             cliente_nombre: { ...nulable(texto), description: 'Cliente del auxiliar (CxC, anticipos)' },
+            impuesto_codigo: { ...nulable(texto), description: 'Impuesto de la partida (fiscal.impuestos)' },
+            cuadricula: {
+                ...nulable(texto),
+                description: 'Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro',
+            },
         },
-        ['cliente_nombre'],
+        ['cliente_nombre', 'impuesto_codigo', 'cuadricula'],
     ),
 )
 
@@ -291,26 +323,34 @@ export const CierrePeriodo = definirEsquema(
     ),
 )
 
-const lineaEstado = objeto({
-    cuenta_id: id,
-    codigo: texto,
-    nombre: texto,
-    tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
-    debe: Dinero,
-    haber: Dinero,
-    saldo: { ...Dinero, description: 'Según la naturaleza de la cuenta' },
-})
+const lineaEstado = objeto(
+    {
+        cuenta_id: id,
+        codigo: texto,
+        nombre: texto,
+        tipo: enumerado(['activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto']),
+        naturaleza: enumerado(['deudora', 'acreedora']),
+        debe: Dinero,
+        haber: Dinero,
+        saldo: { ...Dinero, description: 'Según la naturaleza de la cuenta' },
+    },
+    ['naturaleza'],
+)
 
-const totalesBalance = objeto({
-    debe: Dinero,
-    haber: Dinero,
-    activo: Dinero,
-    pasivo: Dinero,
-    ingresos: Dinero,
-    gastos: Dinero,
-    resultado: { ...Dinero, description: 'ingresos − gastos' },
-    cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + resultado' },
-})
+const totalesBalance = objeto(
+    {
+        debe: Dinero,
+        haber: Dinero,
+        activo: { ...Dinero, description: 'Neto: las contracuentas (depreciación acumulada) restan' },
+        pasivo: Dinero,
+        patrimonio: Dinero,
+        ingresos: Dinero,
+        gastos: Dinero,
+        resultado: { ...Dinero, description: 'ingresos − gastos' },
+        cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + patrimonio + resultado' },
+    },
+    ['patrimonio'],
+)
 
 const totalesResultados = objeto({ ingresos: Dinero, gastos: Dinero, resultado: Dinero })
 

@@ -20,6 +20,14 @@ const COLUMNAS_CUENTA = [
     'auxiliar_cliente',
     'empresa_id',
     'activa',
+    'pais',
+    'naturaleza',
+    'contracuenta',
+    'reinicia_anual',
+    'auxiliar_proveedor',
+    'categoria_fiscal',
+    'libro_inventario',
+    'categoria_flujo',
     'version',
     'created_at',
     'updated_at',
@@ -145,6 +153,8 @@ export async function movimientosDeAsientos(cliente: QueryClientContract, asient
             'm.haber',
             'm.cliente_id',
             'cl.nombre as cliente_nombre',
+            'm.impuesto_codigo',
+            'm.cuadricula',
         )) as Array<{ asiento_id: number } & Record<string, unknown>>
     for (const { asiento_id: asientoId, ...movimiento } of filas) {
         const lista = mapa.get(asientoId) ?? []
@@ -178,9 +188,15 @@ interface FilaMayor {
     cliente_id: number | null
 }
 
-/** Saldo según la naturaleza de la cuenta: deudora (activo, gasto) o acreedora (pasivo, ingreso). */
-export function saldoSegunNaturaleza(tipo: string, debe: Dec, haber: Dec): Dec {
-    return tipo === 'activo' || tipo === 'gasto' ? debe.minus(haber) : haber.minus(debe)
+/**
+ * Saldo según la naturaleza de la cuenta: `deudora` (activo, gasto) o `acreedora` (pasivo,
+ * patrimonio, ingreso; al revés en las contracuentas). Acepta la naturaleza (columna
+ * `ledger.cuentas.naturaleza`) o, por compatibilidad, el tipo.
+ */
+export function saldoSegunNaturaleza(naturalezaOTipo: string, debe: Dec, haber: Dec): Dec {
+    const deudora =
+        naturalezaOTipo === 'deudora' || naturalezaOTipo === 'activo' || naturalezaOTipo === 'gasto'
+    return deudora ? debe.minus(haber) : haber.minus(debe)
 }
 
 /**
@@ -192,7 +208,7 @@ export async function libroMayor(filtros: FiltrosMayor, empresas: number[] | nul
         .from('ledger.cuentas')
         .where('id', filtros.cuenta_id)
         .select(...COLUMNAS_CUENTA)
-        .first()) as ({ tipo: string } & Record<string, unknown>) | null
+        .first()) as ({ tipo: string; naturaleza: string } & Record<string, unknown>) | null
     if (!cuenta) throw new NoEncontrado(`La cuenta ${filtros.cuenta_id} no existe`)
 
     const base = () =>
@@ -211,7 +227,7 @@ export async function libroMayor(filtros: FiltrosMayor, empresas: number[] | nul
                 db.raw('coalesce(sum(m.haber), 0)::text as haber'),
             )
             .first()) as { debe: string; haber: string }
-        return saldoSegunNaturaleza(cuenta.tipo, dec(fila.debe), dec(fila.haber))
+        return saldoSegunNaturaleza(cuenta.naturaleza, dec(fila.debe), dec(fila.haber))
     }
 
     const saldoInicial = filtros.desde ? await sumas(base().where('a.fecha', '<', filtros.desde)) : CERO
@@ -241,7 +257,7 @@ export async function libroMayor(filtros: FiltrosMayor, empresas: number[] | nul
     )
 
     const data = pagina.data.map((fila) => {
-        acumulado = acumulado.plus(saldoSegunNaturaleza(cuenta.tipo, dec(fila.debe), dec(fila.haber)))
+        acumulado = acumulado.plus(saldoSegunNaturaleza(cuenta.naturaleza, dec(fila.debe), dec(fila.haber)))
         return { ...fila, saldo: aTexto(acumulado) }
     })
 

@@ -7,6 +7,7 @@ import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { periodoCerrado } from '#ledger/cierres'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { PAIS_PLAN } from '#ledger/plan_cuentas'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -36,6 +37,12 @@ export interface LineaAsiento {
     haber?: Monto | null
     /** obligatorio en cuentas con auxiliar por cliente (CxC, anticipos) */
     cliente_id?: number | null
+    /**
+     * Etiqueta de impuesto de la partida (`fiscal.impuestos`): el código y la cuadrícula de la base o
+     * de la cuota. Van juntos. Las acciones la irán poniendo en las fases de FEL y declaraciones.
+     */
+    impuesto_codigo?: string | null
+    cuadricula?: string | null
 }
 
 export interface EntradaAsiento {
@@ -63,6 +70,8 @@ export interface MovimientoRegistrado {
     debe: string
     haber: string
     cliente_id: number | null
+    impuesto_codigo: string | null
+    cuadricula: string | null
 }
 
 export interface AsientoRegistrado {
@@ -94,6 +103,8 @@ interface LineaNormalizada {
     debe: Dec
     haber: Dec
     cliente_id: number | null
+    impuesto_codigo: string | null
+    cuadricula: string | null
 }
 
 export default class RegistrarAsiento extends DomainAction<EntradaAsiento, AsientoRegistrado> {
@@ -150,14 +161,26 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: linea.debe.toFixed(2),
                     haber: linea.haber.toFixed(2),
                     cliente_id: linea.cliente_id,
+                    impuesto_codigo: linea.impuesto_codigo,
+                    cuadricula: linea.cuadricula,
                 })),
             )
-            .returning(['id', 'cuenta_id', 'debe', 'haber', 'cliente_id'])) as Array<{
+            .returning([
+                'id',
+                'cuenta_id',
+                'debe',
+                'haber',
+                'cliente_id',
+                'impuesto_codigo',
+                'cuadricula',
+            ])) as Array<{
             id: number
             cuenta_id: number
             debe: string
             haber: string
             cliente_id: number | null
+            impuesto_codigo: string | null
+            cuadricula: string | null
         }>
 
         // … e inmediato al terminar: el cuadre se verifica aquí y el error sale de esta acción.
@@ -187,6 +210,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: fila.debe,
                     haber: fila.haber,
                     cliente_id: fila.cliente_id,
+                    impuesto_codigo: fila.impuesto_codigo,
+                    cuadricula: fila.cuadricula,
                 })),
         }
     }
@@ -225,7 +250,9 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         const cuentas = (await trx
             .from('ledger.cuentas')
             .where((q) => {
-                q.whereIn('codigo', codigos.length > 0 ? codigos : [''])
+                q.where((c) =>
+                    c.where('pais', PAIS_PLAN).whereIn('codigo', codigos.length > 0 ? codigos : ['']),
+                )
                 q.orWhereIn('id', ids.length > 0 ? ids : [0])
             })
             .select(
@@ -305,11 +332,62 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     message: 'Los montos se redondean a 2 decimales antes del asiento',
                 })
             }
-            lineas.push({ cuenta, debe, haber, cliente_id: clienteId })
+            const impuesto = movimiento.impuesto_codigo?.trim() || null
+            const cuadricula = movimiento.cuadricula?.trim() || null
+            if ((impuesto === null) !== (cuadricula === null)) {
+                errores.push({
+                    field: `${campo}.${impuesto === null ? 'impuesto_codigo' : 'cuadricula'}`,
+                    message: 'impuesto_codigo y cuadricula van juntos',
+                    rule: 'cuadricula',
+                })
+            }
+            lineas.push({ cuenta, debe, haber, cliente_id: clienteId, impuesto_codigo: impuesto, cuadricula })
         })
 
+        await this.validarCuadriculas(trx, lineas, errores)
         if (errores.length > 0) throw new ValidacionFallida(errores, 'Movimientos inválidos')
         return lineas
+    }
+
+    /** La cuadrícula debe ser la de base o cuota de alguna versión del impuesto (`fiscal.impuestos`). */
+    private async validarCuadriculas(
+        trx: TransactionClientContract,
+        lineas: LineaNormalizada[],
+        errores: ErrorCampo[],
+    ) {
+        const codigos = [
+            ...new Set(lineas.map((l) => l.impuesto_codigo).filter((c): c is string => c !== null)),
+        ]
+        if (codigos.length === 0) return
+        const filas = (await trx
+            .from('fiscal.impuestos_versiones')
+            .whereIn('codigo', codigos)
+            .distinct('codigo', 'cuadricula_base', 'cuadricula_cuota')) as Array<{
+            codigo: string
+            cuadricula_base: string
+            cuadricula_cuota: string
+        }>
+        lineas.forEach((linea, i) => {
+            if (linea.impuesto_codigo === null) return
+            const propias = filas.filter((f) => f.codigo === linea.impuesto_codigo)
+            if (propias.length === 0) {
+                errores.push({
+                    field: `movimientos.${i}.impuesto_codigo`,
+                    message: `El impuesto ${linea.impuesto_codigo} no existe`,
+                    rule: 'exists',
+                })
+            } else if (
+                !propias.some(
+                    (f) => f.cuadricula_base === linea.cuadricula || f.cuadricula_cuota === linea.cuadricula,
+                )
+            ) {
+                errores.push({
+                    field: `movimientos.${i}.cuadricula`,
+                    message: `La cuadrícula ${linea.cuadricula} no es de ${linea.impuesto_codigo}`,
+                    rule: 'cuadricula',
+                })
+            }
+        })
     }
 
     private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string, empresaId: number) {
