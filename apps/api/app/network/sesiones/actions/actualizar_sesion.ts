@@ -3,10 +3,13 @@ import type { RegistroAccounting } from '#network/sesiones/registro'
 import {
     actualizarSesionAbierta,
     buscarSesion,
+    CAUSA_SIN_INTERIM,
     cerrarReemplazadas,
     emitirIniciada,
+    hayOtraAbierta,
     inicioEstimado,
     insertarSesion,
+    reabrirSesion,
     resolverContexto,
     type ResultadoAccounting,
 } from '#network/sesiones/sesiones'
@@ -16,7 +19,10 @@ import {
  *
  * - Sin Start previo (se perdió, o `aaa` arrancó con sesiones vivas): abre la sesión con
  *   `inicio = evento − Acct-Session-Time` y emite `sesion.iniciada`.
- * - Sobre una sesión cerrada: se ignora (Interim tardío).
+ * - Sobre una sesión cerrada: se ignora (Interim tardío), salvo que la haya cerrado el cron de
+ *   sesiones colgadas (`sin_interim`) antes de este Interim y el usuario no tenga otra abierta: el
+ *   NAS demostró que seguía viva, así que se reabre (`fin` y causa a null, auditado) y se emite
+ *   `sesion.iniciada` otra vez (`coa`, el portal y RouterOS vuelven a verla).
  * - Prefijos: si el NAS reporta un /64 o un /56 que la sesión no tenía (modo `radius_pool`, el /56
  *   llega después del Start), se guarda y se audita.
  * - Auditoría: solo cuando abre la sesión o aprende un prefijo. Una actualización de contadores llega cada 5 minutos
@@ -27,7 +33,7 @@ export default class ActualizarSesion extends DomainAction<RegistroAccounting, R
     readonly nombre = 'sesiones.actualizar'
 
     protected override auditarExito(salida: ResultadoAccounting): boolean {
-        return salida.efecto === 'abierta' || salida.prefijoNuevo === true
+        return salida.efecto === 'abierta' || salida.efecto === 'reabierta' || salida.prefijoNuevo === true
     }
 
     protected async handle(r: RegistroAccounting, t: Transaccion): Promise<ResultadoAccounting> {
@@ -41,7 +47,22 @@ export default class ActualizarSesion extends DomainAction<RegistroAccounting, R
         }
         const existente = (await buscarSesion(t, r.nas_ip, r.acct_session_id))!
         t.fijarEntidad('sesion', existente.id)
-        if (existente.fin) return { sesionId: existente.id, efecto: 'ignorada', eventos: [] }
+        if (existente.fin) {
+            const reabrir =
+                existente.causa_fin === CAUSA_SIN_INTERIM &&
+                new Date(r.evento_en).getTime() > existente.fin.getTime() &&
+                !(await hayOtraAbierta(t, existente))
+            if (!reabrir) return { sesionId: existente.id, efecto: 'ignorada', eventos: [] }
+            await reabrirSesion(t, existente.id)
+            const reabierta = await actualizarSesionAbierta(t, existente.id, r, ctx)
+            await t.registrarCambios(
+                { tipo: 'sesion', id: existente.id },
+                { fin: existente.fin.toISOString(), causa_fin: existente.causa_fin },
+                { fin: null, causa_fin: null },
+            )
+            await emitirIniciada(t, reabierta)
+            return { sesionId: existente.id, efecto: 'reabierta', eventos: ['sesion.iniciada'] }
+        }
         const despues = await actualizarSesionAbierta(t, existente.id, r, ctx)
         const prefijoNuevo =
             (existente.prefijo_delegado_v6 === null && despues.prefijo_delegado_v6 !== null) ||
