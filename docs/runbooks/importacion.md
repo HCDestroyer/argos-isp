@@ -49,7 +49,7 @@ Notas:
 
 - `--skip-triggers` es opcional: el lector ignora los triggers (Mikrowisp trae seis). Con MySQL 8 y un usuario sin privilegio `PROCESS`, agrega `--no-tablespaces`.
 - Sin acceso por consola, la exportación SQL de phpMyAdmin o de Adminer sirve igual: formato SQL, **estructura y datos**, todas las tablas.
-- Tablas muy grandes (`radacct`, logs): también entran al archivo del origen; la corrida tarda más y la base crece. Si el PM decide dejarlas fuera, se excluyen con `--ignore-table=<base>.radacct` y el reporte no las cuenta.
+- **Tablas enormes (`radacct`, `radpostauth`, logs).** Por defecto se importa **todo** (el PM pidió "traer todo"): también entran al archivo del origen (`importacion.filas_origen`), y en un ISP con años de historial `radacct` puede tener millones de filas: la corrida tarda mucho más y la base crece varios GB. Se pueden dejar fuera **del archivo** sin tocar el volcado con `--excluir-tablas=radacct,radpostauth,logs` (nombres de tabla del volcado, separados por coma). Esas tablas no se guardan ni se cuentan en el cuadre por tabla, y el reporte las lista con su número de filas ("tablas excluidas"). Solo se pueden excluir tablas que quedan solo en el archivo: una tabla que se importa (clientes, servicios, facturas…) hace fallar la corrida con el motivo. **Conserva el `.sql` original** (cifrado, fuera del repositorio, con el backup de la migración) como respaldo de lo excluido. La alternativa, sacarlas del volcado con `mysqldump --ignore-table=<base>.radacct`, también sirve, pero entonces el respaldo es otro volcado completo.
 - Para mandar la estructura al equipo sin datos (cuando el comando no reconoce el esquema): el mismo comando con `--no-data`.
 - El volcado lleva datos personales y **contraseñas en claro**: claves PPPoE (`tblservicios.ppppass`, `radcheck`, `client_services.pass_hot`), credenciales de los routers (`server.pass`, `routers.password`, que Mikrowisp y SmartISP guardan cifradas y no se importan) y los hashes del portal (`clients.password`). Nunca al repositorio ni por chat: en el servidor de ArgosIsp, con permisos `600`, y se borra al terminar. ArgosIsp cifra las claves PPPoE al importarlas; en el archivo del origen toda credencial queda como `***` y el reporte no las muestra.
 - Las dudas de `docs/importacion/mapeo-*.md` ya se resolvieron con los diagnósticos (`docs/importacion/diagnostico*-*.sql`); con otro ISP conviene correrlos de nuevo. La corrida en seco también las delata: un estado o un código desconocido sale como fila omitida con el valor en el mensaje.
@@ -72,6 +72,7 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 
 ### 0.3 Antes de la primera corrida
 
+- [ ] **Empresa (multiempresa).** Todo lo importado (servicios, sus facturas, pagos y promesas, la empresa sugerida de las zonas y routers nuevos, la auditoría y el archivo del origen) va a **una** empresa: `--empresa=<id|nit>` (id o NIT, con o sin guion). Con una sola empresa activa no hace falta; con varias, el comando se detiene antes de tocar nada con la lista de empresas. Un ISP con dos NIT en el mismo sistema anterior se importa en dos corridas (un volcado o CSV por empresa), o se corrige después con "Cambiar empresa" del servicio. Si una segunda corrida usa otra empresa, lo ya importado no se mueve y el reporte lo lista en `servicios_otra_empresa`.
 - [ ] Backup reciente de ArgosIsp (`infra/backups/respaldar.sh`, ver `docs/runbooks/restaurar-backup.md`).
 - [ ] Una plantilla de facturación creada en el panel. Si hay varias, anota el id de la que llevarán los servicios importados (`--plantilla=<id>`).
 - [ ] **Ningún mes cerrado en el libro** que caiga en las fechas de los pagos del origen: los pagos históricos entran con su fecha original y un mes cerrado los rechaza (`periodo_cerrado`). Importa antes del primer cierre mensual, o pide a contabilidad reabrir esos meses durante la importación.
@@ -88,6 +89,8 @@ pnpm importar --origen=smartisp --fuente=/ruta/smartisp-AAAAMMDD.sql --dry-run -
 pnpm importar --origen=csv --fuente=/ruta/plantillas --sistema=wisphub --dry-run --salida=/ruta/reporte-1
 # con varias plantillas de facturación (sin --plantilla, los servicios entran sin ella y sus facturas no se importan):
 pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --plantilla=3 --dry-run --salida=/ruta/reporte-1
+# con varias empresas: a cuál va todo (id o NIT); y sin guardar radacct en el archivo del origen
+pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --empresa=2 --excluir-tablas=radacct --dry-run --salida=/ruta/reporte-1
 ```
 
 Para practicar sin datos de un ISP, con los volcados sintéticos sobre el esquema real:

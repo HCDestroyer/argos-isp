@@ -396,6 +396,7 @@ onMounted(async () => {
                     <template #resultado-cell="{ row }">
                         <UBadge
                             :label="row.original.resultado === 'ok' ? 'Correcto' : 'Error'"
+                            :icon="row.original.resultado === 'ok' ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
                             :color="row.original.resultado === 'ok' ? 'success' : 'error'"
                             variant="subtle"
                             size="sm"

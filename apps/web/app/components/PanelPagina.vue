@@ -18,6 +18,7 @@ withDefaults(defineProps<{
             <UDashboardNavbar
                 :title="titulo"
                 :icon="icono"
+                class="chrome-material"
             >
                 <template #leading>
                     <UDashboardSidebarCollapse />

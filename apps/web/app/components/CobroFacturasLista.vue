@@ -62,6 +62,7 @@ function servicioDe(factura: Factura): string | null {
                 <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(saldoFactura(factura)) }}</span>
                 <UBadge
                     :label="facturaVencida(factura, hoy) ? 'Vencida' : ESTADOS_FACTURA[factura.estado].etiqueta"
+                    :icon="facturaVencida(factura, hoy) ? ESTADOS_FACTURA.vencida.icono : ESTADOS_FACTURA[factura.estado].icono"
                     :color="facturaVencida(factura, hoy) ? 'error' : ESTADOS_FACTURA[factura.estado].color"
                     variant="subtle"
                     size="sm"

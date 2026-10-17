@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js'
+import { CATEGORICAL, SECUENCIAL, type ChartMode } from './paletaGraficas'
 
 /**
  * Cálculos de las gráficas del panel (SVG propio, sin librería): escala del eje Y con números
@@ -18,12 +19,16 @@ export interface SerieGrafica {
 /** Colores: categórico (series distintas) o secuencial (orden, p. ej. antigüedad de la cartera). */
 export type EscalaColor = 'categorica' | 'secuencial'
 
-export const MAX_SERIES_CATEGORICAS = 3
-export const MAX_SERIES_SECUENCIALES = 4
+export const MAX_SERIES_CATEGORICAS = CATEGORICAL.light.length
+export const MAX_SERIES_SECUENCIALES = SECUENCIAL.light.length
 
-/** Variable CSS de la serie `indice` (definidas en `assets/css/main.css`, claro y oscuro). */
-export function colorSerie(escala: EscalaColor, indice: number): string {
-    return escala === 'categorica' ? `var(--viz-${indice + 1})` : `var(--viz-sec-${indice + 1})`
+/**
+ * Color de la serie `indice` en el tema `modo` (`utils/paletaGraficas.ts`, la paleta de la
+ * identidad). Orden fijo, nunca cíclico: una serie de más queda en la última ranura.
+ */
+export function colorSerie(escala: EscalaColor, indice: number, modo: ChartMode = 'light'): string {
+    const paleta = escala === 'categorica' ? CATEGORICAL[modo] : SECUENCIAL[modo]
+    return paleta[Math.min(Math.max(indice, 0), paleta.length - 1)] ?? paleta[0]
 }
 
 export function aDecimal(valor: string | number | null | undefined): Decimal | null {

@@ -15,7 +15,7 @@ export const ESTADOS_PROMESA: Record<PromesaPago['estado'], { etiqueta: string, 
     pendiente_aprobacion: { etiqueta: 'Pendiente de aprobación', color: 'warning', icono: 'i-lucide-hourglass' },
     cumplida: { etiqueta: 'Cumplida', color: 'success', icono: 'i-lucide-circle-check' },
     incumplida: { etiqueta: 'Incumplida', color: 'error', icono: 'i-lucide-circle-x' },
-    rechazada: { etiqueta: 'Rechazada', color: 'error', icono: 'i-lucide-ban' },
+    rechazada: { etiqueta: 'Rechazada', color: 'neutral', icono: 'i-lucide-ban' },
     cancelada: { etiqueta: 'Cancelada', color: 'neutral', icono: 'i-lucide-circle-slash' },
 }
 

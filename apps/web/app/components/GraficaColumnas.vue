@@ -20,8 +20,11 @@ const props = withDefaults(defineProps<{
     escala?: EscalaColor
     formato?: FormatoGrafica
     alto?: number
+    /** Frase con el hallazgo principal, encima de la gráfica (y su descripción accesible). */
+    hallazgo?: string
 }>(), {
     categoriasLargas: undefined,
+    hallazgo: undefined,
     apilada: false,
     escala: 'categorica',
     formato: 'quetzales',
@@ -31,6 +34,16 @@ const props = withDefaults(defineProps<{
 const MARGEN = { arriba: 8, derecha: 4, abajo: 24 }
 const ANCHO_MAX_COLUMNA = 24
 const AIRE = 2
+
+const colorMode = useColorMode()
+/** Tema de la paleta: se re-tematiza al cambiar claro/oscuro sin recargar datos. */
+const modo = computed<ChartMode>(() => (colorMode.value === 'dark' ? 'dark' : 'light'))
+const tinta = computed(() => CHART_INK[modo.value])
+const idHallazgo = useId()
+
+function color(indice: number): string {
+    return colorSerie(props.escala, indice, modo.value)
+}
 
 const contenedor = useTemplateRef<HTMLDivElement>('contenedor')
 const ancho = ref(0)
@@ -151,6 +164,14 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
 
 <template>
     <div class="flex flex-col gap-3">
+        <p
+            v-if="hallazgo"
+            :id="idHallazgo"
+            class="text-sm text-default"
+            data-prueba="hallazgo"
+        >
+            {{ hallazgo }}
+        </p>
         <div class="flex flex-wrap items-center justify-between gap-2">
             <ul
                 v-if="series.length > 1"
@@ -164,7 +185,7 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                 >
                     <span
                         class="inline-block size-2.5 rounded-[2px]"
-                        :style="{ backgroundColor: colorSerie(escala, indice) }"
+                        :style="{ backgroundColor: color(indice) }"
                         aria-hidden="true"
                     />
                     {{ serie.nombre }}
@@ -185,7 +206,11 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
             v-if="verTabla"
             :data="filasTabla"
             :columns="columnasTabla"
-            :ui="{ td: 'py-1.5 text-xs', th: 'py-1.5 text-xs' }"
+            :ui="{
+                root: 'rounded-none bg-transparent ring-0 dark:shadow-none',
+                td: 'py-1.5 text-xs',
+                th: 'py-1.5 text-xs',
+            }"
         />
 
         <div
@@ -200,6 +225,7 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                 :height="alto"
                 role="img"
                 :aria-label="titulo"
+                :aria-describedby="hallazgo ? idHallazgo : undefined"
                 class="block overflow-visible"
                 @pointerleave="enfocada = null"
             >
@@ -213,7 +239,7 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                             :x2="ancho - MARGEN.derecha"
                             :y1="y(marca)"
                             :y2="y(marca)"
-                            :stroke="marca.isZero() ? 'var(--ui-border-accented)' : 'var(--ui-border)'"
+                            :stroke="marca.isZero() ? tinta.axis : tinta.grid"
                             stroke-width="1"
                             shape-rendering="crispEdges"
                         />
@@ -222,7 +248,8 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                             :y="y(marca)"
                             text-anchor="end"
                             dominant-baseline="middle"
-                            class="fill-(--ui-text-muted) text-[11px] tabular-nums"
+                            :fill="tinta.muted"
+                            class="text-[11px] tabular-nums"
                         >{{ etiquetaCompacta(marca, formato) }}</text>
                     </template>
                     <template
@@ -234,7 +261,8 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                             :x="margenIzquierdo + banda * (i + 0.5)"
                             :y="alto - 6"
                             text-anchor="middle"
-                            class="fill-(--ui-text-muted) text-[11px]"
+                            :fill="tinta.muted"
+                            class="text-[11px]"
                         >{{ categoria }}</text>
                     </template>
                 </g>
@@ -263,7 +291,7 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                         v-for="marca in columna.marcas"
                         :key="marca.serie"
                         :d="marca.trayecto"
-                        :fill="colorSerie(escala, marca.serie)"
+                        :fill="color(marca.serie)"
                     />
                 </g>
             </svg>
@@ -286,7 +314,7 @@ const columnasTabla = computed<TableColumn<FilaTabla>[]>(() => [
                         <span class="flex items-center gap-1.5 text-muted">
                             <span
                                 class="inline-block h-0.5 w-3 rounded-full"
-                                :style="{ backgroundColor: colorSerie(escala, indice) }"
+                                :style="{ backgroundColor: color(indice) }"
                                 aria-hidden="true"
                             />
                             {{ serie.nombre }}

@@ -334,6 +334,17 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
             accion: 'Revisar en el origen cómo se pagó (si hubo pago, exportarlo)',
         })
     }
+    for (const x of d.servicios_otra_empresa) {
+        add({
+            entidad: 'servicio',
+            id_origen: x.servicio_origen,
+            tipo: 'servicio_otra_empresa',
+            gravedad: 'aviso',
+            detalle: `Ya importado como servicio ${x.servicio_id} en la empresa ${x.empresa_id}`,
+            causa: 'Una corrida anterior lo asignó a otra empresa (--empresa distinto)',
+            accion: 'Revisar la empresa; si va en esta, usar "Cambiar empresa" del servicio en el panel',
+        })
+    }
     for (const x of d.promesas_no_importadas) {
         add({
             entidad: 'promesa',
@@ -396,6 +407,16 @@ export function reporteMarkdown(r: ReporteImportacion): string {
     )
     s.push('')
     if (r.fuente) s.push(`Fuente: \`${r.fuente}\``, '')
+    s.push(
+        `Empresa: ${r.empresa.id} · ${md(r.empresa.nombre)}${r.empresa.nit ? ` · NIT ${r.empresa.nit}` : ''}`,
+        '',
+    )
+    if (r.tablas_excluidas.length > 0) {
+        s.push(
+            `Tablas excluidas del archivo (\`--excluir-tablas\`): ${r.tablas_excluidas.map((t) => `\`${t.tabla}\` (${t.filas} filas)`).join(', ')}`,
+            '',
+        )
+    }
     s.push('## Resumen', '')
     s.push('| Entidad | Origen | Creados | Existentes | Omitidos |', '| --- | ---: | ---: | ---: | ---: |')
     for (const [nombre, c] of Object.entries(r.resumen)) {

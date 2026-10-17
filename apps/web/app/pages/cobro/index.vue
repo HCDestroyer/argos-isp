@@ -1248,7 +1248,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                             icon="i-lucide-check"
                             size="lg"
                             :loading="enviando"
-                            class="grow justify-center sm:grow-0"
+                            class="glow-brand grow justify-center sm:grow-0"
                         />
                         <UButton
                             label="Limpiar"

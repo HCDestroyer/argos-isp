@@ -4,6 +4,8 @@ import { ValidacionFallida } from '#shared/errores'
 import { ErrorCanal } from '#notify/canales/canal'
 import { resolverCanal } from '#notify/canales/registro'
 import { renderizar } from '#notify/plantillas'
+import { configPara } from '#notify/configuracion'
+import { nombreRemitente } from '#notify/marca'
 
 export type CanalDirecto = 'correo' | 'telegram'
 
@@ -117,7 +119,11 @@ export default class EnviarMensajeDirecto extends DomainAction<
                 if (!resuelto.canal) {
                     throw new ErrorCanal(input.canal, resuelto.motivo ?? 'canal no configurado', true)
                 }
-                const resultado = await resuelto.canal.enviar(destino, asunto, cuerpo)
+                const remitenteNombre =
+                    input.canal === 'correo'
+                        ? await nombreRemitente(t.trx, await configPara(empresaId), empresaId)
+                        : null
+                const resultado = await resuelto.canal.enviar(destino, asunto, cuerpo, { remitenteNombre })
                 proveedorId = resultado.id || null
             } catch (falla) {
                 estado = 'fallido'

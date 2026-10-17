@@ -49,6 +49,7 @@ onMounted(() => lista.recargar())
                         <UBadge
                             v-if="row.original.fin === null"
                             label="Vigente"
+                            icon="i-lucide-circle-check"
                             color="success"
                             variant="subtle"
                             size="sm"

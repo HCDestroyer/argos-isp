@@ -12,7 +12,13 @@ export default defineNuxtConfig({
         head: {
             htmlAttrs: { lang: 'es' },
             title: 'ArgosIsp',
-            meta: [{ name: 'description', content: 'Panel de administración de ArgosIsp' }],
+            meta: [
+                { name: 'description', content: 'Panel de administración de ArgosIsp' },
+                // Color de la barra del navegador en el teléfono: el fondo de cada tema.
+                { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
+                { name: 'theme-color', content: '#0b1014', media: '(prefers-color-scheme: dark)' },
+            ],
+            link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
         },
     },
 

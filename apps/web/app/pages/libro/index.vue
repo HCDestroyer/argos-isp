@@ -311,6 +311,7 @@ onMounted(async () => {
                         <span class="tabular-nums">Haber <strong data-prueba="diario-haber">{{ formatearQuetzales(totalesDiario.haber) }}</strong></span>
                         <UBadge
                             :label="cuadra(totalesDiario) ? 'Cuadra' : 'No cuadra'"
+                            :icon="cuadra(totalesDiario) ? 'i-lucide-circle-check' : 'i-lucide-octagon-alert'"
                             :color="cuadra(totalesDiario) ? 'success' : 'error'"
                             variant="subtle"
                             size="sm"

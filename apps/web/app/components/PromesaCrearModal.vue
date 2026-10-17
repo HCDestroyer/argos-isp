@@ -102,6 +102,7 @@ function otra() {
                     {{ formatearFechaHora(creada.vence_en) }} ·
                     <UBadge
                         :label="ESTADOS_PROMESA[creada.estado].etiqueta"
+                        :icon="ESTADOS_PROMESA[creada.estado].icono"
                         :color="ESTADOS_PROMESA[creada.estado].color"
                         variant="subtle"
                         size="sm"

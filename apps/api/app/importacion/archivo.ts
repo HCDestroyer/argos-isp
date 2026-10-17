@@ -91,6 +91,8 @@ export interface OpcionesArchivo {
     problemas: ProblemaFila[]
     ctx: ContextoAccion
     trx: TransactionClientContract
+    /** empresa a la que se asignó lo importado (se guarda en cada fila del archivo) */
+    empresaId?: number | null
     /** filas por lote de la acción (por defecto 500) */
     lote?: number
 }
@@ -190,7 +192,17 @@ export async function archivarYCuadrar(o: OpcionesArchivo): Promise<CuadreTabla[
                 entidad_tipo: entidadTipo,
                 entidad_id: entidadId,
                 motivo,
-                huella: sha1(JSON.stringify([fila, estado, entidadTipo, entidadId, motivo, linea])),
+                huella: sha1(
+                    JSON.stringify([
+                        fila,
+                        estado,
+                        entidadTipo,
+                        entidadId,
+                        motivo,
+                        linea,
+                        o.empresaId ?? null,
+                    ]),
+                ),
             })
         })
         cuadres.push(cuadre)
@@ -223,7 +235,7 @@ async function guardar(o: OpcionesArchivo, tabla: string, filas: FilaArchivo[]) 
         const cambiadas = lote.filter((f) => huellas.get(f.id_externo) !== f.huella)
         if (cambiadas.length === 0) continue
         await new ArchivarFilasOrigen(cambiadas).execute(
-            { origen: o.sistema, tabla, filas: cambiadas.length },
+            { origen: o.sistema, tabla, filas: cambiadas.length, empresa_id: o.empresaId ?? null },
             o.ctx,
             { trx: o.trx },
         )

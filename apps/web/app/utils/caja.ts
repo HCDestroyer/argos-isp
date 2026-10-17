@@ -61,6 +61,18 @@ export function colorDiferencia(diferencia: string | Decimal | null): 'success' 
     return valor.isNegative() ? 'error' : 'warning'
 }
 
+/** Icono de la diferencia del arqueo: cuadra, faltante o sobrante (siempre junto al texto). */
+export function iconoDiferencia(diferencia: string | Decimal | null): string {
+    if (diferencia === null) {
+        return 'i-lucide-circle-help'
+    }
+    const valor = new Decimal(diferencia)
+    if (valor.isZero()) {
+        return 'i-lucide-circle-check'
+    }
+    return valor.isNegative() ? 'i-lucide-circle-minus' : 'i-lucide-circle-plus'
+}
+
 export function etiquetaDiferencia(diferencia: string | Decimal): string {
     const valor = new Decimal(diferencia)
     if (valor.isZero()) {

@@ -330,6 +330,7 @@ onMounted(cargar)
                             <UButton
                                 v-if="puede('cajas.cerrar')"
                                 label="Cerrar turno"
+                                class="glow-brand"
                                 icon="i-lucide-lock"
                                 @click="cierreAbierto = true"
                             />
@@ -404,6 +405,7 @@ onMounted(cargar)
                             <UButton
                                 v-if="puede('cajas.abrir')"
                                 label="Abrir turno"
+                                class="glow-brand"
                                 icon="i-lucide-lock-open"
                                 @click="aperturaAbierta = true"
                             />
@@ -427,6 +429,8 @@ onMounted(cargar)
                     <UTable
                         v-else
                         :data="cobros"
+                        tabindex="0"
+                        aria-label="Cobros del turno"
                         :columns="columnasCobros"
                         :loading="cargandoCobros"
                     >
@@ -474,8 +478,11 @@ onMounted(cargar)
                     <h3 class="text-sm font-semibold text-highlighted">
                         Turnos de {{ caja.nombre }}
                     </h3>
+                    <!-- Con scroll horizontal en el teléfono: enfocable para moverlo con el teclado (axe). -->
                     <UTable
                         :data="historial.filas.value"
+                        tabindex="0"
+                        :aria-label="`Turnos de ${caja.nombre}`"
                         :columns="columnasTurnos"
                         :loading="historial.cargando.value"
                     >
@@ -504,6 +511,7 @@ onMounted(cargar)
                             <UBadge
                                 v-if="row.original.diferencia !== null"
                                 :label="etiquetaDiferencia(row.original.diferencia)"
+                                :icon="iconoDiferencia(row.original.diferencia)"
                                 :color="colorDiferencia(row.original.diferencia)"
                                 variant="subtle"
                                 size="sm"
@@ -511,6 +519,7 @@ onMounted(cargar)
                             <UBadge
                                 v-else
                                 label="Abierto"
+                                icon="i-lucide-lock-open"
                                 color="success"
                                 variant="outline"
                                 size="sm"

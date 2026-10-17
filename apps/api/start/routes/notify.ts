@@ -237,6 +237,7 @@ const notify: Ruta[] = [
             if (!config) throw new NoAutenticado('Secreto del webhook de Telegram inválido')
             await procesarActualizacion(cuerpo, ctx.contextoAccion('webhook'), {
                 canal: construirCanal(config, 'telegram'),
+                botId: String(params.bot),
             })
             return { ok: true }
         },
