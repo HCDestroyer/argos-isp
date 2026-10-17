@@ -55,25 +55,41 @@ export const Movimiento = definirEsquema(
 
 export const Asiento = definirEsquema(
     'Asiento',
-    objeto({
-        id,
-        fecha,
-        descripcion: texto,
-        origen_tipo: enumerado([
-            'factura',
-            'pago',
-            'mora',
-            'nota_credito',
-            'egreso',
-            'cierre_caja',
-            'ajuste',
-        ]),
-        origen_id: nulable(id),
-        reversa_de: { ...nulable(id), description: 'Asiento que este revierte (correcciones por reverso)' },
-        created_by: nulable(id),
-        created_at: instante,
-        movimientos: lista(Movimiento),
-    }),
+    objeto(
+        {
+            id,
+            fecha,
+            descripcion: texto,
+            origen_tipo: enumerado([
+                'factura',
+                'pago',
+                'mora',
+                'nota_credito',
+                'egreso',
+                'cierre_caja',
+                'ajuste',
+            ]),
+            origen_id: nulable(id),
+            reversa_de: {
+                ...nulable(id),
+                description: 'Asiento que este revierte (correcciones por reverso)',
+            },
+            revertido_por: { ...nulable(id), description: 'Asiento de reverso de este, si ya se revirtió' },
+            revertible: {
+                ...booleano,
+                description:
+                    'Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso)',
+            },
+            motivo_no_revertible: {
+                ...nulable(texto),
+                description: 'Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible',
+            },
+            created_by: nulable(id),
+            created_at: instante,
+            movimientos: lista(Movimiento),
+        },
+        ['revertido_por', 'revertible', 'motivo_no_revertible'],
+    ),
 )
 
 export const LineaMayor = definirEsquema(

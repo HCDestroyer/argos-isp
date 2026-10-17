@@ -691,9 +691,29 @@ export interface paths {
         put?: never;
         /**
          * Anular factura (asiento de reverso)
-         * @description Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago) o factura_anulada si ya lo estaba.
+         * @description Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.
          */
         post: operations["facturasAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/facturas/{id}/notas-credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emitir nota de crédito interna (parcial o total)
+         * @description Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.
+         */
+        post: operations["facturasNotaCredito"];
         delete?: never;
         options?: never;
         head?: never;
@@ -823,6 +843,43 @@ export interface paths {
         put?: never;
         /** Crear pool IPv6 (enlace /64 o delegación /56, /48) */
         post: operations["ipv6PoolsCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/asientos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un asiento con sus movimientos */
+        get: operations["libroVerAsiento"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/asientos/{id}/revertir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revertir un asiento (asiento espejo con motivo)
+         * @description Crea el asiento espejo (debe ↔ haber, mismas cuentas y clientes) con reversa_de = :id; nunca edita el original. Fecha: hoy (o la indicada), nunca anterior al original ni en un mes cerrado (un asiento de un mes cerrado se revierte con fecha de hoy). Solo asientos sin documento (cierre_caja, ajuste manual): los de factura, mora, pago, nota_credito, egreso o saldo inicial responden 422 reverso_por_documento (usar anular pago, anular factura…). 422 asiento_revertido si ya se revirtió y asiento_es_reverso si es un reverso; 422 periodo_cerrado.
+         */
+        post: operations["libroRevertirAsiento"];
         delete?: never;
         options?: never;
         head?: never;
@@ -966,6 +1023,40 @@ export interface paths {
         };
         /** Usuario actual con roles y permisos */
         get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notas-credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar notas de crédito */
+        get: operations["notasCreditoListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notas-credito/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver nota de crédito */
+        get: operations["notasCreditoVer"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2823,6 +2914,12 @@ export interface components {
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
+            /** @description Asiento de reverso de este, si ya se revirtió */
+            revertido_por?: number | null;
+            /** @description Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso) */
+            revertible?: boolean;
+            /** @description Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible */
+            motivo_no_revertible?: string | null;
             created_by: number | null;
             /** Format: date-time */
             created_at: string;
@@ -3409,7 +3506,10 @@ export interface components {
             subtotal: components["schemas"]["Dinero"];
             iva: components["schemas"]["Dinero"];
             total: components["schemas"]["Dinero"];
+            /** @description Lo cubierto de la factura: pagos, saldos a favor y notas de crédito */
             pagado: components["schemas"]["Dinero"];
+            /** @description Parte de pagado que viene de notas de crédito (saldo = total − pagado) */
+            acreditado?: components["schemas"]["Dinero"];
             fel_uuid: string | null;
             fel_serie: string | null;
             fel_numero: string | null;
@@ -3432,6 +3532,10 @@ export interface components {
              */
             anulada_en?: string | null;
             motivo_anulacion?: string | null;
+            /** @description Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp */
+            origen?: string | null;
+            /** @description Id de la factura en su sistema de origen */
+            id_externo?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3444,6 +3548,8 @@ export interface components {
             reglas_snapshot: {
                 [key: string]: unknown;
             };
+            /** @description Notas de crédito de la factura */
+            notas_credito?: components["schemas"]["NotaCredito"][];
         };
         FacturaLinea: {
             id: number;
@@ -3565,6 +3671,36 @@ export interface components {
             abono: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
         };
+        NotaCredito: {
+            id: number;
+            factura_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            servicio_id: number | null;
+            /**
+             * Format: date
+             * @description Fecha contable (Guatemala)
+             */
+            fecha: string;
+            subtotal: components["schemas"]["Dinero"];
+            /** @description IVA acreditado, proporcional al de la factura */
+            iva: components["schemas"]["Dinero"];
+            /** @description subtotal + iva */
+            monto: components["schemas"]["Dinero"];
+            motivo: string;
+            /** @description Asiento nota_credito (Debe ingresos/IVA, Haber CxC) */
+            asiento_id: number | null;
+            created_by: number | null;
+            created_by_nombre: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        NotaCreditoEmitida: components["schemas"]["NotaCredito"] & {
+            /** @description La factura con su nuevo saldo y estado */
+            factura: components["schemas"]["FacturaDetalle"];
+            /** @description Cómo quedó el servicio de la factura (reactivación inmediata) */
+            servicios: components["schemas"]["ServicioEvaluado"][];
+        };
         PaginaComprobantes: {
             data: components["schemas"]["Comprobante"][];
             nextCursor: string | null;
@@ -3604,6 +3740,10 @@ export interface components {
             cuenta_bancaria_nombre?: string | null;
             /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
             historico?: boolean;
+            /** @description Sistema de origen del pago histórico (mikrowisp, smartisp, csv…); null si es de ArgosIsp */
+            origen?: string | null;
+            /** @description Id del pago en su sistema de origen */
+            id_externo?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -4371,6 +4511,9 @@ export interface components {
                 pendiente: components["schemas"]["Dinero"];
                 /** @description Porcentaje 0–100 con 2 decimales */
                 cobranza_pct: number;
+                acreditado?: components["schemas"]["Dinero"];
+                facturado_importado?: components["schemas"]["Dinero"];
+                cobrado_importado?: components["schemas"]["Dinero"];
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
@@ -4380,6 +4523,9 @@ export interface components {
                 cobrado: components["schemas"]["Dinero"] | null;
                 pendiente: components["schemas"]["Dinero"] | null;
                 cobranza_pct: number | null;
+                acreditado?: components["schemas"]["Dinero"] | null;
+                facturado_importado?: components["schemas"]["Dinero"] | null;
+                cobrado_importado?: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -4398,6 +4544,8 @@ export interface components {
                 monto: components["schemas"]["Dinero"];
                 comision: components["schemas"]["Dinero"];
                 neto: components["schemas"]["Dinero"];
+                pagos_importados?: number;
+                monto_importado?: components["schemas"]["Dinero"];
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
@@ -4407,6 +4555,8 @@ export interface components {
                 monto: components["schemas"]["Dinero"] | null;
                 comision: components["schemas"]["Dinero"] | null;
                 neto: components["schemas"]["Dinero"] | null;
+                pagos_importados?: number | null;
+                monto_importado?: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -4426,6 +4576,9 @@ export interface components {
                 facturas_anuladas: number;
                 base_anulada: components["schemas"]["Dinero"];
                 iva_anulado: components["schemas"]["Dinero"];
+                notas_credito?: number;
+                base_acreditada?: components["schemas"]["Dinero"];
+                iva_acreditado?: components["schemas"]["Dinero"];
                 iva_neto: components["schemas"]["Dinero"];
                 iva_libro: components["schemas"]["Dinero"];
             }[];
@@ -4438,6 +4591,9 @@ export interface components {
                 facturas_anuladas: number | null;
                 base_anulada: components["schemas"]["Dinero"] | null;
                 iva_anulado: components["schemas"]["Dinero"] | null;
+                notas_credito?: number | null;
+                base_acreditada?: components["schemas"]["Dinero"] | null;
+                iva_acreditado?: components["schemas"]["Dinero"] | null;
                 iva_neto: components["schemas"]["Dinero"] | null;
                 iva_libro: components["schemas"]["Dinero"] | null;
             };
@@ -7692,6 +7848,87 @@ export interface operations {
             };
         };
     };
+    facturasNotaCredito: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Nota de crédito emitida */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaCreditoEmitida"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.nota_credito; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     facturasCorte: {
         parameters: {
             query?: never;
@@ -8164,6 +8401,136 @@ export interface operations {
             };
         };
     };
+    libroVerAsiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Asiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroRevertirAsiento: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                    /**
+                     * Format: date
+                     * @description Fecha contable del reverso (por defecto hoy). No anterior al original ni en un mes cerrado
+                     */
+                    fecha?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Asiento de reverso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.revertir_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     libroBancos: {
         parameters: {
             query?: never;
@@ -8566,6 +8933,116 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notasCreditoListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                factura_id?: number;
+                /** @description Fecha contable desde (inclusive) */
+                desde?: string;
+                /** @description Fecha contable hasta (inclusive) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de notas de crédito */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["NotaCredito"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notasCreditoVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nota de crédito */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaCredito"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12298,6 +12775,8 @@ export interface operations {
                 router_id?: number;
                 plan_id?: number;
                 tipo?: "servicio" | "mora";
+                /** @description sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos */
+                origen?: "sistema" | "importado";
             };
             header?: never;
             path?: never;
@@ -12356,6 +12835,8 @@ export interface operations {
                 zona_id?: number;
                 metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
                 agrupar?: "mes" | "dia";
+                /** @description sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos */
+                origen?: "sistema" | "importado";
             };
             header?: never;
             path?: never;
@@ -12564,7 +13045,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -12622,7 +13103,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -14809,7 +15290,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.editar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

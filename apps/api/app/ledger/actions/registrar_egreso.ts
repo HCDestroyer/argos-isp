@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
@@ -112,7 +113,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
                 turno_id: origen.turno_id,
                 banco_id: origen.banco_id,
                 cuenta_bancaria_id: origen.cuenta_bancaria_id,
-                registrado_por: t.ctx.actor.id,
+                registrado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const egresoId = fila!.id

@@ -25,6 +25,11 @@ export interface Columna {
     tipo: TipoColumna
     /** puede venir null (p. ej. "Sin zona") */
     nulable?: boolean
+    /**
+     * Columna agregada después de publicado el reporte: la API siempre la manda, pero el esquema
+     * la declara opcional para no romper a los clientes tipados (fixtures del panel).
+     */
+    agregada?: boolean
 }
 
 export type ValorCelda = string | number | null
@@ -84,6 +89,7 @@ export function esquemaReporte(nombre: string, columnas: readonly Columna[]): Es
     const totales = Object.fromEntries(
         columnas.map((c) => [c.clave, c.tipo === 'dinero' ? nulable(Dinero) : { type: ['number', 'null'] }]),
     )
+    const opcionales = columnas.filter((c) => c.agregada).map((c) => c.clave)
     return definirEsquema(
         nombre,
         objeto({
@@ -91,8 +97,11 @@ export function esquemaReporte(nombre: string, columnas: readonly Columna[]): Es
             titulo: texto,
             filtros: jsonLibre,
             columnas: lista(ColumnaReporte),
-            filas: lista(objeto(propiedades)),
-            totales: { ...objeto(totales), description: 'Suma de las columnas de dinero y enteros' },
+            filas: lista(objeto(propiedades, opcionales)),
+            totales: {
+                ...objeto(totales, opcionales),
+                description: 'Suma de las columnas de dinero y enteros',
+            },
             generado_en: { type: 'string', format: 'date-time' },
         }),
     )
@@ -126,7 +135,8 @@ export function armarReporte<F extends Fila>(datos: {
         reporte: datos.reporte,
         titulo: datos.titulo,
         filtros: datos.filtros,
-        columnas: [...datos.columnas],
+        // `agregada` es solo del esquema OpenAPI; no viaja en la respuesta
+        columnas: datos.columnas.map(({ agregada: _agregada, ...columna }) => columna),
         filas: datos.filas,
         totales: { ...totales, ...datos.totales },
         generado_en: new Date().toISOString(),

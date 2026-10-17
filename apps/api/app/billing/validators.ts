@@ -126,6 +126,23 @@ export const corteValidator = vine.compile(
 
 export const anularFacturaValidator = vine.compile(vine.object({ motivo: motivo() }))
 
+export const notaCreditoValidator = vine.compile(
+    vine.object({
+        monto: dinero(),
+        motivo: motivo(),
+    }),
+)
+
+export const listarNotasCreditoValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        factura_id: idEntidad().optional(),
+        desde: fechaIso().optional().meta({ description: 'Fecha contable desde (inclusive)' }),
+        hasta: fechaIso().optional().meta({ description: 'Fecha contable hasta (inclusive)' }),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Pagos
@@ -316,6 +333,14 @@ export const reporteCarteraValidator = vine.compile(
     }),
 )
 
+const origenReporte = vine
+    .enum(['sistema', 'importado'] as const)
+    .optional()
+    .meta({
+        description:
+            'sistema = registrado en ArgosIsp; importado = carga histórica de otro sistema (en su mes de origen). Sin filtro: ambos',
+    })
+
 export const reporteIngresosValidator = vine.compile(
     vine.object({
         formato,
@@ -324,6 +349,7 @@ export const reporteIngresosValidator = vine.compile(
         zona_id: idEntidad().optional(),
         metodo: vine.enum(METODOS_PAGO).optional(),
         agrupar: vine.enum(['mes', 'dia'] as const).optional(),
+        origen: origenReporte,
     }),
 )
 
@@ -333,6 +359,7 @@ export const reporteFacturadoValidator = vine.compile(
         ...rango,
         ...dimensiones,
         tipo: vine.enum(['servicio', 'mora'] as const).optional(),
+        origen: origenReporte,
     }),
 )
 

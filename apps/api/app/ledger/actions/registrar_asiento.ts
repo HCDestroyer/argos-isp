@@ -1,4 +1,5 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
@@ -120,7 +121,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 origen_tipo: input.origen_tipo,
                 origen_id: origenId,
                 reversa_de: input.reversa_de ?? null,
-                created_by: t.ctx.actor.id,
+                created_by: usuarioDelActor(t.ctx.actor),
             })
             .returning(['id', 'created_by'])) as Array<{ id: number; created_by: number | null }>
 

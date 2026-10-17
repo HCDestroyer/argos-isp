@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ReglaNegocio } from '#shared/errores'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { periodoCerrado, periodoDe, resumenDelMes, verCierre, type CierreVista } from '#ledger/cierres'
@@ -50,7 +51,7 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
         const [fila] = (await t.trx
             .insertQuery()
             .table('ledger.cierres_mensuales')
-            .insert({ periodo, cerrado_por: t.ctx.actor.id, resumen: JSON.stringify(resumen) })
+            .insert({ periodo, cerrado_por: usuarioDelActor(t.ctx.actor), resumen: JSON.stringify(resumen) })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('cierre_mensual', fila!.id)
         return verCierre(fila!.id, t.trx)

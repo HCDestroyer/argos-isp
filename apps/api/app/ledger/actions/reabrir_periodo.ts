@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { periodoDe, verCierre, type CierreVista } from '#ledger/cierres'
 import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
@@ -43,11 +44,14 @@ export default class ReabrirPeriodo extends DomainAction<EntradaReabrirPeriodo, 
             )
         }
         t.fijarEntidad('cierre_mensual', cierre.id as number)
-        await t.trx.insertQuery().table('ledger.reaperturas_mensuales').insert({
-            cierre_id: cierre.id,
-            motivo,
-            reabierto_por: t.ctx.actor.id,
-        })
+        await t.trx
+            .insertQuery()
+            .table('ledger.reaperturas_mensuales')
+            .insert({
+                cierre_id: cierre.id,
+                motivo,
+                reabierto_por: usuarioDelActor(t.ctx.actor),
+            })
         return verCierre(cierre.id as number, t.trx)
     }
 }

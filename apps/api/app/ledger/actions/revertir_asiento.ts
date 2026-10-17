@@ -1,5 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { fechaValida, hoyGuatemala } from '#ledger/fechas'
+import { bloqueoReversoDirecto } from '#ledger/reversos'
 import RegistrarAsiento, {
     type AsientoRegistrado,
     type OrigenAsiento,
@@ -9,15 +11,23 @@ import RegistrarAsiento, {
  * `revertirAsiento`: la única forma de corregir el libro. Crea un asiento espejo (debe ↔ haber,
  * mismas cuentas y clientes, mismo origen) que apunta al original con `reversa_de`.
  *
+ * - Motivo obligatorio.
  * - Un asiento se revierte una sola vez; un reverso no se revierte.
- * - La fecha del reverso es hoy (Guatemala) salvo que se indique; si cae en un periodo cerrado se
- *   rechaza. Un asiento de un mes cerrado se revierte con fecha de un mes abierto.
+ * - La fecha del reverso es hoy (Guatemala) salvo que se indique; nunca anterior al original y
+ *   nunca en un periodo cerrado (422 `periodo_cerrado`). Un asiento de un mes cerrado se revierte,
+ *   por eso, con la fecha de hoy (o de otro mes abierto).
+ * - Directo (endpoint) solo se revierten asientos sin documento (cierre de caja, ajuste manual);
+ *   los de factura, mora, pago, nota de crédito, egreso o saldo inicial responden 422
+ *   `reverso_por_documento` con la acción que corresponde (`#ledger/reversos`). Las acciones de
+ *   anulación de esos documentos llaman esta acción con `por_anulacion: true`.
  */
 
 export interface EntradaReverso {
     asiento_id: number
     motivo: string
     fecha?: string
+    /** solo desde la anulación del documento dueño del asiento (anular pago, factura, egreso…) */
+    por_anulacion?: boolean
 }
 
 export default class RevertirAsiento extends DomainAction<EntradaReverso, AsientoRegistrado> {
@@ -29,9 +39,17 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             .where('id', input.asiento_id)
             // Sin FOR UPDATE: el rol de la app no tiene UPDATE sobre el libro. Dos reversos
             // simultáneos los resuelve el índice único `asientos_reversa_unica` (→ 409).
-            .select('id', 'origen_tipo', 'origen_id', 'reversa_de', 'descripcion')
+            .select(
+                'id',
+                t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
+                'origen_tipo',
+                'origen_id',
+                'reversa_de',
+                'descripcion',
+            )
             .first()) as {
             id: number
+            fecha: string
             origen_tipo: OrigenAsiento
             origen_id: number | null
             reversa_de: number | null
@@ -40,11 +58,25 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
         if (!original) throw new NoEncontrado(`El asiento ${input.asiento_id} no existe`)
         t.fijarEntidad('asiento', original.id)
 
+        const motivo = input.motivo?.trim() ?? ''
+        if (motivo.length < 3) {
+            throw new ValidacionFallida([
+                {
+                    field: 'motivo',
+                    message: 'El motivo es obligatorio (mínimo 3 caracteres)',
+                    rule: 'motivo',
+                },
+            ])
+        }
         if (original.reversa_de !== null) {
             throw new ReglaNegocio(
                 `El asiento ${original.id} ya es un reverso (de ${original.reversa_de}); no se revierte`,
                 'asiento_es_reverso',
             )
+        }
+        if (!input.por_anulacion) {
+            const bloqueo = bloqueoReversoDirecto(original.id, original.origen_tipo, original.origen_id)
+            if (bloqueo) throw new ReglaNegocio(bloqueo.mensaje, bloqueo.codigo)
         }
         const yaRevertido = await t.trx.from('ledger.asientos').where('reversa_de', original.id).first()
         if (yaRevertido) {
@@ -52,6 +84,19 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
                 `El asiento ${original.id} ya fue revertido por el asiento ${yaRevertido.id}`,
                 'asiento_revertido',
             )
+        }
+
+        // sin fecha: hoy, o la del original si es posterior (un asiento con fecha futura)
+        const hoy = hoyGuatemala()
+        const fecha = input.fecha ? fechaValida(input.fecha) : hoy < original.fecha ? original.fecha : hoy
+        if (fecha < original.fecha) {
+            throw new ValidacionFallida([
+                {
+                    field: 'fecha',
+                    message: `El reverso no puede ser anterior al asiento original (${original.fecha})`,
+                    rule: 'fecha',
+                },
+            ])
         }
 
         const movimientos = (await t.trx
@@ -67,8 +112,8 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
 
         return new RegistrarAsiento().execute(
             {
-                fecha: input.fecha,
-                descripcion: `Reverso del asiento ${original.id}: ${input.motivo.trim()}`,
+                fecha,
+                descripcion: `Reverso del asiento ${original.id}: ${motivo}`,
                 origen_tipo: original.origen_tipo,
                 origen_id: original.origen_id,
                 reversa_de: original.id,
