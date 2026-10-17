@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -11,16 +10,17 @@ import { lineasDiferencias, reporteCsv, reporteMarkdown } from '#importacion/rep
 import type { CargaFinanciera } from '#importacion/carga_financiera'
 import { cargaFinancieraA3 } from '#importacion/carga_financiera'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
+import { archivoSintetico } from '#tests/importacion/ayudas_importacion'
+import { descifrar } from '#shared/cifrado'
 
 /**
- * Fixture SQL sintético con el esquema supuesto de Mikrowisp
- * (`scripts/importacion/mikrowisp-sintetico.sql`, redes 198.18.0.0/16): los casos difíciles del
- * dump real. Las corridas reales van en una transacción externa que se revierte al final.
+ * Volcado sintético sobre el esquema real de Mikrowisp 6 (`scripts/importacion/esquemas/mikrowisp6.sql`
+ * + los datos de `scripts/importacion/mikrowisp-sintetico.sql`, redes 198.18.0.0/16): los casos
+ * difíciles del dump real. Las corridas reales van en una transacción externa que se revierte al
+ * final.
  */
 
-const FIXTURE = fileURLToPath(
-    new URL('../../../../scripts/importacion/mikrowisp-sintetico.sql', import.meta.url),
-)
+let FIXTURE: string
 
 /** El reporte sin lo que cambia de una corrida a otra (request_id y horas). */
 function estable(r: ReporteImportacion) {
@@ -50,7 +50,11 @@ async function contar(trx?: TransactionClientContract) {
     return resultado.rows[0]
 }
 
-test.group('importacion · volcado MySQL', () => {
+test.group('importacion · volcado MySQL', (group) => {
+    group.setup(async () => {
+        FIXTURE = await archivoSintetico('mikrowisp')
+    })
+
     test('lee CREATE TABLE e INSERT con escapes, NULL, columnas explícitas y comentarios', ({ assert }) => {
         const tablas = leerDumpMysql(`
             -- comentario
@@ -75,6 +79,23 @@ test.group('importacion · volcado MySQL', () => {
         ])
         assert.throws(() => leerDumpMysql('INSERT INTO z VALUES (1);'), ErrorDumpSql)
         assert.throws(() => leerDumpMysql('CREATE TABLE a (x int); INSERT INTO a VALUES (1,2);'), /2 valores/)
+    })
+
+    test('ignora los triggers con DELIMITER aunque traigan INSERT dentro (Mikrowisp 6)', ({ assert }) => {
+        const tablas = leerDumpMysql(`
+            CREATE TABLE \`logsistema\` (\`log\` text, \`idcliente\` int, \`tipolog\` int);
+            CREATE TABLE \`tblservicios\` (\`id\` int, \`ip\` varchar(700));
+            DELIMITER ;;
+            CREATE TRIGGER \`LogStatusUser\` AFTER UPDATE ON \`tblservicios\` FOR EACH ROW
+            IF OLD.ip <> NEW.ip THEN
+            INSERT INTO logsistema(log,idcliente,tipolog) VALUES (CONCAT('IP ',NEW.ip), NEW.id,'1');
+            END IF;;
+            DELIMITER ;
+            /*!50003 CREATE*/ /*!50017 DEFINER=\`x\`@\`localhost\`*/ /*!50003 TRIGGER t2 BEFORE INSERT ON tblservicios FOR EACH ROW SET NEW.ip = '' */;
+            INSERT INTO \`tblservicios\` (\`id\`, \`ip\`) VALUES ('000101','198.18.10.10; otra');
+        `)
+        assert.deepEqual(tablas.get('logsistema')!.filas, [])
+        assert.deepEqual(tablas.get('tblservicios')!.filas, [{ id: '000101', ip: '198.18.10.10; otra' }])
     })
 
     test('normaliza la MAC en sus distintos formatos', ({ assert }) => {
@@ -109,7 +130,7 @@ test.group('importacion · volcado MySQL', () => {
                 ['2', '600.00', 50_000, 25_000],
             ],
         )
-        assert.lengthOf(fuente.clientes, 10)
+        assert.lengthOf(fuente.clientes, 11)
         assert.equal(fuente.clientes.find((c) => c.id === '3')!.direccion, "Km. 14.5, 'La Ceiba'")
         assert.equal(fuente.clientes.find((c) => c.id === '1')!.zona, 'MW Centro')
 
@@ -126,6 +147,57 @@ test.group('importacion · volcado MySQL', () => {
         assert.isNull(s('103')!.fecha_instalacion) // 0000-00-00
         assert.isUndefined(s('113')) // ESTATICO sin IP: fila omitida
 
+        // Propio del esquema real de Mikrowisp 6
+        assert.isNull(s('105')!.ip) // tipoipv4 = 1: IP de la última sesión, no fija
+        assert.equal(s('106')!.pass_ppp, 'clave106') // ppppass vacía: Cleartext-Password de radcheck
+        assert.equal(s('102')!.ip, '198.18.10.20') // dos IPs: la primera
+        assert.containSubset(s('111'), { cliente_id: '10' }) // zerofill '000010'
+        assert.equal(fuente.clientes.find((c) => c.id === '10')!.zona, 'MW Centro')
+        assert.isUndefined(s('114')) // tiposervicio tv
+        assert.equal(s('104')!.estado, 'suspendido') // estado del cliente
+        assert.equal(s('112')!.estado, 'retirado')
+        assert.isUndefined(fuente.facturas.find((f) => ['5009', '5011', '5012'].includes(f.id)))
+        assert.equal(fuente.duenosFacturas?.get('5009'), '10')
+        assert.notInclude(
+            fuente.pagos.map((p) => p.id),
+            '9004',
+        )
+        const propios = fuente.problemas
+            .filter((p) => !p.archivo.endsWith(':usuarios') || p.id !== '7')
+            .map((p) => [p.archivo.split(':')[1], p.id, p.aviso, p.mensaje])
+        assert.deepInclude(propios, [
+            'facturas',
+            '5011',
+            false,
+            'moneda USD: solo se importan facturas en quetzales (GTQ)',
+        ])
+        assert.deepInclude(propios, [
+            'facturas',
+            '5012',
+            false,
+            'estado "Vencida" desconocido (se esperaba No pagado, Pagado o Anulado)',
+        ])
+        assert.deepInclude(propios, [
+            'operaciones',
+            '9004',
+            false,
+            'moneda USD: solo se importan pagos en quetzales (GTQ)',
+        ])
+        assert.deepInclude(propios, [
+            'tblservicios',
+            '114',
+            false,
+            'tiposervicio "tv": solo se importan servicios de internet',
+        ])
+        assert.sameMembers(
+            fuente.problemas.filter((p) => p.aviso && p.archivo.endsWith(':tblservicios')).map((p) => p.id),
+            ['101', '102', '110'], // precio distinto, dos IPs, IPv6
+        )
+        assert.deepInclude(
+            fuente.problemas.map((p) => [p.id, p.aviso]),
+            ['5007', true],
+        )
+
         // Facturas: la anulada no viene; la pagada con pendiente 0; las abonadas, lo que falta
         const pendiente = Object.fromEntries(fuente.facturas.map((f) => [f.id, f.pendiente]))
         assert.deepEqual(pendiente, {
@@ -135,7 +207,7 @@ test.group('importacion · volcado MySQL', () => {
             '5004': '200.00',
             '5005': '150.00',
             '5006': '600.00',
-            '5007': '150.00',
+            '5007': '100.00', // cobrado 50 sin operaciones: se toma lo cobrado (con aviso)
             '5008': '150.00',
             '5010': '150.00',
         })
@@ -160,7 +232,11 @@ test.group('importacion · volcado MySQL', () => {
     })
 })
 
-test.group('importacion · Mikrowisp desde volcado SQL', () => {
+test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
+    group.setup(async () => {
+        FIXTURE = await archivoSintetico('mikrowisp')
+    })
+
     test('en seco: dos corridas dan el mismo reporte, la suma de saldos cuadra y la base queda igual', async ({
         assert,
     }) => {
@@ -190,14 +266,14 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         assert.equal(r1.ids_externos, 'tabla')
         assert.deepEqual(r1.saldos, {
             clientes: 9,
-            suma_origen: '1830.00',
-            suma_importada: '1830.00',
+            suma_origen: '1780.00',
+            suma_importada: '1780.00',
             diferencia: '0.00',
             cuadra: true,
         })
         assert.deepInclude(r1.resumen, {
             routers: { origen: 2, creados: 2, existentes: 0, omitidos: 0 },
-            clientes: { origen: 10, creados: 10, existentes: 0, omitidos: 0 },
+            clientes: { origen: 11, creados: 11, existentes: 0, omitidos: 0 },
             // 12 filas válidas: 107 sin plan, 111 IP repetida y 112 retirado no entran
             servicios: { origen: 12, creados: 9, existentes: 0, omitidos: 3 },
             // Modo B (clientes 1, 2, 5 y 6 tienen pagos): 5002 pagada entra por su total porque la
@@ -234,7 +310,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         ])
         assert.sameMembers(
             d.ips_nuevas.map((x) => x.servicio_origen),
-            ['103', '109'],
+            ['103', '105', '109'], // 105: su IP era dinámica (tipoipv4 = 1)
         )
         assert.deepEqual(
             d.facturas_a_saldo.map((x) => x.factura_origen),
@@ -268,6 +344,18 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['router', '2', 'router_sin_credenciales'],
         )
+        // Lo que el adaptador no traduce sale en el reporte, con su entidad
+        const propias = lineasDiferencias(r1).map((x) => [x.entidad, x.id_origen, x.tipo])
+        for (const esperada of [
+            ['factura', '5011', 'formato_fila'], // dólares
+            ['factura', '5012', 'formato_fila'], // estado desconocido
+            ['pago', '9004', 'formato_fila'], // dólares
+            ['servicio', '114', 'formato_fila'], // tv
+            ['servicio', '101', 'formato_campo'], // precio distinto al del plan
+            ['factura', '5007', 'formato_campo'], // cobrado sin operaciones
+        ]) {
+            assert.deepInclude(propias, esperada)
+        }
         const csv = reporteCsv(r1)
         assert.isTrue(csv.startsWith('﻿entidad,id_origen,tipo,gravedad,detalle,causa,accion\r\n'))
         assert.equal(csv.trimEnd().split('\r\n').length, lineas.length + 1)
@@ -326,6 +414,27 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             )
             assert.isNull(wisp[0]!.user_ppp)
 
+            // La clave PPPoE del origen entra cifrada (como la guarda ArgosIsp) y no sale en el reporte
+            const ppp = (await trx
+                .from('core.servicios as s')
+                .join('core.ids_externos as e', (q) =>
+                    q
+                        .on('e.entidad_id', 's.id')
+                        .andOnVal('e.entidad_tipo', 'servicio')
+                        .andOnVal('e.sistema', 'mikrowisp'),
+                )
+                .where('e.externo_id', '101')
+                .select('s.pass_ppp')
+                .first()) as { pass_ppp: string }
+            assert.notEqual(ppp.pass_ppp, 'clave101')
+            assert.equal(descifrar(ppp.pass_ppp), 'clave101')
+            const salidas = [JSON.stringify(primera), reporteMarkdown(primera), reporteCsv(primera)].join(
+                '\n',
+            )
+            for (const secreto of ['clave1', 'clave-lab-norte', 'secreto-lab-norte']) {
+                assert.notInclude(salidas, secreto)
+            }
+
             // Todo por acciones: auditoría con el request_id de la corrida
             const auditadas = (await trx
                 .from('audit.acciones')
@@ -346,7 +455,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             }
             assert.deepInclude(segunda.resumen, {
                 routers: { origen: 2, creados: 0, existentes: 2, omitidos: 0 },
-                clientes: { origen: 10, creados: 0, existentes: 10, omitidos: 0 },
+                clientes: { origen: 11, creados: 0, existentes: 11, omitidos: 0 },
                 servicios: { origen: 12, creados: 0, existentes: 9, omitidos: 3 },
                 facturas: { origen: 9, creados: 0, existentes: 7, omitidos: 2 },
                 saldos: { origen: 4, creados: 0, existentes: 4, omitidos: 0 },
@@ -379,7 +488,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             })
             assert.deepEqual(r.errores, [])
             assert.isTrue(r.saldos.cuadra)
-            assert.equal(r.saldos.suma_importada, '1830.00')
+            assert.equal(r.saldos.suma_importada, '1780.00')
 
             const factura = async (id: string) =>
                 (await trx

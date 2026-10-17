@@ -642,6 +642,7 @@ services:
         printf '%s' "$$METRICS_TOKEN" > /tmp/metrics_token &&
         exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml
         --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=$${PROMETHEUS_RETENCION:-30d}
+        --rules.alert.resend-delay=15s
     environment:
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       PROMETHEUS_RETENCION: ${PROMETHEUS_RETENCION:-30d}

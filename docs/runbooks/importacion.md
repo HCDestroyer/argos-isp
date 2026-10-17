@@ -12,21 +12,50 @@ La regla es **nunca importar en real sin dos corridas en seco limpias**. La corr
 | SmartISP                                                   | `smartisp`  | volcado `.sql` de su base MySQL      | `mysqldump`; ver la nota de SmartISP          |
 | Otro sistema, o uno de los anteriores sin acceso a la base | `csv`       | directorio con las plantillas llenas | exportación a Excel/CSV, una hoja por entidad |
 
-- **Mikrowisp**: el esquema del volcado todavía es supuesto (falta el volcado real del primer ISP). Si el comando se detiene con "no tiene el esquema que espera el origen mikrowisp (falta la tabla X; a la tabla Y le faltan las columnas Z)", avisa al equipo (A6) con el mensaje completo; se ajusta `apps/api/app/importacion/origenes/mikrowisp.ts` y nada más. Mientras tanto se puede ir por CSV.
-- **SmartISP**: el adaptador es un **esqueleto con un esquema supuesto sin verificar**: con el primer volcado real casi seguro se detendrá con la lista de tablas y columnas que faltan (no toca la base). Manda ese mensaje y el volcado (sin datos, `mysqldump --no-data`, basta para empezar) al equipo. Mientras tanto, usa CSV con `--sistema=smartisp`.
+- **Mikrowisp** (versión 6) y **SmartISP**: los adaptadores leen el esquema real de cada sistema. Qué tabla y columna da cada dato, y las preguntas abiertas: `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`. Antes de tocar la base, el comando compara el volcado con las tablas y columnas que necesita; si falta algo se detiene con la lista completa ("no tiene el esquema que espera el origen mikrowisp:" y una línea por tabla o columna). Casi siempre es que el volcado no incluyó una tabla: repite el `mysqldump` con la lista de abajo. Si la tabla existe con otras columnas (otra versión del sistema), manda el mensaje completo al equipo (A6).
 - **CSV**: sirve para cualquier sistema. Ver el paso 0.2.
 
 El origen y el id de cada fila en ese sistema forman la clave para no importar dos veces lo mismo. **Usa siempre el mismo origen para el mismo ISP**: si empezaste con CSV de un Mikrowisp, sigue con `--origen=csv --sistema=mikrowisp` (o pasa al volcado: `mikrowisp` reconoce lo que entró con `--sistema=mikrowisp`). Con otro `--sistema`, todo se crearía de nuevo.
 
 ### 0.1 Volcado SQL (Mikrowisp, SmartISP)
 
-Tomado con el sistema sin cobros en curso:
+Tomado **con el sistema sin cobros en curso** (o fuera de horario), en el servidor del sistema anterior o desde una máquina con acceso a su MySQL/MariaDB. Solo las tablas que lee el importador: es más chico y lleva menos datos personales.
+
+**Mikrowisp 6** (la base suele llamarse `mikrowisp`; MariaDB):
 
 ```sh
-mysqldump --single-transaction --default-character-set=utf8mb4 -u root -p <base> > origen-AAAAMMDD.sql
+mysqldump --single-transaction --default-character-set=utf8mb4 --skip-triggers \
+    -u <usuario> -p <base> \
+    server nas ipv4 perfiles usuarios tblavisouser zonas tblservicios radcheck \
+    facturas facturaitems operaciones saldos monedas \
+    > mikrowisp-AAAAMMDD.sql
 ```
 
-Si no hay acceso a MySQL, la exportación SQL de phpMyAdmin (todas las tablas, con `CREATE TABLE`) sirve igual.
+| Obligatorias | Opcionales (sin ellas, ese dato entra vacío) |
+| --- | --- |
+| `server`, `perfiles`, `usuarios`, `tblservicios` | `nas` (IP RADIUS del router), `ipv4` (redes), `tblavisouser` y `zonas` (zona del cliente), `radcheck` (clave PPPoE si falta en el servicio), `facturas`, `facturaitems` (concepto), `operaciones` (pagos), `saldos` (saldo a favor), `monedas` |
+
+**SmartISP** (la base suele llamarse `smartisp`; MySQL 5.7):
+
+```sh
+mysqldump --single-transaction --default-character-set=utf8mb4 --skip-triggers \
+    -u <usuario> -p <base> \
+    routers radius control_routers address_routers plans clients zone client_services \
+    bill_customers bill_customer_item payment_news invoices payments \
+    > smartisp-AAAAMMDD.sql
+```
+
+| Obligatorias | Opcionales |
+| --- | --- |
+| `routers`, `plans`, `clients`, `client_services` | `radius` (secreto RADIUS), `control_routers` (tipo de conexión), `address_routers` (redes), `zone`, `bill_customers` y `bill_customer_item` (facturas), `payment_news` (pagos), `invoices` y `payments` (solo para avisar si las tablas viejas tienen filas) |
+
+Notas:
+
+- `--skip-triggers` es opcional: el lector ignora los triggers (Mikrowisp trae seis). Con MySQL 8 y un usuario sin privilegio `PROCESS`, agrega `--no-tablespaces`.
+- Sin acceso por consola, la exportación SQL de phpMyAdmin o de Adminer sirve igual: formato SQL, **estructura y datos**, solo esas tablas.
+- Para mandar la estructura al equipo sin datos (cuando el comando no reconoce el esquema): el mismo comando con `--no-data`.
+- El volcado lleva datos personales y **contraseñas en claro**: claves PPPoE (`tblservicios.ppppass`, `radcheck`, `client_services.pass_hot`), credenciales de los routers (`server.pass`, `routers.password`) y los hashes del portal (`clients.password`). Nunca al repositorio ni por chat: en el servidor de ArgosIsp, con permisos `600`, y se borra al terminar. ArgosIsp cifra las claves al importarlas y el reporte no las muestra.
+- Antes de la primera corrida, conviene contestar las preguntas de `docs/importacion/mapeo-*.md` (sección "Dudas para el PM") con el volcado: cada una trae la consulta SQL. La corrida en seco también las delata: un estado o un código desconocido sale como fila omitida con el valor en el mensaje.
 
 ### 0.2 Plantillas CSV (cualquier sistema)
 
@@ -57,15 +86,40 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 Desde la raíz del repositorio, con el `.env` de la API apuntando a la base destino:
 
 ```sh
-pnpm importar --origen=mikrowisp --fuente=/ruta/origen-AAAAMMDD.sql --dry-run --salida=/ruta/reporte-1
+pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --dry-run --salida=/ruta/reporte-1
+pnpm importar --origen=smartisp --fuente=/ruta/smartisp-AAAAMMDD.sql --dry-run --salida=/ruta/reporte-1
 pnpm importar --origen=csv --fuente=/ruta/plantillas --sistema=wisphub --dry-run --salida=/ruta/reporte-1
-# con varias plantillas de facturación:
-pnpm importar --origen=mikrowisp --fuente=/ruta/origen-AAAAMMDD.sql --plantilla=3 --dry-run --salida=/ruta/reporte-1
+# con varias plantillas de facturación (sin --plantilla, los servicios entran sin ella y sus facturas no se importan):
+pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --plantilla=3 --dry-run --salida=/ruta/reporte-1
 ```
 
-En Docker: `docker compose -f infra/docker-compose.yml run --rm --no-deps -v /ruta:/datos api node ace.js importar --origen=mikrowisp --fuente=/datos/origen-AAAAMMDD.sql --dry-run --salida=/datos/reporte-1`.
+Para practicar sin datos de un ISP, con los volcados sintéticos sobre el esquema real:
+
+```sh
+cat scripts/importacion/esquemas/mikrowisp6.sql scripts/importacion/mikrowisp-sintetico.sql > /tmp/mikrowisp.sql
+pnpm importar --origen=mikrowisp --fuente=/tmp/mikrowisp.sql --plantilla=<id> --dry-run --salida=/tmp/reporte-mikrowisp
+cat scripts/importacion/esquemas/smartisp.sql scripts/importacion/smartisp-sintetico.sql > /tmp/smartisp.sql
+pnpm importar --origen=smartisp --fuente=/tmp/smartisp.sql --plantilla=<id> --dry-run --salida=/tmp/reporte-smartisp
+```
+
+En Docker: `docker compose -f infra/docker-compose.yml run --rm --no-deps -v /ruta:/datos api node ace.js importar --origen=mikrowisp --fuente=/datos/mikrowisp-AAAAMMDD.sql --dry-run --salida=/datos/reporte-1`.
 
 Si el comando se detiene antes de importar ("no tiene el esquema que espera el origen…", "Falta clientes.csv…", "columna repetida…"), no tocó la base: corrige lo que dice y repite.
+
+Qué revisar primero en el reporte de un volcado de Mikrowisp o SmartISP (son las filas que el adaptador no traduce o traduce con una observación, tipo `formato_fila` / `formato_campo`):
+
+| Mensaje | Qué significa | Qué hacer |
+| --- | --- | --- |
+| `estado "X" desconocido` / `status "X" desconocido` | El sistema usa un valor que no conocemos | Mandarlo al equipo con cuántas filas lo tienen; no corregir a mano |
+| `moneda USD: solo se importan … en quetzales` | Factura o pago en otra moneda (Mikrowisp) | Decidir con contabilidad; entra como saldo inicial si hace falta |
+| `tiposervicio "tv"` | Servicio que no es de internet (Mikrowisp) | Nada, o cobrarlo en ArgosIsp como cargo aparte |
+| `tipo_conexion "hotspot"` | Router de SmartISP en modo hotspot | ArgosIsp no maneja hotspot: queda fuera |
+| `precio del servicio … distinto al del plan` | El cliente paga otro precio que el de su plan (Mikrowisp) | Ajustar el plan o crear uno para esos clientes antes de facturar |
+| `cobrado … y la suma de sus operaciones … no coinciden` | Abono registrado sin pago (Mikrowisp) | Revisar con caja; el saldo entra con lo cobrado |
+| `balance del origen … no coinciden` | El saldo que muestra SmartISP no es la suma de sus facturas | Revisar con caja; entra lo de las facturas |
+| `IPv6 y DUID del origen no se importan` | Servicio con IPv6 en Mikrowisp | Configurar el IPv6 en ArgosIsp después |
+| `invoices trae N filas` | SmartISP tiene facturas en la tabla vieja | Confirmar con el ISP cuál usa antes de seguir |
+| `status … sin paid_on` / `con paid_on` | El significado supuesto del estado de factura puede estar mal | Mandarlo al equipo antes de la corrida real |
 
 ## 2. Leer el reporte
 
@@ -124,7 +178,7 @@ Cuando dos corridas en seco seguidas dan un reporte aceptable (saldos que cuadra
 3. Correr sin `--dry-run`, con la misma fuente y las mismas opciones (incluido `--sistema`) que la última corrida en seco:
 
     ```sh
-    pnpm importar --origen=mikrowisp --fuente=/ruta/origen-AAAAMMDD.sql --salida=/ruta/reporte-real
+    pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --salida=/ruta/reporte-real
     ```
 
 4. Comparar `reporte-real/diferencias.csv` con el de la última corrida en seco: deben ser iguales. El resumen dice `creados` donde en seco decía lo mismo.
@@ -146,5 +200,4 @@ No sirve para **actualizar** lo ya importado (un cambio de plan o de IP en el or
 
 ## Pendiente
 
-- El esquema de Mikrowisp es supuesto hasta que llegue la copia real de la base del ISP.
-- El adaptador de SmartISP es un esqueleto: falta un volcado real.
+- Confirmar con datos reales los valores supuestos de cada sistema (estados, seguridad del router en Mikrowisp, tipo de control y estados de factura en SmartISP): preguntas en `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`.
