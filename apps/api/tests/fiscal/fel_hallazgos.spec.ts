@@ -13,6 +13,7 @@ import { controlFelFalso } from '#fiscal/fel/falso'
 import { dteParaEnviar, verDte } from '#fiscal/fel/dte'
 import { xmlDte } from '#fiscal/fel/xml_gt'
 import { errorDe, lineas, sacarDeLaColaFel } from '#tests/contabilidad/ayudas_contabilidad'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import {
     IVA_DEBITO,
     IVA_POR_CERTIFICAR,
@@ -70,7 +71,30 @@ test.group('FEL · decisiones sobre los hallazgos del auditor', (group) => {
         assert.equal(await saldo(e.B, IVA_POR_CERTIFICAR), '0.00')
     })
 
-    test('nota interna después del DTE: con el DTE en cola 409 con su estado; certificado y FEL desactivada 409 nota_requiere_ncre', async ({
+    test('H11: con FEL opcional, una factura que no es aviso y tiene nota interna se certifica a mano por el neto', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('opcional')
+        const s = await servicioFel(e, 'nunca', '224.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        assert.isFalse(await factura(f.id).then((r) => Boolean(r.aviso_cobro)))
+        await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '24.00', motivo: 'descuento' },
+            e.ctx,
+        )
+        // la nota interna ya bajó 2.1.02: 24.00 − 2.57 = 21.43
+        assert.equal(await saldo(e.B, IVA_DEBITO), '-21.43')
+        await new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx)
+        await cola(e)
+        const [dte] = await dtesDe('factura', f.id)
+        assert.containSubset(dte, { estado: 'certificado', total: '200.00', iva: '21.43' })
+        const envio = await dteParaEnviar(db.connection(), await verDte(Number(dte!.id)))
+        assert.containSubset(envio.lineas[0], { precio: '224.00', descuento: '24.00', total: '200.00' })
+        assert.equal(await saldo(e.B, IVA_DEBITO), '-21.43')
+        assert.equal(await saldo(e.B, IVA_POR_CERTIFICAR), '0.00')
+    })
+
+    test('nota interna después del DTE:con el DTE en cola 409 con su estado; certificado y FEL desactivada 409 nota_requiere_ncre', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
@@ -249,6 +273,7 @@ test.group('FEL · decisiones sobre los hallazgos del auditor', (group) => {
         assert.lengthOf(asientos, 2)
         assert.equal(asientos[1].reversa_de, asientos[0].id)
         assert.equal(await saldo(e.B, IVA_DEBITO), '-16.07')
+        await afirmarLibro(assert, e.B)
         const otra = await errorDe(
             new AnularNotaCredito().execute({ nota_id: nota.id, motivo: 'otra vez' }, e.ctx),
         )
@@ -274,5 +299,6 @@ test.group('FEL · decisiones sobre los hallazgos del auditor', (group) => {
             new AnularNotaCredito().execute({ nota_id: ni.id, motivo: 'prueba' }, e.ctx),
         )
         assert.equal(sinNcre.codigo, 'nota_sin_ncre_rechazada')
+        await afirmarLibro(assert, e.B)
     })
 })

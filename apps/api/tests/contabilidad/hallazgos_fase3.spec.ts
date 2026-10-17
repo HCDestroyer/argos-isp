@@ -122,7 +122,7 @@ test.group('Auditor contable · hallazgos de la fase 3 (FEL)', (group) => {
         )
 
         assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
-    }).fails('H5: el DTE del aviso lleva el bruto (IVA 24.00) y la reclasificación solo 21.43')
+    })
 
     test('H6 · un pago registrado mientras la anulación del DTE está pendiente deja el DTE anulado en la SAT y vivo en el libro', async ({
         assert,

@@ -58,10 +58,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    '12.reclasificacion_distinta_del_iva_del_dte': 'H5',
-    '12.dte_de_aviso_distinto_del_neto': 'H5',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 

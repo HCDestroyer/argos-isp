@@ -159,7 +159,7 @@ export default class SolicitarCertificacion extends DomainAction<
             referencia = referenciaA(origen!, `Recargo por mora de la factura ${factura.factura_origen_id}`)
         }
 
-        // H5: un aviso con notas internas se certifica por el neto
+        // H5/H11: todo documento con notas internas (aviso o no) se certifica por el neto
         const neto = await netoParaDte(t.trx, factura.id)
         const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor)
         const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)

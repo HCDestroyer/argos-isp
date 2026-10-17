@@ -4,9 +4,10 @@ import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { controlFelFalso } from '#fiscal/fel/falso'
-import { sacarDeLaColaFel, type Empresas } from '#tests/contabilidad/ayudas_contabilidad'
+import { errorDe, sacarDeLaColaFel, type Empresas } from '#tests/contabilidad/ayudas_contabilidad'
 import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
 
@@ -16,18 +17,17 @@ import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/
  * (nota_id único, asiento_id del reverso, motivo, anulado_por, anulado_en; solo inserción), reverso
  * con `RevertirAsiento` y el monto fuera de `facturas.pagado`.
  *
- * Mientras la acción no exista en esta rama, cada caso **simula** la anulación dentro de una
- * transacción que se revierte (la tabla se crea ahí si aún no existe) y comprueba que
- * `verificarLibro` acepta la correcta y rechaza cada mutación: reverso parcial, anulación de una
- * nota cuya NCRE está certificada y doble anulación. Cuando llegue la acción de A3, la simulación
- * se reemplaza por la acción y las mutaciones siguen igual.
+ * La anulación correcta pasa por la acción real (`AnularNotaCredito`), que además rechaza con 409
+ * anular una nota con la NCRE certificada y la doble anulación. Las mutaciones (reverso parcial,
+ * nota certificada anulada a mano, doble anulación) se escriben como dueño dentro de una
+ * transacción que se revierte y `verificarLibro` tiene que verlas.
  */
 
 interface Escenario {
     e: Empresas
     facturaId: number
-    rechazada: { id: number; monto: string }
-    certificada: { id: number; monto: string }
+    rechazada: { id: number; monto: string; dteId: number }
+    certificada: { id: number; monto: string; dteId: number }
 }
 
 /** Factura certificada con dos NCRE: una rechazada en definitivo por la SAT y otra certificada. */
@@ -55,20 +55,9 @@ async function escenario(): Promise<Escenario> {
     return {
         e,
         facturaId,
-        rechazada: { id: r.id, monto: r.monto },
-        certificada: { id: c.id, monto: c.monto },
+        rechazada: { id: r.id, monto: r.monto, dteId: Number(dteR.id) },
+        certificada: { id: c.id, monto: c.monto, dteId: Number(dteC.id) },
     }
-}
-
-async function crearTabla(trx: TransactionClientContract) {
-    // sin UNIQUE a propósito: la doble anulación tiene que verla el invariante aunque falte la restricción
-    await trx.rawQuery(`CREATE TABLE IF NOT EXISTS billing.notas_credito_anulaciones (
-        id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        nota_id bigint NOT NULL REFERENCES billing.notas_credito(id),
-        asiento_id bigint NOT NULL REFERENCES ledger.asientos(id),
-        motivo text NOT NULL,
-        anulado_por bigint,
-        anulado_en timestamptz NOT NULL DEFAULT now())`)
 }
 
 async function asientoDe(trx: TransactionClientContract, notaId: number): Promise<number> {
@@ -80,16 +69,17 @@ async function asientoDe(trx: TransactionClientContract, notaId: number): Promis
     return Number(fila.id)
 }
 
-/** Lo que haría la acción de A3: fila de anulación y el monto fuera de `pagado` con su estado. */
+/** Fila de anulación escrita a mano (las mutaciones; la anulación correcta usa la acción). */
 async function registrarAnulacion(
     x: Escenario,
     trx: TransactionClientContract,
-    notaId: number,
+    nota: { id: number; dteId: number },
     reversoId: number,
 ) {
     await trx.rawQuery(
-        `INSERT INTO billing.notas_credito_anulaciones (nota_id, asiento_id, motivo, anulado_por) VALUES (?, ?, 'NCRE rechazada', ?)`,
-        [notaId, reversoId, x.e.usuarioId],
+        `INSERT INTO billing.notas_credito_anulaciones (empresa_id, nota_id, asiento_id, dte_id, motivo, anulado_por)
+         VALUES (?, ?, ?, ?, 'NCRE rechazada', ?)`,
+        [x.e.B, nota.id, reversoId, nota.dteId, x.e.usuarioId],
     )
 }
 
@@ -104,8 +94,12 @@ async function quitarDePagado(x: Escenario, trx: TransactionClientContract, mont
     )
 }
 
-/** Anulación correcta: reverso espejo con `RevertirAsiento`, fila y `pagado`. */
-async function anular(x: Escenario, trx: TransactionClientContract, nota: { id: number; monto: string }) {
+/** Anulación hecha a mano con `RevertirAsiento`, fila y `pagado` (para las mutaciones). */
+async function anular(
+    x: Escenario,
+    trx: TransactionClientContract,
+    nota: { id: number; monto: string; dteId: number },
+) {
     const reverso = await new RevertirAsiento().execute(
         {
             asiento_id: await asientoDe(trx, nota.id),
@@ -115,14 +109,13 @@ async function anular(x: Escenario, trx: TransactionClientContract, nota: { id: 
         x.e.ctx,
         { trx },
     )
-    await registrarAnulacion(x, trx, nota.id, Number(reverso.id))
+    await registrarAnulacion(x, trx, nota, Number(reverso.id))
     await quitarDePagado(x, trx, nota.monto)
 }
 
 async function enTransaccion(prueba: (trx: TransactionClientContract) => Promise<void>) {
     const trx = await db.transaction()
     try {
-        await crearTabla(trx)
         await prueba(trx)
     } finally {
         await trx.rollback()
@@ -148,11 +141,21 @@ test.group('Auditor contable · anulación de notas de crédito con NCRE rechaza
         assert,
     }) => {
         const x = await escenario()
-        await enTransaccion(async (trx) => {
-            assert.deepEqual(await violaciones(x, trx), [])
-            await anular(x, trx, x.rechazada)
-            assert.deepEqual(await violaciones(x, trx), [])
-        })
+        assert.deepEqual(await verificarLibro(x.e.B), [])
+        await new AnularNotaCredito().execute({ nota_id: x.rechazada.id, motivo: 'NCRE rechazada' }, x.e.ctx)
+        assert.deepEqual(await verificarLibro(x.e.B), [])
+        // la acción no anula una nota con la NCRE certificada ni dos veces la misma
+        for (const [notaId, codigo] of [
+            [x.certificada.id, 'ncre_certificada'],
+            [x.rechazada.id, 'nota_anulada'],
+        ] as const) {
+            const error = await errorDe(
+                new AnularNotaCredito().execute({ nota_id: notaId, motivo: 'otra vez' }, x.e.ctx),
+            )
+            assert.equal(error.status, 409)
+            assert.equal(error.codigo, codigo)
+        }
+        assert.deepEqual(await verificarLibro(x.e.B), [])
     })
 
     test('mutación: reverso parcial (un centavo menos en cada lado) → 9.nota_anulada_mal', async ({
@@ -179,7 +182,7 @@ test.group('Auditor contable · anulación de notas de crédito con NCRE rechaza
                    FROM ledger.movimientos m WHERE m.asiento_id = ? ORDER BY m.id`,
                 [reverso, original, original, original],
             )
-            await registrarAnulacion(x, trx, x.rechazada.id, reverso)
+            await registrarAnulacion(x, trx, x.rechazada, reverso)
             await quitarDePagado(x, trx, x.rechazada.monto)
             assert.include(await invariantes(x, trx), '9.nota_anulada_mal')
         })
@@ -205,7 +208,7 @@ test.group('Auditor contable · anulación de notas de crédito con NCRE rechaza
                 .firstOrFail()) as { asiento_id: number }
             const segunda = await trx
                 .transaction(async (sp) => {
-                    await registrarAnulacion(x, sp, x.rechazada.id, Number(reverso.asiento_id))
+                    await registrarAnulacion(x, sp, x.rechazada, Number(reverso.asiento_id))
                 })
                 .then(() => true)
                 .catch(() => false)

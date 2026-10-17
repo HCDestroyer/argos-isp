@@ -477,9 +477,10 @@ function repartir(monto: Dec, pesos: Dec[]): Dec[] {
 }
 
 /**
- * Neto de un aviso al certificarse (H5, decisión del líder): el DTE se certifica por el total y el
- * IVA de la factura **menos sus notas internas** (las notas de la factura sin DTE propio; después de
- * un DTE solo se admiten NCRE). La reclasificación lleva exactamente el IVA del DTE.
+ * Neto de una factura o mora al certificarse (H5 y H11, decisiones del líder): todo DTE de factura
+ * o NDEB, sea aviso o no, se certifica por el total y el IVA del documento **menos sus notas
+ * internas** (las notas sin DTE propio; después de un DTE solo se admiten NCRE), igual que lo que
+ * ya bajó del libro. En un aviso, la reclasificación lleva exactamente el IVA del DTE.
  */
 export async function netoParaDte(
     cliente: QueryClientContract,
