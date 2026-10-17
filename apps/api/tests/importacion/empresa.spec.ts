@@ -1,6 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { EmpresaImportacionRequerida, importar } from '#importacion/importador'
+import { cargaFinancieraA3, type CargaFinanciera } from '#importacion/carga_financiera'
+import { formatearReporte } from '#importacion/reporte'
 import { leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
 import { archivoSintetico } from '#tests/importacion/ayudas_importacion'
@@ -151,6 +153,108 @@ test.group('importacion · empresa de la corrida', (group) => {
         }
     })
 
+    test('--empresa llega explícito a facturas, pagos, promesas y saldos iniciales, y el reporte lo verifica por empresa', async ({
+        assert,
+    }) => {
+        await crearEmpresaFila({ nombre_comercial: 'Cable Norte' })
+        const empresa = await crearEmpresaFila({ nombre_comercial: 'Fibra Sur' })
+        const plantillaId = await crearPlantillaFila()
+        // Las entradas que reciben las acciones de A3 (el adaptador real, envuelto)
+        const pedidas: Record<
+            'facturas' | 'pagos' | 'promesas' | 'saldos',
+            Array<number | null | undefined>
+        > = {
+            facturas: [],
+            pagos: [],
+            promesas: [],
+            saldos: [],
+        }
+        const carga: CargaFinanciera = {
+            ...cargaFinancieraA3,
+            importarFactura: (e, ctx, t) => {
+                pedidas.facturas.push(e.empresa_id)
+                return cargaFinancieraA3.importarFactura(e, ctx, t)
+            },
+            registrarSaldoInicial: (e, ctx, t) => {
+                pedidas.saldos.push(e.empresa_id)
+                return cargaFinancieraA3.registrarSaldoInicial(e, ctx, t)
+            },
+            registrarPagoHistorico: (e, ctx, t) => {
+                pedidas.pagos.push(e.empresa_id)
+                return cargaFinancieraA3.registrarPagoHistorico!(e, ctx, t)
+            },
+            importarPromesa: (e, ctx, t) => {
+                pedidas.promesas.push(e.empresa_id)
+                return cargaFinancieraA3.importarPromesa!(e, ctx, t)
+            },
+        }
+        const trx = await db.transaction()
+        try {
+            const r = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
+                dryRun: false,
+                trx,
+                plantillaId,
+                carga,
+                empresa: String(empresa),
+            })
+            for (const [nombre, lista] of Object.entries(pedidas)) {
+                assert.isNotEmpty(lista, `${nombre}: la corrida llama la acción`)
+                assert.deepEqual([...new Set(lista)], [empresa], `${nombre}: empresa_id explícito`)
+            }
+
+            // En la base: lo de la empresa (nueva en esta prueba) es exactamente lo de la corrida
+            const enLaEmpresa = async (tabla: string) =>
+                Number(
+                    (
+                        (await trx
+                            .from(tabla)
+                            .where({ origen: 'mikrowisp', empresa_id: empresa })
+                            .count('* as n')
+                            .first()) as { n: string }
+                    ).n,
+                )
+            const porTabla = {
+                facturas: ['billing.facturas', r.resumen.facturas],
+                pagos: ['billing.pagos', r.resumen.pagos],
+                promesas: ['billing.promesas', r.resumen.promesas],
+                saldos_iniciales: ['billing.saldos_iniciales', r.resumen.saldos],
+            } as const
+            const fila = r.empresas.por_empresa.find((e) => e.empresa_id === empresa)!
+            for (const [campo, [tabla, conteo]] of Object.entries(porTabla)) {
+                const n = fila[campo as keyof typeof porTabla]
+                assert.isAbove(n, 0, campo)
+                assert.equal(n, conteo.creados + conteo.existentes, campo)
+                assert.equal(await enLaEmpresa(tabla), n, tabla)
+            }
+            assert.equal(r.empresas.corrida, empresa)
+            assert.deepEqual(
+                r.empresas.por_empresa.map((e) => e.empresa_id),
+                [empresa],
+            )
+            assert.lengthOf(r.empresas.fuera_de_empresa, 0)
+            assert.equal(r.empresas.suma, r.saldos.suma_importada)
+            assert.equal(fila.saldo, r.saldos.suma_importada)
+            assert.isTrue(r.empresas.cuadra)
+            assert.isTrue(r.saldos.cuadra)
+            // Los asientos de lo importado también son de esa empresa (el libro de su NIT)
+            const asientos = (await trx
+                .from('ledger.asientos as a')
+                .join('billing.facturas as f', (j) =>
+                    j.on('f.id', 'a.origen_id').andOnVal('a.origen_tipo', 'factura'),
+                )
+                .where({ 'f.origen': 'mikrowisp', 'f.empresa_id': empresa })
+                .distinct('a.empresa_id')) as Array<{ empresa_id: number }>
+            assert.deepEqual(
+                asientos.map((a) => Number(a.empresa_id)),
+                [empresa],
+            )
+            assert.include(formatearReporte(r), `Empresas (CUADRA): empresa ${empresa} (corrida)`)
+        } finally {
+            await trx.rollback()
+        }
+    })
+
     test('--empresa por NIT; una segunda corrida con otra empresa no mueve lo ya importado y lo reporta', async ({
         assert,
     }) => {
@@ -178,6 +282,9 @@ test.group('importacion · empresa de la corrida', (group) => {
                 empresa: norte,
             })
             assert.equal(segunda.resumen.servicios.creados, 0)
+            // Lo ya importado sigue en Fibra Sur con su servicio: no cuenta como fuera de empresa
+            assert.lengthOf(segunda.empresas.fuera_de_empresa, 0)
+            assert.isTrue(segunda.empresas.cuadra)
             // Los que la primera corrida dejó en Fibra Sur salen en el reporte, ninguno se movió
             const enSur = segunda.diferencias.servicios_otra_empresa.filter((x) => x.empresa_id === sur)
             assert.lengthOf(enSur, primera.resumen.servicios.creados)

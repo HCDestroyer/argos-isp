@@ -142,7 +142,9 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
     ...ambos(
         'pago.registrado',
         'Pago recibido: {{pago.monto_q}}',
-        'Recibimos tu pago de {{pago.monto_q}} el {{pago.fecha}}. ¡Gracias!',
+        'Recibimos tu pago de {{pago.monto_q}} el {{pago.fecha}}. ¡Gracias!' +
+            // Cobro repartido entre empresas: un aviso por empresa, cada uno con su parte
+            '{{#cobro.repartido}}\n\nEste pago es la parte de {{empresa.nombre}} de tu pago total de {{cobro.monto_q}}; el resto lo aplicó {{cobro.otras_empresas}}, que te envía su propio aviso.{{/cobro.repartido}}',
     ),
     ...ambos(
         'promesa.creada',

@@ -110,6 +110,7 @@ export default class EnviarMensajeDirecto extends DomainAction<
         let error: string | null = null
         let proveedorId: string | null = null
         const empresaId = input.empresa_id ?? null
+        if (empresaId !== null) t.fijarEmpresa(empresaId)
         const resuelto = await resolverCanal(input.canal, { empresaId })
         if (resuelto.apagado) {
             estado = 'fallido'

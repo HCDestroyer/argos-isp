@@ -76,6 +76,8 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
             .first()) as FilaEnvio | null
         if (!envio) throw new NoEncontrado(`notify.envios ${input.envioId} no existe`)
         t.fijarEntidad('envio', envio.id)
+        // Auditoría: la empresa del envío (la del evento que lo originó; null en alertas al equipo)
+        t.fijarEmpresa(envio.empresa_id === null ? null : Number(envio.empresa_id))
         if (envio.estado !== 'encolado') return { estado: 'omitido' }
 
         // Las alertas internas (sin cliente) usan el interruptor de alertas al equipo.

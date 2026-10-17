@@ -22,6 +22,7 @@ export default class EditarPlantillaNotificacion extends DomainAction<EntradaEdi
 
     protected async handle(input: EntradaEditarPlantilla, t: Transaccion): Promise<FilaPlantilla> {
         t.fijarEntidad('plantilla_notificacion', input.id)
+        t.fijarEmpresa(null) // plantillas globales
 
         const errores: ErrorCampo[] = []
         for (const campo of ['asunto', 'cuerpo'] as const) {

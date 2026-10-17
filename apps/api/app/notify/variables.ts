@@ -309,6 +309,51 @@ async function aplicadoAlCliente(
     }
 }
 
+/**
+ * Cobro repartido (multiempresa, `contratos/eventos.md`): un cobro de caja que cubrió facturas de
+ * varias empresas se divide en un pago por empresa y cada uno emite su `pago.registrado` con el
+ * mismo `cobro_id`. Cada aviso es el de su empresa (su marca, su bot); estas variables dejan que
+ * la plantilla diga que es parte de un cobro mayor:
+ *
+ * - `id`, `monto`, `monto_q`: el cobro completo (lo que el cliente entregó en caja).
+ * - `partes`: cuántos pagos (empresas) tiene el cobro.
+ * - `repartido`: true si son 2 o más (para `{{#cobro.repartido}}…{{/cobro.repartido}}`).
+ * - `otras_empresas`: nombres de las demás empresas del cobro, separados por coma.
+ */
+export async function variablesCobro(
+    cliente: QueryClientContract,
+    cobroId: number,
+    empresaId: number | null,
+): Promise<Variables | null> {
+    const cobro = (await cliente
+        .from('billing.cobros')
+        .where('id', cobroId)
+        .select('id', 'monto')
+        .first()) as {
+        id: number
+        monto: string
+    } | null
+    if (!cobro) return null
+    const partes = (await cliente
+        .from('billing.pagos as p')
+        .join('core.empresas as e', 'e.id', 'p.empresa_id')
+        .where('p.cobro_id', cobroId)
+        .orderBy('p.empresa_id', 'asc')
+        .select('p.empresa_id', 'e.nombre_comercial')) as Array<{
+        empresa_id: number
+        nombre_comercial: string
+    }>
+    const otras = partes.filter((x) => Number(x.empresa_id) !== empresaId).map((x) => x.nombre_comercial)
+    return {
+        id: Number(cobro.id),
+        monto: monto(cobro.monto),
+        monto_q: quetzales(cobro.monto),
+        partes: partes.length,
+        repartido: partes.length > 1,
+        otras_empresas: [...new Set(otras)].join(', '),
+    }
+}
+
 /** Pago de `billing.pagos` con sus facturas (para `comprobante.aprobado`). */
 async function variablesPago(cliente: QueryClientContract, pagoId: number): Promise<Variables | null> {
     const fila = await cliente
@@ -397,6 +442,11 @@ export async function construirVariables(
                 variables.pago as Variables,
                 await aplicadoAlCliente(cliente, pagoId, destinatario.clienteId),
             )
+        }
+        const cobroId = entero(payload.cobro_id)
+        if (cobroId) {
+            const cobro = await variablesCobro(cliente, cobroId, await empresaDelEvento(cliente, payload))
+            if (cobro) variables.cobro = cobro
         }
     }
 
