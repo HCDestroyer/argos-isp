@@ -41,6 +41,14 @@ export const actualizarLocalizacionValidator = vine.compile(
 export const editarParametroValidator = vine.compile(
     vine.object({
         valor: vine.any().meta({
+            // `object` sin más queda `Record<string, never>` en los tipos generados (pedido de A4)
+            anyOf: [
+                { type: 'string' },
+                { type: 'number' },
+                { type: 'boolean' },
+                { type: 'array', items: {} },
+                { type: 'object', additionalProperties: true },
+            ],
             description:
                 'Valor según el tipo del parámetro: porcentaje y monto como string decimal ("12.00", "2500.00"), entero, bool, fecha YYYY-MM-DD, texto, una de las opciones (enum) u objeto/lista con la forma del valor del paquete (json)',
         }),

@@ -67,6 +67,17 @@ const camposLocalizacionEmpresa = {
     disponible: { ...nulable(texto), description: 'Versión más reciente para su país' },
     actualizacion_disponible: booleano,
     instalaciones: { ...lista(instalacion), description: 'La vigente primero' },
+    tipos_dte: {
+        ...lista(
+            objeto({
+                codigo: { ...texto, description: 'FACT, FCAM, FPEQ, FCAP, NCRE, NDEB…' },
+                nombre: texto,
+                regimenes: { ...lista(texto), description: 'Regímenes que lo emiten' },
+                fuente: texto,
+            }),
+        ),
+        description: 'Catálogo de tipos de DTE de la localización vigente (vacío sin localización)',
+    },
 }
 
 export const LocalizacionEmpresa = definirEsquema('LocalizacionEmpresa', objeto(camposLocalizacionEmpresa))

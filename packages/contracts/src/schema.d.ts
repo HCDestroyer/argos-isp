@@ -5033,6 +5033,15 @@ export interface components {
                     [key: string]: unknown;
                 };
             }[];
+            /** @description Catálogo de tipos de DTE de la localización vigente (vacío sin localización) */
+            tipos_dte: {
+                /** @description FACT, FCAM, FPEQ, FCAP, NCRE, NDEB… */
+                codigo: string;
+                nombre: string;
+                /** @description Regímenes que lo emiten */
+                regimenes: string[];
+                fuente: string;
+            }[];
         };
         LocalizacionFiscal: {
             /** @description Versión del paquete, p. ej. gt-2026.1 */
@@ -6317,6 +6326,15 @@ export interface components {
                 resumen: {
                     [key: string]: unknown;
                 };
+            }[];
+            /** @description Catálogo de tipos de DTE de la localización vigente (vacío sin localización) */
+            tipos_dte: {
+                /** @description FACT, FCAM, FPEQ, FCAP, NCRE, NDEB… */
+                codigo: string;
+                nombre: string;
+                /** @description Regímenes que lo emiten */
+                regimenes: string[];
+                fuente: string;
             }[];
             resumen: {
                 empresa_id: number;
@@ -11694,7 +11712,9 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @description Valor según el tipo del parámetro: porcentaje y monto como string decimal ("12.00", "2500.00"), entero, bool, fecha YYYY-MM-DD, texto, una de las opciones (enum) u objeto/lista con la forma del valor del paquete (json) */
-                    valor: string | number | boolean | unknown[] | Record<string, never>;
+                    valor: string | number | boolean | unknown[] | {
+                        [key: string]: unknown;
+                    };
                     /** Format: date */
                     vigente_desde: string;
                     motivo: string;

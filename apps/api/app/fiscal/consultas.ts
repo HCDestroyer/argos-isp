@@ -1,7 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
-import { ULTIMO_PAQUETE } from '#fiscal/instalador'
+import { PAQUETES, ULTIMO_PAQUETE } from '#fiscal/instalador'
+import type { DefinicionTipoDte } from '#fiscal/localizacion'
 
 /**
  * Consultas de solo lectura de la localización (`GET /fiscal/localizaciones`,
@@ -62,6 +63,8 @@ export interface LocalizacionEmpresa {
     disponible: string | null
     actualizacion_disponible: boolean
     instalaciones: InstalacionVista[]
+    /** catálogo de tipos de DTE de la localización vigente (vacío sin localización) */
+    tipos_dte: DefinicionTipoDte[]
 }
 
 export async function verLocalizacionEmpresa(
@@ -118,5 +121,6 @@ export async function verLocalizacionEmpresa(
             instalada_por_nombre: f.instalada_por_nombre,
             resumen: f.resumen,
         })),
+        tipos_dte: vigente ? [...(PAQUETES[vigente.localizacion_codigo]?.tipos_dte ?? [])] : [],
     }
 }

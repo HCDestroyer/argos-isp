@@ -242,6 +242,13 @@ test.group('Localización fiscal · instalación', (group) => {
         )
         exigirCampos(assert, todos.LocalizacionEmpresa!, empresa.body(), 'LocalizacionEmpresa')
         assert.equal(empresa.body().codigo, 'gt-2026.1')
+        // catálogo de tipos de DTE del paquete (para el selector de frases, A4)
+        const codigos = empresa.body().tipos_dte.map((t: { codigo: string }) => t.codigo)
+        assert.includeMembers(codigos, ['FACT', 'FPEQ', 'NCRE', 'NDEB'])
+        assert.deepInclude(empresa.body().tipos_dte[0], {
+            codigo: 'FACT',
+            regimenes: ['utilidades', 'opcional_simplificado'],
+        })
     })
 
     test('instalarla en otra empresa no cambia los valores de la primera', async ({ assert }) => {
