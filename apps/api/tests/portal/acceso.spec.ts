@@ -8,9 +8,10 @@ import {
     crearServicio,
     crearSesion,
     nitAleatorio,
+    usarEnviadorCodigo,
 } from '#tests/portal/ayudas_portal'
-import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
 import { mascararCorreo } from '#portal/acceso/codigos'
+import { MOTIVO_CODIGO_ACCESO } from '#portal/actions/solicitar_codigo'
 
 /**
  * Acceso al portal por código (tarea 7) contra Postgres y Redis reales, con el enviador de
@@ -72,6 +73,33 @@ test.group('Portal: acceso por código', (group) => {
         assert.equal(enviador.mensajes[0]!.destino, 'cliente.uno@example.com')
 
         const codigo = enviador.ultimoCodigo()
+        assert.equal(enviador.mensajes[0]!.asunto, `Tu código de acceso: ${codigo}`)
+
+        // Enviado con EnviarMensajeDirecto (A6): una fila en notify.envios, sin el código en claro
+        const envio = await db
+            .from('notify.envios')
+            .where('cliente_id', s.clienteId)
+            .where('evento', MOTIVO_CODIGO_ACCESO)
+            .firstOrFail()
+        assert.include(envio, { canal: 'correo', destino: 'cliente.uno@example.com', estado: 'enviado' })
+        assert.include(envio.cuerpo, '{{secreto}}')
+        assert.notInclude(JSON.stringify(envio), codigo)
+        const directo = await db
+            .from('audit.acciones')
+            .where('accion', 'notificaciones.enviar_directo')
+            .where('entidad_id', s.clienteId)
+            .select('canal', 'entrada')
+            .firstOrFail()
+        assert.equal(directo.canal, 'portal')
+        assert.notInclude(JSON.stringify(directo.entrada), codigo)
+        const notificado = await db
+            .from('audit.outbox')
+            .where('evento', 'notificacion.enviada')
+            .whereRaw(`(payload->>'cliente_id')::bigint = ?`, [s.clienteId])
+            .select('payload')
+            .firstOrFail()
+        assert.include(notificado.payload, { evento_origen: MOTIVO_CODIGO_ACCESO, estado: 'enviado' })
+
         const fila = await db
             .from('core.portal_codigos')
             .where('solicitud', pedido.body().solicitud)
@@ -387,6 +415,32 @@ test.group('Portal: acceso por código', (group) => {
         assert.equal(respuesta.body().type, 'urn:argosisp:problema:envio_codigo_fallido')
         const codigos = await db.from('core.portal_codigos').where('cliente_id', s.clienteId).count('* as n')
         assert.equal(Number(codigos[0].n), 0)
+        // El intento fallido queda en notify.envios (transacción propia de EnviarMensajeDirecto)
+        const envio = await db
+            .from('notify.envios')
+            .where('cliente_id', s.clienteId)
+            .where('evento', MOTIVO_CODIGO_ACCESO)
+            .firstOrFail()
+        assert.equal(envio.estado, 'fallido')
+        assert.include(envio.error, 'SMTP caído')
+    })
+
+    test('sin canal configurado (ni correo ni Telegram) por IP: 422 sin_destino y nada enviado', async ({
+        client,
+        assert,
+    }) => {
+        const s = await crearServicio({ nit: nitAleatorio(), email: 'sin.canal@example.com' })
+        const ip = ipNueva()
+        await crearSesion(s, { ipv4: ip })
+        enviador.canales = []
+        const respuesta = await estado(
+            client.post('/api/v1/portal/codigo').header('X-Forwarded-For', ip).json({ por_ip: true }),
+            422,
+        )
+        assert.equal(respuesta.body().type, 'urn:argosisp:problema:sin_destino')
+        assert.lengthOf(enviador.mensajes, 0)
+        const envios = await db.from('notify.envios').where('cliente_id', s.clienteId).count('* as n')
+        assert.equal(Number(envios[0].n), 0)
     })
 })
 

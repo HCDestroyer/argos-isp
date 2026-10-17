@@ -35,9 +35,12 @@ Reglas:
   a los anteriores. El intento se cuenta con un `UPDATE` atómico antes de comparar y fuera de la
   transacción de la acción, así un intento fallido queda contado aunque la acción se revierta. En la
   auditoría el código viaja como `secreto` (`***`).
-- **Envío.** Puerto `acceso/envio_codigo.ts` (`EnviadorCodigo`); por defecto usa la interfaz `Canal`
-  de notify (`SMTP_*`, `TELEGRAM_BOT_TOKEN`). No usa `ProgramarNotificacion` porque guardaría el texto
-  con el código en `notify.envios`. Si el canal falla: 503 `envio_codigo_fallido` y el código no queda.
+- **Envío.** `EnviarMensajeDirecto` de notify (A6, `notificaciones.enviar_directo`, motivo
+  `portal.codigo_acceso`): un canal configurado (`SMTP_*`, `TELEGRAM_BOT_TOKEN`), el destino registrado
+  y el código como `secreto` (`{{secreto}}` en asunto y cuerpo; ni `notify.envios` ni la auditoría lo
+  guardan). Emite `notificacion.enviada`. Corre en su propia transacción: si el canal falla, la fila
+  `fallido` de `notify.envios` queda, el portal responde 503 `envio_codigo_fallido` y el código no queda.
+  Las pruebas registran canales falsos en `#notify/canales/registro` (`EnviadorFalso` de `tests/portal/ayudas_portal.ts`).
 - **Sesión.** `core.portal_sesiones`: token `pcs_…` (solo su SHA-256) en la cookie `argos_portal`
   (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/portal`, `Secure` con HTTPS o `PORTAL_COOKIE_SEGURA=siempre`). Inactividad
   `PORTAL_SESION_INACTIVIDAD_S` (1800), máximo `PORTAL_SESION_MAX_S` (14400). Alcance: un cliente;
