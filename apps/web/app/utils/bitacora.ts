@@ -58,6 +58,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'pagos.anular': 'Pago anulado',
     'promesas.crear': 'Promesa de pago creada',
     'promesas.aprobar': 'Promesa de pago aprobada',
+    'promesas.importar': 'Promesa de pago importada',
     'cajas.abrir': 'Turno de caja abierto',
     'cajas.cerrar': 'Turno de caja cerrado',
     'notificaciones.enviar': 'Notificación enviada',

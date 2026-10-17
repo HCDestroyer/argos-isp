@@ -57,7 +57,7 @@ describe('datos de la empresa configurados en el panel', () => {
         const wrapper = await montar(PaginaCorte)
         expect(wrapper.findAll('button').some(b => b.text().includes('Ver datos de depósito'))).toBe(false)
         const contacto = wrapper.find('[data-testid="contacto-corte"]')
-        expect(contacto.text()).toContain('Contacta a soporte')
+        expect(contacto.text()).toContain('Teléfonos, correo y horario')
         expect(contacto.attributes('href')).toBe('/contacto')
         window.history.replaceState({}, '', '/')
     })

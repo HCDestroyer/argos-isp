@@ -15,6 +15,14 @@
  * 2 min; al ver `activo` muestra "Ya tienes servicio".
  */
 const { seguirNavegandoUrl } = useRuntimeConfig().public
+/** Los `data-testid` de siempre de `/corte` (pruebas y guía del piloto). */
+const TESTIDS_CORTE: Partial<Record<IdAcceso, string>> = {
+    comprobante: 'subir-comprobante',
+    promesa: 'solicitar-promesa',
+    facturas: 'ver-mi-cuenta',
+    soporte: 'contacto-corte',
+    deposito: 'ver-deposito',
+}
 const route = useRoute()
 const router = useRouter()
 const { data: corte, status, error, refresh } = useCorte()
@@ -165,10 +173,94 @@ const contacto = computed(() => {
 const hayDatosDeposito = computed(() => !empresa.value
     || empresa.value.cuentas_deposito.length > 0
     || Boolean(empresa.value.instrucciones_pago))
+
+/**
+ * Condiciones de promesa por IP (`GET /portal/promesas/condiciones`): "Prometer pago" solo aparece si
+ * la API dice que se puede ahora. Se leen una vez identificado el servicio y cuando cambia el caso.
+ */
+const { condiciones: leerCondiciones } = useSolicitudPromesa()
+const promesaDisponible = ref<boolean | null>(null)
+watch(puedePedirPromesa, async (puede) => {
+    promesaDisponible.value = puede ? null : false
+    if (puede) {
+        const leido = await leerCondiciones()
+        promesaDisponible.value = leido.ok ? promesaPermitida(leido.data) : false
+    }
+}, { immediate: true })
+
+/**
+ * Sesión del portal en este dispositivo (`useSesionPortal`): con ella, "Facturas" lleva directo a la
+ * sección de `/cuenta`, se ofrece vincular Telegram y el layout muestra la barra del cliente.
+ */
+const sesion = useSesionPortal()
+const telegram = useTelegram()
+onMounted(async () => {
+    if (await sesion.comprobar()) {
+        await telegram.cargar()
+    }
+})
+
+/** Sin pasarela (leída), "Ver datos de depósito" pasa a ser el botón principal de un servicio identificado. */
+const depositoPrincipal = computed(() => identificado.value
+    && !retirado.value
+    && empresa.value !== null
+    && !empresa.value.pago_en_linea
+    && hayDatosDeposito.value)
+
+/** Accesos rápidos de `/corte`: los que funcionan por IP ("Pagar en línea" es el botón principal). */
+const accesos = computed(() => {
+    if (!corte.value) {
+        return []
+    }
+    const lista = accesosRapidos({
+        modo: sesion.activa.value ? 'sesion' : 'ip',
+        empresa: empresa.value,
+        montoAdeudado: corte.value.monto_adeudado,
+        retirado: retirado.value,
+        pagoEnCamino: pagoEnCamino.value,
+        promesaDisponible: puedePedirPromesa.value ? promesaDisponible.value : false,
+        telegram: telegram.estado.value
+            ? { disponible: telegram.estado.value.disponible, vinculado: telegram.estado.value.vinculado }
+            : null,
+        soporte: soporteDe(empresa.value),
+        rutaTelegram: '/cuenta?seccion=cuenta#telegram',
+    }).filter(acceso => acceso.id !== 'pagar' && !(acceso.id === 'deposito' && depositoPrincipal.value))
+    // Sin identificar el servicio solo sirve lo que no depende de él: depósito y soporte.
+    return identificado.value ? lista : lista.filter(acceso => acceso.id === 'deposito' || acceso.id === 'soporte')
+})
+
+function alAcceso(accion: NonNullable<AccesoRapido['accion']>) {
+    if (accion === 'deposito') {
+        verDeposito.value = true
+    }
+    else if (accion === 'comprobante') {
+        verComprobante.value = true
+    }
+    else if (accion === 'promesa') {
+        verPromesa.value = true
+    }
+}
+
+/** "Actualizar" y jalar para actualizar: vuelve a identificar y revisa el estado en vivo. */
+const actualizando = ref(false)
+async function actualizar() {
+    if (actualizando.value) {
+        return
+    }
+    actualizando.value = true
+    await refresh()
+    actualizando.value = false
+    vigilarEstado()
+}
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
+        <PortalJalarParaActualizar
+            :actualizando="actualizando"
+            @actualizar="actualizar"
+        />
+
         <template v-if="cargando">
             <USkeleton class="h-5 w-1/3" />
             <USkeleton class="h-8 w-2/3" />
@@ -290,55 +382,27 @@ const hayDatosDeposito = computed(() => !empresa.value
                 <p class="-mt-1 text-center text-xs text-muted">
                     Para pagar en línea, subir un comprobante o pedir una promesa de pago necesitamos saber cuál es tu servicio.
                 </p>
-                <UButton
-                    v-if="hayDatosDeposito"
-                    label="Ver datos de depósito"
-                    icon="i-lucide-landmark"
-                    color="neutral"
-                    variant="outline"
-                    size="xl"
-                    block
-                    @click="verDeposito = true"
-                />
             </div>
 
-            <div
-                v-else-if="!retirado"
-                class="flex flex-col gap-2"
-            >
+            <template v-else-if="!retirado">
                 <PagoEnLinea v-if="!pagoEnCamino" />
+                <!-- Sin pasarela, el depósito es la acción principal (un botón, no una tarjeta más). -->
                 <UButton
-                    v-if="hayDatosDeposito"
+                    v-if="depositoPrincipal"
                     label="Ver datos de depósito"
                     icon="i-lucide-landmark"
-                    :color="empresa?.pago_en_linea ? 'neutral' : 'primary'"
-                    :variant="empresa?.pago_en_linea ? 'outline' : 'solid'"
                     size="xl"
                     block
+                    data-testid="ver-deposito"
                     @click="verDeposito = true"
                 />
-                <UButton
-                    data-testid="subir-comprobante"
-                    label="Subir comprobante de pago"
-                    icon="i-lucide-upload"
-                    color="neutral"
-                    variant="outline"
-                    size="xl"
-                    block
-                    @click="verComprobante = true"
-                />
-                <UButton
-                    v-if="puedePedirPromesa"
-                    data-testid="solicitar-promesa"
-                    label="Solicitar promesa de pago"
-                    icon="i-lucide-hand-coins"
-                    color="neutral"
-                    variant="outline"
-                    size="xl"
-                    block
-                    @click="verPromesa = true"
-                />
-            </div>
+            </template>
+
+            <PortalAccesosRapidos
+                :accesos="accesos"
+                :testids="TESTIDS_CORTE"
+                @accion="alAcceso"
+            />
 
             <CorteEstadoEnVivo
                 v-if="puedeVigilar && pagoId === null"
@@ -347,35 +411,13 @@ const hayDatosDeposito = computed(() => !empresa.value
             />
 
             <UButton
-                v-if="identificado"
-                data-testid="ver-mi-cuenta"
-                label="Ver mis facturas y pagos"
-                icon="i-lucide-receipt"
-                color="neutral"
-                variant="outline"
-                size="lg"
-                to="/entrar?por_ip=1"
-                block
-            />
-
-            <UButton
-                data-testid="contacto-corte"
-                :label="contacto.label"
-                :icon="contacto.icon"
-                :to="contacto.to"
-                color="neutral"
-                variant="ghost"
-                size="lg"
-                block
-            />
-            <UButton
                 v-if="contacto.to !== '/contacto'"
                 label="Más formas de contacto y horario"
                 color="neutral"
                 variant="link"
                 size="sm"
                 to="/contacto"
-                class="-mt-3 self-center"
+                class="self-center"
             />
 
             <p

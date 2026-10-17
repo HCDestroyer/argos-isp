@@ -69,7 +69,7 @@ describe('redireccionPortalCautivo', () => {
     })
 
     it('sin URL pública, /corte y sus recursos se sirven en el Host ajeno (sin bucle)', () => {
-        for (const ruta of ['/corte', '/_nuxt/entry.js', '/api/v1/portal/quien-soy', '/api/_nuxt_icon/lucide.json', '/favicon.ico']) {
+        for (const ruta of ['/corte', '/_nuxt/entry.js', '/api/v1/portal/quien-soy', '/api/_nuxt_icon/lucide.json', '/favicon.ico', '/favicon.svg']) {
             expect(redireccionPortalCautivo({ host: 'example.com', ruta }, SIN_URL)).toBeNull()
         }
         expect(redireccionPortalCautivo({ host: 'example.com', ruta: '/' }, SIN_URL)).toBe('/corte')

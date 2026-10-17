@@ -15,14 +15,20 @@ reconoce por la conexión, sin usuario ni contraseña.
 Ve solo lo necesario: su primer nombre con una inicial, el estado del servicio, el monto pendiente y
 cuántas facturas están vencidas. Nunca su nombre completo, NIT, dirección ni teléfono.
 
-Desde ahí puede:
+Desde ahí puede, con el botón principal y las tarjetas de acceso rápido:
 
-- **Pagar en línea** con tarjeta (si la empresa tiene pasarela; si no, el botón aparece apagado).
+- **Pagar en línea** con tarjeta (si la empresa tiene pasarela; si no, el botón aparece apagado y
+  **Ver datos de depósito** pasa a ser el botón principal).
 - **Ver datos de depósito**: las cuentas de la empresa y las instrucciones de pago, con botón para
   copiar el número.
-- **Subir comprobante de pago** de un depósito o transferencia.
-- **Solicitar promesa de pago** para reactivar ya y pagar después.
-- **Llamar a soporte** con el teléfono configurado en el panel.
+- **Subir comprobante** de un depósito o transferencia.
+- **Prometer pago** para reactivar ya y pagar después. Solo aparece si la promesa se puede pedir
+  ahora (por ejemplo, no aparece si ya tiene una promesa abierta o si su plantilla exige un abono antes).
+- **Mis facturas y pagos**: entra con un código.
+- **Contactar soporte**: llama al teléfono configurado en el panel.
+
+Las tarjetas muestran solo lo que el sistema aceptaría en ese momento: nunca se ofrece algo que luego
+dé error.
 
 <img src="img/02-datos-deposito.png" alt="Datos para depósito con las cuentas de la empresa" width="300">
 
@@ -31,7 +37,7 @@ Las cuentas, el teléfono, el horario y las instrucciones se cambian en el panel
 
 ## 2. Cómo promete pago
 
-1. Toca **Solicitar promesa de pago**.
+1. Toca **Prometer pago**.
 2. El portal muestra los límites antes de enviar: hasta qué día puede prometer y el monto máximo
    (y, si la plantilla lo pide, el abono inicial o si requiere aprobación).
 3. Elige el día y el monto (vienen llenos con la fecha máxima y el saldo vencido) y toca
@@ -56,7 +62,7 @@ panel; el portal no decide nada por su cuenta.
 
 ## 3. Cómo sube un comprobante
 
-1. Toca **Subir comprobante de pago**.
+1. Toca **Subir comprobante**.
 2. Elige cómo pagó (depósito, transferencia, ACH o remesa) y la cuenta a la que pagó.
 3. Escribe el monto, la fecha y el número de boleta o referencia.
 4. Toma una foto con la cámara o elige el archivo (foto JPG, PNG o WebP, o PDF, hasta 5 MB) y toca
@@ -76,18 +82,23 @@ cuando el servicio vuelve.
 
 Telegram sirve para recibir avisos (factura, vencimiento, corte) y el código de acceso al portal.
 
-1. En la página de corte, **Ver mis facturas y pagos** (o entrar al portal y elegir **Entrar**).
+1. En la página de corte, **Mis facturas y pagos** (o entrar al portal y elegir **Entrar**).
 2. Pide el código: le llega al correo registrado (o a Telegram, si ya lo tenía vinculado).
    Escribe los 6 dígitos.
-3. En **Mi cuenta**, pestaña **Mis datos**, toca **Vincular Telegram** y luego **Abrir Telegram**.
+3. En **Mi cuenta** toca **Vincular Telegram** (en el inicio, o en **Cuenta** en la barra de abajo) y
+   luego **Abrir Telegram**.
 4. En Telegram, toca **Iniciar**. La pantalla del portal cambia sola a "Vinculado".
 
 <img src="img/07-entrar-codigo.png" alt="Entrar a mi cuenta con el código de 6 dígitos" width="300">
-<img src="img/08-telegram.png" alt="Vincular Telegram en Mis datos" width="300">
+<img src="img/08-telegram.png" alt="Vincular Telegram en la sección Cuenta" width="300">
 
 Si el enlace no abre Telegram, el portal muestra el mensaje para enviar a mano (`/start` y el
 código). El código vence en unos minutos; se puede pedir otro. Una vez vinculado, puede elegir
-Telegram como canal preferido en la misma pestaña.
+Telegram como canal preferido en la misma sección.
+
+Con la sesión abierta, el portal se usa como una aplicación: barra de abajo con **Inicio**, **Pagar**,
+**Facturas** y **Cuenta**, y se actualiza al jalar hacia abajo (o con **Actualizar**). Desde el menú
+del navegador, **Agregar a pantalla de inicio** deja el ícono del portal en el teléfono.
 
 ## 5. Dudas frecuentes
 

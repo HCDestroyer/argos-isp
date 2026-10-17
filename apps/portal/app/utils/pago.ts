@@ -4,6 +4,21 @@
  * Contrato: `.claude/integration/contratos/pago-en-linea.md`.
  */
 
+/**
+ * Estado del pago en línea que ve el cliente: el del cobro en la API más `confirmando` (el
+ * proveedor dijo `pagado` al volver y el webhook aún no llega). Icono + texto + color, como todo
+ * estado (`cuenta.ts`). Los que siguen en curso se muestran con el cargador girando.
+ */
+export type EstadoPagoVisible = 'pendiente' | 'confirmando' | 'pagado' | 'fallido' | 'expirado'
+
+export const ESTADOS_PAGO_EN_LINEA: Record<EstadoPagoVisible, { etiqueta: string, color: 'info' | 'success' | 'error', icono: string }> = {
+    pendiente: { etiqueta: 'Procesando', color: 'info', icono: 'i-lucide-clock' },
+    confirmando: { etiqueta: 'Aprobado por el proveedor', color: 'success', icono: 'i-lucide-shield-check' },
+    pagado: { etiqueta: 'Pagado', color: 'success', icono: 'i-lucide-circle-check' },
+    fallido: { etiqueta: 'No se completó', color: 'error', icono: 'i-lucide-credit-card' },
+    expirado: { etiqueta: 'Enlace vencido', color: 'error', icono: 'i-lucide-timer-off' },
+}
+
 /** Ruta de retorno del pago en línea. */
 export function rutaRetornoPago(id: number): string {
     return `/corte?pago=${id}`
