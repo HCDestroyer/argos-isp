@@ -20,9 +20,19 @@ import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import AnularEgreso from '#ledger/actions/anular_egreso'
+import SustituirFactura from '#billing/actions/sustituir_factura'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
+import ReintentarDte from '#fiscal/actions/reintentar_dte'
+import CambiarContingenciaFel from '#fiscal/actions/cambiar_contingencia_fel'
+import EditarParametro from '#fiscal/actions/editar_parametro'
+import { configuracionFel } from '#fiscal/fel/configuracion'
+import { controlFelFalso } from '#fiscal/fel/falso'
+import { procesarColaFel } from '#fiscal/fel/cola'
+import { configurarModo, datosNit, empresasFel } from '#tests/fiscal/ayudas_fel'
 import { Azar, centavosDe, texto } from '#tests/contabilidad/semilla'
 import {
     prepararEmpresas,
+    sacarDeLaColaFel,
     servicioEn,
     pendientes,
     type Empresas,
@@ -109,7 +119,27 @@ const PESOS = {
     cierre_mes: 5,
 } as const
 
-type Accion = keyof typeof PESOS
+/**
+ * Operaciones de la fase 3 (FEL), solo con `{ fel: true }`: la empresa B con FEL `obligatoria`
+ * (mora con IVA: NDEB) y la C con `opcional`; el certificador falso responde a veces con error
+ * temporal, caída tras certificar o rechazo.
+ */
+const PESOS_FEL = {
+    cola_fel: 10,
+    certificar_manual: 3,
+    rechazo_sat: 2,
+    reintentar_dte: 3,
+    contingencia: 2,
+    anular_dte: 3,
+    ncre_linea: 3,
+    sustituir: 3,
+    pagar_aviso_y_anular: 4,
+} as const
+
+type Accion = keyof typeof PESOS | keyof typeof PESOS_FEL
+
+/** Estados desde los que un DTE ya es un hecho fiscal: solo `facturas.anular` (y su cola) lo mueve. */
+const DTE_FISCAL = ['certificado', 'anulacion_pendiente', 'anulado']
 
 class RechazoEsperadoNoOcurrio extends Error {}
 
@@ -125,14 +155,39 @@ export class EscenarioGenerativo {
     private referencia = 0
     readonly pasos: Paso[] = []
     private extra: Violacion[] = []
+    private readonly fel: boolean
+    private readonly incluirHallazgosAbiertos: boolean
+    private readonly pesos: Record<Accion, number>
+    private dtes = new Map<number, string>()
 
-    constructor(readonly semilla: number) {
+    constructor(
+        readonly semilla: number,
+        opciones: { fel?: boolean; incluirHallazgosAbiertos?: boolean } = {},
+    ) {
         this.azar = new Azar(semilla)
+        this.fel = opciones.fel ?? false
+        this.incluirHallazgosAbiertos = opciones.incluirHallazgosAbiertos ?? false
+        this.pesos = (this.fel ? { ...PESOS, ...PESOS_FEL } : PESOS) as Record<Accion, number>
     }
 
     async preparar() {
         this.marcas = await marcasAuditoria()
-        this.e = await prepararEmpresas()
+        if (this.fel) {
+            this.e = await empresasFel('obligatoria')
+            await configurarModo(this.e, this.e.C, 'opcional')
+            await new EditarParametro().execute(
+                {
+                    clave: 'mora_con_iva',
+                    valor: true,
+                    vigente_desde: '2026-01-01',
+                    motivo: 'auditoría: NDEB',
+                    empresa_id: this.e.B,
+                },
+                { ...this.e.ctx, empresaId: this.e.B },
+            )
+        } else {
+            this.e = await prepararEmpresas()
+        }
         this.empresas = [this.e.B, this.e.C]
         const precios = ['150.00', '199.99', '275.50', '99.01', '333.33']
         const plantillas = [
@@ -143,7 +198,8 @@ export class EscenarioGenerativo {
         ]
         // 5 clientes; 3 con servicios en las dos empresas (cobro repartido), 2 en una sola
         for (let i = 0; i < 5; i++) {
-            const clienteId = await crearClienteFila()
+            // con FEL: NIT válido salvo el último cliente (consumidor final; los totales no llegan al límite)
+            const clienteId = await crearClienteFila(this.fel && i < 4 ? datosNit() : {})
             const enDos = i < 3
             const propias = enDos ? this.empresas : [this.azar.elegir(this.empresas)]
             for (const empresaId of propias) {
@@ -154,7 +210,18 @@ export class EscenarioGenerativo {
                     clienteId,
                     precio: this.azar.elegir(precios),
                     instalacion,
-                    plantilla: this.azar.elegir(plantillas),
+                    plantilla: {
+                        ...this.azar.elegir(plantillas),
+                        ...(this.fel
+                            ? {
+                                  certificar_al: this.azar.elegir(
+                                      empresaId === this.e.B
+                                          ? ['pagar', 'emitir']
+                                          : ['pagar', 'emitir', 'nunca'],
+                                  ),
+                              }
+                            : {}),
+                    },
                 })
                 this.servicios.push({ id: servicioId, clienteId, empresaId, hasta: instalacion })
             }
@@ -166,6 +233,7 @@ export class EscenarioGenerativo {
             }
         }
         this.foto = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
+        if (this.fel) this.dtes = await this.estadosDte()
     }
 
     get empresasDelEscenario(): number[] {
@@ -176,10 +244,10 @@ export class EscenarioGenerativo {
         const hallazgos: ResultadoEscenario['hallazgos'] = []
         const vistos = new Set<string>()
         for (let n = 1; n <= cantidad; n++) {
-            const accion = this.azar.ponderado(PESOS)
+            const accion = this.azar.ponderado(this.pesos)
             const paso = await this.ejecutar(n, accion)
             this.pasos.push(paso)
-            const violaciones = [...this.extra, ...(await this.verificar())]
+            const violaciones = [...this.extra, ...(await this.verificar(accion))]
             this.extra = []
             for (const violacion of violaciones) {
                 if (vistos.has(violacion.invariante)) continue
@@ -193,14 +261,101 @@ export class EscenarioGenerativo {
                 })
             }
         }
+        if (this.fel) await sacarDeLaColaFel()
         return { semilla: this.semilla, pasos: this.pasos, hallazgos }
     }
 
-    private async verificar(): Promise<Violacion[]> {
-        const violaciones = await verificarLibro(this.empresas)
+    private async verificar(accion: Accion): Promise<Violacion[]> {
+        const violaciones = await verificarLibro(this.empresas, {
+            incluirHallazgosAbiertos: this.incluirHallazgosAbiertos,
+        })
         const nueva = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
         violaciones.push(...compararFotoLibro(this.foto, nueva))
         this.foto = nueva
+        if (this.fel) violaciones.push(...(await this.verificarFel(accion)))
+        return violaciones
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FEL: invariantes que dependen del paso
+    |--------------------------------------------------------------------------
+    */
+
+    private async estadosDte(): Promise<Map<number, string>> {
+        const filas = (await db
+            .from('fiscal.dte')
+            .whereIn('empresa_id', this.empresas)
+            .select('id', 'estado')) as Array<{ id: number; estado: string }>
+        return new Map(filas.map((f) => [Number(f.id), f.estado]))
+    }
+
+    /**
+     * - Un DTE que ya es un hecho fiscal (certificado, anulación pendiente o anulado) solo cambia por
+     *   `facturas.anular` (certificado → anulacion_pendiente) y su cola (→ anulado, o de vuelta a
+     *   certificado si el certificador rechaza la anulación). En particular, **anular un pago nunca
+     *   revierte un DTE** (§10.1). Un DTE nunca desaparece.
+     * - Después de correr la cola, ningún aviso cobrado queda sin su DTE (salvo un rechazo
+     *   definitivo, que espera a que alguien corrija el dato y reintente).
+     */
+    private async verificarFel(accion: Accion): Promise<Violacion[]> {
+        const violaciones: Violacion[] = []
+        const antesDelPaso = this.dtes
+        const ahora = await this.estadosDte()
+        const indebidos: unknown[] = []
+        for (const [id, antes] of this.dtes) {
+            const despues = ahora.get(id)
+            if (despues === undefined) {
+                indebidos.push({ dte_id: id, antes, despues: null })
+                continue
+            }
+            if (!DTE_FISCAL.includes(antes) || despues === antes) continue
+            const permitido =
+                (antes === 'certificado' &&
+                    (despues === 'anulacion_pendiente' || despues === 'anulado') &&
+                    (accion === 'anular_dte' || accion === 'anular_factura')) ||
+                (antes === 'anulacion_pendiente' &&
+                    (despues === 'anulado' || despues === 'certificado') &&
+                    (accion === 'cola_fel' || accion === 'anular_dte' || accion === 'rechazo_sat'))
+            if (!permitido) indebidos.push({ dte_id: id, antes, despues, accion })
+        }
+        if (indebidos.length > 0) {
+            violaciones.push({
+                invariante:
+                    '12.dte_fiscal_cambiado_fuera_de_su_anulacion (un pago anulado nunca revierte un DTE)',
+                detalle: indebidos.slice(0, 20),
+            })
+        }
+        this.dtes = ahora
+        if (accion === 'cola_fel') {
+            const { rows } = (await db.rawQuery(
+                `SELECT f.id, f.tipo, f.empresa_id,
+                        (SELECT max(o.id) FROM fiscal.dte o WHERE o.documento_tipo = 'factura'
+                            AND o.documento_id = f.factura_origen_id AND o.estado = 'certificado') AS origen_dte
+                   FROM billing.facturas f JOIN fiscal.fel_configuracion c ON c.empresa_id = f.empresa_id
+                  WHERE f.empresa_id = ANY(?::bigint[]) AND f.aviso_cobro AND f.estado = 'pagada'
+                    AND c.modo <> 'desactivada' AND NOT c.contingencia_activa
+                    AND NOT EXISTS (
+                            SELECT 1 FROM fiscal.dte d
+                             WHERE d.documento_id = f.id
+                               AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                               AND (d.estado IN ('certificado', 'anulacion_pendiente', 'error_temporal', 'pendiente')
+                                    OR (d.estado = 'rechazado' AND d.ultimo_error <> 'aviso_sin_cubrir')))`,
+                [this.empresas],
+            )) as { rows: Array<{ id: number; tipo: string; origen_dte: number | null }> }
+            // una mora (NDEB) se pide cuando su factura ya estaba certificada al empezar la corrida
+            const sinDte = rows.filter(
+                (r) =>
+                    r.tipo === 'servicio' ||
+                    (r.origen_dte !== null && antesDelPaso.get(Number(r.origen_dte)) === 'certificado'),
+            )
+            if (sinDte.length > 0) {
+                violaciones.push({
+                    invariante: '12.aviso_cobrado_sin_dte_tras_la_cola',
+                    detalle: sinDte.slice(0, 20),
+                })
+            }
+        }
         return violaciones
     }
 
@@ -211,7 +366,8 @@ export class EscenarioGenerativo {
             paso.detalle = (await this[accion]()) ?? ''
         } catch (error) {
             if (error instanceof Problema && error.status >= 400 && error.status < 500) {
-                paso.rechazo = `${error.status} ${error.tipo.split(':').at(-1)}: ${error.detalle ?? error.message}`
+                const campos = (error.errores ?? []).map((x) => `${x.field}: ${x.message}`).join('; ')
+                paso.rechazo = `${error.status} ${error.tipo.split(':').at(-1)}: ${error.detalle ?? error.message}${campos ? ` [${campos}]` : ''}`
                 const despues = await contarAsientos(this.empresas)
                 if (despues !== antes) {
                     this.extra.push({
@@ -693,7 +849,15 @@ export class EscenarioGenerativo {
             return `mes cerrado: factura y pago histórico del ${fecha} rechazados (422 periodo_cerrado)`
         }
         const factura = this.azar.moneda(0.6) ? await importar() : null
-        const pago = await pagar(factura?.factura_id ? [factura.factura_id] : undefined)
+        // la factura importada pudo quedar saldada al aplicarle un anticipo del cliente: el pago va sin ella
+        const viva = factura?.factura_id
+            ? await db
+                  .from('billing.facturas')
+                  .where('id', factura.factura_id)
+                  .whereIn('estado', ['emitida', 'parcial', 'vencida'])
+                  .first()
+            : null
+        const pago = await pagar(viva ? [factura!.factura_id!] : undefined)
         await this.marcarMesCambiado(empresaId, fecha)
         return `histórico del ${fecha} en la empresa ${empresaId}: ${factura ? `factura ${factura.factura_id} de ${texto(total)} y ` : ''}pago ${pago.id} de ${texto(monto)}`
     }
@@ -727,5 +891,207 @@ export class EscenarioGenerativo {
         estado.foto = foto
         estado.cambiado = false
         return `cierra ${periodo.slice(0, 7)} en la empresa ${empresaId}: ${foto.asientos} asientos, debe ${foto.debe}`
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pasos de la fase 3 (FEL)
+    |--------------------------------------------------------------------------
+    */
+
+    /** Facturas vivas con un DTE en el estado dado (de las dos empresas). */
+    private async facturasConDte(estados: string[], extra = '') {
+        const { rows } = (await db.rawQuery(
+            `SELECT f.id, f.tipo, f.total::text, f.pagado::text, f.estado, f.cliente_id, d.id AS dte_id, d.estado AS dte_estado
+               FROM billing.facturas f
+               JOIN fiscal.dte d ON d.documento_id = f.id
+                AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+              WHERE f.empresa_id = ANY(?::bigint[]) AND f.estado <> 'anulada' AND d.estado = ANY(?::text[]) ${extra}
+              ORDER BY f.id`,
+            [this.empresas, estados],
+        )) as {
+            rows: Array<{
+                id: number
+                tipo: string
+                total: string
+                pagado: string
+                estado: string
+                cliente_id: number
+                dte_id: number
+                dte_estado: string
+            }>
+        }
+        return rows
+    }
+
+    /**
+     * Una corrida de la cola `fel`. A veces el certificador falso responde mal a lo siguiente
+     * (error temporal, caída después de certificar o rechazo) y a veces los reintentos ya vencieron.
+     */
+    private async cola_fel() {
+        const respuesta = this.azar.ponderado({ bien: 6, error_temporal: 2, caida: 2, rechazado: 1 })
+        if (respuesta !== 'bien') controlFelFalso.siguiente.push(respuesta)
+        if (this.azar.moneda(0.5)) {
+            await db
+                .from('fiscal.dte')
+                .whereIn('empresa_id', this.empresas)
+                .whereIn('estado', ['error_temporal', 'anulacion_pendiente'])
+                .whereNotNull('proximo_intento')
+                .update({ proximo_intento: db.knexRawQuery('now()') } as Record<string, unknown>)
+        }
+        const r = await procesarColaFel(this.ctx)
+        controlFelFalso.siguiente = []
+        return `cola fel (${respuesta}): ${r.solicitados} pedidos, ${r.enviados} enviados, ${r.anulados} anulados, ${r.errores} errores`
+    }
+
+    /** `POST /facturas/:id/certificar` a mano (un aviso se certifica aunque no esté cubierto). */
+    private async certificar_manual() {
+        const todas = await pendientes(this.empresas)
+        const lista = todas.filter((f) => f.tipo === 'servicio')
+        if (lista.length === 0) return 'sin facturas'
+        const factura = this.azar.elegir(lista)
+        const r = await new SolicitarCertificacion().execute({ factura_id: factura.id }, this.ctx)
+        return `certificar a mano la factura ${factura.id} (empresa ${factura.empresa_id}): DTE ${r.dte?.id} ${r.dte?.estado} (${r.motivo ?? 'nuevo'})`
+    }
+
+    /** El certificador rechaza (definitivo) lo próximo que se envíe. */
+    private async rechazo_sat() {
+        controlFelFalso.siguiente.push('rechazado')
+        const r = await procesarColaFel(this.ctx)
+        controlFelFalso.siguiente = []
+        return `rechazo de la SAT: ${r.enviados} enviados, ${r.errores} errores`
+    }
+
+    /** `POST /dte/:id/reintentar` de un DTE rechazado (dato corregido) o con error temporal. */
+    private async reintentar_dte() {
+        const { rows } = (await db.rawQuery(
+            `SELECT d.id, d.estado, d.ultimo_error FROM fiscal.dte d
+              WHERE d.empresa_id = ANY(?::bigint[]) AND d.estado IN ('rechazado', 'error_temporal')
+                AND coalesce(d.ultimo_error, '') <> 'documento_anulado'
+              ORDER BY d.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number; estado: string; ultimo_error: string | null }> }
+        if (rows.length === 0) return 'sin DTE para reintentar'
+        const dte = this.azar.elegir(rows)
+        const nuevo = await new ReintentarDte().execute({ dte_id: Number(dte.id) }, this.ctx)
+        return `reintentar el DTE ${dte.id} (${dte.estado}: ${dte.ultimo_error}) → DTE ${nuevo.id} ${nuevo.estado}`
+    }
+
+    /** Activa o levanta la contingencia de la empresa B (obligatoria). */
+    private async contingencia() {
+        const actual = await configuracionFel(this.e.B)
+        await new CambiarContingenciaFel().execute(
+            { empresa_id: this.e.B, activa: !actual.contingencia_activa, motivo: 'auditoría: contingencia' },
+            { ...this.ctx, empresaId: this.e.B },
+        )
+        return `contingencia de la empresa ${this.e.B}: ${actual.contingencia_activa ? 'se levanta' : 'se activa'}`
+    }
+
+    /** `facturas.anular` sobre una factura certificada (dos pasos; a veces corre la cola enseguida). */
+    private async anular_dte() {
+        const lista = await this.facturasConDte(['certificado'], `AND f.pagado = 0`)
+        if (lista.length === 0) return 'sin facturas certificadas anulables'
+        const f = this.azar.elegir(lista)
+        await new AnularFactura().execute({ factura_id: f.id, motivo: 'auditoría: anular DTE' }, this.ctx)
+        let detalle = `anular la factura ${f.id} (${f.tipo}) con DTE ${f.dte_id} certificado`
+        if (this.azar.moneda(0.6)) {
+            const r = await procesarColaFel(this.ctx)
+            detalle += `; cola: ${r.anulados} anulados, ${r.errores} errores`
+        }
+        return detalle
+    }
+
+    /** Nota de crédito por línea (NCRE si la factura está certificada; interna si es un aviso sin DTE). */
+    private async ncre_linea() {
+        const lista = await pendientes(this.empresas)
+        if (lista.length === 0) return 'sin facturas pendientes'
+        const factura = this.azar.elegir(lista)
+        const lineas = (await db
+            .from('billing.facturas_lineas as l')
+            .where('l.factura_id', factura.id)
+            .select(
+                'l.id',
+                db.raw(
+                    `(l.total - (SELECT coalesce(sum(nl.monto), 0) FROM billing.notas_credito_lineas nl WHERE nl.linea_id = l.id))::text AS resto`,
+                ),
+            )) as Array<{ id: number; resto: string }>
+        const conResto = lineas.filter((l) => centavosDe(l.resto) > 0n)
+        if (conResto.length === 0) return `factura ${factura.id} sin líneas por acreditar`
+        const linea = this.azar.elegir(conResto)
+        const pendiente = centavosDe(factura.total) - centavosDe(factura.pagado)
+        const tope = centavosDe(linea.resto) < pendiente ? centavosDe(linea.resto) : pendiente
+        const monto = this.azar.moneda(0.4) ? tope : this.parcial(tope)
+        const nota = await new EmitirNotaCredito().execute(
+            {
+                factura_id: factura.id,
+                motivo: 'auditoría: nota por línea',
+                lineas: [{ linea_id: Number(linea.id), monto: texto(monto) }],
+            },
+            this.ctx,
+        )
+        return `nota por línea ${nota.id} de ${texto(monto)} (IVA ${nota.iva}) a la línea ${linea.id} de la factura ${factura.id}`
+    }
+
+    /** `facturas.sustituir` (NIT mal emitido): NCRE si está certificada, anulación si no. */
+    private async sustituir() {
+        const { rows } = (await db.rawQuery(
+            `SELECT f.id FROM billing.facturas f
+              WHERE f.empresa_id = ANY(?::bigint[]) AND f.tipo = 'servicio'
+                AND f.estado IN ('emitida', 'vencida', 'por_certificar')
+                AND NOT EXISTS (SELECT 1 FROM billing.sustituciones s WHERE s.original_id = f.id)
+                AND NOT EXISTS (SELECT 1 FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
+                                 WHERE a.factura_id = f.id AND p.estado = 'registrado')
+              ORDER BY f.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number }> }
+        if (rows.length === 0) return 'sin facturas sustituibles'
+        const f = this.azar.elegir(rows)
+        const r = await new SustituirFactura().execute(
+            {
+                factura_id: Number(f.id),
+                motivo: 'auditoría: NIT mal emitido',
+                cliente_fiscal: {
+                    tipo_documento_fiscal: 'nit',
+                    nit_cui: '12345679',
+                    nombre_fiscal: 'Corregido, S.A.',
+                },
+            },
+            this.ctx,
+        )
+        return `sustituir la factura ${f.id} por la ${r.nueva.id} (${r.tipo}${r.nota_credito_id ? `, nota ${r.nota_credito_id}` : ''})`
+    }
+
+    /**
+     * Cubre un aviso por completo y anula el pago, antes o después de que la cola lo certifique: el
+     * DTE certificado nunca se revierte y el IVA queda donde debe (§10.1).
+     */
+    private async pagar_aviso_y_anular() {
+        const { rows } = (await db.rawQuery(
+            `SELECT f.id, f.cliente_id, f.empresa_id, (f.total - f.pagado)::text AS pendiente FROM billing.facturas f
+              WHERE f.empresa_id = ANY(?::bigint[]) AND f.aviso_cobro AND f.estado IN ('emitida', 'parcial', 'vencida')
+              ORDER BY f.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number; cliente_id: number; empresa_id: number; pendiente: string }> }
+        if (rows.length === 0) return 'sin avisos pendientes'
+        const f = this.azar.elegir(rows)
+        const pago = await this.pagar({
+            cliente_id: f.cliente_id,
+            metodo: 'caja',
+            monto: f.pendiente,
+            facturas: [Number(f.id)],
+            empresa_id: Number(f.empresa_id),
+        })
+        const despues = this.azar.moneda()
+        let detalle = `paga ${f.pendiente} del aviso ${f.id}`
+        if (despues) {
+            const r = await procesarColaFel(this.ctx)
+            detalle += `; cola: ${r.solicitados} pedidos, ${r.enviados} enviados`
+            // los DTE recién certificados ya son hechos fiscales: anular el pago no los toca
+            this.dtes = await this.estadosDte()
+        }
+        for (const p of pago.pagos) {
+            await new AnularPago().execute({ pago_id: p.id, motivo: 'auditoría: aviso anulado' }, this.ctx)
+        }
+        return `${detalle}; anula el pago ${despues ? 'después' : 'antes'} de certificar`
     }
 }
