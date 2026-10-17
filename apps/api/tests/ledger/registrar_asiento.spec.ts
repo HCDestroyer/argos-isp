@@ -374,7 +374,12 @@ test.group('revertirAsiento', () => {
         const clienteId = await crearCliente()
         const original = await new RegistrarAsiento().execute(asientoFactura(clienteId), contextoPrueba())
         const reverso = await new RevertirAsiento().execute(
-            { asiento_id: original.id, motivo: 'factura mal emitida', fecha: '2026-10-20' },
+            {
+                asiento_id: original.id,
+                motivo: 'factura mal emitida',
+                fecha: '2026-10-20',
+                por_anulacion: true,
+            },
             contextoPrueba(),
         )
 
@@ -389,13 +394,16 @@ test.group('revertirAsiento', () => {
         assert.equal(await saldoTexto(clienteId), '0.00')
 
         await problema(
-            new RevertirAsiento().execute({ asiento_id: original.id, motivo: 'otra vez' }, contextoPrueba()),
+            new RevertirAsiento().execute(
+                { asiento_id: original.id, motivo: 'otra vez', por_anulacion: true },
+                contextoPrueba(),
+            ),
             422,
             'asiento_revertido',
         )
         await problema(
             new RevertirAsiento().execute(
-                { asiento_id: reverso.id, motivo: 'revertir reverso' },
+                { asiento_id: reverso.id, motivo: 'revertir reverso', por_anulacion: true },
                 contextoPrueba(),
             ),
             422,
@@ -421,14 +429,19 @@ test.group('revertirAsiento', () => {
 
         await problema(
             new RevertirAsiento().execute(
-                { asiento_id: original.id, motivo: 'dentro del cerrado', fecha: '2020-03-31' },
+                {
+                    asiento_id: original.id,
+                    motivo: 'dentro del cerrado',
+                    fecha: '2020-03-31',
+                    por_anulacion: true,
+                },
                 contextoPrueba(),
             ),
             422,
             'periodo_cerrado',
         )
         const reverso = await new RevertirAsiento().execute(
-            { asiento_id: original.id, motivo: 'en mes abierto', fecha: '2020-04-01' },
+            { asiento_id: original.id, motivo: 'en mes abierto', fecha: '2020-04-01', por_anulacion: true },
             contextoPrueba(),
         )
         assert.equal(reverso.fecha, '2020-04-01')

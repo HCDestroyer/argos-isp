@@ -4,6 +4,7 @@ import { NoEncontrado } from '#shared/errores'
 import { paginar, decodificarCursor, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
+import { bloqueoReversoDirecto } from '#ledger/reversos'
 
 /**
  * Consultas de solo lectura del libro (plan de cuentas, diario, mayor, saldos).
@@ -50,35 +51,68 @@ interface FilaAsiento {
     origen_tipo: string
     origen_id: number | null
     reversa_de: number | null
+    revertido_por: number | null
     created_by: number | null
     created_at: Date
 }
 
-export async function libroDiario(filtros: FiltrosDiario) {
-    const consulta = db
-        .from('ledger.asientos')
-        .select(
-            'id',
-            db.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
-            'descripcion',
-            'origen_tipo',
-            'origen_id',
-            'reversa_de',
-            'created_by',
-            'created_at',
-        )
-        .if(filtros.desde, (q) => q.where('fecha', '>=', filtros.desde!))
-        .if(filtros.hasta, (q) => q.where('fecha', '<=', filtros.hasta!))
-        .if(filtros.origen_tipo, (q) => q.where('origen_tipo', filtros.origen_tipo!))
-        .if(filtros.origen_id, (q) => q.where('origen_id', filtros.origen_id!))
+function columnasAsiento(cliente: QueryClientContract) {
+    return [
+        'a.id',
+        cliente.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
+        'a.descripcion',
+        'a.origen_tipo',
+        'a.origen_id',
+        'a.reversa_de',
+        cliente.raw(
+            '(select r.id from ledger.asientos r where r.reversa_de = a.id limit 1) as revertido_por',
+        ),
+        'a.created_by',
+        'a.created_at',
+    ]
+}
 
-    const pagina = await paginar<FilaAsiento>(consulta, filtros)
+/** Si el panel puede ofrecer «Revertir» (POST /libro/asientos/:id/revertir) y por qué no. */
+function conReverso<T extends FilaAsiento>(asiento: T) {
+    let bloqueo: string | null = null
+    if (asiento.reversa_de !== null) bloqueo = 'Es un reverso'
+    else if (asiento.revertido_por !== null) bloqueo = `Revertido por el asiento ${asiento.revertido_por}`
+    else bloqueo = bloqueoReversoDirecto(asiento.id, asiento.origen_tipo, asiento.origen_id)?.mensaje ?? null
+    return { ...asiento, revertible: bloqueo === null, motivo_no_revertible: bloqueo }
+}
+
+/** Un asiento con sus movimientos (`GET /libro/asientos/:id`, respuesta del reverso). */
+export async function verAsiento(id: number, cliente: QueryClientContract = db.connection()) {
+    const asiento = (await cliente
+        .from('ledger.asientos as a')
+        .where('a.id', id)
+        .select(...columnasAsiento(cliente))
+        .first()) as FilaAsiento | null
+    if (!asiento) throw new NoEncontrado(`El asiento ${id} no existe`)
+    const movimientos = await movimientosDeAsientos(cliente, [id])
+    return { ...conReverso(asiento), movimientos: movimientos.get(id) ?? [] }
+}
+
+export async function libroDiario(filtros: FiltrosDiario) {
+    const conexion = db.connection()
+    const consulta = conexion
+        .from('ledger.asientos as a')
+        .select(...columnasAsiento(conexion))
+        .if(filtros.desde, (q) => q.where('a.fecha', '>=', filtros.desde!))
+        .if(filtros.hasta, (q) => q.where('a.fecha', '<=', filtros.hasta!))
+        .if(filtros.origen_tipo, (q) => q.where('a.origen_tipo', filtros.origen_tipo!))
+        .if(filtros.origen_id, (q) => q.where('a.origen_id', filtros.origen_id!))
+
+    const pagina = await paginar<FilaAsiento>(consulta, filtros, { columna: 'a.id' })
     const movimientos = await movimientosDeAsientos(
         db.connection(),
         pagina.data.map((a) => a.id),
     )
     return {
-        data: pagina.data.map((asiento) => ({ ...asiento, movimientos: movimientos.get(asiento.id) ?? [] })),
+        data: pagina.data.map((asiento) => ({
+            ...conReverso(asiento),
+            movimientos: movimientos.get(asiento.id) ?? [],
+        })),
         nextCursor: pagina.nextCursor,
     }
 }

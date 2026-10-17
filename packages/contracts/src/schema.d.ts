@@ -806,6 +806,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/asientos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un asiento con sus movimientos */
+        get: operations["libroVerAsiento"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/asientos/{id}/revertir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revertir un asiento (asiento espejo con motivo)
+         * @description Crea el asiento espejo (debe ↔ haber, mismas cuentas y clientes) con reversa_de = :id; nunca edita el original. Fecha: hoy (o la indicada), nunca anterior al original ni en un mes cerrado (un asiento de un mes cerrado se revierte con fecha de hoy). Solo asientos sin documento (cierre_caja, ajuste manual): los de factura, mora, pago, nota_credito, egreso o saldo inicial responden 422 reverso_por_documento (usar anular pago, anular factura…). 422 asiento_revertido si ya se revirtió y asiento_es_reverso si es un reverso; 422 periodo_cerrado.
+         */
+        post: operations["libroRevertirAsiento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/bancos": {
         parameters: {
             query?: never;
@@ -2717,6 +2754,12 @@ export interface components {
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
+            /** @description Asiento de reverso de este, si ya se revirtió */
+            revertido_por?: number | null;
+            /** @description Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso) */
+            revertible?: boolean;
+            /** @description Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible */
+            motivo_no_revertible?: string | null;
             created_by: number | null;
             /** Format: date-time */
             created_at: string;
@@ -7898,6 +7941,136 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroVerAsiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Asiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroRevertirAsiento: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                    /**
+                     * Format: date
+                     * @description Fecha contable del reverso (por defecto hoy). No anterior al original ni en un mes cerrado
+                     */
+                    fecha?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Asiento de reverso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.revertir_asiento */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -39,7 +39,11 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
             .firstOrFail()
         const motivo = input.motivo.trim()
         const reverso = await new RevertirAsiento().execute(
-            { asiento_id: asiento.id as number, motivo: `anulación del egreso ${egreso.id}: ${motivo}` },
+            {
+                asiento_id: asiento.id as number,
+                motivo: `anulación del egreso ${egreso.id}: ${motivo}`,
+                por_anulacion: true,
+            },
             t.ctx,
             { trx: t.trx },
         )

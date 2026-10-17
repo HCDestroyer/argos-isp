@@ -24,7 +24,8 @@ import { dimensionesDeEgreso, listarCategoriasEgreso, listarEgresos, verEgreso }
 import { cajaPrincipalId } from '#billing/pagos'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import AnularEgreso from '#ledger/actions/anular_egreso'
-import { libroDiario, libroMayor, listarCuentas } from '#ledger/consultas'
+import { libroDiario, libroMayor, listarCuentas, verAsiento } from '#ledger/consultas'
+import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { listarBancosLibro } from '#ledger/bancos'
 import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { exigirAlcance } from '#core/acl'
@@ -135,6 +136,36 @@ const libro: Ruta[] = [
         query: v.diarioValidator,
         respuesta: { status: 200, descripcion: 'Página de asientos', esquema: pagina(Asiento) },
         handler: (_ctx, { query }) => libroDiario(query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/asientos/:id',
+        operacion: 'libroVerAsiento',
+        resumen: 'Ver un asiento con sus movimientos',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        respuesta: { status: 200, descripcion: 'Asiento', esquema: Asiento },
+        handler: (_ctx, { params }) => verAsiento(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/asientos/:id/revertir',
+        operacion: 'libroRevertirAsiento',
+        resumen: 'Revertir un asiento (asiento espejo con motivo)',
+        etiqueta: 'libro',
+        permiso: 'libro.revertir_asiento',
+        cuerpo: v.revertirAsientoValidator,
+        idempotente: true,
+        descripcion:
+            'Crea el asiento espejo (debe ↔ haber, mismas cuentas y clientes) con reversa_de = :id; nunca edita el original. Fecha: hoy (o la indicada), nunca anterior al original ni en un mes cerrado (un asiento de un mes cerrado se revierte con fecha de hoy). Solo asientos sin documento (cierre_caja, ajuste manual): los de factura, mora, pago, nota_credito, egreso o saldo inicial responden 422 reverso_por_documento (usar anular pago, anular factura…). 422 asiento_revertido si ya se revirtió y asiento_es_reverso si es un reverso; 422 periodo_cerrado.',
+        respuesta: { status: 201, descripcion: 'Asiento de reverso', esquema: Asiento },
+        handler: async (ctx, { cuerpo, params }) => {
+            const reverso = await new RevertirAsiento().execute(
+                { asiento_id: Number(params.id), motivo: cuerpo.motivo, fecha: cuerpo.fecha },
+                ctx.contextoAccion(),
+            )
+            return verAsiento(reverso.id)
+        },
     }),
     definirRuta({
         metodo: 'get',

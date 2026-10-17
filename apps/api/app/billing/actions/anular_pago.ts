@@ -104,7 +104,11 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             .select('a.id')) as Array<{ id: number }>
         for (const asiento of asientos) {
             await new RevertirAsiento().execute(
-                { asiento_id: asiento.id, motivo: `anulación del pago ${pago.id}: ${input.motivo}` },
+                {
+                    asiento_id: asiento.id,
+                    motivo: `anulación del pago ${pago.id}: ${input.motivo}`,
+                    por_anulacion: true,
+                },
                 t.ctx,
                 { trx: t.trx },
             )

@@ -93,7 +93,11 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 .select('a.id')) as Array<{ id: number }>
             for (const asiento of asientos) {
                 await new RevertirAsiento().execute(
-                    { asiento_id: asiento.id, motivo: `anulación de la factura ${f.id}: ${motivo}` },
+                    {
+                        asiento_id: asiento.id,
+                        motivo: `anulación de la factura ${f.id}: ${motivo}`,
+                        por_anulacion: true,
+                    },
                     t.ctx,
                     { trx: t.trx },
                 )

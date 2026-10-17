@@ -5534,6 +5534,203 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/asientos/{id}": {
+      "get": {
+        "operationId": "libroVerAsiento",
+        "summary": "Ver un asiento con sus movimientos",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/asientos/{id}/revertir": {
+      "post": {
+        "operationId": "libroRevertirAsiento",
+        "summary": "Revertir un asiento (asiento espejo con motivo)",
+        "description": "Crea el asiento espejo (debe ↔ haber, mismas cuentas y clientes) con reversa_de = :id; nunca edita el original. Fecha: hoy (o la indicada), nunca anterior al original ni en un mes cerrado (un asiento de un mes cerrado se revierte con fecha de hoy). Solo asientos sin documento (cierre_caja, ajuste manual): los de factura, mora, pago, nota_credito, egreso o saldo inicial responden 422 reverso_por_documento (usar anular pago, anular factura…). 422 asiento_revertido si ya se revirtió y asiento_es_reverso si es un reverso; 422 periodo_cerrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha contable del reverso (por defecto hoy). No anterior al original ni en un mes cerrado"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asiento de reverso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.revertir_asiento",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.revertir_asiento",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/bancos": {
       "get": {
         "operationId": "libroBancos",
@@ -18889,6 +19086,25 @@
             ],
             "minimum": 1,
             "description": "Asiento que este revierte (correcciones por reverso)"
+          },
+          "revertido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento de reverso de este, si ya se revirtió"
+          },
+          "revertible": {
+            "type": "boolean",
+            "description": "Si POST /libro/asientos/:id/revertir lo acepta (sin documento, no revertido, no es reverso)"
+          },
+          "motivo_no_revertible": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no se revierte directo (p. ej. «anula el pago»); null si revertible"
           },
           "created_by": {
             "type": [

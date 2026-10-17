@@ -88,6 +88,16 @@ export const registrarEgresoValidator = vine.compile(
 
 export const anularEgresoValidator = vine.compile(vine.object({ motivo: motivo() }))
 
+export const revertirAsientoValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        fecha: fechaIso().optional().meta({
+            description:
+                'Fecha contable del reverso (por defecto hoy). No anterior al original ni en un mes cerrado',
+        }),
+    }),
+)
+
 export const listarEgresosValidator = vine.compile(
     vine.object({
         ...reglasPaginacion,

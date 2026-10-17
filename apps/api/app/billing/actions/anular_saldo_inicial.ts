@@ -100,6 +100,7 @@ export default class AnularSaldoInicial extends DomainAction<
                     {
                         asiento_id: asiento.id,
                         motivo: `anulación del saldo inicial ${saldo.clave_externa}: ${motivo}`,
+                        por_anulacion: true,
                     },
                     t.ctx,
                     { trx: t.trx },
