@@ -1,7 +1,8 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { cidrV4, dinero, idEntidad, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
+import { cidrV4, dinero, idEntidad, instanteIso, ipv4, prefijoV6, versionEsperada } from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
+import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
 /*
 |--------------------------------------------------------------------------
@@ -311,6 +312,43 @@ export const listarSesionesValidator = vine.compile(
         router_id: idEntidad().optional(),
         servicio_id: idEntidad().optional(),
         activa: vine.boolean().optional(),
+        desde: instanteIso().optional().meta({
+            description: 'Sesiones vivas en o después de este instante: abiertas o con `fin >= desde`',
+        }),
+        hasta: instanteIso()
+            .optional()
+            .meta({ description: 'Sesiones iniciadas antes de este instante (`inicio < hasta`)' }),
+    }),
+)
+
+/** `GET /routers/:id/resumen-sesiones?desde=` (A2). */
+export const resumenSesionesRouterValidator = vine.compile(
+    vine.object({
+        desde: instanteIso().optional(),
+    }),
+)
+
+/** `POST /routers/:id/marcar-migrado` (A2): `desde` omitido = ahora; null = desmarcar. */
+export const marcarRouterMigradoValidator = vine.compile(
+    vine.object({
+        desde: instanteIso().nullable().optional(),
+        motivo: vine.string().trim().minLength(3).maxLength(500),
+        version: vine.number().withoutDecimals().min(0).optional(),
+    }),
+)
+
+/** `GET /red/eventos` (A2): lectura de `audit.red`. `desde` inclusive, `hasta` exclusive. */
+export const listarEventosRedValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        router_id: idEntidad().optional(),
+        servicio_id: idEntidad().optional(),
+        tipo: vine.enum(TIPOS_EVENTO_RED).optional(),
+        resultado: vine.enum(RESULTADOS_EVENTO_RED).optional().meta({
+            description: '`ok` (ACK o escritura aceptada) o `error` (NAK, timeout, sin secret, fallo)',
+        }),
+        desde: instanteIso().optional(),
+        hasta: instanteIso().optional(),
     }),
 )
 

@@ -128,7 +128,12 @@ export interface CatalogoEventos {
 
     // aaa (A2)
     'sesion.iniciada': PayloadSesion
-    'sesion.terminada': PayloadSesion
+    /**
+     * `motivo` = `causa_fin` de la sesión: `Acct-Terminate-Cause` del NAS (`User-Request`,
+     * `Lost-Carrier`…), `NAS-Reboot`, `Sesion-Reemplazada` o `sin_interim` (cierre del cron de
+     * sesiones colgadas). Agregado en la semana 3; los consumidores que no lo lean no cambian.
+     */
+    'sesion.terminada': PayloadSesion & { motivo: string | null }
     /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
     'sesion.desconexion_solicitada': {
         sesion_id: number
