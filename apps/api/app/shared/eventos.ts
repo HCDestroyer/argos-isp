@@ -97,8 +97,17 @@ interface PayloadSesion {
     prefijos_v6: string[]
 }
 
-/** Campos de `core.clientes` que emiten `cliente.actualizado` (los que Horus muestra). */
-export const CAMPOS_CLIENTE_ACTUALIZADO = ['nombre', 'tipo', 'codigo'] as const
+/**
+ * Campos de `core.clientes` que emiten `cliente.actualizado`: los que Horus muestra (`nombre`,
+ * `tipo`, `codigo`) y la identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`).
+ */
+export const CAMPOS_CLIENTE_ACTUALIZADO = [
+    'nombre',
+    'tipo',
+    'codigo',
+    'nit_cui',
+    'tipo_documento_fiscal',
+] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
 export interface CatalogoEventos {
@@ -204,7 +213,8 @@ export interface CatalogoEventos {
 
     /**
      * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
-     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro). Sin `empresa_id`: el
+     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
+     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar). Sin `empresa_id`: el
      * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
      */
     'cliente.actualizado': {
