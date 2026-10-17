@@ -37,7 +37,7 @@ export interface ReporteImportacion {
         facturas: ConteoEntidad
         /** saldos iniciales por cliente (RegistrarSaldoInicial de A3) */
         saldos: ConteoEntidad
-        /** pagos históricos (acción de A3 pendiente: hoy todos omitidos) */
+        /** pagos históricos (RegistrarPagoHistorico de A3, modo B) */
         pagos: ConteoEntidad
     }
     /** cómo se reconoce lo ya importado: `core.ids_externos` o solo claves naturales */
@@ -61,13 +61,27 @@ export interface ReporteImportacion {
         clientes_nit_duplicado: Array<{ nit: string; clientes_origen: string[] }>
         /** servicio sin plan en el origen: no se importa (sus facturas van al saldo inicial) */
         servicios_sin_plan: Array<{ servicio_origen: string; cliente_origen: string; etiqueta: string }>
-        /** pago de un cliente a la factura de otro (informativo: el pendiente ya lo descuenta) */
+        /** pago de un cliente a la factura de otro (informativo: el pago histórico la salda igual) */
         pagos_cruzados: Array<{
             pago_origen: string
             pagador_origen: string
             factura_origen: string
             dueno_origen: string
             monto: string
+        }>
+        /** pago cuya factura no entró: queda a favor del pagador y el saldo inicial lo compensa */
+        pagos_sin_factura: Array<{
+            pago_origen: string
+            factura_origen: string
+            monto: string
+            motivo: string
+        }>
+        /** pago del origen que no se importa (p. ej. sin fecha); el saldo inicial lo compensa */
+        pagos_no_importados: Array<{
+            pago_origen: string
+            cliente_origen: string
+            monto: string
+            motivo: string
         }>
         /** misma IP en varios servicios del origen: se importa el primero (por orden del archivo) */
         ips_duplicadas: Array<{ ip: string; servicios_origen: string[]; importado_origen: string | null }>
@@ -177,6 +191,18 @@ export function formatearReporte(r: ReporteImportacion): string {
         d.pagos_cruzados.map(
             (x) =>
                 `pago ${x.pago_origen}: cliente ${x.pagador_origen} pagó Q ${x.monto} de la factura ${x.factura_origen} del cliente ${x.dueno_origen}`,
+        ),
+    )
+    seccion(
+        'Pagos cuya factura no entró (quedan a favor; el saldo inicial lo compensa)',
+        d.pagos_sin_factura.map(
+            (x) => `pago ${x.pago_origen} · factura ${x.factura_origen} · Q ${x.monto}: ${x.motivo}`,
+        ),
+    )
+    seccion(
+        'Pagos no importados (el saldo inicial lo compensa)',
+        d.pagos_no_importados.map(
+            (x) => `pago ${x.pago_origen} · cliente ${x.cliente_origen} · Q ${x.monto}: ${x.motivo}`,
         ),
     )
     seccion(

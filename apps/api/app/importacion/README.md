@@ -1,6 +1,6 @@
 # importacion · importador multi-origen (A6)
 
-Lleva a ArgosIsp los datos de otro sistema de gestión (Mikrowisp, SmartISP o cualquiera que exporte a hoja de cálculo): routers, redes IPv4, planes (y su implementación en cada router), zonas, clientes, servicios (PPPoE y WISP sin PPPoE), facturas pendientes y saldos. Todo se crea **por las acciones de dominio** de A1 (`CrearRouter`, `CrearRedIpv4`, `CrearPlan`, `ImplementarPlan`, `CrearZona`, `CrearCliente`, `CrearServicio`) y de A3 (`ImportarFacturaPendiente`, `RegistrarSaldoInicial`), así que queda auditoría y salen los eventos del outbox. Nunca hay `INSERT` directo; las lecturas para decidir (si ya existe, si la IP está libre) sí van directo a la base.
+Lleva a ArgosIsp los datos de otro sistema de gestión (Mikrowisp, SmartISP o cualquiera que exporte a hoja de cálculo): routers, redes IPv4, planes (y su implementación en cada router), zonas, clientes, servicios (PPPoE y WISP sin PPPoE), facturas, pagos históricos y saldos. Todo se crea **por las acciones de dominio** de A1 (`CrearRouter`, `CrearRedIpv4`, `CrearPlan`, `ImplementarPlan`, `CrearZona`, `CrearCliente`, `CrearServicio`) y de A3 (`ImportarFacturaPendiente`, `RegistrarPagoHistorico`, `RegistrarSaldoInicial`), así que queda auditoría y salen los eventos del outbox. Nunca hay `INSERT` directo; las lecturas para decidir (si ya existe, si la IP está libre) sí van directo a la base.
 
 ```sh
 pnpm importar --origen=mikrowisp --fuente=mikrowisp.sql --dry-run --salida=reporte/   # en seco desde el volcado SQL; reporte en Markdown, CSV y JSON
@@ -104,18 +104,19 @@ Opciones de `node ace importar`:
 
 ## Qué hace con cada entidad
 
-| Entidad        | Ya importada si…                                                      | Al crear                                                                                                                                                                                  |
-| -------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Router         | existe uno con la misma `nas_ip` o el mismo `nombre`                  | `CrearRouter` (credenciales cifradas por la acción)                                                                                                                                       |
-| Red IPv4       | existe la misma red en el mismo router                                | `CrearRedIpv4`; si se traslapa con otra, queda en errores                                                                                                                                 |
-| Plan           | existe un plan con su `nombre` (o con `equivale_a`)                   | `CrearPlan`, dual stack, `global = false`: solo disponible donde se implementa                                                                                                            |
-| Implementación | existe (plan, router)                                                 | `ImplementarPlan` con `perfil_ppp` y `pool_ipv4`, una por cada par que usan los servicios                                                                                                 |
-| Zona           | existe por nombre                                                     | `CrearZona`                                                                                                                                                                               |
-| Cliente        | `campos_personalizados.<sistema>_id` = id del origen                  | `CrearCliente` con `<sistema>_id` en `campos_personalizados`                                                                                                                              |
-| Servicio PPPoE | existe el `user_ppp` (sin distinguir mayúsculas) con el mismo cliente | `CrearServicio` con user y clave PPP del origen (la acción cifra la clave), IP fija, MAC, fecha de instalación y la plantilla                                                             |
-| Servicio WISP  | su IP vigente es de un servicio del mismo cliente (sin IP: su MAC)    | `CrearServicio` con `tipo_conexion`, `amarre_ip_mac`, IP y MAC, sin credenciales. Necesita el modelo de A1 (`core.servicios.tipo_conexion`); sin él, queda en `tipos_conexion_pendientes` |
-| Factura        | existe una factura con `clave_externa = <sistema>:factura:<id>`       | `ImportarFacturaPendiente` (A3) con lo pendiente, el periodo y el vencimiento, en el servicio de la factura o, si no trae, en el único servicio importado del cliente                     |
-| Saldo inicial  | existe uno con `clave_externa = <sistema>:saldo:<cliente>`            | `RegistrarSaldoInicial` (A3) por la diferencia entre el saldo del origen y lo que entró como factura                                                                                      |
+| Entidad        | Ya importada si…                                                      | Al crear                                                                                                                                                                                        |
+| -------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Router         | existe uno con la misma `nas_ip` o el mismo `nombre`                  | `CrearRouter` (credenciales cifradas por la acción)                                                                                                                                             |
+| Red IPv4       | existe la misma red en el mismo router                                | `CrearRedIpv4`; si se traslapa con otra, queda en errores                                                                                                                                       |
+| Plan           | existe un plan con su `nombre` (o con `equivale_a`)                   | `CrearPlan`, dual stack, `global = false`: solo disponible donde se implementa                                                                                                                  |
+| Implementación | existe (plan, router)                                                 | `ImplementarPlan` con `perfil_ppp` y `pool_ipv4`, una por cada par que usan los servicios                                                                                                       |
+| Zona           | existe por nombre                                                     | `CrearZona`                                                                                                                                                                                     |
+| Cliente        | `campos_personalizados.<sistema>_id` = id del origen                  | `CrearCliente` con `<sistema>_id` en `campos_personalizados`                                                                                                                                    |
+| Servicio PPPoE | existe el `user_ppp` (sin distinguir mayúsculas) con el mismo cliente | `CrearServicio` con user y clave PPP del origen (la acción cifra la clave), IP fija, MAC, fecha de instalación y la plantilla                                                                   |
+| Servicio WISP  | su IP vigente es de un servicio del mismo cliente (sin IP: su MAC)    | `CrearServicio` con `tipo_conexion`, `amarre_ip_mac`, IP y MAC, sin credenciales. Necesita el modelo de A1 (`core.servicios.tipo_conexion`); sin él, queda en `tipos_conexion_pendientes`       |
+| Factura        | existe una factura con `clave_externa = <sistema>:factura:<id>`       | `ImportarFacturaPendiente` (A3) con el periodo y el vencimiento, en el servicio de la factura o, si no trae, en el único servicio importado del cliente. Modo A: lo pendiente; modo B: el total |
+| Pago           | existe un pago con `clave_externa = <sistema>:pago:<id>`              | `RegistrarPagoHistorico` (A3) con la fecha del origen, `historico: true`, el método mapeado (`metodoPago`) y `facturas: [id]` de la factura que cubrió (puede ser de otro cliente)              |
+| Saldo inicial  | existe uno con `clave_externa = <sistema>:saldo:<cliente>`            | `RegistrarSaldoInicial` (A3) por la diferencia entre el saldo del origen y lo que entró (facturas y pagos)                                                                                      |
 
 Por eso es **idempotente**: una segunda corrida no crea nada, no deja auditoría y reporta todo como `existentes`.
 
@@ -124,7 +125,11 @@ Por eso es **idempotente**: una segunda corrida no crea nada, no deja auditoría
 ## Saldos: suma contra el origen
 
 - **Saldo del origen por cliente**: el de `saldos`; si el cliente no está ahí, la suma de sus facturas pendientes.
-- **Lo que entra**: cada factura pendiente con servicio (`ImportarFacturaPendiente`) y, por la diferencia, un saldo inicial (`RegistrarSaldoInicial`: positivo = factura de apertura, negativo = anticipo). Una factura sin servicio en ArgosIsp entra así dentro del saldo inicial (`facturas_a_saldo`).
+- **Dos modos por cliente** (`contratos/importacion.md`; el importador elige uno por cliente y no los mezcla). El pago histórico de A3 **mueve el libro** (`2.9.01 / CxC + Anticipos`, con la fecha del pago; no toca caja ni bancos), así que:
+    - **Modo A** (el cliente no tiene pagos en el origen): sus facturas pendientes con servicio entran **por lo pendiente** y, por la diferencia con el origen, un saldo inicial.
+    - **Modo B** (el cliente pagó algo, o alguien pagó una factura suya, en el origen): sus facturas pendientes y las que cubre algún pago entran **por su total**; después, cada pago del origen entra con `RegistrarPagoHistorico` y `facturas: [id]` de la factura que cubrió; al final, el saldo inicial cubre la diferencia entre el saldo del origen y el que el cliente ya tiene en ArgosIsp (CxC − anticipos), p. ej. un abono que el origen no registró como pago o un pago cuya factura no entró (`pagos_sin_factura`).
+    - Orden dentro de la corrida: facturas → pagos → saldos iniciales. Sin acción de pago histórico (`registrarPagoHistorico: null` en el puerto), todos los clientes van en modo A y los pagos salen como omitidos.
+- **Saldo inicial**: `RegistrarSaldoInicial`, positivo = factura de apertura, negativo = anticipo. Una factura sin servicio en ArgosIsp entra así dentro del saldo inicial (`facturas_a_saldo`).
 - **Comparación**: al final de la corrida (en seco, antes de revertir) se lee el saldo de cada cliente en ArgosIsp = CxC (`saldoCliente`) − anticipos (`saldoAnticipos`) y se compara con el del origen. El reporte trae `saldos { clientes, suma_origen, suma_importada, diferencia, cuadra }` y `saldos_distintos` cliente por cliente. Lo que no cuadra es lo que no se pudo importar (un cliente inválido, una factura de un cliente que no existe, una acción que falló).
 - Las facturas importadas no cambian el estado del servicio: el corte se aplica en la siguiente evaluación (A3).
 
@@ -137,7 +142,9 @@ Encabezado: `origen` (sistema), `fuente` (ruta), `modo`, `request_id`. Por entid
 | Routers sin credenciales                | Se importan; el reporte dice qué falta (usuario y clave de la API, secreto RADIUS) para cargarlo en el panel                                       |
 | Clientes con el mismo NIT               | Se importan todos (son cuentas distintas en el origen); el operador decide si unirlos                                                              |
 | Servicios sin plan                      | No se importan; sus facturas van al saldo inicial del cliente, así que el saldo cuadra                                                             |
-| Pagos a facturas de otro cliente        | Informativo: lo pendiente de la factura ya descuenta el pago                                                                                       |
+| Pagos a facturas de otro cliente        | Informativo: el pago se importa a nombre de quien pagó y salda la factura del otro cliente (los dos van en modo B)                                 |
+| Pagos sin factura                       | Su factura no entró (sin servicio, cliente faltante): el pago queda a favor del pagador y el saldo inicial lo compensa                             |
+| Pagos no importados                     | Sin fecha en el origen (el pago histórico la exige): no entra al historial; el saldo inicial lo compensa                                           |
 | IPs duplicadas en el origen             | Se importa el primer servicio del archivo; los demás se omiten                                                                                     |
 | IP fuera de las redes del router        | El servicio se omite (importarlo sin IP le daría otra al cliente)                                                                                  |
 | IP en uso por otro servicio de ArgosIsp | El servicio se omite                                                                                                                               |
@@ -152,7 +159,7 @@ Encabezado: `origen` (sistema), `fuente` (ruta), `modo`, `request_id`. Por entid
 | Formato                                 | Fila omitida (falta un dato obligatorio, IP o red mal escrita) o campo descartado con aviso (correo, coordenadas, MAC, fecha, columna desconocida) |
 | Servicios sin PPPoE pendientes          | `ip_estatica` / `dhcp_fija` mientras ArgosIsp no tenga `tipo_conexion` (modelo de A1): no se importan                                              |
 | Facturas a saldo                        | Factura sin servicio en ArgosIsp (no se importó o el cliente tiene varios y la factura no dice cuál): su monto va al saldo inicial                 |
-| Facturas pagadas                        | Pendiente 0 (total = pagado): se omiten                                                                                                            |
+| Facturas pagadas                        | Pendiente 0 (total = pagado) y ningún pago del origen la cubre: se omiten (si un pago la cubre, entra por su total en modo B)                      |
 | Saldos distintos                        | Cliente cuyo saldo en ArgosIsp no es el del origen, con la diferencia                                                                              |
 | Errores                                 | Lo que rechazó una acción de dominio, con su mensaje                                                                                               |
 
@@ -162,7 +169,10 @@ Encabezado: `origen` (sistema), `fuente` (ruta), `modo`, `request_id`. Por entid
 
 ## Carga financiera (A3) detrás de un puerto
 
-Las facturas pendientes, los saldos iniciales y los pagos históricos pasan por `CargaFinanciera` (`carga_financiera.ts`), no por las acciones directamente. El adaptador `cargaFinancieraA3` usa `ImportarFacturaPendiente` y `RegistrarSaldoInicial`; el pago histórico queda en `null` (los pagos se cuentan como omitidos y el reporte lo dice en `pendiente`).
+Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinanciera` (`carga_financiera.ts`), no por las acciones directamente. El adaptador `cargaFinancieraA3` usa `ImportarFacturaPendiente`, `RegistrarSaldoInicial` y `RegistrarPagoHistorico` (contrato en `.claude/integration/contratos/importacion.md`). Para no auditar en la segunda corrida, el importador consulta antes (solo lectura) `billing.facturas.clave_externa`, `billing.saldos_iniciales.clave_externa` y `billing.pagos.clave_externa`.
+
+- Una fecha de pago en un mes cerrado del libro termina en `errores` (422 `periodo_cerrado` de A3) y el saldo de ese cliente no cuadra: importar antes de cerrar el primer mes, o reabrir el mes (ver el contrato).
+- Forma de pago del origen → `METODOS_PAGO` con `metodoPago` (`efectivo` → `caja`, `depósito`/`boleta` → `deposito`, `transferencia`, `tarjeta` → `debito`, `en línea`/`PayPal` → `pasarela`; lo desconocido, `caja`). El texto original queda en la nota del pago.
 
 ## Transacción y auditoría
 
@@ -175,7 +185,7 @@ Las facturas pendientes, los saldos iniciales y los pagos históricos pasan por 
 - Aplicar el estado suspendido del origen: con las facturas, por `evaluarEstadoServicio` en la siguiente evaluación.
 - Ajustar `origenes/mikrowisp.ts` al esquema real cuando llegue el volcado del ISP (falta la copia del PM).
 - Ajustar `origenes/smartisp.ts` con un volcado real de SmartISP (no tenemos ninguno).
-- Pagos históricos: adaptador en `carga_financiera.ts` con `RegistrarPagoHistorico` de A3.
+- Si A3 cambia `contratos/importacion.md` a su versión neutral (sin "Mikrowisp"), revisar `carga_financiera.ts`.
 
 ## Eventos
 

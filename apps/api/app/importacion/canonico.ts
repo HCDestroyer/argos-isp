@@ -96,6 +96,8 @@ export interface FacturaOrigen {
     servicio_id: string | null
     /** primer día del periodo (YYYY-MM-DD) */
     periodo: string
+    /** total original, IVA incluido, con 2 decimales (modo con historial: se importa por este) */
+    total: string
     /** lo pendiente (total − pagado), IVA incluido, con 2 decimales */
     pendiente: string
     vence: string | null
@@ -103,8 +105,9 @@ export interface FacturaOrigen {
 }
 
 /**
- * Pago registrado en el origen (historial). El pendiente de cada factura ya descuenta lo pagado;
- * los pagos sirven para el reporte (pagos de un cliente a facturas de otro) y para el historial.
+ * Pago registrado en el origen. El pendiente de cada factura ya descuenta lo pagado. El importador
+ * los registra como pagos históricos (A3) y, para su cliente y los dueños de las facturas que
+ * cubren, importa esas facturas por su total (modo B de `contratos/importacion.md`).
  */
 export interface PagoOrigen {
     id: string
@@ -409,6 +412,7 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
             cliente_id: f.requerido('cliente_id'),
             servicio_id: f.opcional('servicio_id'),
             periodo: f.periodo('periodo'),
+            total,
             pendiente: pendiente.toFixed(2),
             vence: f.fecha('vence'),
             concepto: f.opcional('concepto'),

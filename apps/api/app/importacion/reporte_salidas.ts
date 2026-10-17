@@ -235,8 +235,30 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
             tipo: 'pago_cruzado',
             gravedad: 'info',
             detalle: `El cliente ${x.pagador_origen} pagó Q ${x.monto} de la factura ${x.factura_origen} del cliente ${x.dueno_origen}`,
-            causa: 'Pago de un cliente a la factura de otro en el origen; el pendiente de la factura ya lo descuenta',
+            causa: 'Pago de un cliente a la factura de otro en el origen; se importa igual (el pago salda esa factura)',
             accion: 'Nada (confirmar que no fue un error de digitación)',
+        })
+    }
+    for (const x of d.pagos_sin_factura) {
+        add({
+            entidad: 'pago',
+            id_origen: x.pago_origen,
+            tipo: 'pago_sin_factura',
+            gravedad: 'aviso',
+            detalle: `Q ${x.monto} de la factura ${x.factura_origen} quedan a favor del cliente; el saldo inicial lo compensa`,
+            causa: x.motivo,
+            accion: 'Revisar por qué no entró la factura (ver sus líneas); el saldo del cliente cuadra igual',
+        })
+    }
+    for (const x of d.pagos_no_importados) {
+        add({
+            entidad: 'pago',
+            id_origen: x.pago_origen,
+            tipo: 'pago_no_importado',
+            gravedad: 'omitido',
+            detalle: `Q ${x.monto} del cliente ${x.cliente_origen} no entra al historial; el saldo inicial lo compensa`,
+            causa: x.motivo,
+            accion: 'Completar el dato en el origen si se quiere el pago en el estado de cuenta',
         })
     }
     for (const x of d.saldos_distintos) {

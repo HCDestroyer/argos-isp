@@ -10,6 +10,7 @@ import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import CrearServicio, { type EntradaCrearServicio } from '#core/actions/crear_servicio'
 import { saldoAnticipos } from '#billing/cobros'
 import { saldoCliente } from '#ledger/consultas'
+import type { MetodoPago } from '#shared/eventos'
 import CrearCliente from '#core/actions/crear_cliente'
 import CrearZona from '#core/actions/crear_zona'
 import CrearPlan from '#network/actions/crear_plan'
@@ -153,6 +154,19 @@ class Importador {
     readonly #servicioOrigen: Map<string, ServicioOrigen>
     readonly #facturasPorCliente: Map<string, FacturaOrigen[]>
     readonly #serviciosPorCliente: Map<string, ServicioOrigen[]>
+    /**
+     * Clientes del origen en modo B (`contratos/importacion.md`): pagaron algo o tienen facturas
+     * pagadas por un pago del origen. Sus facturas entran por su total, los pagos como pagos
+     * históricos y el saldo inicial cubre solo la diferencia que quede. Vacío si no se importan
+     * pagos (todos en modo A: facturas por lo pendiente y saldo inicial).
+     */
+    readonly #modoB = new Set<string>()
+    /** facturas del origen que cubre algún pago (en modo B entran aunque estén pagadas) */
+    readonly #facturasCubiertas = new Set<string>()
+    /** factura del origen → factura de ArgosIsp (creada o ya importada) */
+    readonly #facturas = new Map<string, number>()
+    /** dueño de cada factura del origen (incluidas pagadas o anuladas si el origen lo sabe) */
+    readonly #duenos: Map<string, string>
 
     constructor(
         private readonly fuente: FuenteCanonica,
@@ -167,6 +181,16 @@ class Importador {
         this.#servicioOrigen = new Map(fuente.servicios.map((s) => [s.id, s]))
         this.#facturasPorCliente = agrupar(fuente.facturas, (f) => f.cliente_id)
         this.#serviciosPorCliente = agrupar(fuente.servicios, (s) => s.cliente_id)
+        this.#duenos = fuente.duenosFacturas ?? new Map(fuente.facturas.map((f) => [f.id, f.cliente_id]))
+        if (this.#carga.registrarPagoHistorico) {
+            for (const p of fuente.pagos) {
+                this.#modoB.add(p.cliente_id)
+                if (!p.factura_id) continue
+                this.#facturasCubiertas.add(p.factura_id)
+                const dueno = this.#duenos.get(p.factura_id)
+                if (dueno) this.#modoB.add(dueno)
+            }
+        }
         const zonas = new Set(fuente.clientes.map((c) => c.zona).filter(Boolean))
         this.reporte = {
             modo: opciones.dryRun ? 'en_seco' : 'real',
@@ -200,6 +224,8 @@ class Importador {
                 clientes_nit_duplicado: [],
                 servicios_sin_plan: [],
                 pagos_cruzados: [],
+                pagos_sin_factura: [],
+                pagos_no_importados: [],
                 ips_duplicadas: [],
                 ips_fuera_de_red: [],
                 ips_en_uso: [],
@@ -239,9 +265,10 @@ class Importador {
         await this.clientes()
         await this.#resolverPlantilla()
         await this.servicios()
+        // Orden del contrato: facturas → pagos → saldo inicial (el del modo B depende de los pagos).
         await this.facturas()
-        await this.saldos()
         await this.pagos()
+        await this.saldos()
         await this.compararSaldos()
     }
 
@@ -715,29 +742,38 @@ class Importador {
     }
 
     /**
-     * Facturas pendientes por `ImportarFacturaPendiente` (A3). El servicio es el de la factura o,
-     * si no trae, el único servicio importado del cliente. Sin servicio, su monto va al saldo
-     * inicial (`facturas_a_saldo`). Ya importada = existe una factura con su `clave_externa`.
+     * Facturas por `ImportarFacturaPendiente` (A3). El servicio es el de la factura o, si no
+     * trae, el único servicio importado del cliente. Sin servicio, su monto va al saldo inicial
+     * (`facturas_a_saldo`). Ya importada = existe una factura con su `clave_externa`.
+     *
+     * - Modo A (el cliente no tiene pagos en el origen): solo las pendientes, por lo pendiente.
+     * - Modo B (`#modoB`): las pendientes y las que cubre algún pago, **por su total**; los pagos
+     *   históricos las saldan después.
      */
     async facturas() {
         const conteo = this.reporte.resumen.facturas
         for (const f of this.fuente.facturas) {
-            if (new Decimal(f.pendiente).lte(0)) {
+            const modoB = this.#modoB.has(f.cliente_id)
+            const pendiente = new Decimal(f.pendiente).gt(0)
+            const cubierta = modoB && this.#facturasCubiertas.has(f.id)
+            if (!pendiente && !cubierta) {
                 conteo.omitidos++ // pagada en el origen: no hay nada que importar
                 continue
             }
-            const servicioId = this.#servicioDeFactura(f)
+            // Pagada y sin servicio: no va al saldo (no se debe nada); su pago lo dice el reporte.
+            const servicioId = pendiente ? this.#servicioDeFactura(f) : this.#servicioDeFacturaSinAnotar(f)
             if (servicioId === null) {
                 conteo.omitidos++
                 continue
             }
             const clave = this.#claveFactura(f.id)
-            const ya = await this.trx
+            const ya = (await this.trx
                 .from('billing.facturas')
                 .where('clave_externa', clave)
                 .select('id')
-                .first()
+                .first()) as { id: number } | null
             if (ya) {
+                this.#facturas.set(f.id, Number(ya.id))
                 conteo.existentes++
                 continue
             }
@@ -747,7 +783,7 @@ class Importador {
                         clave_externa: clave,
                         servicio_id: servicioId,
                         periodo: f.periodo,
-                        total: f.pendiente,
+                        total: modoB ? f.total : f.pendiente,
                         vence_en: f.vence ?? undefined,
                         concepto: f.concepto,
                     },
@@ -755,8 +791,10 @@ class Importador {
                     this.trx,
                 ),
             )
-            if (hecha) conteo.creados++
-            else conteo.omitidos++
+            if (hecha) {
+                this.#facturas.set(f.id, hecha.factura_id)
+                conteo.creados++
+            } else conteo.omitidos++
         }
     }
 
@@ -795,9 +833,102 @@ class Importador {
     }
 
     /**
-     * Saldo inicial por cliente (`RegistrarSaldoInicial` de A3) = saldo en el origen − lo que entra
-     * como factura pendiente. Sin fila en saldos.csv, el saldo del origen es la suma de sus
-     * facturas pendientes (las que quedaron sin servicio entran aquí).
+     * Pagos del origen por `RegistrarPagoHistorico` (A3, modo B): con su fecha original y
+     * `facturas: [id]` de la factura que cubrió en ArgosIsp (puede ser de otro cliente). El pago
+     * mueve el libro (`2.9.01 / CxC + Anticipos`), no la caja. Si su factura no entró, el dinero
+     * queda a favor del pagador (`pagos_sin_factura`) y el saldo inicial lo compensa. Ya
+     * importado = existe un pago con su `clave_externa`. Sin la acción (`registrarPagoHistorico`
+     * null), los pagos no se importan y todos los clientes van en modo A.
+     */
+    async pagos() {
+        const conteo = this.reporte.resumen.pagos
+        const d = this.reporte.diferencias
+        for (const p of this.fuente.pagos) {
+            const dueno = p.factura_id ? this.#duenos.get(p.factura_id) : undefined
+            if (p.factura_id && dueno && dueno !== p.cliente_id) {
+                d.pagos_cruzados.push({
+                    pago_origen: p.id,
+                    pagador_origen: p.cliente_id,
+                    factura_origen: p.factura_id,
+                    dueno_origen: dueno,
+                    monto: p.monto,
+                })
+            }
+        }
+        const registrar = this.#carga.registrarPagoHistorico
+        if (!registrar) {
+            conteo.omitidos = this.fuente.pagos.length
+            if (this.fuente.pagos.length > 0) {
+                this.reporte.pendiente.push(
+                    `Pagos históricos: ${this.fuente.pagos.length} pagos del origen no se importan (sin acción de pago histórico). No cambia saldos: lo pendiente de cada factura ya los descuenta.`,
+                )
+            }
+            return
+        }
+        for (const p of this.fuente.pagos) {
+            const clienteId = this.#clientes.get(p.cliente_id)
+            if (!clienteId) {
+                this.#faltante('pago', p.id, 'cliente', p.cliente_id)
+                conteo.omitidos++
+                continue
+            }
+            if (!p.fecha) {
+                d.pagos_no_importados.push({
+                    pago_origen: p.id,
+                    cliente_origen: p.cliente_id,
+                    monto: p.monto,
+                    motivo: 'sin fecha en el origen (el pago histórico la exige)',
+                })
+                conteo.omitidos++
+                continue
+            }
+            const clave = `${this.sistema}:pago:${p.id}`
+            if (await this.#carga.existePagoHistorico?.(clave, this.trx)) {
+                conteo.existentes++
+                continue
+            }
+            const facturaId = p.factura_id ? this.#facturas.get(p.factura_id) : undefined
+            if (p.factura_id && facturaId === undefined) {
+                d.pagos_sin_factura.push({
+                    pago_origen: p.id,
+                    factura_origen: p.factura_id,
+                    monto: p.monto,
+                    motivo: 'la factura no se importó: el pago queda a favor del cliente y el saldo inicial lo compensa',
+                })
+            }
+            const metodo = metodoPago(p.metodo)
+            const hecho = await this.#accion('pago', p.id, 'pagos.registrar_historico', () =>
+                registrar(
+                    {
+                        historico: true,
+                        id_externo: clave,
+                        cliente_id: clienteId,
+                        metodo,
+                        monto: p.monto,
+                        fecha: p.fecha!,
+                        nota: `Pago histórico importado de ${this.sistema} (${p.id})${
+                            p.metodo ? ` · forma de pago en el origen: ${p.metodo}` : ''
+                        }`,
+                        facturas: facturaId === undefined ? [] : [facturaId],
+                    },
+                    this.ctx,
+                    this.trx,
+                ),
+            )
+            if (hecho) conteo.creados++
+            else conteo.omitidos++
+        }
+    }
+
+    /**
+     * Saldo inicial por cliente (`RegistrarSaldoInicial` de A3), para que el saldo en ArgosIsp
+     * sea el del origen:
+     *
+     * - Modo A: saldo del origen − lo que entra como factura pendiente. Sin fila en `saldos`, el
+     *   saldo del origen es la suma de sus facturas pendientes (las sin servicio entran aquí).
+     * - Modo B: saldo del origen − el saldo que ya tiene en ArgosIsp (CxC − anticipos) después de
+     *   cargar sus facturas por su total y sus pagos históricos. Cubre lo que el historial no
+     *   explica (abonos sin pago en el origen, una factura que no entró).
      */
     async saldos() {
         const conteo = this.reporte.resumen.saldos
@@ -810,13 +941,6 @@ class Importador {
         for (const [clienteOrigen, origen] of this.#saldosOrigen()) {
             const clienteId = this.#clientes.get(clienteOrigen)
             if (!clienteId) continue // ya está en referencias faltantes o no se pudo importar el cliente
-            const comoFactura = (this.#facturasPorCliente.get(clienteOrigen) ?? [])
-                .filter((f) => new Decimal(f.pendiente).gt(0))
-                .filter((f) => this.#servicioDeFacturaSinAnotar(f) !== null)
-                .reduce((suma, f) => suma.plus(f.pendiente), new Decimal(0))
-            const monto = origen.minus(comoFactura)
-            if (monto.isZero()) continue
-            conteo.origen++
             const clave = `${this.sistema}:saldo:${clienteOrigen}`
             const ya = await this.trx
                 .from('billing.saldos_iniciales')
@@ -824,9 +948,19 @@ class Importador {
                 .select('id')
                 .first()
             if (ya) {
+                conteo.origen++
                 conteo.existentes++
                 continue
             }
+            const cargado = this.#modoB.has(clienteOrigen)
+                ? await this.#saldoArgos(clienteId)
+                : (this.#facturasPorCliente.get(clienteOrigen) ?? [])
+                      .filter((f) => new Decimal(f.pendiente).gt(0))
+                      .filter((f) => this.#servicioDeFacturaSinAnotar(f) !== null)
+                      .reduce((suma, f) => suma.plus(f.pendiente), new Decimal(0))
+            const monto = origen.minus(cargado)
+            if (monto.isZero()) continue
+            conteo.origen++
             const hecho = await this.#accion('saldo', clienteOrigen, 'facturas.registrar_saldo_inicial', () =>
                 this.#carga.registrarSaldoInicial(
                     {
@@ -844,70 +978,10 @@ class Importador {
         }
     }
 
-    /**
-     * Pagos del origen. Lo pendiente de cada factura ya descuenta lo pagado, así que los pagos no
-     * mueven saldos aquí: se reportan los de un cliente a facturas de otro (`pagos_cruzados`) y,
-     * cuando A3 publique la acción de pago histórico (`carga_financiera.ts`), se registran como
-     * historial. Sin ella, quedan en `pendiente`.
-     */
-    async pagos() {
-        const conteo = this.reporte.resumen.pagos
-        const duenos =
-            this.fuente.duenosFacturas ?? new Map(this.fuente.facturas.map((f) => [f.id, f.cliente_id]))
-        for (const p of this.fuente.pagos) {
-            const dueno = p.factura_id ? duenos.get(p.factura_id) : undefined
-            if (p.factura_id && dueno && dueno !== p.cliente_id) {
-                this.reporte.diferencias.pagos_cruzados.push({
-                    pago_origen: p.id,
-                    pagador_origen: p.cliente_id,
-                    factura_origen: p.factura_id,
-                    dueno_origen: dueno,
-                    monto: p.monto,
-                })
-            }
-        }
-        const registrar = this.#carga.registrarPagoHistorico
-        if (!registrar) {
-            conteo.omitidos = this.fuente.pagos.length
-            if (this.fuente.pagos.length > 0) {
-                this.reporte.pendiente.push(
-                    `Pagos históricos: ${this.fuente.pagos.length} pagos del origen no se importan hasta que A3 publique la acción de pago histórico (contratos/importacion.md). No cambia saldos: lo pendiente de cada factura ya los descuenta.`,
-                )
-            }
-            return
-        }
-        for (const p of this.fuente.pagos) {
-            const clienteId = this.#clientes.get(p.cliente_id)
-            if (!clienteId) {
-                this.#faltante('pago', p.id, 'cliente', p.cliente_id)
-                conteo.omitidos++
-                continue
-            }
-            const clave = `${this.sistema}:pago:${p.id}`
-            if (await this.#carga.existePagoHistorico?.(clave, this.trx)) {
-                conteo.existentes++
-                continue
-            }
-            const hecho = await this.#accion('pago', p.id, 'pagos.registrar_historico', async () => {
-                await registrar(
-                    {
-                        clave_externa: clave,
-                        cliente_id: clienteId,
-                        monto: p.monto,
-                        fecha: p.fecha,
-                        metodo: p.metodo,
-                        factura_clave_externa: p.factura_id
-                            ? `${this.sistema}:factura:${p.factura_id}`
-                            : null,
-                    },
-                    this.ctx,
-                    this.trx,
-                )
-                return true
-            })
-            if (hecho) conteo.creados++
-            else conteo.omitidos++
-        }
+    /** Saldo del cliente en ArgosIsp dentro de la corrida: CxC − anticipos. */
+    async #saldoArgos(clienteId: number): Promise<Decimal> {
+        const cxc = await saldoCliente(clienteId, this.trx)
+        return cxc.minus(await saldoAnticipos(this.trx, clienteId))
     }
 
     /** Igual que `#servicioDeFactura` pero sin anotar diferencias (ya se anotaron en `facturas`). */
@@ -920,9 +994,15 @@ class Importador {
         return id
     }
 
-    /** cliente_origen → saldo en el origen (saldos.csv o suma de facturas pendientes). */
+    /**
+     * cliente_origen → saldo en el origen (`saldos` o suma de facturas pendientes). Los clientes
+     * en modo B entran aunque no deban nada (0): sus pagos mueven el libro y hay que comprobarlo.
+     */
     #saldosOrigen(): Map<string, Decimal> {
         const saldos = new Map<string, Decimal>()
+        for (const c of this.#modoB) {
+            if (this.#clientes.has(c)) saldos.set(c, new Decimal(0))
+        }
         for (const f of this.fuente.facturas) {
             if (new Decimal(f.pendiente).lte(0)) continue
             saldos.set(f.cliente_id, (saldos.get(f.cliente_id) ?? new Decimal(0)).plus(f.pendiente))
@@ -1103,6 +1183,24 @@ function revisarNit(c: ClienteOrigen): { nit: string | null; motivo: string | nu
     } catch (error) {
         return { nit: null, motivo: mensajeDe(error) }
     }
+}
+
+/**
+ * Forma de pago del origen (texto libre) → `METODOS_PAGO` de ArgosIsp. Lo que no se reconoce
+ * queda como `caja` (efectivo); el texto original va en la nota del pago.
+ */
+export function metodoPago(valor: string | null): MetodoPago {
+    const v = (valor ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const reglas: Array<[RegExp, MetodoPago]> = [
+        [/transfer|banca|bi en linea/, 'transferencia'],
+        [/deposit|boleta|ventanilla/, 'deposito'],
+        [/\bach\b/, 'ach'],
+        [/remesa/, 'remesa'],
+        [/agente|kiosco|punto de pago/, 'agente'],
+        [/tarjeta|debito|credito|card|pos\b/, 'debito'],
+        [/pasarela|en linea|online|web|paypal|stripe/, 'pasarela'],
+    ]
+    return reglas.find(([re]) => re.test(v))?.[1] ?? 'caja'
 }
 
 function agrupar<T>(lista: T[], clave: (x: T) => string): Map<string, T[]> {

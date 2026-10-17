@@ -1,6 +1,6 @@
 # Runbook · Importación desde otro sistema (Mikrowisp, SmartISP, CSV)
 
-Para el operador que pasa los datos del sistema anterior a ArgosIsp: clientes, routers, planes, servicios, facturas pendientes y saldos. Detalle técnico en `apps/api/app/importacion/README.md`.
+Para el operador que pasa los datos del sistema anterior a ArgosIsp: clientes, routers, planes, servicios, facturas, pagos históricos y saldos. Detalle técnico en `apps/api/app/importacion/README.md`.
 
 La regla es **nunca importar en real sin dos corridas en seco limpias**. La corrida en seco hace todo dentro de una transacción y la revierte al final: no cambia nada en la base, pero el reporte dice exactamente lo que pasaría.
 
@@ -48,6 +48,8 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 
 - [ ] Backup reciente de ArgosIsp (`infra/backups/respaldar.sh`, ver `docs/runbooks/restaurar-backup.md`).
 - [ ] Una plantilla de facturación creada en el panel. Si hay varias, anota el id de la que llevarán los servicios importados (`--plantilla=<id>`).
+- [ ] **Ningún mes cerrado en el libro** que caiga en las fechas de los pagos del origen: los pagos históricos entran con su fecha original y un mes cerrado los rechaza (`periodo_cerrado`). Importa antes del primer cierre mensual, o pide a contabilidad reabrir esos meses durante la importación.
+- [ ] Pagos: si el origen trae pagos, los clientes con pagos entran con su historial (facturas por su total + pagos con su fecha); los demás, solo con su saldo. En los dos casos el saldo final es el del origen.
 - [ ] El volcado y los CSV tienen datos personales y contraseñas PPPoE: guárdalos fuera del repositorio y bórralos al terminar.
 
 ## 1. Corrida en seco
@@ -99,7 +101,9 @@ Se corrige **en el sistema anterior** (o en una copia de su base) y se toma un v
 | `nit_invalido`                   | Corregir el NIT (dígito verificador). Entra sin NIT si no se corrige                                                                                 |
 | `router_sin_credenciales`        | No bloquea: cargar usuario, clave de la API y secreto RADIUS en el panel de ArgosIsp después                                                         |
 | `factura_a_saldo`                | No bloquea: el monto entra en el saldo inicial. Para que entre como factura, el cliente debe tener un solo servicio (o la factura, su `servicio_id`) |
-| `pago_cruzado`                   | Confirmar con caja que el pago a la factura de otro cliente fue a propósito                                                                          |
+| `pago_cruzado`                   | Confirmar con caja que el pago a la factura de otro cliente fue a propósito (se importa igual y salda esa factura)                                   |
+| `pago_sin_factura`               | No bloquea: la factura que pagó no entró (ver sus líneas); el pago queda a favor y el saldo inicial lo compensa                                      |
+| `pago_no_importado`              | Completar la fecha del pago en el origen si se quiere en el estado de cuenta; el saldo cuadra igual                                                  |
 | `formato_fila` / `formato_campo` | Corregir el dato (correo, coordenadas, MAC, fecha, IP) o el nombre de la columna                                                                     |
 | `error_accion`                   | Leer `causa`; si no se entiende, avisar al equipo con el `reporte.json`                                                                              |
 
@@ -144,4 +148,3 @@ No sirve para **actualizar** lo ya importado (un cambio de plan o de IP en el or
 
 - El esquema de Mikrowisp es supuesto hasta que llegue la copia real de la base del ISP.
 - El adaptador de SmartISP es un esqueleto: falta un volcado real.
-- Pagos históricos: no se importan todavía. No cambia saldos: lo pendiente de cada factura ya descuenta lo pagado.
