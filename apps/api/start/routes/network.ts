@@ -24,6 +24,7 @@ import {
     Sesion,
     EventoRed,
     ResumenSesionesRouter,
+    MigracionAaaRouter,
     VistaPreviaControl,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
@@ -42,6 +43,8 @@ import {
 } from '#network/sesiones/consultas'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { listarEventosRed } from '#network/sesiones/eventos_red'
+import { verMigracionAaa } from '#network/sesiones/migracion_aaa'
+import MarcarRouterMigrado from '#network/sesiones/actions/marcar_router_migrado'
 import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
@@ -367,8 +370,8 @@ const sesiones: Ruta[] = [
             'Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha',
         descripcion:
             'Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no ' +
-            'tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde` (p. ej. la fecha de ' +
-            'migración al nuevo `aaa`). 404 si el router no existe.',
+            'tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde`. Sin `desde`, usa la ' +
+            'fecha de migración marcada (`aaa_desde`); 422 si no hay. 404 si el router no existe.',
         etiqueta: 'sesiones',
         permiso: 'sesiones.ver',
         query: v.resumenSesionesRouterValidator,
@@ -377,6 +380,43 @@ const sesiones: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, { router: [id] })
             return resumenSesionesRouter(id, query.desde, ctx.alcance)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/migracion-aaa',
+        operacion: 'routersMigracionAaa',
+        resumen: 'Fecha de migración del router al nuevo aaa',
+        descripcion:
+            '`aaa_desde` marcado por el operador (null si no se marcó) y `primer_accounting` como referencia. ' +
+            '404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Migración del router', esquema: MigracionAaaRouter },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return verMigracionAaa(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/marcar-migrado',
+        operacion: 'routersMarcarMigrado',
+        resumen: 'Marcar cuándo el router pasó al nuevo aaa',
+        descripcion:
+            '`desde` omitido = ahora; `null` = desmarcar (vuelta atrás). Con `version` (la leída) responde ' +
+            '409 si otro la cambió. 422 si `desde` es futura. Queda en la bitácora con el valor anterior. ' +
+            'No toca el router ni las sesiones.',
+        etiqueta: 'routers',
+        permiso: 'routers.marcar_migrado',
+        cuerpo: v.marcarRouterMigradoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Migración del router', esquema: MigracionAaaRouter },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new MarcarRouterMigrado().execute({ router_id: id, ...cuerpo }, ctx.contextoAccion())
         },
     }),
     definirRuta({

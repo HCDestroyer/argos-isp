@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { verMigracionAaa } from '#network/sesiones/migracion_aaa'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
 
@@ -136,7 +137,10 @@ export interface ServicioSinSesion {
 
 export interface ResumenSesionesRouter {
     router_id: number
+    /** El `desde` usado: el de la consulta o, si no vino, `aaa_desde` del router */
     desde: string
+    /** Fecha de migración marcada (`routers.marcar_migrado`), null si no está marcada */
+    aaa_desde: string | null
     /** Servicios PPPoE no retirados del router (dentro del alcance de quien consulta) */
     servicios: number
     /** De esos, cuántos tienen una sesión abierta ahora */
@@ -159,16 +163,26 @@ const dimensionesServicio: FiltrosDimension = {
  * cuántos tienen sesión abierta y cuáles no tuvieron ninguna desde `desde`. Una sesión cuenta si
  * estuvo viva en o después de `desde` (abierta, o `fin >= desde`), igual que `GET /sesiones?desde=`.
  * Las sesiones se buscan por `servicio_id` (no por el router de la sesión): un servicio que acaba
- * de cambiar de router cuenta con la sesión que tenga.
+ * de cambiar de router cuenta con la sesión que tenga. Sin `desde`, usa la fecha de migración
+ * marcada (`routers.marcar_migrado`); si no hay, 422.
  */
 export async function resumenSesionesRouter(
     routerId: number,
-    desde: Date,
+    desdeConsulta: Date | undefined,
     alcance?: Alcance,
 ): Promise<ResumenSesionesRouter> {
     const cliente = db.connection()
-    const router = await cliente.from('network.routers').where('id', routerId).select('id').first()
-    if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
+    const migracion = await verMigracionAaa(routerId, cliente)
+    const desde = desdeConsulta ?? (migracion.aaa_desde ? new Date(migracion.aaa_desde) : null)
+    if (!desde) {
+        throw new ValidacionFallida([
+            {
+                field: 'desde',
+                message: 'Falta desde: el router no está marcado como migrado al nuevo aaa',
+                rule: 'required',
+            },
+        ])
+    }
 
     const consulta = cliente
         .from('core.servicios as s')
@@ -224,6 +238,7 @@ export async function resumenSesionesRouter(
     return {
         router_id: routerId,
         desde: desde.toISOString(),
+        aaa_desde: migracion.aaa_desde,
         servicios: filas.length,
         con_sesion_activa: filas.filter((f) => f.activa).length,
         sesiones_activas: Number(abiertas.n),

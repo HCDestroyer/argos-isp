@@ -13756,6 +13756,7 @@
                         "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
+                        "routers.marcar_migrado",
                         "routers.ver",
                         "servicios.crear",
                         "servicios.desconectar",
@@ -13945,6 +13946,7 @@
                         "routers.cambiar_control_velocidad",
                         "routers.crear",
                         "routers.editar",
+                        "routers.marcar_migrado",
                         "routers.ver",
                         "servicios.crear",
                         "servicios.desconectar",
@@ -14914,6 +14916,209 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/marcar-migrado": {
+      "post": {
+        "operationId": "routersMarcarMigrado",
+        "summary": "Marcar cuándo el router pasó al nuevo aaa",
+        "description": "`desde` omitido = ahora; `null` = desmarcar (vuelta atrás). Con `version` (la leída) responde 409 si otro la cambió. 422 si `desde` es futura. Queda en la bitácora con el valor anterior. No toca el router ni las sesiones.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Migración del router",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigracionAaaRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.marcar_migrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.marcar_migrado",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/migracion-aaa": {
+      "get": {
+        "operationId": "routersMigracionAaa",
+        "summary": "Fecha de migración del router al nuevo aaa",
+        "description": "`aaa_desde` marcado por el operador (null si no se marcó) y `primer_accounting` como referencia. 404 si el router no existe.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Migración del router",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigracionAaaRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/planes": {
       "get": {
         "operationId": "routersPlanes",
@@ -15175,7 +15380,7 @@
       "get": {
         "operationId": "routersResumenSesiones",
         "summary": "Resumen de sesiones del router: servicios, sesiones activas y PPPoE sin sesión desde una fecha",
-        "description": "Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde` (p. ej. la fecha de migración al nuevo `aaa`). 404 si el router no existe.",
+        "description": "Servicios PPPoE no retirados del router, cuántos tienen sesión abierta y la lista de los que no tuvieron ninguna sesión viva (abierta o con `fin >= desde`) desde `desde`. Sin `desde`, usa la fecha de migración marcada (`aaa_desde`); 422 si no hay. 404 si el router no existe.",
         "tags": [
           "sesiones"
         ],
@@ -15197,7 +15402,7 @@
           {
             "name": "desde",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -17842,6 +18047,7 @@
                             "routers.cambiar_control_velocidad",
                             "routers.crear",
                             "routers.editar",
+                            "routers.marcar_migrado",
                             "routers.ver",
                             "servicios.crear",
                             "servicios.desconectar",
@@ -22016,6 +22222,56 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "MigracionAaaRouter": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "aaa_desde",
+          "motivo",
+          "version",
+          "updated_at",
+          "primer_accounting"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "aaa_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Desde cuándo el router usa el nuevo aaa (marcado por el operador); null si no se marcó"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "description": "0 si nunca se marcó; mandarla al marcar (409 si cambió)"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "primer_accounting": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Inicio de la primera sesión registrada del router (dato de referencia, no la migración)"
           }
         }
       },
@@ -26411,6 +26667,7 @@
         "required": [
           "router_id",
           "desde",
+          "aaa_desde",
           "servicios",
           "con_sesion_activa",
           "sesiones_activas",
@@ -26424,7 +26681,16 @@
           },
           "desde": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "El usado: el de la consulta o, si no vino, `aaa_desde`"
+          },
+          "aaa_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Fecha de migración marcada del router (o null)"
           },
           "servicios": {
             "type": "integer",

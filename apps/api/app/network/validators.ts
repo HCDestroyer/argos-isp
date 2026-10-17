@@ -324,7 +324,16 @@ export const listarSesionesValidator = vine.compile(
 /** `GET /routers/:id/resumen-sesiones?desde=` (A2). */
 export const resumenSesionesRouterValidator = vine.compile(
     vine.object({
-        desde: instanteIso(),
+        desde: instanteIso().optional(),
+    }),
+)
+
+/** `POST /routers/:id/marcar-migrado` (A2): `desde` omitido = ahora; null = desmarcar. */
+export const marcarRouterMigradoValidator = vine.compile(
+    vine.object({
+        desde: instanteIso().nullable().optional(),
+        motivo: vine.string().trim().minLength(3).maxLength(500),
+        version: vine.number().withoutDecimals().min(0).optional(),
     }),
 )
 

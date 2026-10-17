@@ -32,6 +32,7 @@ export const PERMISOS = {
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
     'routers.editar': 'Editar routers y sus credenciales',
+    'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
     'redes.ver': 'Ver redes IPv4',
@@ -191,6 +192,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'routers.ver',
             'routers.crear',
             'routers.editar',
+            'routers.marcar_migrado',
             'redes.ver',
             'redes.crear',
             'ipv6.ver',
