@@ -17,17 +17,23 @@ test.group('OpenAPI', () => {
 
     test('conserva Me y Problem de la semilla, y los operationId del login', async ({ assert }) => {
         const doc = JSON.parse(await construirOpenApi())
-        assert.deepEqual(doc.components.schemas.Me, {
-            type: 'object',
-            required: ['id', 'nombre', 'email', 'permisos', 'roles'],
-            properties: {
-                id: { type: 'integer' },
-                nombre: { type: 'string' },
-                email: { type: 'string', format: 'email' },
-                roles: { type: 'array', items: { type: 'string' } },
-                permisos: { type: 'array', items: { type: 'string' } },
+        // la semilla se conserva; `csrf` es opcional y solo llega con la cookie del panel
+        const { csrf, ...propiedades } = doc.components.schemas.Me.properties
+        assert.deepEqual(
+            { ...doc.components.schemas.Me, properties: propiedades },
+            {
+                type: 'object',
+                required: ['id', 'nombre', 'email', 'permisos', 'roles'],
+                properties: {
+                    id: { type: 'integer' },
+                    nombre: { type: 'string' },
+                    email: { type: 'string', format: 'email' },
+                    roles: { type: 'array', items: { type: 'string' } },
+                    permisos: { type: 'array', items: { type: 'string' } },
+                },
             },
-        })
+        )
+        assert.equal(csrf.type, 'string')
         assert.deepEqual(doc.components.schemas.Problem.required, ['type', 'title', 'status'])
         assert.equal(doc.paths['/api/v1/auth/login'].post.operationId, 'authLogin')
         assert.equal(doc.paths['/api/v1/me'].get.operationId, 'me')

@@ -8,7 +8,7 @@ const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
 /**
  * Toma `X-Request-Id` (o genera un UUID), lo devuelve en la respuesta y deja en el ctx
  * `requestId` y `contextoAccion()`, que arma el `ContextoAccion` para las acciones de dominio:
- * actor = usuario autenticado (`token` si entró con un token de API; sistema si es anónimo), canal = header `X-Canal` (por defecto `api`).
+ * actor = usuario autenticado (`token` si entró con un token de API; sistema si es anónimo), canal = header `X-Canal` (por defecto `panel` con la cookie del panel y `api` en lo demás).
  *
  * Log de acceso (pedido de A6): al terminar cada petición, una línea `info` con `request_id`,
  * `metodo`, `ruta` (el patrón de la ruta, p. ej. `/api/v1/servicios/:id`, nunca la URL con datos;
@@ -20,7 +20,7 @@ export default class RequestIdMiddleware {
         const entrante = ctx.request.header('x-request-id')
         const requestId = entrante && ID_VALIDO.test(entrante) ? entrante : randomUUID()
         const canalHeader = ctx.request.header('x-canal')
-        const canal: Canal = esCanal(canalHeader) ? canalHeader : 'api'
+        const canal: Canal | null = esCanal(canalHeader) ? canalHeader : null
 
         ctx.requestId = requestId
         ctx.response.header('X-Request-Id', requestId)
@@ -28,12 +28,13 @@ export default class RequestIdMiddleware {
         registrarAcceso(ctx)
         ctx.contextoAccion = (canalForzado?: Canal): ContextoAccion => {
             const usuario = 'auth' in ctx ? ctx.auth.user : undefined
-            const viaToken = usuario !== undefined && ctx.auth.authenticatedViaGuard === 'tokens'
+            const guard = usuario !== undefined ? ctx.auth.authenticatedViaGuard : undefined
             return {
                 actor: usuario
-                    ? { tipo: viaToken ? 'token' : 'usuario', id: usuario.id }
+                    ? { tipo: guard === 'tokens' ? 'token' : 'usuario', id: usuario.id }
                     : { tipo: 'sistema', id: null },
-                canal: canalForzado ?? canal,
+                // la cookie del panel implica canal `panel` si no llega `X-Canal`
+                canal: canalForzado ?? canal ?? (guard === 'panel' ? 'panel' : 'api'),
                 requestId,
             }
         }

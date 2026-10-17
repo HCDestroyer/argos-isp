@@ -31,6 +31,7 @@ export interface FilaSesion {
     prefijo_delegado_v6: string | null
     inicio: Date
     fin: Date | null
+    causa_fin: string | null
 }
 
 /** `rawQuery` con valores que pueden ser null (knex los acepta; sus tipos no). */
@@ -40,10 +41,22 @@ function consulta(t: Transaccion, sql: string, valores: unknown[]): Promise<unkn
 
 const COLUMNAS = `id, servicio_id::int AS servicio_id, router_id::int AS router_id, host(nas_ip) AS nas_ip,
     acct_session_id, user_ppp, host(ipv4) AS ipv4, prefijo_enlace_v6::text AS prefijo_enlace_v6,
-    prefijo_delegado_v6::text AS prefijo_delegado_v6, inicio, fin`
+    prefijo_delegado_v6::text AS prefijo_delegado_v6, inicio, fin, causa_fin`
+
+/** `COLUMNAS` con alias `s.` (UPDATE … FROM). */
+const COLUMNAS_S = `s.id, s.servicio_id::int AS servicio_id, s.router_id::int AS router_id, host(s.nas_ip) AS nas_ip,
+    s.acct_session_id, s.user_ppp, host(s.ipv4) AS ipv4, s.prefijo_enlace_v6::text AS prefijo_enlace_v6,
+    s.prefijo_delegado_v6::text AS prefijo_delegado_v6, s.inicio, s.fin, s.causa_fin`
 
 /** Causa con la que se cierra una sesión vieja del mismo usuario al abrir otra. */
 export const CAUSA_REEMPLAZADA = 'Sesion-Reemplazada'
+
+/**
+ * Causa con la que el cron cierra una sesión sin Stop ni Interim-Update en N intervalos
+ * (`actions/cerrar_sesiones_colgadas.ts`). Un Interim posterior la reabre y un Stop posterior
+ * corrige su `fin` y su causa: el NAS demostró que la sesión seguía viva o cuándo terminó.
+ */
+export const CAUSA_SIN_INTERIM = 'sin_interim'
 
 export interface Contexto {
     servicioId: number | null
@@ -247,15 +260,108 @@ export async function emitirIniciada(t: Transaccion, sesion: FilaSesion): Promis
     await t.emit('sesion.iniciada', payload(sesion))
 }
 
+/** `motivo` = `causa_fin` de la sesión (Acct-Terminate-Cause, `NAS-Reboot`, `Sesion-Reemplazada`, `sin_interim`). */
 export async function emitirTerminada(t: Transaccion, sesion: FilaSesion): Promise<void> {
-    await t.emit('sesion.terminada', payload(sesion))
+    await t.emit('sesion.terminada', { ...payload(sesion), motivo: sesion.causa_fin })
+}
+
+/** Quita el cierre `sin_interim` de una sesión (llegó un Interim-Update: seguía viva). */
+export async function reabrirSesion(t: Transaccion, id: number): Promise<void> {
+    await consulta(
+        t,
+        `UPDATE network.sesiones SET fin = NULL, causa_fin = NULL, updated_at = now()
+         WHERE id = ? AND causa_fin = ?`,
+        [id, CAUSA_SIN_INTERIM],
+    )
+}
+
+/** Hay otra sesión abierta del mismo `user_ppp` (entonces una cerrada por `sin_interim` no se reabre). */
+export async function hayOtraAbierta(t: Transaccion, sesion: FilaSesion): Promise<boolean> {
+    const { rows } = (await consulta(
+        t,
+        `SELECT 1 FROM network.sesiones WHERE user_ppp = ? AND id <> ? AND fin IS NULL LIMIT 1`,
+        [sesion.user_ppp, sesion.id],
+    )) as { rows: unknown[] }
+    return rows.length > 0
+}
+
+/** Corrige `fin`, causa y contadores de una sesión cerrada por `sin_interim` con el Stop real. */
+export async function corregirCierre(
+    t: Transaccion,
+    id: number,
+    r: RegistroAccounting,
+    causa: string,
+): Promise<FilaSesion> {
+    const { rows } = (await consulta(
+        t,
+        `UPDATE network.sesiones SET
+             fin = GREATEST(inicio, ?::timestamptz),
+             causa_fin = ?,
+             bytes_in = GREATEST(bytes_in, ?::bigint),
+             bytes_out = GREATEST(bytes_out, ?::bigint),
+             updated_at = now()
+         WHERE id = ?
+         RETURNING ${COLUMNAS}`,
+        [r.evento_en, causa, r.bytes_in, r.bytes_out, id],
+    )) as { rows: FilaSesion[] }
+    return rows[0]!
+}
+
+/**
+ * Cierra (como mucho `limite`) sesiones abiertas sin accounting desde `corte`: `fin` = su último
+ * accounting (`updated_at`, nunca antes de `inicio`), causa `sin_interim`.
+ *
+ * Salvaguarda: solo de NAS que siguen mandando accounting (alguna sesión abierta suya se
+ * actualizó o empezó después de `corte`). Si `aaa`, Redis o el worker se cayeron, ningún NAS
+ * tiene accounting reciente y no se cierra nada; un NAS que se apagó cierra las suyas con su
+ * `Accounting-On` al volver. `SKIP LOCKED`: una sesión que el worker está actualizando se deja
+ * para la próxima corrida.
+ */
+export async function cerrarColgadas(
+    t: Transaccion,
+    corte: Date,
+    limite: number,
+): Promise<{ cerradas: FilaSesion[]; nasSilenciosos: string[] }> {
+    const { rows } = (await consulta(
+        t,
+        `WITH nas_vivos AS (
+             SELECT DISTINCT nas_ip FROM network.sesiones
+             WHERE fin IS NULL AND (updated_at >= ?::timestamptz OR inicio >= ?::timestamptz)
+         ), candidatas AS (
+             SELECT s.id FROM network.sesiones s
+             WHERE s.fin IS NULL AND s.updated_at < ?::timestamptz
+               AND s.nas_ip IN (SELECT nas_ip FROM nas_vivos)
+             ORDER BY s.id
+             LIMIT ?
+             FOR UPDATE OF s SKIP LOCKED
+         )
+         UPDATE network.sesiones s
+            SET fin = GREATEST(s.inicio, s.updated_at), causa_fin = ?, updated_at = now()
+           FROM candidatas c
+          WHERE s.id = c.id AND s.fin IS NULL
+         RETURNING ${COLUMNAS_S}`,
+        [corte, corte, corte, limite, CAUSA_SIN_INTERIM],
+    )) as { rows: FilaSesion[] }
+    const { rows: silenciosos } = (await consulta(
+        t,
+        `SELECT DISTINCT host(nas_ip) AS nas_ip FROM network.sesiones s
+         WHERE s.fin IS NULL AND s.updated_at < ?::timestamptz
+           AND NOT EXISTS (
+               SELECT 1 FROM network.sesiones o
+               WHERE o.nas_ip = s.nas_ip AND o.fin IS NULL
+                 AND (o.updated_at >= ?::timestamptz OR o.inicio >= ?::timestamptz)
+           )
+         ORDER BY 1`,
+        [corte, corte, corte],
+    )) as { rows: Array<{ nas_ip: string }> }
+    return { cerradas: rows, nasSilenciosos: silenciosos.map((f) => f.nas_ip) }
 }
 
 /** Resultado común de las acciones de accounting (para el log del worker y las pruebas). */
 export interface ResultadoAccounting {
     sesionId: number | null
     /** qué pasó con la fila */
-    efecto: 'abierta' | 'actualizada' | 'cerrada' | 'creada_cerrada' | 'ignorada'
+    efecto: 'abierta' | 'actualizada' | 'cerrada' | 'creada_cerrada' | 'ignorada' | 'reabierta' | 'corregida'
     eventos: Array<'sesion.iniciada' | 'sesion.terminada'>
     /** El paquete trajo un prefijo IPv6 que la sesión no tenía (modo `radius_pool`) */
     prefijoNuevo?: boolean

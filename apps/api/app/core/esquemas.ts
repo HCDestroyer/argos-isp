@@ -35,12 +35,29 @@ export const Me = definirEsquema('Me', {
         email: { type: 'string', format: 'email' },
         roles: { type: 'array', items: { type: 'string' } },
         permisos: { type: 'array', items: { type: 'string' } },
+        csrf: {
+            type: 'string',
+            description:
+                'Solo con la sesión del panel por cookie (`GET /me`): valor de `X-CSRF-Token` para POST, PUT y DELETE',
+        },
     },
 })
 
 export const Sesion = definirEsquema(
     'SesionIniciada',
     objeto({ token: { type: 'string', description: 'Token Bearer opaco' }, usuario: Me }),
+)
+
+export const SesionPanel = definirEsquema(
+    'SesionPanel',
+    objeto({
+        usuario: Me,
+        csrf: {
+            type: 'string',
+            description: 'Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión',
+        },
+        expira_en: nulable({ ...instante, description: 'Cuándo vence la sesión (no se renueva)' }),
+    }),
 )
 
 export const AsignacionRol = definirEsquema(

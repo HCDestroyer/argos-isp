@@ -7,6 +7,7 @@ import {
     enumerado,
     id,
     instante,
+    jsonLibre,
     lista,
     nulable,
     objeto,
@@ -211,6 +212,96 @@ export const Sesion = definirEsquema(
         bytes_in: entero,
         bytes_out: entero,
         causa_fin: nulable(texto),
+    }),
+)
+
+/** Fecha de migración del router al nuevo `aaa` (`GET /routers/:id/migracion-aaa`). */
+export const MigracionAaaRouter = definirEsquema(
+    'MigracionAaaRouter',
+    objeto({
+        router_id: id,
+        aaa_desde: {
+            ...nulable(instante),
+            description:
+                'Desde cuándo el router usa el nuevo aaa (marcado por el operador); null si no se marcó',
+        },
+        motivo: nulable(texto),
+        version: { ...entero, description: '0 si nunca se marcó; mandarla al marcar (409 si cambió)' },
+        updated_at: nulable(instante),
+        primer_accounting: {
+            ...nulable(instante),
+            description:
+                'Inicio de la primera sesión registrada del router (dato de referencia, no la migración)',
+        },
+    }),
+)
+
+/** PPPoE del router sin sesión desde una fecha (`GET /routers/:id/resumen-sesiones`). */
+export const ServicioSinSesion = definirEsquema(
+    'ServicioSinSesion',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        user_ppp: texto,
+        estado: enumerado(['activo', 'limitado', 'suspendido']),
+        ultima_sesion_inicio: {
+            ...nulable(instante),
+            description: 'Última sesión registrada (de cualquier fecha)',
+        },
+        ultima_sesion_fin: nulable(instante),
+    }),
+)
+
+/** Resumen de sesiones de un router para la pantalla "Migración de router" (A4). */
+export const ResumenSesionesRouter = definirEsquema(
+    'ResumenSesionesRouter',
+    objeto({
+        router_id: id,
+        desde: { ...instante, description: 'El usado: el de la consulta o, si no vino, `aaa_desde`' },
+        aaa_desde: { ...nulable(instante), description: 'Fecha de migración marcada del router (o null)' },
+        servicios: { ...entero, description: 'Servicios PPPoE no retirados del router (dentro del alcance)' },
+        con_sesion_activa: { ...entero, description: 'De esos servicios, los que tienen sesión abierta' },
+        sesiones_activas: {
+            ...entero,
+            description: 'Sesiones abiertas en el router (incluye user_ppp desconocidos)',
+        },
+        con_sesion_desde: {
+            ...entero,
+            description: 'De esos servicios, los que tuvieron sesión viva en o después de `desde`',
+        },
+        sin_sesion_desde: lista(ServicioSinSesion),
+    }),
+)
+
+/**
+ * Fila de `audit.red` (`GET /red/eventos`): un CoA, un Disconnect-Request o una escritura en
+ * RouterOS, con la respuesta del equipo. Las credenciales salen como `***`.
+ */
+export const EventoRed = definirEsquema(
+    'EventoRed',
+    objeto({
+        id,
+        tipo: enumerado(['coa', 'disconnect', 'routeros']),
+        router_id: nulable(id),
+        router_nombre: nulable(texto),
+        servicio_id: nulable(id),
+        ok: { ...booleano, description: 'ACK del NAS o escritura aceptada por RouterOS' },
+        comando: {
+            ...jsonLibre,
+            description:
+                'Lo que se envió. CoA/Disconnect: `evento_id`, `evento`, `razon`, `sesion_id`, `nas_ip`, ' +
+                '`puerto`, `atributos`, `intento`. RouterOS: `metodo`, `ruta`, `id`, `propiedades`, `host`, ' +
+                '`intento` u `operacion` (fila final de un fallo)',
+        },
+        respuesta: {
+            ...nulable(jsonLibre),
+            description:
+                'Lo que respondió el equipo. CoA/Disconnect: `resultado` (ack, nak, timeout, error, ' +
+                'sin_secret, sin_rate_limit), `codigo`, `error`, `rtt_ms`, `final`. RouterOS: `status`, ' +
+                '`objeto` o `error`/`tipo_error`',
+        },
+        created_at: instante,
     }),
 )
 
