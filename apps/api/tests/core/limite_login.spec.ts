@@ -95,6 +95,22 @@ test.group('Auth · límite de intentos de login', (group) => {
         assert.include(r.body().detail, 'conexión')
     })
 
+    test('por IP: un cuerpo inválido (422) también consume el cupo, antes de validar', async ({
+        client,
+        assert,
+    }) => {
+        apagar = encender({ LOGIN_LIMITE_IP: '3', LOGIN_LIMITE_USUARIO: '0' })
+        const { email, password } = await crearUsuarioLogin()
+        const invalido = await estado(client.post('/api/v1/auth/login').json({ email: 'no-es-correo' }), 422)
+        assert.equal(invalido.header('ratelimit-remaining'), '2')
+        await estado(client.post('/api/v1/auth/sesion').json({ password: 'sin correo' }), 422)
+        // una sola cuenta por petición: el gancho y el handler no la cuentan dos veces
+        const valido = await estado(login(client, email, password), 200)
+        assert.equal(valido.header('ratelimit-remaining'), '0')
+        const r = await estado(client.post('/api/v1/auth/login').json({}), 429)
+        assert.match(r.body().type, /demasiados_intentos/)
+    })
+
     test('si Redis no responde, el login sigue', async ({ client }) => {
         apagar = encender({ LOGIN_LIMITE_IP: '1', LOGIN_LIMITE_USUARIO: '1' })
         const { email, password } = await crearUsuarioLogin()

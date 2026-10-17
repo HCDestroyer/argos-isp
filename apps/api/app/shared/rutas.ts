@@ -18,7 +18,7 @@ export const PREFIJO_API = '/api/v1'
 export type MetodoHttp = 'get' | 'post' | 'put' | 'delete'
 
 /**
- * - `sesion`: Bearer de login (o token de API, A1) + permiso del ACL.
+ * - `sesion`: Bearer de login, token de API o cookie `HttpOnly` del panel (con CSRF) + permiso del ACL.
  * - `interno`: Bearer con `INTERNAL_TOKEN` (servicios aaa y coa).
  * - `portal`: cookie de sesión del portal del cliente (`argos_portal`). El router no monta
  *   middleware: el handler la exige con `exigirSesionPortal` (A5); el OpenAPI declara el esquema
@@ -30,6 +30,9 @@ export type Seguridad = 'sesion' | 'interno' | 'portal' | 'publico'
 /** Nombre de la cookie de sesión del portal (esquema de seguridad `portal` del OpenAPI). */
 export const COOKIE_PORTAL = 'argos_portal'
 
+/** Cookie `HttpOnly` de la sesión del panel (esquema `panel`; `app/core/auth/sesion_panel.ts`). */
+export const COOKIE_SESION_PANEL = 'argos_sesion'
+
 type ValidadorVine = VineValidator<SchemaTypes, any>
 type Salida<V> = V extends VineValidator<infer S, any> ? Infer<S> : undefined
 
@@ -40,9 +43,13 @@ export interface EntradaHandler<C, Q> {
 }
 
 export interface RespuestaRuta {
-    status: 200 | 201 | 202 | 204
+    /**
+     * `303`: redirección (See Other). El handler devuelve `redirigir(url)`; `despachar` pone
+     * `Location` y el status. Sin `esquema` ni `contenido`; el OpenAPI declara la cabecera `Location`.
+     */
+    status: 200 | 201 | 202 | 204 | 303
     descripcion: string
-    /** schema JSON de la respuesta exitosa; omitir con 204 o con `contenido` binario */
+    /** schema JSON de la respuesta exitosa; omitir con 204, 303 o con `contenido` binario */
     esquema?: EsquemaJson
     /**
      * Tipo de contenido de la respuesta. Por defecto `application/json`. Un tipo binario
@@ -93,6 +100,12 @@ export interface DefinicionRuta<
     versionada?: boolean
     /** tiene límite de peticiones y puede responder 429 con `Retry-After` */
     limitada?: boolean
+    /**
+     * Gancho que corre después de autenticar, autorizar e idempotencia, pero **antes** de validar
+     * cuerpo y query con VineJS. Para el límite de peticiones: un cuerpo inválido (422) también
+     * consume el cupo. Si lanza, ni se valida ni corre el handler.
+     */
+    antes?: (ctx: HttpContext) => Promise<void>
     handler?: (ctx: HttpContext, entrada: EntradaHandler<Salida<VC>, Salida<VQ>>) => Promise<unknown>
 }
 
@@ -116,15 +129,43 @@ export function parametrosDeRuta(ruta: string): string[] {
     return [...ruta.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]!)
 }
 
-/** Ejecuta validación y handler (o 501) para una ruta montada. */
+const REDIRECCION = Symbol('redireccion')
+
+/** Resultado de un handler con `respuesta.status: 303`. */
+export interface Redireccion {
+    readonly [REDIRECCION]: string
+}
+
+/** Lo devuelve el handler de una ruta 303: `return redirigir(urlDeRetorno)`. */
+export function redirigir(url: string): Redireccion {
+    return { [REDIRECCION]: url }
+}
+
+function esRedireccion(valor: unknown): valor is Redireccion {
+    return typeof valor === 'object' && valor !== null && REDIRECCION in valor
+}
+
+export function esStatusRedireccion(status: number): boolean {
+    return status >= 300 && status < 400
+}
+
+/** Ejecuta el gancho `antes`, la validación y el handler (o 501) para una ruta montada. */
 export async function despachar(ruta: Ruta, ctx: HttpContext) {
+    if (ruta.antes) await ruta.antes(ctx)
     // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined
     const query = ruta.query ? await ruta.query.validate(ctx.request.qs()) : undefined
     if (!ruta.handler) throw new NoImplementado(ruta.operacion)
 
     const resultado = await ruta.handler(ctx, { cuerpo, query, params: ctx.params })
-    ctx.response.status(ruta.respuesta.status)
-    if (ruta.respuesta.status === 204) return ctx.response.send('')
+    const { status } = ruta.respuesta
+    if (esStatusRedireccion(status)) {
+        if (!esRedireccion(resultado)) {
+            throw new Error(`${ruta.operacion}: una ruta ${status} debe devolver redirigir(url)`)
+        }
+        return ctx.response.redirect().status(status).toPath(resultado[REDIRECCION])
+    }
+    ctx.response.status(status)
+    if (status === 204) return ctx.response.send('')
     return resultado
 }

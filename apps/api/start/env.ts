@@ -117,6 +117,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     AAA_PPP_KEY: Env.schema.string.optional(),
     ACCESS_TOKEN_EXPIRA: Env.schema.string.optional(),
     CORS_ORIGINS: Env.schema.string.optional(),
+    /** `Secure` de la cookie de sesión del panel; `false` solo en desarrollo (`app/core/auth/sesion_panel.ts`). */
+    PANEL_COOKIE_SEGURA: Env.schema.boolean.optional(),
 
     /*
     |----------------------------------------------------------

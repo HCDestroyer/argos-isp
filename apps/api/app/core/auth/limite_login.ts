@@ -93,10 +93,17 @@ export class LimiteLogin {
 
     /** Cuenta el intento de la IP y revisa los fallidos del usuario; lanza 429 si se pasó alguno. */
     async antes(ctx: HttpContext, email: string): Promise<void> {
+        await this.contarIp(ctx)
+        await this.revisarUsuario(ctx, email)
+    }
+
+    /** Cuenta el intento de la IP (una vez por petición); 429 si se pasó. */
+    async contarIp(ctx: HttpContext): Promise<void> {
+        if (IP_CONTADA.has(ctx)) return
+        IP_CONTADA.add(ctx)
         const c = this.config()
-        const r = this.conexion()
         if (c.porIp > 0) {
-            const [n, pttl] = (await r.eval(
+            const [n, pttl] = (await this.conexion().eval(
                 SCRIPT_CONTAR,
                 1,
                 this.#claveIp(c, ctx.request.ip()),
@@ -106,6 +113,12 @@ export class LimiteLogin {
             ctx.response.header('RateLimit-Remaining', String(Math.max(0, c.porIp - n)))
             if (n > c.porIp) this.#rechazar(ctx, segundos(pttl), 'ip')
         }
+    }
+
+    /** Revisa los intentos fallidos del usuario; 429 si se pasó. */
+    async revisarUsuario(ctx: HttpContext, email: string): Promise<void> {
+        const c = this.config()
+        const r = this.conexion()
         if (c.porUsuario > 0) {
             const clave = this.#claveUsuario(c, email)
             const [valor, pttl] = await Promise.all([r.get(clave), r.pttl(clave)])
@@ -131,7 +144,28 @@ export class LimiteLogin {
     }
 }
 
+/** Peticiones cuya IP ya contó el gancho `antes` de la ruta (no se cuenta dos veces). */
+const IP_CONTADA = new WeakSet<HttpContext>()
+
 let compartido: LimiteLogin | undefined
+
+/** Errores de Redis: se registran y la petición pasa; el 429 sí sale. */
+async function seguro(paso: () => Promise<void>) {
+    try {
+        await paso()
+    } catch (error) {
+        if (error instanceof DemasiadosIntentos) throw error
+        logger.warn({ err: error }, 'No se pudo aplicar el límite de login; la petición pasa')
+    }
+}
+
+/**
+ * Gancho `antes` de las rutas de login (`DefinicionRuta.antes`): cuenta el intento de la IP antes
+ * de validar el cuerpo, así un cuerpo inválido (422) también consume el cupo.
+ */
+export function contarIpLogin(limite?: LimiteLogin) {
+    return (ctx: HttpContext) => seguro(() => (limite ?? (compartido ??= new LimiteLogin())).contarIp(ctx))
+}
 
 /**
  * Envuelve el login con el límite. Los errores de Redis se registran y no bloquean; el 429 y los
@@ -143,14 +177,6 @@ export async function conLimiteLogin<T>(
     login: () => Promise<T>,
     limite: LimiteLogin = (compartido ??= new LimiteLogin()),
 ): Promise<T> {
-    const seguro = async (paso: () => Promise<void>) => {
-        try {
-            await paso()
-        } catch (error) {
-            if (error instanceof DemasiadosIntentos) throw error
-            logger.warn({ err: error }, 'No se pudo aplicar el límite de login; la petición pasa')
-        }
-    }
     await seguro(() => limite.antes(ctx, email))
     try {
         const resultado = await login()
