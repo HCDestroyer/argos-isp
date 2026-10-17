@@ -62,6 +62,7 @@ export function checksumPaquete(paquete: PaqueteLocalizacion): string {
                 cuentas: paquete.cuentas,
                 parametros: paquete.parametros,
                 impuestos: paquete.impuestos,
+                cuadriculas: paquete.cuadriculas,
                 regimenes: paquete.regimenes,
                 frases: paquete.frases_por_regimen,
                 tipos_dte: paquete.tipos_dte,
@@ -235,10 +236,10 @@ async function agregarImpuestos(trx: QueryClientContract, paquete: PaqueteLocali
         for (const version of imp.versiones) {
             const filas = (await trx.rawQuery(
                 `INSERT INTO fiscal.impuestos_versiones
-                    (pais, codigo, empresa_id, vigente_desde, origen, nombre, calculo, base_impuesto, tasa,
+                    (pais, codigo, empresa_id, vigente_desde, origen, nombre, calculo, base_impuesto, tasa, signo,
                      incluido, exigibilidad, cuenta_cuota, cuenta_transicion, cuadricula_base, cuadricula_cuota,
                      descripcion, fuente, confianza, confirmar_contador, activo, localizacion_codigo)
-                 VALUES (?, ?, NULL, ?, 'paquete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?)
+                 VALUES (?, ?, NULL, ?, 'paquete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?)
                  ON CONFLICT (pais, codigo, empresa_id, vigente_desde, origen) DO NOTHING
                  RETURNING id`,
                 [
@@ -249,11 +250,12 @@ async function agregarImpuestos(trx: QueryClientContract, paquete: PaqueteLocali
                     imp.calculo,
                     imp.base_impuesto as string,
                     version.tasa,
+                    imp.signo,
                     imp.incluido,
                     imp.exigibilidad,
                     imp.cuenta_cuota,
                     imp.cuenta_transicion as string,
-                    imp.cuadricula_base,
+                    imp.cuadricula_base as string,
                     imp.cuadricula_cuota,
                     imp.descripcion,
                     imp.fuente,

@@ -1,7 +1,7 @@
 import type { DefinicionFrase, DefinicionTipoDte, PaqueteLocalizacion } from '#fiscal/localizacion'
 import { CUENTAS_PAQUETE_GT } from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
-import { IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
+import { CUADRICULAS_GT, IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 
 /**
  * Paquete de localización de Guatemala, versión `gt-2026.1` (contrato §2, §5 y §6).
@@ -112,6 +112,7 @@ export const PAQUETE_GT_2026_1: PaqueteLocalizacion = {
     cuentas: CUENTAS_PAQUETE_GT,
     parametros: PARAMETROS_GT,
     impuestos: IMPUESTOS_GT,
+    cuadriculas: CUADRICULAS_GT,
     regimenes: REGIMENES_GT,
     frases_por_regimen: FRASES_POR_REGIMEN_GT,
     tipos_dte: TIPOS_DTE_GT,

@@ -30,12 +30,11 @@ test.group('Localización fiscal · parámetros con vigencia', (group) => {
     test('una tasa vieja se lee con el valor de su fecha (ISR 31 % en 2013, 28 % en 2014, 25 % desde 2015)', async ({
         assert,
     }) => {
-        const leido33 = await impuesto(1, 'ISR_UTILIDADES', '2013-06-30')
-        assert.equal(leido33.tasa, '31.00')
-        const leido34 = await impuesto(1, 'ISR_UTILIDADES', '2014-12-31')
-        assert.equal(leido34.tasa, '28.00')
-        const leido35 = await impuesto(1, 'ISR_UTILIDADES', '2026-10-17')
-        assert.equal(leido35.tasa, '25.00')
+        assert.equal(await valorParametro(1, 'isr_utilidades_tasa', '2013-06-30'), '31.00')
+        assert.equal(await valorParametro(1, 'isr_utilidades_tasa', '2014-12-31'), '28.00')
+        assert.equal(await valorParametro(1, 'isr_utilidades_tasa', '2026-10-17'), '25.00')
+        const iva = await impuesto(1, 'IVA12', '2013-06-30')
+        assert.equal(iva.tasa, '12.00')
         // el límite de pequeño contribuyente 2026 no se inventa para 2025
         assert.equal(await valorParametro(1, 'pc_limite_anual', '2026-03-01'), '500285.00')
         await assert.rejects(() => parametro(1, 'pc_limite_anual', '2025-12-31'), /pc_limite_anual/)

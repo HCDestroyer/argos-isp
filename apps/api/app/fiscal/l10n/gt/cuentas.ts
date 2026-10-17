@@ -16,6 +16,10 @@ export const CUENTAS_GT = {
     ISR_PAGOS_TRIMESTRALES: '1.1.07',
     ISO_POR_ACREDITAR: '1.1.08',
     PAGOS_ANTICIPADOS_IMPUESTOS: '1.1.09',
+    COBROS_POR_LIQUIDAR: '1.1.10',
+    FONDOS_EN_TRANSITO: '1.1.11',
+    ESTIMACION_INCOBRABLES: '1.1.12',
+    GASTOS_PAGADOS_ANTICIPADO: '1.1.13',
     PROPIEDAD_PLANTA_EQUIPO: '1.2.01',
     DEPRECIACION_ACUMULADA: '1.2.02',
     PROVEEDORES: '2.1.03',
@@ -27,6 +31,7 @@ export const CUENTAS_GT = {
     PC_POR_PAGAR: '2.1.09',
     PASIVO_LEALTAD: '2.1.10',
     IVA_POR_CERTIFICAR: '2.1.11',
+    INGRESOS_COBRADOS_ANTICIPADO: '2.1.12',
     CAPITAL_SOCIAL: '3.1.01',
     RESERVA_LEGAL: '3.2.01',
     UTILIDADES_ACUMULADAS: '3.3.01',
@@ -35,11 +40,15 @@ export const CUENTAS_GT = {
     INGRESOS_DIFERIDOS_LEALTAD: '4.1.05',
     INGRESOS_PUNTOS: '4.1.06',
     DIFERENCIAL_CAMBIARIO: '4.2.01',
+    GANANCIA_VENTA_ACTIVOS: '4.2.02',
     PREMIOS_PROMOCIONES: '5.1.03',
     DEPRECIACIONES: '5.3.01',
     CUENTAS_INCOBRABLES: '5.3.02',
     IMPUESTOS_DEDUCIBLES: '5.3.03',
     IMPUESTO_PC: '5.3.04',
+    DIFERENCIAS_COBRO: '5.3.05',
+    PERDIDA_BAJA_ACTIVOS: '5.3.06',
+    GASTOS_BANCARIOS: '5.3.07',
     GASTOS_NO_DEDUCIBLES: '5.4.01',
     MULTAS_TRIBUTARIAS: '5.4.02',
     IMPUESTO_SOBRE_RENTA: '5.5.01',
@@ -82,6 +91,13 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
     hoja(C.ISR_PAGOS_TRIMESTRALES, 'ISR pagos trimestrales', 'activo', '1.1'),
     hoja(C.ISO_POR_ACREDITAR, 'ISO por acreditar', 'activo', '1.1'),
     hoja(C.PAGOS_ANTICIPADOS_IMPUESTOS, 'Pagos anticipados de impuestos', 'activo', '1.1'),
+    // contabilidad completa (contrato §10): una subcuenta 1.1.10.NN por proveedor de cobro
+    grupo(C.COBROS_POR_LIQUIDAR, 'Cobros por liquidar', 'activo', '1.1'),
+    hoja(C.FONDOS_EN_TRANSITO, 'Fondos en tránsito', 'activo', '1.1'),
+    hoja(C.ESTIMACION_INCOBRABLES, 'Estimación para cuentas incobrables', 'activo', '1.1', {
+        contracuenta: true,
+    }),
+    hoja(C.GASTOS_PAGADOS_ANTICIPADO, 'Gastos pagados por anticipado', 'activo', '1.1'),
     grupo('1.2', 'Activo no corriente', 'activo', '1'),
     grupo(C.PROPIEDAD_PLANTA_EQUIPO, 'Propiedad, planta y equipo', 'activo', '1.2'),
     ...CLASES_ACTIVO.map((clase) =>
@@ -115,6 +131,7 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
     hoja(C.PC_POR_PAGAR, 'Impuesto de pequeño contribuyente por pagar', 'pasivo', '2.1'),
     hoja(C.PASIVO_LEALTAD, 'Pasivo del programa de lealtad', 'pasivo', '2.1'),
     hoja(C.IVA_POR_CERTIFICAR, 'IVA por certificar', 'pasivo', '2.1'),
+    hoja(C.INGRESOS_COBRADOS_ANTICIPADO, 'Ingresos cobrados por anticipado', 'pasivo', '2.1'),
 
     grupo('3', 'Patrimonio', 'patrimonio', null),
     grupo('3.1', 'Capital', 'patrimonio', '3'),
@@ -132,6 +149,7 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
     hoja(C.INGRESOS_PUNTOS, 'Ingresos por puntos canjeados o vencidos', 'ingreso', '4.1'),
     grupo('4.2', 'Ingresos no operativos', 'ingreso', '4'),
     hoja(C.DIFERENCIAL_CAMBIARIO, 'Diferencial cambiario', 'ingreso', '4.2'),
+    hoja(C.GANANCIA_VENTA_ACTIVOS, 'Ganancia en venta de activos', 'ingreso', '4.2'),
 
     hoja(C.PREMIOS_PROMOCIONES, 'Premios y promociones', 'gasto', '5.1'),
     grupo('5.3', 'Depreciaciones, reservas e impuestos', 'gasto', '5'),
@@ -139,6 +157,9 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
     hoja(C.CUENTAS_INCOBRABLES, 'Cuentas incobrables', 'gasto', '5.3'),
     hoja(C.IMPUESTOS_DEDUCIBLES, 'Impuestos y tasas deducibles', 'gasto', '5.3'),
     hoja(C.IMPUESTO_PC, 'Impuesto de pequeño contribuyente', 'gasto', '5.3'),
+    hoja(C.DIFERENCIAS_COBRO, 'Diferencias de cobro', 'gasto', '5.3'),
+    hoja(C.PERDIDA_BAJA_ACTIVOS, 'Pérdida en baja de activos', 'gasto', '5.3'),
+    hoja(C.GASTOS_BANCARIOS, 'Gastos y comisiones bancarias', 'gasto', '5.3'),
     grupo('5.4', 'Gastos no deducibles', 'gasto', '5'),
     hoja(C.GASTOS_NO_DEDUCIBLES, 'Gastos no deducibles', 'gasto', '5.4', {
         categoria_fiscal: 'no_deducible',
@@ -164,7 +185,8 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
 export function categoriaFlujoGt(codigo: string): CategoriaFlujo | undefined {
     const empieza = (prefijo: string) => codigo === prefijo || codigo.startsWith(`${prefijo}.`)
     if (['1', '1.1', '1.2', '2', '2.1', '3', '4', '5'].includes(codigo)) return undefined
-    if (empieza('1.1.01') || empieza('1.1.02')) return 'efectivo'
+    // cajas, bancos y fondos en tránsito (depósitos de caja aún no acreditados)
+    if (empieza('1.1.01') || empieza('1.1.02') || empieza(C.FONDOS_EN_TRANSITO)) return 'efectivo'
     if (empieza(C.PROPIEDAD_PLANTA_EQUIPO)) return 'inversion'
     if (empieza(C.DEPRECIACION_ACUMULADA)) return 'operacion'
     if (empieza('3.1') || empieza('3.2')) return 'financiamiento'

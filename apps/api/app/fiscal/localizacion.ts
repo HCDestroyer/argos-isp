@@ -124,35 +124,35 @@ export interface DefinicionTipoDte {
 }
 
 /**
- * Impuesto como entidad con vigencia (estudio de Odoo, tabla final #6 y #7). Las retenciones son
- * impuestos **negativos** (como en Odoo), con nuestras tasas.
+ * Impuesto como entidad con vigencia (contrato §10.2; estudio de Odoo #6 y #7). Las retenciones son
+ * impuestos negativos (`signo = -1`, como en Odoo), con nuestras tasas; la `tasa` va siempre en
+ * positivo.
  *
- * - `calculo`: `precio_incluido` (IVA dentro del precio: `cuota = total − total / (1 + tasa)`),
- *   `sobre_base` (tasa × base sin IVA), `sobre_impuesto` (tasa × la cuota de `base_impuesto`; las
- *   retenciones de IVA son un porcentaje del IVA) o `sobre_total` (tasa × total del documento).
- * - `uso`: `venta` (lo cobra o lo sufre la empresa al vender), `compra` (al comprar o como agente)
- *   o `declaracion` (se calcula en una declaración, no en un documento).
- * - `exigibilidad`: `factura` o `pago` (IVA de avisos que se certifican al cobrar, contrato §8.3).
- * - `cuadricula_base` / `cuadricula_cuota`: etiquetas que llevan los movimientos del libro de la
- *   base y de la cuota (`ledger.movimientos.cuadricula`) para cuadrar lo declarado con lo contabilizado.
+ * - `calculo`: `porcentaje_incluido` (IVA dentro del precio: `cuota = total − total / (1 + tasa)`),
+ *   `porcentaje_de_base` (tasa × base sin IVA), `porcentaje_del_impuesto` (tasa × la cuota de
+ *   `base_impuesto`: las retenciones de IVA son un porcentaje del IVA) o `porcentaje_del_total`.
+ * - `uso`: `venta` (lo cobra o lo sufre la empresa al vender) o `compra` (al comprar o como agente).
+ *   Un código por uso: los de compras llevan el sufijo `_C` (`IVA12_C`).
+ * - `exigibilidad`: `factura` o `certificacion` (la cuota va a `cuenta_transicion` hasta certificar).
+ * - `cuadricula_base` / `cuadricula_cuota`: etiquetas (`CUADRICULAS_GT`) que llevan los movimientos
+ *   del libro de la base y de la cuota (`ledger.movimientos.cuadricula`, con signo `+` o `-`).
  */
-export const CALCULOS_IMPUESTO = ['precio_incluido', 'sobre_base', 'sobre_impuesto', 'sobre_total'] as const
-export type CalculoImpuesto = (typeof CALCULOS_IMPUESTO)[number]
-export const USOS_IMPUESTO = ['venta', 'compra', 'declaracion'] as const
-export type UsoImpuesto = (typeof USOS_IMPUESTO)[number]
-export const GRUPOS_IMPUESTO = [
-    'iva',
-    'retencion_iva',
-    'retencion_isr',
-    'isr',
-    'iso',
-    'pequeno_contribuyente',
+export const CALCULOS_IMPUESTO = [
+    'porcentaje_incluido',
+    'porcentaje_del_impuesto',
+    'porcentaje_de_base',
+    'porcentaje_del_total',
 ] as const
+export type CalculoImpuesto = (typeof CALCULOS_IMPUESTO)[number]
+export const USOS_IMPUESTO = ['venta', 'compra'] as const
+export type UsoImpuesto = (typeof USOS_IMPUESTO)[number]
+export const GRUPOS_IMPUESTO = ['iva', 'retencion_iva', 'retencion_isr', 'pequeno_contribuyente'] as const
 export type GrupoImpuesto = (typeof GRUPOS_IMPUESTO)[number]
+export const EXIGIBILIDADES = ['factura', 'certificacion'] as const
 
 export interface VersionImpuesto {
     vigente_desde: string
-    /** por ciento, string decimal con signo: "12.00", "-15.00" */
+    /** por ciento, string decimal positivo: "12.00" */
     tasa: string
 }
 
@@ -162,15 +162,18 @@ export interface DefinicionImpuesto {
     grupo: GrupoImpuesto
     uso: UsoImpuesto
     calculo: CalculoImpuesto
-    /** impuesto sobre cuya cuota se calcula (`sobre_impuesto`) */
+    /** +1 impuesto; -1 retención */
+    signo: 1 | -1
+    /** impuesto sobre cuya cuota se calcula (`porcentaje_del_impuesto`) */
     base_impuesto: string | null
     incluido: boolean
-    exigibilidad: 'factura' | 'pago'
+    exigibilidad: (typeof EXIGIBILIDADES)[number]
     /** código de la cuenta de la cuota */
     cuenta_cuota: string
     /** cuenta de transición mientras no es exigible (IVA de avisos sin certificar) */
     cuenta_transicion: string | null
-    cuadricula_base: string
+    /** null en las retenciones: su base es la cuota de otro impuesto o el total */
+    cuadricula_base: string | null
     cuadricula_cuota: string
     fuente: string
     confianza: Confianza
@@ -200,6 +203,8 @@ export interface PaqueteLocalizacion {
     cuentas: readonly DefinicionCuentaPaquete[]
     parametros: readonly DefinicionParametro[]
     impuestos: readonly DefinicionImpuesto[]
+    /** etiquetas de impuesto que admiten los movimientos del libro (sin signo) */
+    cuadriculas: readonly string[]
     regimenes: readonly string[]
     /** frases de cada régimen */
     frases_por_regimen: Readonly<Record<string, readonly DefinicionFrase[]>>

@@ -25,9 +25,9 @@ const cualquiera: EsquemaJson = {
 }
 const tasa: EsquemaJson = {
     type: 'string',
-    pattern: '^-?\\d{1,3}\\.\\d{2,6}$',
-    description: 'Por ciento con signo (las retenciones son negativas), como string',
-    examples: ['12.00', '-15.00'],
+    pattern: '^\\d{1,3}\\.\\d{2,6}$',
+    description: 'Por ciento, positiva, como string (el signo va en signo)',
+    examples: ['12.00', '15.00'],
 }
 
 export const LocalizacionFiscal = definirEsquema(
@@ -191,26 +191,39 @@ export const ImpuestoFiscal = definirEsquema(
         id,
         pais: texto,
         codigo: texto,
-        grupo: enumerado(['iva', 'retencion_iva', 'retencion_isr', 'isr', 'iso', 'pequeno_contribuyente']),
-        uso: enumerado(['venta', 'compra', 'declaracion']),
+        grupo: enumerado(['iva', 'retencion_iva', 'retencion_isr', 'pequeno_contribuyente']),
+        uso: enumerado(['venta', 'compra']),
         empresa_id: nulable(id),
         vigente_desde: fecha,
         origen: enumerado(['paquete', 'usuario']),
         nombre: texto,
-        calculo: enumerado(['precio_incluido', 'sobre_base', 'sobre_impuesto', 'sobre_total']),
+        calculo: enumerado([
+            'porcentaje_incluido',
+            'porcentaje_del_impuesto',
+            'porcentaje_de_base',
+            'porcentaje_del_total',
+        ]),
         base_impuesto: {
             ...nulable(texto),
-            description: 'Impuesto sobre cuya cuota se calcula (sobre_impuesto)',
+            description: 'Impuesto sobre cuya cuota se calcula (porcentaje_del_impuesto)',
         },
         tasa,
+        signo: {
+            type: 'integer',
+            enum: [-1, 1],
+            description: '1 impuesto; -1 retención (impuesto negativo)',
+        },
         incluido: booleano,
-        exigibilidad: enumerado(['factura', 'pago']),
+        exigibilidad: enumerado(['factura', 'certificacion']),
         cuenta_cuota: { ...texto, description: 'Código de la cuenta de la cuota' },
         cuenta_transicion: {
             ...nulable(texto),
             description: 'Cuenta mientras no es exigible (IVA por certificar)',
         },
-        cuadricula_base: { ...texto, description: 'Etiqueta de los movimientos de la base' },
+        cuadricula_base: {
+            ...nulable(texto),
+            description: 'Etiqueta de los movimientos de la base (null en las retenciones)',
+        },
         cuadricula_cuota: { ...texto, description: 'Etiqueta de los movimientos de la cuota' },
         descripcion: texto,
         fuente: texto,

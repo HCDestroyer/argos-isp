@@ -56,8 +56,8 @@ export const editarImpuestoValidator = vine.compile(
         tasa: vine
             .string()
             .trim()
-            .regex(/^-?\d{1,3}(\.\d{1,6})?$/)
-            .meta({ description: 'Por ciento con signo: las retenciones son negativas ("-15.00")' }),
+            .regex(/^\d{1,3}(\.\d{1,6})?$/)
+            .meta({ description: 'Por ciento positivo ("15.00"); el signo de la retención es del impuesto' }),
         vigente_desde: fechaIso(),
         motivo: motivo(),
         activo: vine

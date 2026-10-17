@@ -8245,8 +8245,8 @@
                 "properties": {
                   "tasa": {
                     "type": "string",
-                    "pattern": "^-?\\d{1,3}(\\.\\d{1,6})?$",
-                    "description": "Por ciento con signo: las retenciones son negativas (\"-15.00\")"
+                    "pattern": "^\\d{1,3}(\\.\\d{1,6})?$",
+                    "description": "Por ciento positivo (\"15.00\"); el signo de la retención es del impuesto"
                   },
                   "vigente_desde": {
                     "type": "string",
@@ -31192,6 +31192,7 @@
           "calculo",
           "base_impuesto",
           "tasa",
+          "signo",
           "incluido",
           "exigibilidad",
           "cuenta_cuota",
@@ -31225,8 +31226,6 @@
               "iva",
               "retencion_iva",
               "retencion_isr",
-              "isr",
-              "iso",
               "pequeno_contribuyente"
             ]
           },
@@ -31234,8 +31233,7 @@
             "type": "string",
             "enum": [
               "venta",
-              "compra",
-              "declaracion"
+              "compra"
             ]
           },
           "empresa_id": {
@@ -31262,10 +31260,10 @@
           "calculo": {
             "type": "string",
             "enum": [
-              "precio_incluido",
-              "sobre_base",
-              "sobre_impuesto",
-              "sobre_total"
+              "porcentaje_incluido",
+              "porcentaje_del_impuesto",
+              "porcentaje_de_base",
+              "porcentaje_del_total"
             ]
           },
           "base_impuesto": {
@@ -31273,16 +31271,24 @@
               "string",
               "null"
             ],
-            "description": "Impuesto sobre cuya cuota se calcula (sobre_impuesto)"
+            "description": "Impuesto sobre cuya cuota se calcula (porcentaje_del_impuesto)"
           },
           "tasa": {
             "type": "string",
-            "pattern": "^-?\\d{1,3}\\.\\d{2,6}$",
-            "description": "Por ciento con signo (las retenciones son negativas), como string",
+            "pattern": "^\\d{1,3}\\.\\d{2,6}$",
+            "description": "Por ciento, positiva, como string (el signo va en signo)",
             "examples": [
               "12.00",
-              "-15.00"
+              "15.00"
             ]
+          },
+          "signo": {
+            "type": "integer",
+            "enum": [
+              -1,
+              1
+            ],
+            "description": "1 impuesto; -1 retención (impuesto negativo)"
           },
           "incluido": {
             "type": "boolean"
@@ -31291,7 +31297,7 @@
             "type": "string",
             "enum": [
               "factura",
-              "pago"
+              "certificacion"
             ]
           },
           "cuenta_cuota": {
@@ -31306,8 +31312,11 @@
             "description": "Cuenta mientras no es exigible (IVA por certificar)"
           },
           "cuadricula_base": {
-            "type": "string",
-            "description": "Etiqueta de los movimientos de la base"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Etiqueta de los movimientos de la base (null en las retenciones)"
           },
           "cuadricula_cuota": {
             "type": "string",

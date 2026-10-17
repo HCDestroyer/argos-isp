@@ -4,6 +4,7 @@ Decisión del PM, 17 de octubre. Al elegir el país de una empresa se instala su
 
 - Dueños: A1 (`core.empresas.pais` y la selección de país) y A3 (todo lo demás: `ledger`, `billing`, FEL y el módulo nuevo `fiscal`). A4, A5 y A6 consumen.
 - La fuente de cada tasa, plazo, límite o formulario es la investigación del líder (`contabilidad-gt/investigacion.md`, citada como **inv. X.n**). Lo que el informe marca como NO VERIFICADO entra como parámetro editable con la marca **confirmar con contador** (tabla al final), nunca como un hecho.
+- La referencia contable es la documentación oficial de Odoo 20 y 18, resumida en el estudio del líder (`odoo/odoo-contabilidad.md`, citado como **odoo §n**). Odoo sirve como modelo de diseño, nunca como fuente de tasas (inv. D.1).
 - Este contrato manda sobre lo que choque con él en los README de `ledger` y `billing`. Cambia en la misma PR que el código que lo cumple.
 
 ## 1. Objetivos
@@ -14,7 +15,7 @@ Decisión del PM, 17 de octubre. Al elegir el país de una empresa se instala su
 4. Declaraciones como **borradores calculados** y un tablero que ayuda a decidir. El sistema **nunca** presenta nada a la SAT ni cambia el régimen por su cuenta.
 5. Sin romper las reglas 4 (libro inmutable), 5 (invalidación por evento), 9 (auditoría) y 13 (multiempresa). Con una empresa GT y FEL desactivada, todo lo que existe hoy se comporta igual.
 
-Fuera de alcance: nómina (IGSS, IRTRA, INTECAP; inv. A.6), activos fijos con depreciación automática (solo se deja el catálogo de tasas), multimoneda (solo se guarda el tipo de cambio del Banguat cuando haga falta; inv. B.4), envío de declaraciones a la SAT.
+Fuera de alcance: nómina (IGSS, IRTRA, INTECAP; inv. A.6), multimoneda (solo se guarda el tipo de cambio del Banguat cuando haga falta; inv. B.4), envío de declaraciones a la SAT. Los activos fijos con depreciación lineal y los diferidos **entran** al alcance (decisión del PM; §10.10).
 
 ### Decisiones del PM (2026-10-17)
 
@@ -32,13 +33,14 @@ Fuera de alcance: nómina (IGSS, IRTRA, INTECAP; inv. A.6), activos fijos con de
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Paquete                     | `apps/api/app/fiscal/l10n/gt/` es código versionado (`gt-2026.1`): cuentas, parámetros, tipos de DTE, frases, libros, obligaciones y consejos. Un `Instalador` lo aplica a una empresa. Otro país = otra carpeta `l10n/<pais>/` con la misma interfaz | Como los `l10n_*` de Odoo (inv. D.2), pero con nuestras tasas: las de `l10n_gt` están mal (inv. D.1) |
 | Schema nuevo                | `fiscal` (A3) para configuración, DTE, declaraciones, libros emitidos y calendario. Compras y bloqueos van en `ledger`; el estado de la factura en `billing`                                                                                          | `ledger` guarda lo que mueve dinero; `fiscal` lo que se calcula o se reporta encima                  |
-| Parámetros                  | Filas **solo de inserción** con `vigente_desde`. Leer = la fila más reciente con `vigente_desde <= fecha`, primero la de la empresa, luego la global, luego la del paquete                                                                            | Versionado sin `UPDATE`; una declaración vieja se recalcula con los valores de su fecha              |
+| Parámetros                  | Filas **solo de inserción** con `vigente_desde`. Leer = la fila más reciente con `vigente_desde <= fecha`, primero la de la empresa, luego la de la instalación de la empresa, luego la global, luego la del paquete (§16)                                                                           | Versionado sin `UPDATE`; una declaración vieja se recalcula con los valores de su fecha              |
 | Régimen y banderas          | También son parámetros con vigencia (`regimen`, `agente_retencion_iva`, `contribuyente_especial`…), con acciones propias que validan la ley                                                                                                           | Un solo mecanismo de vigencia y auditoría                                                            |
 | `core.empresas.regimen_isr` | Pasa a ser de solo lectura: la API la calcula del parámetro `regimen` vigente. Se borra la columna en una PR posterior                                                                                                                                | Evita dos fuentes de verdad                                                                          |
 | Plan de cuentas             | Se **amplía** el catálogo común (`ledger.cuentas`), con tipo nuevo `patrimonio` y columna `pais`                                                                                                                                                      | No rompe `CUENTAS.*` ni los asientos existentes                                                      |
 | FEL                         | Interfaz `ProveedorFel` (como `account_edi_format` de Odoo, inv. D.2) y tabla `fiscal.dte` separada de la factura                                                                                                                                     | La factura es dinero; el DTE es su certificación, con su propio ciclo y reintentos                   |
 | Modo obligatorio            | La factura nace `por_certificar`, sin asiento ni `factura.emitida`, y se emite al certificarse                                                                                                                                                        | Decisión del PM: no se considera emitida sin certificar                                              |
 | Libros oficiales            | Solo de periodos cerrados y bloqueados; cada emisión guarda folio inicial y final y el hash del archivo                                                                                                                                               | Un folio impreso no puede cambiar de contenido                                                       |
+| Contabilidad completa       | Diarios con numeración guardada, impuestos con etiquetas en el libro, cuentas puente, conciliación bancaria, bloqueos por tipo, checks de cierre, cadena de hash, activos y diferidos (§10)                                                           | Decisión del PM: contabilidad al 100 %, con Odoo como referencia                                     |
 
 ## 3. Modelo de datos
 
@@ -46,10 +48,10 @@ Todas las tablas llevan `empresa_id NOT NULL` (FK a `core.empresas`) salvo los c
 
 ### 3.1 Núcleo (A1)
 
-| Tabla           | Cambio                                                                                                                                                                                                                                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §11)                                                                                                                |
-| `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool) y la marca `nit_cui_invalido` (migración, §11.1). Van en `audit.cambios` |
+| Tabla           | Cambio                                                                                                                                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §12)                                                               |
+| `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool) y la marca `nit_cui_invalido` (migración, §12). Van en `audit.cambios` |
 
 ### 3.2 Localización y parámetros (`fiscal`, A3)
 
@@ -58,9 +60,9 @@ Todas las tablas llevan `empresa_id NOT NULL` (FK a `core.empresas`) salvo los c
 | `fiscal.localizaciones`     | `codigo` (`gt-2026.1`), `pais`, `version` (semver), `publicada_en`, `checksum`                                                                                                                                                                     | Catálogo sembrado desde el código; solo inserción                                                                                                                                                                      |
 | `fiscal.instalaciones`      | `empresa_id`, `localizacion_codigo`, `de_codigo` (null en la primera), `instalada_en`, `instalada_por`, `resumen` jsonb (qué agregó)                                                                                                               | Solo inserción. La vigente es la última                                                                                                                                                                                |
 | `fiscal.parametros`         | `pais`, `clave`, `tipo` (`porcentaje`, `monto`, `entero`, `fecha`, `texto`, `enum`, `bool`, `json`), `alcance` (`N`, `G`, `E`), `fuente` (`inv. A.1`), `confianza`, `confirmar_contador` bool, `descripcion`, `opciones` jsonb, `minimo`, `maximo` | Catálogo del paquete, una fila por (`pais`, `clave`)                                                                                                                                                                   |
-| `fiscal.parametros_valores` | `id`, `empresa_id` (null = global de la instalación), `clave`, `valor` jsonb, `vigente_desde` date, `origen` (`paquete`, `usuario`), `motivo`, `creado_por`, `created_at`                                                                          | Solo inserción (trigger y `REVOKE`). Único (`empresa_id`, `clave`, `vigente_desde`) con NULLS NOT DISTINCT. `alcance = N` solo admite `origen = paquete`. El valor respeta `minimo`/`maximo` (ej. reserva legal ≥ 5 %) |
+| `fiscal.parametros_valores` | `id`, `empresa_id` (null = global de la instalación), `clave`, `valor` jsonb, `vigente_desde` date, `origen` (`paquete`, `usuario`), `motivo`, `creado_por`, `created_at`                                                                          | Solo inserción (trigger y `REVOKE`). Único (`pais`, `empresa_id`, `clave`, `vigente_desde`, `origen`; `origen` en `paquete`, `instalacion`, `usuario`) con NULLS NOT DISTINCT (§16). `alcance = N` solo admite `origen = paquete`. El valor respeta `minimo`/`maximo` (ej. reserva legal ≥ 5 %) |
 | `fiscal.establecimientos`   | `codigo` (entero de la SAT), `nombre`, `direccion`, `municipio`, `departamento`, `activo`, `por_defecto`, `version`                                                                                                                                | Único (`empresa_id`, `codigo`); uno `por_defecto` por empresa                                                                                                                                                          |
-| `fiscal.frases`             | `tipo_frase`, `escenario`, `texto`, `tipos_dte[]`, `origen` (`regimen`, `manual`), `vigente_desde`, `resolucion` (pago directo)                                                                                                                    | Solo inserción; las de `regimen` las deriva la acción, las `manual` las agrega el contador                                                                                                                             |
+| `fiscal.frases`             | `tipo_frase`, `escenario`, `texto`, `tipos_dte[]`, `origen` (`regimen`, `manual`), `vigente_desde`, `resolucion` (pago directo)                                                                                                                    | Solo inserción; solo guarda las `manual` del contador. Las del régimen se calculan al leer (§16)                                                                                                                             |
 | `fiscal.feriados`           | `fecha`, `nombre`, `origen`                                                                                                                                                                                                                        | Global; para plazos en días hábiles. **confirmar con contador**                                                                                                                                                        |
 
 Lectura: `parametro(empresaId, clave, fecha)` en `#fiscal/parametros`. Caché en memoria del proceso por (empresa, clave), invalidada por el evento `fiscal.parametros_cambiados` (regla 5, sin TTL).
@@ -68,9 +70,11 @@ Lectura: `parametro(empresaId, clave, fecha)` en `#fiscal/parametros`. Caché en
 ### 3.3 Plan de cuentas (`ledger`, A3)
 
 - `ledger.cuentas.tipo` admite `patrimonio`. Columna `pais char(2) NOT NULL DEFAULT 'GT'`; el único pasa a (`pais`, `codigo`). `cuentasPorCodigo` resuelve con el país de la empresa del asiento (hoy siempre GT: nada cambia).
-- Columnas nuevas: `naturaleza` (`deudora`, `acreedora`; derivada del tipo, salvo las contracuentas), `auxiliar_proveedor` bool, `categoria_fiscal` (ver §6.5), `libro_inventario` bool.
+- Columnas nuevas: `naturaleza` (`deudora`, `acreedora`; derivada del tipo, salvo las contracuentas), `auxiliar_proveedor` bool, `categoria_fiscal` (ver §6.1), `libro_inventario` bool.
 - `ledger.movimientos.proveedor_id` (FK a `ledger.proveedores`), obligatorio en cuentas con `auxiliar_proveedor`.
-- `ledger.asientos.origen_tipo` agrega `compra`, `pago_proveedor`, `retencion`, `liquidacion_impuesto`, `pago_impuesto`, `cierre_anual`, `reclasificacion` y `lealtad` (este último lo usa `contratos/lealtad.md`).
+- Columnas del catálogo `reinicia_anual` y `categoria_flujo` (§10.8). `ledger.movimientos` agrega `impuesto_codigo` y `cuadricula` (§10.2); `ledger.asientos` agrega `fecha_documento` (fecha real de un asiento automático movido por un bloqueo) y `excepcion_id` (§10.4). Son `ALTER ADD COLUMN`: las filas existentes quedan en null.
+- Tablas de §10 en `ledger`: `diarios`, `secuencias`, `asientos_numeros`, `asientos_partidas`, `asientos_sellos`, `bloqueos_excepciones`, `cierres_checks`, `extractos`, `extractos_lineas`, `conciliaciones`, `reglas_conciliacion`, `activos`, `activos_cuotas`, `activos_bajas`, `diferimientos`, `diferimientos_cuotas`; en `billing`: `secuencias`, `sustituciones`, `notas_credito_lineas`; en `fiscal`: `impuestos`. Todas de solo inserción salvo la configuración (`diarios`, `reglas_conciliacion`), que lleva `version` y `audit.cambios`.
+- `ledger.asientos.origen_tipo` agrega `compra`, `pago_proveedor`, `retencion`, `liquidacion_impuesto`, `pago_impuesto`, `cierre_anual`, `reclasificacion`, `liquidacion_cobro`, `deposito`, `traslado`, `banco`, `provision`, `castigo`, `diferencia_cobro`, `depreciacion`, `baja_activo`, `diferido` y `lealtad` (este último lo usa `contratos/lealtad.md`).
 
 ### 3.4 Compras (`ledger`, A3)
 
@@ -102,7 +106,7 @@ Caja | Banco | 2.1.03 Proveedores haber  total − retenciones
 
 ### 3.5 Facturación (`billing`, A3)
 
-- `billing.facturas.estado` agrega `por_certificar`. `establecimiento_id` (FK) y `tipo_dte` (texto, del catálogo). Las columnas `fel_*` quedan de solo lectura y se migran a `fiscal.dte` (§11).
+- `billing.facturas.estado` agrega `por_certificar`. `establecimiento_id` (FK) y `tipo_dte` (texto, del catálogo). Las columnas `fel_*` quedan de solo lectura y se migran a `fiscal.dte` (§12).
 - `billing.facturas_lineas.tipo` agrega `descuento` (línea negativa ligada a otra línea por `linea_id`; la usa lealtad, inv. F.1). `descuento numeric(14,2)` en la línea descontada.
 - `billing.pagos`: `retenciones[]` vía `ledger.constancias_retencion` (`direccion = recibida`). El asiento del pago agrega `1.1.05 IVA retenido por clientes` o `1.1.06 ISR retenido por clientes` en el debe por el monto de la constancia, y CxC en el haber por el total.
 
@@ -118,16 +122,16 @@ Caja | Banco | 2.1.03 Proveedores haber  total − retenciones
 
 ### 3.7 Cierres, bloqueos, libros y declaraciones
 
-| Tabla                        | Columnas clave                                                                                                                                                                                                                                                                                                                        | Restricciones                                                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ledger.bloqueos`            | `empresa_id`, `tipo` (`normal`, `duro`), `hasta` date, `motivo`, `creado_por`, `created_at`                                                                                                                                                                                                                                           | Solo inserción. El bloqueo vigente de cada tipo es la última fila. Un `duro` nuevo debe ser posterior al anterior (trigger); el `normal` nunca queda antes del `duro` |
-| `ledger.cierres_anuales`     | `empresa_id`, `anio`, `resultado`, `isr`, `reserva_legal`, `asientos[]`, `cerrado_por`, `cerrado_en`                                                                                                                                                                                                                                  | Único (`empresa_id`, `anio`); solo inserción                                                                                                                          |
-| `fiscal.libros_habilitados`  | `empresa_id`, `libro`, `tipo` (`computarizado`), `autorizacion` (SAT-7121 y Registro Mercantil), `folio_desde`, `folio_hasta`, `fecha`                                                                                                                                                                                                | Solo inserción                                                                                                                                                        |
-| `fiscal.libros_emisiones`    | `empresa_id`, `libro`, `desde`, `hasta`, `folio_inicial`, `folio_final`, `formato` (`pdf`, `xlsx`), `archivo`, `sha256`, `generado_por`                                                                                                                                                                                               | Solo inserción. Folios correlativos por (`empresa_id`, `libro`) y dentro de un rango habilitado                                                                       |
-| `fiscal.obligaciones`        | `empresa_id`, `impuesto`, `periodo_desde`, `periodo_hasta`, `formulario`, `vence_en`, `estado` (`pendiente`, `borrador`, `presentada`, `no_aplica`), `declaracion_id`                                                                                                                                                                 | Único (`empresa_id`, `impuesto`, `periodo_desde`). Es el calendario fiscal                                                                                            |
-| `fiscal.declaraciones`       | `id`, `empresa_id`, `impuesto`, `periodo_desde`, `periodo_hasta`, `version` (1, 2…), `formulario`, `vence_en`, `parametros` jsonb (clave, valor, `vigente_desde`, fuente), `detalle` jsonb (renglones), `totales` jsonb, `datos_hash`, `calculada_por`, `calculada_en`, `estado` (`borrador`, `revisada`, `presentada`, `sustituida`) | Solo inserción de versiones; `presentada` guarda `numero_formulario`, `fecha_presentacion` y `boleta` que escribe el usuario                                          |
-| `fiscal.ajustes_fiscales`    | `empresa_id`, `anio`, `concepto`, `tipo` (`no_deducible`, `exento`, `diferencia_temporal`), `monto`, `cuenta_id`, `motivo`, `creado_por`                                                                                                                                                                                              | Solo inserción; los usa el ISR anual y el trimestral por cierre parcial                                                                                               |
-| `fiscal.iso_acreditamientos` | `empresa_id`, `declaracion_iso_id`, `monto`, `acreditado_contra` (declaración ISR), `vence_en` (3 años, inv. A.4)                                                                                                                                                                                                                     | Solo inserción                                                                                                                                                        |
+| Tabla                        | Columnas clave                                                                                                                                                                                                                                                                                                                        | Restricciones                                                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ledger.bloqueos`            | `empresa_id`, `tipo` (`global`, `ventas`, `compras`, `impuestos`, `duro`), `hasta` date, `motivo`, `creado_por`, `created_at`                                                                                                                                                                                                         | Solo inserción. El bloqueo vigente de cada tipo es la última fila. Un `duro` nuevo debe ser posterior al anterior (trigger); ningún otro queda antes del `duro`. Excepciones en §10.4 |
+| `ledger.cierres_anuales`     | `empresa_id`, `anio`, `resultado`, `isr`, `reserva_legal`, `asientos[]`, `cerrado_por`, `cerrado_en`                                                                                                                                                                                                                                  | Único (`empresa_id`, `anio`); solo inserción                                                                                                                                          |
+| `fiscal.libros_habilitados`  | `empresa_id`, `libro`, `tipo` (`computarizado`), `autorizacion` (SAT-7121 y Registro Mercantil), `folio_desde`, `folio_hasta`, `fecha`                                                                                                                                                                                                | Solo inserción                                                                                                                                                                        |
+| `fiscal.libros_emisiones`    | `empresa_id`, `libro`, `desde`, `hasta`, `folio_inicial`, `folio_final`, `formato` (`pdf`, `xlsx`), `archivo`, `sha256`, `generado_por`                                                                                                                                                                                               | Solo inserción. Folios correlativos por (`empresa_id`, `libro`) y dentro de un rango habilitado                                                                                       |
+| `fiscal.obligaciones`        | `empresa_id`, `impuesto`, `periodo_desde`, `periodo_hasta`, `formulario`, `vence_en`, `estado` (`pendiente`, `borrador`, `presentada`, `no_aplica`), `declaracion_id`                                                                                                                                                                 | Único (`empresa_id`, `impuesto`, `periodo_desde`). Es el calendario fiscal                                                                                                            |
+| `fiscal.declaraciones`       | `id`, `empresa_id`, `impuesto`, `periodo_desde`, `periodo_hasta`, `version` (1, 2…), `formulario`, `vence_en`, `parametros` jsonb (clave, valor, `vigente_desde`, fuente), `detalle` jsonb (renglones), `totales` jsonb, `datos_hash`, `calculada_por`, `calculada_en`, `estado` (`borrador`, `revisada`, `presentada`, `sustituida`) | Solo inserción de versiones; `presentada` guarda `numero_formulario`, `fecha_presentacion` y `boleta` que escribe el usuario                                                          |
+| `fiscal.ajustes_fiscales`    | `empresa_id`, `anio`, `concepto`, `tipo` (`no_deducible`, `exento`, `diferencia_temporal`), `monto`, `cuenta_id`, `motivo`, `creado_por`                                                                                                                                                                                              | Solo inserción; los usa el ISR anual y el trimestral por cierre parcial                                                                                                               |
+| `fiscal.iso_acreditamientos` | `empresa_id`, `declaracion_iso_id`, `monto`, `acreditado_contra` (declaración ISR), `vence_en` (3 años, inv. A.4)                                                                                                                                                                                                                     | Solo inserción                                                                                                                                                                        |
 
 ## 4. Versionado
 
@@ -144,7 +148,7 @@ Alcance: **N** = lo fija la ley (no editable), **G** = valor global que la empre
 | ------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------- | ---------- | ------------------------------------------------------------------------------------------------------- |
 | `moneda`                              | GTQ                                                                                                 | inv. B.4            | N          | #1                                                                                                      |
 | `ejercicio`                           | 1-ene a 31-dic                                                                                      | inv. A.2, B.2       | N          | #2                                                                                                      |
-| `inicio_libros`                       | fecha de instalación                                                                                | diseño              | E          | Desde cuándo ArgosIsp es el libro oficial (§11)                                                         |
+| `inicio_libros`                       | fecha de instalación                                                                                | diseño              | E          | Desde cuándo ArgosIsp es el libro oficial (§12)                                                         |
 | `tipo_cambio_fuente`                  | Banguat `TipoCambioDia`                                                                             | inv. B.4            | G          | #3; horario de publicación: contador                                                                    |
 | `iva_tasa`                            | 12 %                                                                                                | inv. A.1            | G          | #4                                                                                                      |
 | `iva_incluido`                        | sí                                                                                                  | inv. A.1            | N          | #5                                                                                                      |
@@ -203,6 +207,14 @@ Alcance: **N** = lo fija la ley (no editable), **G** = valor global que la empre
 | `conservacion_anios`                  | indefinida (mínimo 5)                                                                               | inv. B.1            | G          | #56                                                                                                     |
 | `libros_ventana_meses`                | 2                                                                                                   | inv. B.1            | G          | #55                                                                                                     |
 | `mora_con_iva`                        | no (decisión del PM)                                                                                | inv. A.1 (art. 12)  | E          | Interpretación de A3: el art. 12 podría incluirla; el contador decide si se activa                      |
+| `certificar_pago_parcial`             | no                                                                                                  | inv. A.1 (art. 4.1) | E          | §10.1; contador                                                                                         |
+| `iva_redondeo`                        | por línea                                                                                           | odoo §3.1           | N          | §10.2; lo que hace hoy `lineaConIva`; si FEL exige otro: contador                                       |
+| `cobros_liquidar_dias`                | 7                                                                                                   | diseño              | E          | §10.3                                                                                                   |
+| `diferencia_cobro_tope`               | Q1.00                                                                                               | diseño              | E          | §10.9                                                                                                   |
+| `depreciacion_inicio`                 | mes siguiente al alta                                                                               | diseño              | E          | §10.10; contador                                                                                        |
+| `diferir_periodos_cruzados`           | no                                                                                                  | odoo §9             | E          | §10.10; contador                                                                                        |
+
+Las tasas de impuestos y retenciones de esta tabla (`iva_tasa`, `ret_iva_*`, `pc_tasa`, `isr_opcional_retencion`, `isr_no_residentes`, `isr_capital_premios`, `isr_dividendos`) se guardan como filas de `fiscal.impuestos` (§10.2), con la misma fuente, alcance y vigencia.
 
 Regla: un parámetro **sin valor** y marcado contador bloquea solo el cálculo que lo necesita, con 422 `parametro_sin_confirmar` (`errors[0].field` = la clave). Nada se inventa.
 
@@ -276,17 +288,18 @@ Se respetan los códigos actuales (`1.1.03` es CxC, `2.1.02` es IVA débito); no
 
 Todos son reportes de `#fiscal/libros` con la misma salida que `/reportes/*` (`columnas`, `filas`, `totales`) y exportación PDF y XLSX. Llevan encabezado con razón social, NIT, nombre legal del libro (inv. B.1: usar el nombre legal), periodo, folio y "Página N de M". El PDF repite "Van" y "Vienen" con los totales acumulados al pie y al inicio de cada página.
 
-| Libro                         | Columnas                                                                                                                                                                         | Fuente de datos                                                                              |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Diario (primera entrada)      | Partida (correlativo por empresa y año, por `fecha, id`), fecha, cuenta (código y nombre), descripción, debe, haber; total por partida                                           | `ledger.asientos` y `movimientos`                                                            |
-| Mayor (centralizador)         | Por cuenta: saldo inicial, fecha, partida, descripción, debe, haber, saldo; saldo final                                                                                          | `movimientos`                                                                                |
-| Inventarios                   | A una fecha (apertura y 31-dic): cuenta, detalle, valor parcial y total; activo, pasivo y patrimonio; firma del comerciante y del contador                                       | Saldos de cuentas con `libro_inventario` (inv. A.2, art. 42; B.1)                            |
-| Estados financieros           | Balance general, estado de resultados, flujo de efectivo (método indirecto desde el mayor) y, si aplica, costo de producción; firmas                                             | Amplía `estados_financieros.ts` (inv. B.2)                                                   |
-| Compras y servicios recibidos | Fecha, tipo, serie, número, NIT, proveedor, bienes, servicios, importaciones, exento, IVA, total, retención IVA, retención ISR, crédito sí/no, periodo IVA                       | `ledger.compras` por `periodo_iva`                                                           |
-| Ventas y servicios prestados  | Fecha, tipo DTE, serie, número, autorización, NIT/CUI/CF, cliente, bienes, servicios, exportación, exento, IVA, total, estado (anulado = valores en cero), retenciones recibidas | `fiscal.dte` certificados del mes y, sin FEL, `billing.facturas` emitidas y notas de crédito |
+| Libro                         | Columnas                                                                                                                                                                                              | Fuente de datos                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Diario (primera entrada)      | Partida (correlativo por empresa y año guardado al cerrar el mes, `ledger.asientos_partidas`; §10.7), número del diario, fecha, cuenta (código y nombre), descripción, debe, haber; total por partida | `ledger.asientos` y `movimientos`                                                            |
+| Mayor (centralizador)         | Por cuenta: saldo inicial, fecha, partida, descripción, debe, haber, saldo; saldo final                                                                                                               | `movimientos`                                                                                |
+| Inventarios                   | A una fecha (apertura y 31-dic): cuenta, detalle, valor parcial y total; activo, pasivo y patrimonio; firma del comerciante y del contador                                                            | Saldos de cuentas con `libro_inventario` (inv. A.2, art. 42; B.1)                            |
+| Estados financieros           | Balance general, estado de resultados, flujo de efectivo (método indirecto desde el mayor) y, si aplica, costo de producción; firmas                                                                  | Amplía `estados_financieros.ts` (inv. B.2)                                                   |
+| Compras y servicios recibidos | Fecha, tipo, serie, número, NIT, proveedor, bienes, servicios, importaciones, exento, IVA, total, retención IVA, retención ISR, crédito sí/no, periodo IVA                                            | `ledger.compras` por `periodo_iva`                                                           |
+| Ventas y servicios prestados  | Fecha, tipo DTE, serie, número, autorización, NIT/CUI/CF, cliente, bienes, servicios, exportación, exento, IVA, total, estado (anulado = valores en cero), retenciones recibidas                      | `fiscal.dte` certificados del mes y, sin FEL, `billing.facturas` emitidas y notas de crédito |
 
 - Las columnas de los libros de IVA son propuesta de A3; el formato exacto exigido por la SAT no está en el informe: contador.
-- **Emisión oficial** (`POST /libros/:libro/emitir`): solo de un rango con mes cerrado **y** bloqueo normal o duro (422 `periodo_sin_bloqueo`). Toma el siguiente folio del libro (`fiscal.libros_emisiones`), dentro de un rango habilitado (`fiscal.libros_habilitados`; 422 `folios_agotados`). Guarda archivo y SHA-256. Volver a emitir el mismo rango crea otra emisión con folios nuevos y la marca de reimpresión.
+- **Emisión oficial** (`POST /libros/:libro/emitir`): solo de un rango con mes cerrado **y** bloqueo `global` o `duro` (422 `periodo_sin_bloqueo`). Toma el siguiente folio del libro (`fiscal.libros_emisiones`), dentro de un rango habilitado (`fiscal.libros_habilitados`; 422 `folios_agotados`). Guarda archivo, SHA-256 y el último hash de la cadena del periodo (§10.10). Volver a emitir el mismo rango crea otra emisión con folios nuevos y la marca de reimpresión.
+- Además de los libros legales: balance de comprobación, auxiliar y antigüedad de proveedores y resumen de conciliación bancaria (§10.3, §10.8).
 - Vista previa (`GET /libros/:libro`): cualquier rango, marca de agua "Borrador sin folio".
 - Pequeño contribuyente: solo el libro de compras y ventas (inv. A.3).
 - Plazo: el tablero avisa si un libro no se emitió dentro de `libros_ventana_meses` (multa de Q5,000; inv. E.2).
@@ -324,7 +337,7 @@ pendiente → contingencia → enviando → certificado
 
 - `enviando` es corto: la acción toma el DTE con `FOR UPDATE SKIP LOCKED`. Si el proceso cae, el reintento **consulta primero** por `identificador` (no duplica).
 - `rechazado` no se reintenta: la factura queda `por_certificar` con el error visible; se corrige el dato (por ejemplo, el NIT del cliente) y `fel.reintentar` crea un DTE nuevo con otro `identificador`.
-- Cada transición deja fila en `fiscal.dte_intentos` y auditoría; los cambios de estado emiten eventos (§10).
+- Cada transición deja fila en `fiscal.dte_intentos` y auditoría; los cambios de estado emiten eventos (§11.3).
 
 ### 8.3 Modos de emisión por empresa
 
@@ -356,16 +369,15 @@ pendiente → contingencia → enviando → certificado
 4. Reserva legal si hubo utilidad: `reserva_legal_pct` × la base de `reserva_legal_base`, `3.3.01 / 3.2.01`. El 15 % del capital es el umbral para capitalizar, no un tope.
 5. Cierra diciembre (`cerrar_periodo`) y guarda `ledger.cierres_anuales`.
 
-El procedimiento detallado no está en una norma (NO VERIFICADO, inv. B.3): los pasos son la práctica estándar y el contador los revisa. Un cierre anual no se reabre si hay bloqueo duro; sin él, `libro.reabrir_ejercicio` (solo `admin`) revierte los asientos de cierre con fecha de hoy.
+Los reportes excluyen el asiento `cierre_anual` del estado de resultados del año, y el cierre exige el check anual (§10.5, §10.8). El procedimiento detallado no está en una norma (NO VERIFICADO, inv. B.3): los pasos son la práctica estándar y el contador los revisa. Un cierre anual no se reabre si hay bloqueo duro; sin él, `libro.reabrir_ejercicio` (solo `admin`) revierte los asientos de cierre con fecha de hoy.
 
 ### 9.2 Bloqueos (inv. D.2)
 
-| Tipo     | Quién                                                     | Efecto                                                                                                                               |
-| -------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `normal` | `contabilidad` (`libro.bloquear`)                         | Ningún asiento con fecha ≤ `hasta`. Se puede mover hacia atrás con motivo (`libro.desbloquear`)                                      |
-| `duro`   | `admin` (`libro.bloquear_duro`), con confirmación escrita | Irreversible: una fila posterior solo puede avanzar la fecha. Exige meses cerrados, sin DTE pendientes y sin compras sin periodo IVA |
+Los bloqueos son por tipo (`global`, `ventas`, `compras`, `impuestos` y `duro`), con excepciones que tienen fecha de fin: detalle en §10.4. Lo que sigue vale para todos:
 
-`ledger.periodo_cerrado(fecha, empresa_id)` pasa a ser verdadero también si `fecha <= bloqueo`. `reabrir_periodo` sobre un mes bajo bloqueo duro: 409 `bloqueo_duro`. Los asientos de un periodo bloqueado se corrigen con reverso fechado hoy, como ya pasa con los meses cerrados.
+- `ledger.fecha_bloqueada(fecha, empresa_id, diario_id, con_impuesto)` es verdadera si la fecha cae en un mes cerrado o bajo un bloqueo que aplica a ese asiento. La usan la acción y los triggers.
+- El bloqueo duro es irreversible y solo avanza. Exige meses cerrados, ningún DTE pendiente, ninguna compra sin periodo IVA y los requisitos de §10.4 (extractos conciliados, cobros por liquidar al día, cadena de hash verificada, check anual).
+- `reabrir_periodo` sobre un mes bajo bloqueo duro: 409 `bloqueo_duro`. Los asientos de un periodo bloqueado se corrigen con reverso fechado hoy, como ya pasa con los meses cerrados.
 
 ### 9.3 Declaraciones (borradores, nunca se envían)
 
@@ -382,7 +394,7 @@ El procedimiento detallado no está en una norma (NO VERIFICADO, inv. B.3): los 
 
 - El calendario (`fiscal.obligaciones`) lo genera el cron `fiscal:calendario` para todo lo pendiente hasta el mes en curso, según el régimen y las banderas vigentes en cada periodo; idempotente por la clave única.
 - `declaraciones.calcular` crea una versión nueva con `detalle` (cada renglón con su origen: DTE, compra, constancia, cuenta), `totales`, los parámetros usados y `datos_hash` (hash de lo leído). Al abrirla, si los datos cambiaron (otro hash), la API lo dice y `presentar` responde 409 `declaracion_desactualizada`.
-- `declaraciones.marcar_presentada` guarda lo que el usuario presentó en la Agencia Virtual: número de formulario, fecha y boleta. Opcionalmente genera el asiento de liquidación (IVA: `2.1.02 / 1.1.04 + 1.1.05 + 2.1.06`, el remanente queda en `1.1.04`).
+- `declaraciones.marcar_presentada` guarda lo que el usuario presentó en la Agencia Virtual: número de formulario, fecha y boleta. El asiento de liquidación ya no es opcional: lo genera `declaraciones.revisar`, que fija además el bloqueo de impuestos (§10.6).
 - `declaraciones.registrar_pago` hace `2.1.06 | 2.1.07 | 2.1.08 | 2.1.09 | 2.1.04 | 2.1.05 / Banco`. Si el pago es tardío calcula mora y multa con los parámetros (inv. E.2) y las separa en `5.4.02`.
 - ISO e ISR: `fiscal.iso_acreditamientos` lleva el saldo por acreditar y su vencimiento; al vencer los 3 años, el cierre anual pasa el remanente a `5.3.03` (inv. A.4).
 
@@ -423,115 +435,370 @@ Errores visibles: si una parte no se puede calcular (falta un parámetro, una vi
 
 Todos llevan el aviso **"Referencia; valídelo con su contador"**. Se pueden ocultar por empresa (queda auditado).
 
-## 10. API, permisos, eventos y errores
+## 10. Contabilidad completa (referencia: Odoo 20)
 
-### 10.1 Endpoints (`/api/v1`)
+Decisión del PM (17 oct): la contabilidad se entrega al 100 % y toma como referencia la documentación oficial de Odoo. Esta sección baja a reglas los diez cambios del estudio de Odoo 20 y 18 del líder (`odoo/odoo-contabilidad.md`, citado como **odoo §n**). Cuando ArgosIsp se aparta de Odoo, aquí se dice por qué (casi siempre por la regla 4 o por la ley de Guatemala).
 
-| Método       | Ruta                                                                                                         | Permiso                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| POST         | `/empresas/:id/cambiar-pais` `{ pais, version }` (A1)                                                        | `empresas.cambiar_pais`                                                     |
-| GET          | `/empresas/paises` (selector de país; A1)                                                                    | `empresas.ver`                                                              |
-| GET          | `/fiscal/localizaciones`, `/fiscal/empresas/:id/localizacion`                                                | `fiscal.ver`                                                                |
-| POST         | `/fiscal/empresas/:id/actualizar-localizacion` `{ codigo }`                                                  | `fiscal.instalar`                                                           |
-| GET          | `/fiscal/parametros?fecha=` (valores vigentes con su origen y fuente), `/fiscal/parametros/:clave/historial` | `fiscal.ver`                                                                |
-| POST         | `/fiscal/parametros/:clave/valores` `{ valor, vigente_desde, motivo }`                                       | `fiscal.editar_parametros`                                                  |
-| POST         | `/fiscal/regimen` `{ regimen, vigente_desde, aviso_sat }`                                                    | `fiscal.cambiar_regimen`                                                    |
-| GET/POST/PUT | `/fiscal/establecimientos[/:id]`                                                                             | `fiscal.ver` / `fiscal.configurar`                                          |
-| GET/POST     | `/fiscal/frases`                                                                                             | `fiscal.ver` / `fiscal.configurar`                                          |
-| GET/PUT      | `/fel/configuracion` (con `version`)                                                                         | `fel.ver` / `fel.configurar`                                                |
-| PUT          | `/fel/credenciales/:ambiente` (multipart o JSON; responde sin secretos)                                      | `fel.configurar`                                                            |
-| POST         | `/fel/credenciales/:ambiente/probar`                                                                         | `fel.configurar`                                                            |
-| POST         | `/fel/activar-contingencia`, `/fel/desactivar-contingencia` `{ motivo }`                                     | `fel.contingencia`                                                          |
-| GET          | `/dte`, `/dte/:id`, `/dte/:id/xml`, `/dte/:id/pdf`                                                           | `fel.ver`                                                                   |
-| POST         | `/facturas/:id/certificar`, `/fel/lotes` `{ facturas[] \| desde, hasta }`                                    | `fel.certificar`                                                            |
-| POST         | `/dte/:id/reintentar`                                                                                        | `fel.certificar`                                                            |
-| GET/POST/PUT | `/proveedores[/:id]`                                                                                         | `proveedores.ver` / `proveedores.editar`                                    |
-| GET          | `/compras`, `/compras/:id`                                                                                   | `compras.ver`                                                               |
-| POST         | `/compras`, `/compras/desde-egreso/:egreso_id`                                                               | `compras.registrar`                                                         |
-| POST         | `/compras/:id/anular` `{ motivo }`                                                                           | `compras.anular`                                                            |
-| POST         | `/pagos-proveedores`, `/pagos-proveedores/:id/anular`                                                        | `compras.pagar`                                                             |
-| GET          | `/libros/:libro?desde&hasta&formato` (vista previa)                                                          | `libros.ver`                                                                |
-| POST         | `/libros/:libro/emitir` `{ desde, hasta, formato }`                                                          | `libros.emitir`                                                             |
-| GET/POST     | `/libros/habilitaciones`                                                                                     | `libros.ver` / `libros.habilitar`                                           |
-| POST         | `/libro/ejercicios/:anio/cerrar`, `/libro/ejercicios/:anio/reabrir`                                          | `libro.cerrar_ejercicio` / `libro.reabrir_ejercicio`                        |
-| GET/POST     | `/libro/bloqueos` `{ tipo, hasta, motivo }`                                                                  | `libro.ver` / `libro.bloquear`, `libro.bloquear_duro`                       |
-| POST         | `/libro/bloqueos/desbloquear` `{ hasta, motivo }`                                                            | `libro.desbloquear`                                                         |
-| GET          | `/fiscal/obligaciones`, `/declaraciones`, `/declaraciones/:id[?formato=pdf\|xlsx]`                           | `declaraciones.ver`                                                         |
-| POST         | `/declaraciones/calcular` `{ impuesto, periodo }`                                                            | `declaraciones.calcular`                                                    |
-| POST         | `/declaraciones/:id/revisar`, `/marcar-presentada`, `/registrar-pago`                                        | `declaraciones.revisar` / `declaraciones.presentar` / `declaraciones.pagar` |
-| GET          | `/fiscal/tablero`, `/fiscal/comparador?crecimiento=`                                                         | `fiscal.ver`                                                                |
-| POST         | `/fiscal/consejos/:clave/ocultar`                                                                            | `fiscal.configurar`                                                         |
+Cuentas nuevas que usa esta sección (se suman a §6.1, dentro del paquete `gt-2026.1`):
+
+| Código    | Cuenta                                                            | Tipo    | Notas                                                       |
+| --------- | ----------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| 1.1.10.NN | Cobros por liquidar (una por proveedor: pasarela, agente, débito) | activo  | §10.3                                                       |
+| 1.1.11    | Fondos en tránsito                                                | activo  | Depósitos de caja y traslados entre cuentas propias (§10.3) |
+| 1.1.12    | Estimación para cuentas incobrables                               | activo  | Contracuenta, naturaleza acreedora (§10.9)                  |
+| 1.1.13    | Gastos pagados por anticipado                                     | activo  | Diferidos de compras (§10.10)                               |
+| 2.1.12    | Ingresos cobrados por anticipado                                  | pasivo  | Diferidos de facturas de varios meses (§10.10)              |
+| 4.2.02    | Ganancia en venta de activos                                      | ingreso | §10.10                                                      |
+| 5.3.05    | Diferencias de cobro                                              | gasto   | §10.9                                                       |
+| 5.3.06    | Pérdida en baja de activos                                        | gasto   | §10.10                                                      |
+| 5.3.07    | Gastos y comisiones bancarias                                     | gasto   | Partidas del extracto sin documento (§10.3)                 |
+
+### 10.1 Ciclo completo de `2.1.11 IVA por certificar`
+
+`2.1.11` es la cuenta de transición del aviso de cobro que se certifica al cobrar (decisión del PM; §8.3), con el mismo papel que la _Cash Basis Transition Account_ de Odoo (odoo §3.3). Ejemplo con un aviso de Q150.00:
+
+```
+Aviso (sin DTE)        1.1.03 CxC 150.00   / 4.1.01 Ingresos 133.93 + 2.1.11 IVA por certificar 16.07
+Pago                   Caja 150.00         / 1.1.03 CxC 150.00
+Certificación del DTE  2.1.11 16.07        / 2.1.02 IVA débito fiscal 16.07   (origen reclasificacion)
+```
+
+| Caso                                                                      | Regla                                                                                                                                                                                                                                                                                                                                                                            | Asiento                                                                                                 |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Pago parcial                                                              | No se certifica hasta que el aviso quede cubierto por pagos y notas. El IVA sigue en `2.1.11`. Certificar por lo pagado (DTE parcial, proporción `pagado / total` como Odoo) queda detrás del parámetro `certificar_pago_parcial` (por defecto `no`): contador, porque el art. 4.1 causa el IVA "cuando se percibe la remuneración" si no hay factura (inv. A.1)                 | Ninguno hasta certificar                                                                                |
+| Pago anulado **después** de certificar                                    | **No se revierte nada fiscal.** Odoo revierte el asiento CABA al desconciliar (odoo §3.3); en Guatemala un DTE certificado es un hecho fiscal que solo se deshace con la **anulación del DTE** (dentro de `dte_anulacion_plazo`) o con una **NCRE**. Anular el pago reabre la CxC y la factura certificada queda como deuda normal. Si no se va a cobrar: NCRE o castigo (§10.9) | Solo el reverso del pago. Si después se anula el DTE: `2.1.02 / 2.1.11` (la factura vuelve a ser aviso) |
+| Pago anulado **antes** de certificar                                      | Nada que revertir en el IVA: el aviso sigue sin DTE                                                                                                                                                                                                                                                                                                                              | Reverso del pago                                                                                        |
+| Nota de crédito antes de certificar                                       | Nota **interna** (sin NCRE, porque no hay DTE al que referirse). Debita `2.1.11` en proporción, nunca `2.1.02`                                                                                                                                                                                                                                                                   | `4.1.01 + 2.1.11 / CxC`                                                                                 |
+| Nota de crédito después de certificar                                     | NCRE con referencia (§8.3)                                                                                                                                                                                                                                                                                                                                                       | `4.1.01 + 2.1.02 / CxC`                                                                                 |
+| Castigo de un aviso que nunca se paga                                     | `cartera.castigar` (§10.9). El IVA del aviso nunca se causó: sale de `2.1.11`. No genera DTE                                                                                                                                                                                                                                                                                     | `2.1.11 + 1.1.12 Estimación (o 5.3.02) / CxC`                                                           |
+| Fecha de certificación bajo un bloqueo (`impuestos`, `ventas` o `global`) | La reclasificación es un asiento automático: va con `fecha = max(fecha de certificación, bloqueo + 1 día)` y guarda la fecha real en `fecha_documento` (odoo §7.1). El DTE y el libro de ventas conservan su fecha                                                                                                                                                               | Reclasificación en el primer día abierto                                                                |
+| Bajo bloqueo duro                                                         | Igual que el anterior; el bloqueo duro nunca tiene excepción                                                                                                                                                                                                                                                                                                                     | Igual                                                                                                   |
+
+**Check de cierre** (§10.5): saldo de `2.1.11` de la empresa = Σ IVA de los avisos vigentes sin DTE certificado, menos lo acreditado por notas internas, menos lo castigado. Una diferencia bloquea el cierre del mes.
+
+### 10.2 Impuestos como entidad y etiquetas en el libro
+
+Hoy las tasas son parámetros sueltos. Odoo modela el impuesto como registro con su reparto a cuentas y sus cuadrículas, y con ellas cuadra la declaración contra el libro (odoo §3.2).
+
+**`fiscal.impuestos`** (A3), solo inserción con vigencia, igual que los parámetros (§4): `pais`, `empresa_id` (null = paquete o global), `codigo`, `nombre`, `uso` (`venta`, `compra`), `calculo` (`porcentaje_incluido`, `porcentaje_del_impuesto`, `porcentaje_de_base`, `porcentaje_del_total`), `tasa`, `signo` (`+1`; `−1` = retención), `exigibilidad` (`factura`, `certificacion`), `cuenta_cuota`, `cuenta_transicion` (`2.1.11` en `certificacion`), `grupo`, `cuadricula_base`, `cuadricula_cuota`, `vigente_desde`, `fuente`. Único (`pais`, `codigo`, `empresa_id`, `vigente_desde`, `origen`) con NULLS NOT DISTINCT. Un código por uso: los de compra llevan sufijo `_C` (`IVA12_C`). Un trigger exige `signo = −1` en los grupos `retencion_*` y `+1` en los demás (§16).
+
+| Código                                                     | Cálculo                                                     | Tasa                          | Fuente              |
+| ---------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------- | ------------------- |
+| `IVA12` (venta y compra)                                   | porcentaje incluido                                         | 12 %                          | inv. A.1            |
+| `IVA_PC`                                                   | sin IVA desglosado; impuesto del 5 % sobre el total del mes | 5 %                           | inv. A.3            |
+| `RET_IVA_ESP`, `RET_IVA_PUB`, `RET_IVA_EXP`, `RET_IVA_TAR` | porcentaje del impuesto, signo −1                           | 15 %, 25 %, 15 % y 65 %, 15 % | inv. A.1            |
+| `RET_IVA_PEQ`                                              | porcentaje del total, signo −1                              | 5 %                           | inv. A.1            |
+| `RET_ISR_OPC`                                              | porcentaje de la base, signo −1                             | 7 %                           | inv. A.2 (art. 48)  |
+| `RET_ISR_NR_DATOS`, `RET_ISR_NR_HON`, `RET_ISR_NR_OTRAS`   | porcentaje de la base, signo −1                             | 5 %, 15 %, 25 %               | inv. A.2 (art. 104) |
+| `RET_ISR_PREMIO`, `RET_ISR_DIV`                            | porcentaje de la base, signo −1                             | 10 %, 5 %                     | inv. A.2, F.2       |
+
+- Los parámetros `iva_tasa`, `ret_iva_*`, `pc_tasa`, `isr_opcional_retencion`, `isr_no_residentes`, `isr_capital_premios` e `isr_dividendos` de §5 dejan de ser parámetros: son estas filas, con la misma fuente, el mismo alcance y la misma vigencia. Los mínimos (`ret_iva_minimo`) y los plazos siguen siendo parámetros.
+- Las retenciones son impuestos negativos con su grupo, como en Odoo (odoo §3.2). Una retención de IVA es un grupo `IVA12` + `RET_IVA_ESP`.
+- Redondeo: parámetro `iva_redondeo` = `por_linea` (alcance N: es lo que hace hoy `lineaConIva`, con la diferencia en la línea mayor y `ROUND_HALF_UP` declarado en decimal.js). Si FEL exige otro: contador.
+- **Etiqueta en cada movimiento.** `ledger.movimientos` agrega `impuesto_codigo` y `cuadricula` (texto con signo, por ejemplo `+V_IVA` o `−V_IVA`), en la línea de la **base** y en la de la **cuota** (odoo §3.2). Se escriben al insertar y nunca cambian. Las cuadrículas del paquete GT: `V_BASE_SERV`, `V_BASE_BIEN`, `V_EXENTO`, `V_EXPORT`, `V_IVA`, `V_IVA_TRANS` (`2.1.11`), `C_BASE_SERV`, `C_BASE_BIEN`, `C_PEQ`, `C_IVA`, `C_SIN_CREDITO`, `RET_IVA_REC`, `RET_IVA_EMI`, `RET_ISR_REC`, `RET_ISR_EMI`, `PC_BASE`, `PC_IMP`. Son internas; su relación con las casillas del SAT-2237 y del SAT-2046 no está en el informe: contador.
+- **Para qué.** La declaración sigue saliendo de los DTE, las compras y las constancias (§9.3), pero antes de revisarla se **cuadra contra el libro por cuadrícula**: Σ `V_IVA` del periodo = IVA débito del libro de ventas; Σ `C_IVA` = crédito del libro de compras; Σ `RET_IVA_REC` = constancias. Una diferencia es una anomalía del check de impuestos (§10.5) con el detalle de los documentos que la explican.
+- Los asientos históricos no tienen etiqueta (no se pueden actualizar): el cuadre solo se exige desde `inicio_libros`.
+
+### 10.3 Cuentas puente, depósitos y conciliación bancaria
+
+**Cobros por liquidar** (_Outstanding receipts_ de Odoo, odoo §6). Hoy un pago por pasarela, agente o débito debita `1.1.02.01 Banco principal` el día del webhook, aunque el dinero llega neto y días después. Desde la fase 4:
+
+```
+Pago por pasarela      1.1.10.NN Cobros por liquidar (bruto)       / 1.1.03 CxC
+Liquidación            Banco (neto) + 5.1.02 Comisiones            / 1.1.10.NN (bruto)
+```
+
+- `cobros.liquidar` (A3) registra la liquidación del proveedor (archivo o captura: fecha, bruto, comisión, neto, pagos incluidos). Concilia cada pago con la liquidación (solo inserción). La comisión deja de estimarse en el webhook: se toma de la liquidación.
+- La conciliación diaria de la pasarela que ya existe compara cobros y pagos; la liquidación compara pagos y dinero en el banco.
+- Check: el saldo de cada `1.1.10.NN` = Σ pagos sin liquidar; antigüedad mayor a `cobros_liquidar_dias` (parámetro de diseño, alcance E, por defecto 7) = anomalía.
+
+**Depósito de caja a banco y traslados** (odoo §6, transferencias internas):
+
+```
+cajas.depositar        1.1.11 Fondos en tránsito    / Caja (con la boleta y el turno)
+Al conciliar el banco  Banco                        / 1.1.11
+bancos.trasladar       1.1.11 / Banco A ; Banco B / 1.1.11
+```
+
+El depósito baja el efectivo esperado del turno igual que un egreso.
+
+**Extractos y conciliación, solo de inserción.**
+
+| Tabla                        | Columnas clave                                                                                                                      | Restricciones                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `ledger.extractos`           | `empresa_id`, `cuenta_bancaria_id`, `desde`, `hasta`, `saldo_inicial`, `saldo_final`, `archivo`, `sha256`, `importado_por`          | Solo inserción. El saldo inicial debe encadenar con el final del anterior (aviso si no) |
+| `ledger.extractos_lineas`    | `extracto_id`, `fecha`, `descripcion`, `referencia`, `monto` (con signo), `saldo`, `huella`                                         | Solo inserción. Único (`cuenta_bancaria_id`, `huella`): detecta duplicados (odoo §6)    |
+| `ledger.conciliaciones`      | `linea_id`, `movimiento_id`, `monto`, `regla_id`, `creado_por`, `created_at`                                                        | Solo inserción. Deshacer = fila en `ledger.conciliaciones_anulaciones` con motivo       |
+| `ledger.reglas_conciliacion` | `empresa_id`, `condicion` (texto contiene o regex, rango de monto), `accion` (`contrapartida` con cuenta, `cliente` por referencia) | Configuración con `version` y `audit.cambios`                                           |
+
+- **Diferencia con Odoo.** Odoo registra la transacción contra una cuenta de suspenso y **reescribe** ese asiento al conciliar (odoo §6). ArgosIsp nunca reescribe: la conciliación es una fila que liga una línea del extracto con un movimiento existente; una línea sin documento (comisión, interés, cargo) genera un asiento **nuevo** con `bancos.registrar_desde_extracto` (`5.3.07 / Banco`) y se concilia con él.
+- Importación del extracto: adaptadores por banco en CSV o XLSX (A6, neutral al origen, como `contratos/importacion.md`) que llaman a `bancos.importar_extracto` (A3).
+- Reporte de resumen de conciliación por cuenta y fecha: saldo del libro, saldo del extracto, partidas en tránsito de cada lado (odoo §6).
+
+### 10.4 Bloqueos por tipo y excepciones
+
+Detalle de §9.2. `ledger.bloqueos.tipo` admite `global` (el `normal` de antes), `ventas`, `compras`, `impuestos` y `duro` (odoo §7.1).
+
+| Tipo        | Afecta                                                             | Quién lo fija                                                                                       | Se puede mover hacia atrás           |
+| ----------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `ventas`    | Asientos de los diarios de ventas (§10.7): facturas, avisos, notas | `contabilidad` (`libro.bloquear`)                                                                   | Sí, con motivo                       |
+| `compras`   | Diarios de compras y pagos a proveedores                           | `contabilidad`                                                                                      | Sí, con motivo                       |
+| `impuestos` | Todo asiento con algún movimiento etiquetado (§10.2)               | **Automático** al revisar la declaración del IVA o de pequeño contribuyente (§10.6); también a mano | Solo con una excepción               |
+| `global`    | Todo asiento                                                       | `contabilidad`                                                                                      | Sí, con motivo (`libro.desbloquear`) |
+| `duro`      | Todo asiento, sin excepción posible                                | `admin` (`libro.bloquear_duro`), con confirmación escrita                                           | **Nunca**; solo avanza               |
+
+- **Excepciones** (`ledger.bloqueos_excepciones`, solo inserción): tipo de bloqueo (nunca `duro`), `usuario_id` (null = todos), motivo, `hasta_en` (fin obligatorio; Odoo admite excepciones sin fin, aquí no), creada por `admin`. Revocar = fila en `bloqueos_excepciones_revocaciones`. Cada asiento que entra por una excepción guarda `excepcion_id`.
+- **Requisitos del bloqueo duro**, además de los de §9.2: todos los extractos del periodo conciliados (como `_validate_locks` de Odoo, odoo §6), ningún cobro por liquidar más antiguo que `cobros_liquidar_dias`, la cadena de hash verificada hasta la fecha (§10.10) y el check anual en verde o supervisado (§10.5).
+- **Fecha bajo bloqueo.** Un asiento manual con fecha bloqueada responde 422 `periodo_bloqueado` con el tipo. Los asientos **automáticos** (reclasificación de `2.1.11`, liquidación de cobros, depreciación, diferidos, conciliación) van al primer día abierto (`bloqueo + 1`) y guardan su fecha real en `fecha_documento` (odoo §7.1).
+- `ledger.periodo_cerrado(fecha, empresa_id)` se generaliza a `ledger.fecha_bloqueada(fecha, empresa_id, diario_id, con_impuesto)`, usada por la acción y por los triggers.
+
+### 10.5 Lista de verificación de cierre
+
+`ledger.cierres_checks` (A3, solo inserción): `empresa_id`, `tipo` (`mensual`, `impuestos`, `anual`), `periodo`, `clave`, `automatico`, `esperado`, `obtenido`, `resultado` (`ok`, `anomalia`), `estado` (`revisado`, `anomalia`, `supervisado`), `nota`, `revisado_por`, `created_at`. El estado vigente es la última fila por clave. Como la tarea de cierre de Odoo 20 (odoo §7.2), con la diferencia de que `supervisado` exige nota.
+
+| Clave                   | Tipo      | Qué compara                                                            |
+| ----------------------- | --------- | ---------------------------------------------------------------------- |
+| `cxc_antiguedad`        | mensual   | Total de la antigüedad de cartera = saldo de `1.1.03`                  |
+| `cxc_auxiliar`          | mensual   | Σ saldos de clientes = saldo de `1.1.03`; ídem `2.1.01 Anticipos`      |
+| `cxp_antiguedad`        | mensual   | Antigüedad de proveedores = saldo de `2.1.03`                          |
+| `apertura_cero`         | mensual   | `2.9.01 Saldos de apertura` = 0 (después de la importación)            |
+| `iva_por_certificar`    | mensual   | §10.1                                                                  |
+| `turnos_cerrados`       | mensual   | Ningún turno de caja abierto con fecha del periodo                     |
+| `fondos_transito`       | mensual   | `1.1.11` = depósitos sin conciliar                                     |
+| `cobros_por_liquidar`   | mensual   | §10.3                                                                  |
+| `extractos_conciliados` | mensual   | Toda línea de extracto del periodo conciliada                          |
+| `dte_pendientes`        | mensual   | Ningún DTE `pendiente`, `enviando` o `contingencia` del periodo        |
+| `por_certificar`        | mensual   | Facturas `por_certificar` del periodo (aviso, no bloquea)              |
+| `compras_sin_periodo`   | mensual   | Compras sin `periodo_iva`                                              |
+| `secuencias_sin_huecos` | mensual   | §10.7                                                                  |
+| `hash_verificado`       | mensual   | §10.10                                                                 |
+| `depreciacion_al_dia`   | mensual   | Cuotas de activos y diferidos del periodo contabilizadas (§10.10)      |
+| `iva_cuadrado`          | impuestos | §10.2: cuadrículas = libros de IVA = borrador                          |
+| `iva_liquidado`         | impuestos | Saldo de `2.1.02` y `1.1.04` del periodo trasladado por la liquidación |
+| `incobrables`           | anual     | Cartera con más de 60 días revisada; estimación ≤ tope (§10.9)         |
+| `resultados_cero`       | anual     | Cuentas con `reinicia_anual` en cero después del cierre (§10.8)        |
+| `comprobacion_cuadra`   | anual     | Balance de comprobación cuadra antes y después del cierre              |
+
+- `libro.cerrar_periodo`, la revisión de una declaración, `libro.cerrar_ejercicio` y el bloqueo duro exigen sus checks en `ok`, `revisado` o `supervisado` (422 `checks_pendientes` con las claves).
+- Los checks automáticos los corre `cierres.verificar` (A3) bajo pedido y en el cierre; nunca se escriben a mano.
+
+### 10.6 Liquidación del IVA obligatoria
+
+Completa §9.3. Como el _Validate_ de Odoo, que publica el asiento de cierre y fija el bloqueo de impuestos (odoo §7.3):
+
+- `declaraciones.revisar` del IVA genera **siempre** el asiento de liquidación con fecha del último día del periodo (origen `liquidacion_impuesto`, diario de impuestos) y fija el bloqueo `impuestos` en esa fecha, en la misma transacción:
+    - régimen general: `2.1.02 / 1.1.04 + 1.1.05 + 2.1.06`; si el crédito es mayor, el remanente queda en `1.1.04` sin asiento extra (arrastre, como el _tax carryover_ de Odoo);
+    - pequeño contribuyente: `5.3.04 / 2.1.09` por el impuesto, `2.1.09 / 1.1.05` por las retenciones del 5 % recibidas;
+    - ISR opcional: `5.5.01 / 1.1.06 + 2.1.07`; ISR trimestral: `1.1.07 / 2.1.07`; ISO: `1.1.08 / 2.1.08`;
+    - retenciones: sin asiento (ya están en `2.1.04` y `2.1.05`); solo el bloqueo y el check.
+- La liquidación cuadra con el borrador revisado (`datos_hash`). Una corrección posterior va al periodo siguiente o a una declaración sustitutiva, cuyo asiento es la **diferencia** con la anterior, con fecha de hoy.
+- `marcar_presentada` ya no genera asiento: guarda los datos del formulario.
+
+### 10.7 Diarios y numeración guardada
+
+Hoy el tipo de asiento lo da `origen_tipo` y la partida del Libro Diario se calcula por `(fecha, id)`, con lo que un asiento con fecha anterior renumera las siguientes (odoo §2).
+
+- **`ledger.diarios`** por empresa (A3): `codigo`, `tipo` (`ventas`, `cobros`, `caja`, `banco`, `compras`, `impuestos`, `cierre`, `varios`), `cuenta_por_defecto`, `activo`. El paquete crea `VEN`, `COB`, `COM`, `IMP`, `CIE`, `VAR`, uno `CAJ-n` por caja y uno `BAN-n` por cuenta bancaria. El diario se deriva de `origen_tipo` y del método del pago.
+- **`ledger.secuencias`** (`empresa_id`, `diario_id`, `anio`, `ultimo`): el número se toma con `SELECT … FOR UPDATE` en la transacción del asiento y se guarda en **`ledger.asientos_numeros`** (`asiento_id` PK, `diario_id`, `anio`, `numero`; único `diario_id, anio, numero`), solo inserción. Es tabla aparte para no actualizar `ledger.asientos`; los asientos existentes reciben su número en la migración, en orden `(fecha, id)`, con una sola inserción.
+- **Partida del Libro Diario.** El Código de Comercio pide orden cronológico (inv. B.1, art. 373). El correlativo de partida por empresa y año se guarda en `ledger.asientos_partidas` al **cerrar el mes**, en orden `(fecha, numero)`: el mes cerrado ya no admite asientos, así que nunca se renumera. El libro oficial imprime ese número. Que el correlativo se asigne al cierre y no al registrar: contador.
+- **Numeración interna de documentos**, aunque FEL esté desactivada: `billing.secuencias` (`empresa_id`, `establecimiento_id`, `tipo` `AVISO`, `RECIBO`, `NOTA`, `serie`, `anio`, `ultimo`) y columnas `facturas.numero_interno`, `pagos.numero_recibo`, `notas_credito.numero_interno`, escritas al insertar. El DTE trae además su serie y número de la SAT.
+- Ningún número se reutiliza: un documento anulado conserva el suyo. El check `secuencias_sin_huecos` y el tablero avisan de huecos (odoo §2).
+
+### 10.8 Cierre anual y reportes
+
+**Decisión: se mantiene la partida de cierre clásica** (§9.1: cancelar ingresos y gastos contra `3.3.03` y trasladar), y **los reportes excluyen el asiento `cierre_anual`** del estado de resultados del año que cierra.
+
+- Por qué no el modelo de Odoo 19+, donde los resultados no se cancelan y el resultado aparece como línea dinámica (odoo §7.2): el Libro Diario y el Mayor legales de Guatemala se llevan por partida doble y los errores se corrigen con asientos (inv. B.1, arts. 368 y 373). Una línea calculada que no es un asiento no queda en el Diario. La partida clásica deja el traslado del resultado escrito en el libro.
+- Validez para los libros legales y el procedimiento: contador (inv. B.3, NO VERIFICADO; odoo §18).
+- `ledger.cuentas.reinicia_anual` (derivado del tipo: ingresos, gastos y `3.3.03`) y `categoria_flujo` (`operacion`, `inversion`, `financiamiento`, `efectivo`), columnas del catálogo del paquete (odoo §1). Antes de cerrar el año N, los reportes de N+1 muestran la línea "Resultado de ejercicios sin cerrar", calculada con las cuentas `reinicia_anual`; desaparece al cerrar.
+- **Flujo de efectivo** (método indirecto, inv. B.2): resultado del periodo más variaciones de las cuentas por `categoria_flujo`. Las cuentas de `1.1.01`, `1.1.02` y `1.1.11` son `efectivo`.
+- **Balance de comprobación** (`GET /libro/comprobacion?desde&hasta`, A3): por cuenta y por grupo, saldo inicial, debe, haber y saldo final, con cuadre. Se emite antes y después del cierre anual.
+- **Auxiliar de proveedores** (`GET /proveedores/:id/estado-cuenta`) y **antigüedad de proveedores** (`/reportes/cuentas-por-pagar`, tramos iguales a la cartera vencida), A3.
+- **Estados financieros** definidos por prefijo de cuenta o por etiqueta en el paquete `l10n/gt/estados.ts`, no en código de reporte (odoo §8).
+
+### 10.9 Corrección de documentos y cartera
+
+| Acción                                   | Regla                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Asiento                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `facturas.sustituir` (A3)                | Para un dato mal emitido (por ejemplo, el NIT) cuando el periodo ya está ocupado. Anula la original (si está en plazo y sin pagos) o la acredita con NCRE completa, y emite una nueva para el mismo periodo. `billing.sustituciones` (`original_id`, `nueva_id`, `tipo`, `motivo`) traza la relación; la nueva toma `clave_unica = <servicio>-<periodo>#s<n>` y `generarFacturas` considera cubierto el periodo si hay una original vigente o una sustituta vigente. Hoy un periodo anulado no se vuelve a emitir y un NIT equivocado no tiene salida | El de la anulación o la NCRE, más el de la factura nueva              |
+| Nota de crédito por línea                | `billing.notas_credito_lineas` (`nota_id`, `linea_id`, `monto`, `iva`). Acredita un concepto concreto (un cargo indebido, un descuento) en lugar de la proporción de toda la factura. La NCRE lleva esas líneas                                                                                                                                                                                                                                                                                                                                       | Por línea, con su IVA (`2.1.02`, o `2.1.11` si el aviso no tiene DTE) |
+| `cartera.provisionar` (A3, en el cierre) | Estimación de incobrables hasta `reserva_incobrables_max`: **3 % de los saldos deudores al cierre** (inv. A.2, art. 21.20, confianza alta). Si la base incluye el IVA de los avisos sin DTE y cómo se calcula con varios años de estimación: contador                                                                                                                                                                                                                                                                                                 | `5.3.02 / 1.1.12`                                                     |
+| `cartera.castigar` (A3)                  | Por cliente y documento, con motivo y evidencia de gestión de cobro (el art. 21.20 admite la gestión documentada **o** la reserva; inv. A.2). Usa primero la estimación. En avisos sin DTE, el IVA sale de `2.1.11` (§10.1); en facturas certificadas el IVA ya declarado solo se recupera con NCRE: contador                                                                                                                                                                                                                                         | `1.1.12 (o 5.3.02) + 2.1.11 / CxC`                                    |
+| `pagos.cerrar_diferencia` (A3)           | Cierra el saldo pequeño que deja un pago hasta `diferencia_cobro_tope` (parámetro de diseño, alcance E, por defecto Q1.00), como el _Post Difference In_ de Odoo (odoo §6). Si la factura tiene DTE, la diferencia va por NCRE (reduce la venta); si es un aviso sin DTE, por nota interna proporcional                                                                                                                                                                                                                                               | `5.3.05 + 2.1.11 / CxC` o la NCRE                                     |
+
+Todas con `Idempotency-Key`, auditoría y su evento (§11.3); reevalúan el servicio como cualquier abono.
+
+### 10.10 Integridad, activos fijos y diferidos
+
+**Cadena de hash** (odoo §13). El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); falta la prueba de que nadie con acceso de DBA lo alteró.
+
+- `ledger.asientos_sellos` (`asiento_id` PK, `empresa_id`, `sello` correlativo por empresa, `version` `v1`, `hash_anterior`, `hash`), solo inserción.
+- `hash = SHA-256(hash_anterior ‖ json)`, con `json` canónico v1: claves ordenadas; `empresa_id`, `asiento_id`, fecha, diario y número, `origen_tipo`, `origen_id`, `descripcion`, `reversa_de` y los movimientos en orden de id (`cuenta_codigo`, `debe` y `haber` como texto con 2 decimales, `cliente_id`, `proveedor_id`, `impuesto_codigo`, `cuadricula`); fechas en UTC ISO.
+- Lo calcula el sellador `ledger:sellar` (A3, cron cada minuto, con lock), que sella en orden de id los asientos confirmados sin sello. Así no se serializan las transacciones de cobro. Un asiento que confirma tarde con un id menor recibe el siguiente `sello`: la cadena sigue el orden de sellado.
+- `GET /libro/integridad?desde&hasta` (`libro.ver`) recalcula la cadena y devuelve verificado o la primera ruptura, con el primer y el último hash. `ledger.cierres_mensuales` y `fiscal.libros_emisiones` guardan el último hash del periodo (columna nueva, solo en las filas nuevas).
+- El cierre mensual exige todos los asientos del mes sellados y la cadena verificada.
+
+**Activos fijos** (entran al alcance; odoo §10). A3, en `ledger`:
+
+- `ledger.activos`: `empresa_id`, `clase` (las de `depreciacion`), `descripcion`, `serie`, `ubicacion` (sitio, nodo o cliente si es CPE en comodato), `compra_linea_id`, `fecha_alta`, `costo` (sin el IVA tomado como crédito; inv. A.1, art. 16), `valor_residual`, `tasa_anual` (≤ tope legal de la clase; 422 `tasa_sobre_tope`), cuentas de activo, depreciación acumulada y gasto. Solo inserción; la baja es una fila en `activos_bajas`.
+- Método **lineal** únicamente (el que usa el art. 28; inv. A.2). Cuota mensual = (costo − residual) × tasa / 12. Desde qué mes empieza (mes de alta o siguiente) no está en el informe: parámetro `depreciacion_inicio` = `mes_siguiente`, contador.
+- `ledger:depreciar` (cron mensual, con lock): procesa todo lo pendiente hasta el mes cerrado anterior, clave única (`activo_id`, `mes`) en `ledger.activos_cuotas`, asiento `5.3.01 / 1.2.02.xx`.
+- `activos.dar_de_baja` (venta o baja): cancela costo y depreciación acumulada, `4.2.02` o `5.3.06` por la diferencia. Una compra con línea `activo_fijo` crea el activo en la misma transacción.
+- El Libro de Inventarios lista los activos vivos al 31-dic.
+
+**Diferidos** (entran al alcance; odoo §9):
+
+- `ledger.diferimientos` (`empresa_id`, `origen` factura o compra y su línea, `cuenta_diferida` `2.1.12` o `1.1.13`, `cuenta_destino`, `total`, `inicio`, `fin`, `base` `meses`), solo inserción, y `ledger.diferimientos_cuotas` (`diferimiento_id`, `mes`, `monto`, `asiento_id`; único `diferimiento_id, mes`).
+- Usos: factura de varios meses (plan anual o semestral pagado de una vez) y compras de seguros o licencias anuales. `ledger:diferir` (cron mensual, con lock) devuelve cada mes su parte a ingresos o gastos.
+- Diferir también el periodo de servicio que cruza el fin de mes (ciclo `aniversario`): parámetro `diferir_periodos_cruzados` = `no`, contador (odoo §9: en NIIF haría falta; lo fiscal sigue a la factura).
+- El IVA no se difiere: se causa con la factura o la certificación.
+
+## 11. API, permisos, eventos y errores
+
+### 11.1 Endpoints (`/api/v1`)
+
+| Método       | Ruta                                                                                                                                                  | Permiso                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| POST         | `/empresas/:id/cambiar-pais` `{ pais, version }` (A1)                                                                                                        | `empresas.cambiar_pais`                                                     |
+| GET          | `/empresas/paises` (selector de país; A1)                                                                                                                    | `empresas.ver`                                                              |
+| GET          | `/fiscal/localizaciones`, `/fiscal/empresas/:id/localizacion`                                                                                         | `fiscal.ver`                                                                |
+| POST         | `/fiscal/empresas/:id/actualizar-localizacion` `{ codigo }`                                                                                           | `fiscal.instalar`                                                           |
+| GET          | `/fiscal/parametros?fecha=` (valores vigentes con su origen y fuente), `/fiscal/parametros/:clave/historial`                                          | `fiscal.ver`                                                                |
+| POST         | `/fiscal/parametros/:clave/valores` `{ valor, vigente_desde, motivo }`                                                                                | `fiscal.editar_parametros`                                                  |
+| POST         | `/fiscal/regimen` `{ regimen, vigente_desde, aviso_sat }`                                                                                             | `fiscal.cambiar_regimen`                                                    |
+| GET/POST/PUT | `/fiscal/establecimientos[/:id]`                                                                                                                      | `fiscal.ver` / `fiscal.configurar`                                          |
+| GET/POST     | `/fiscal/frases`                                                                                                                                      | `fiscal.ver` / `fiscal.configurar`                                          |
+| GET/PUT      | `/fel/configuracion` (con `version`)                                                                                                                  | `fel.ver` / `fel.configurar`                                                |
+| PUT          | `/fel/credenciales/:ambiente` (multipart o JSON; responde sin secretos)                                                                               | `fel.configurar`                                                            |
+| POST         | `/fel/credenciales/:ambiente/probar`                                                                                                                  | `fel.configurar`                                                            |
+| POST         | `/fel/activar-contingencia`, `/fel/desactivar-contingencia` `{ motivo }`                                                                              | `fel.contingencia`                                                          |
+| GET          | `/dte`, `/dte/:id`, `/dte/:id/xml`, `/dte/:id/pdf`                                                                                                    | `fel.ver`                                                                   |
+| POST         | `/facturas/:id/certificar`, `/fel/lotes` `{ facturas[] \| desde, hasta }`                                                                             | `fel.certificar`                                                            |
+| POST         | `/dte/:id/reintentar`                                                                                                                                 | `fel.certificar`                                                            |
+| GET/POST/PUT | `/proveedores[/:id]`                                                                                                                                  | `proveedores.ver` / `proveedores.editar`                                    |
+| GET          | `/compras`, `/compras/:id`                                                                                                                            | `compras.ver`                                                               |
+| POST         | `/compras`, `/compras/desde-egreso/:egreso_id`                                                                                                        | `compras.registrar`                                                         |
+| POST         | `/compras/:id/anular` `{ motivo }`                                                                                                                    | `compras.anular`                                                            |
+| POST         | `/pagos-proveedores`, `/pagos-proveedores/:id/anular`                                                                                                 | `compras.pagar`                                                             |
+| GET          | `/libros/:libro?desde&hasta&formato` (vista previa)                                                                                                   | `libros.ver`                                                                |
+| POST         | `/libros/:libro/emitir` `{ desde, hasta, formato }`                                                                                                   | `libros.emitir`                                                             |
+| GET/POST     | `/libros/habilitaciones`                                                                                                                              | `libros.ver` / `libros.habilitar`                                           |
+| POST         | `/libro/ejercicios/:anio/cerrar`, `/libro/ejercicios/:anio/reabrir`                                                                                   | `libro.cerrar_ejercicio` / `libro.reabrir_ejercicio`                        |
+| GET/POST     | `/libro/bloqueos` `{ tipo, hasta, motivo }`                                                                                                           | `libro.ver` / `libro.bloquear`, `libro.bloquear_duro`                       |
+| POST         | `/libro/bloqueos/desbloquear` `{ hasta, motivo }`                                                                                                     | `libro.desbloquear`                                                         |
+| GET          | `/fiscal/obligaciones`, `/declaraciones`, `/declaraciones/:id[?formato=pdf\|xlsx]`                                                                    | `declaraciones.ver`                                                         |
+| POST         | `/declaraciones/calcular` `{ impuesto, periodo }`                                                                                                     | `declaraciones.calcular`                                                    |
+| POST         | `/declaraciones/:id/revisar`, `/marcar-presentada`, `/registrar-pago`                                                                                 | `declaraciones.revisar` / `declaraciones.presentar` / `declaraciones.pagar` |
+| GET          | `/fiscal/tablero`, `/fiscal/comparador?crecimiento=`                                                                                                  | `fiscal.ver`                                                                |
+| POST         | `/fiscal/consejos/:clave/ocultar`                                                                                                                     | `fiscal.configurar`                                                         |
+| GET/POST     | `/fiscal/impuestos` (vigentes y su historial) · `/fiscal/impuestos/:codigo/versiones` `{ tasa, vigente_desde, motivo }`                               | `fiscal.ver` / `fiscal.editar_parametros`                                   |
+| GET/POST/PUT | `/libro/diarios[/:id]`                                                                                                                                | `libro.ver` / `libro.configurar_diarios`                                    |
+| GET          | `/libro/comprobacion?desde&hasta`, `/libro/integridad?desde&hasta`                                                                                    | `libro.ver`                                                                 |
+| GET/POST     | `/libro/bloqueos/excepciones` `{ tipo, usuario_id?, motivo, hasta_en }` · POST `/libro/bloqueos/excepciones/:id/revocar`                              | `libro.ver` / `libro.excepcion_bloqueo`                                     |
+| GET          | `/libro/cierres/:tipo/:periodo/checks`                                                                                                                | `libro.ver`                                                                 |
+| POST         | `/libro/cierres/:tipo/:periodo/verificar`, `/libro/cierres/checks/:id/revisar` `{ estado, nota }`                                                     | `libro.cerrar_periodo`                                                      |
+| POST         | `/cobros/liquidaciones` (liquidación de pasarela, agente o débito)                                                                                    | `cobros.liquidar`                                                           |
+| POST         | `/cajas/:id/depositar` `{ monto, cuenta_bancaria_id, boleta }`, `/bancos/trasladar`                                                                   | `cajas.depositar` / `bancos.trasladar`                                      |
+| GET/POST     | `/bancos/extractos` (importar), `/bancos/extractos/:id/lineas`                                                                                        | `bancos.ver` / `bancos.importar_extracto`                                   |
+| POST         | `/bancos/conciliaciones` `{ linea_id, movimientos[] }`, `/bancos/conciliaciones/:id/anular`, `/bancos/extractos/lineas/:id/registrar` (asiento nuevo) | `bancos.conciliar`                                                          |
+| GET/POST/PUT | `/bancos/reglas[/:id]`                                                                                                                                | `bancos.ver` / `bancos.conciliar`                                           |
+| GET          | `/reportes/conciliacion-bancaria`, `/reportes/cuentas-por-pagar`, `/proveedores/:id/estado-cuenta`                                                    | `reportes.ver` / `proveedores.ver`                                          |
+| POST         | `/facturas/:id/sustituir` `{ motivo, cliente_fiscal? }`                                                                                               | `facturas.sustituir`                                                        |
+| POST         | `/facturas/:id/notas-credito` acepta `lineas[] { linea_id, monto }`                                                                                   | `facturas.nota_credito`                                                     |
+| POST         | `/cartera/provisionar` `{ anio }`, `/cartera/castigos` `{ facturas[], motivo, evidencia }`                                                            | `cartera.provisionar` / `cartera.castigar`                                  |
+| POST         | `/pagos/:id/cerrar-diferencia`                                                                                                                        | `pagos.cerrar_diferencia`                                                   |
+| GET/POST     | `/activos[/:id]`, POST `/activos/:id/dar-de-baja`                                                                                                     | `activos.ver` / `activos.registrar`, `activos.dar_de_baja`                  |
+| GET/POST     | `/diferimientos[/:id]`                                                                                                                                | `libro.ver` / `libro.registrar_asiento`                                     |
 
 Todas las listas con cursor y `?empresas=todas` (solo alcance global). Las que mueven dinero o estado aceptan `Idempotency-Key`. `POST /pagos` acepta `retenciones[] { impuesto, numero, fecha, monto }`.
 
-### 10.2 Permisos nuevos
+### 11.2 Permisos nuevos
 
-`empresas.cambiar_pais`, `fiscal.ver`, `fiscal.configurar`, `fiscal.instalar`, `fiscal.editar_parametros`, `fiscal.cambiar_regimen`, `fel.ver`, `fel.configurar`, `fel.certificar`, `fel.anular`, `fel.contingencia`, `proveedores.ver`, `proveedores.editar`, `compras.ver`, `compras.registrar`, `compras.anular`, `compras.pagar`, `libros.ver`, `libros.emitir`, `libros.habilitar`, `libro.cerrar_ejercicio`, `libro.reabrir_ejercicio`, `libro.bloquear`, `libro.bloquear_duro`, `libro.desbloquear`, `declaraciones.ver`, `declaraciones.calcular`, `declaraciones.revisar`, `declaraciones.presentar`, `declaraciones.pagar`.
+`empresas.cambiar_pais`, `fiscal.ver`, `fiscal.configurar`, `fiscal.instalar`, `fiscal.editar_parametros`, `fiscal.cambiar_regimen`, `fel.ver`, `fel.configurar`, `fel.certificar`, `fel.anular`, `fel.contingencia`, `proveedores.ver`, `proveedores.editar`, `compras.ver`, `compras.registrar`, `compras.anular`, `compras.pagar`, `libros.ver`, `libros.emitir`, `libros.habilitar`, `libro.cerrar_ejercicio`, `libro.reabrir_ejercicio`, `libro.bloquear`, `libro.bloquear_duro`, `libro.desbloquear`, `declaraciones.ver`, `declaraciones.calcular`, `declaraciones.revisar`, `declaraciones.presentar`, `declaraciones.pagar`, y por §10: `libro.configurar_diarios`, `libro.excepcion_bloqueo`, `cobros.liquidar`, `cajas.depositar`, `bancos.ver`, `bancos.trasladar`, `bancos.importar_extracto`, `bancos.conciliar`, `facturas.sustituir`, `cartera.provisionar`, `cartera.castigar`, `pagos.cerrar_diferencia`, `activos.ver`, `activos.registrar`, `activos.dar_de_baja`.
 
-| Rol            | Agrega                                                                                                                     |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `admin`        | todos                                                                                                                      |
-| `contabilidad` | todos menos `fiscal.instalar`, `fel.configurar`, `libro.bloquear_duro`, `libro.reabrir_ejercicio`, `empresas.cambiar_pais` |
-| `cajero`       | `fel.ver` (ver el estado del DTE al cobrar)                                                                                |
-| `lectura`      | los `.ver` (automático)                                                                                                    |
+| Rol            | Agrega                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`        | todos                                                                                                                                                 |
+| `contabilidad` | todos menos `fiscal.instalar`, `fel.configurar`, `libro.bloquear_duro`, `libro.reabrir_ejercicio`, `libro.excepcion_bloqueo`, `empresas.cambiar_pais` |
+| `cajero`       | `fel.ver` (ver el estado del DTE al cobrar) y `cajas.depositar`                                                                                       |
+| `lectura`      | los `.ver` (automático)                                                                                                                               |
 
 `fel.anular` lo pide `facturas.anular` cuando la factura tiene DTE (el actor necesita los dos).
 
-### 10.3 Eventos nuevos
+### 11.3 Eventos nuevos
 
-| Evento                                             | Emite     | Payload                                                                                                                         |
-| -------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `fiscal.localizacion_instalada`                    | A3        | empresa_id, pais, codigo, de_codigo                                                                                             |
-| `fiscal.parametros_cambiados`                      | A3        | empresa_id (null = global), claves[], vigente_desde                                                                             |
-| `fiscal.config_cambiada`                           | A3        | empresa_id, campos[] (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`); nunca valores secretos |
-| `dte.certificado`                                  | A3        | dte_id, empresa_id, documento_tipo, documento_id, tipo_dte, autorizacion, serie, numero, contingencia                           |
-| `dte.rechazado`                                    | A3        | dte_id, empresa_id, documento_tipo, documento_id, error, definitivo                                                             |
-| `dte.anulado`                                      | A3        | dte_id, empresa_id, documento_tipo, documento_id, motivo                                                                        |
-| `fel.contingencia_cambiada`                        | A3        | empresa_id, activa, motivo                                                                                                      |
-| `compra.registrada` / `compra.anulada`             | A3        | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva                                                                    |
-| `libro.bloqueo_cambiado`                           | A3        | empresa_id, tipo, hasta, anterior                                                                                               |
-| `ejercicio.cerrado`                                | A3        | empresa_id, anio, resultado, reserva_legal                                                                                      |
-| `declaracion.calculada` / `declaracion.presentada` | A3        | declaracion_id, empresa_id, impuesto, periodo_desde, periodo_hasta, vence_en, monto                                             |
-| `fiscal.vencimiento_proximo`                       | A3 (cron) | obligacion_id, empresa_id, impuesto, vence_en, dias (7, 3, 1, 0; una vez por umbral)                                            |
-| `fiscal.limite_pc`                                 | A3        | empresa_id, umbral_pct, acumulado, limite, anio (una vez por umbral y año)                                                      |
+| Evento                                             | Emite         | Payload                                                                                                                         |
+| -------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `fiscal.localizacion_instalada`                    | A3            | empresa_id, pais, codigo, de_codigo                                                                                             |
+| `fiscal.parametros_cambiados`                      | A3            | empresa_id (null = global), claves[], vigente_desde                                                                             |
+| `fiscal.config_cambiada`                           | A3            | empresa_id, campos[] (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`); nunca valores secretos |
+| `dte.certificado`                                  | A3            | dte_id, empresa_id, documento_tipo, documento_id, tipo_dte, autorizacion, serie, numero, contingencia                           |
+| `dte.rechazado`                                    | A3            | dte_id, empresa_id, documento_tipo, documento_id, error, definitivo                                                             |
+| `dte.anulado`                                      | A3            | dte_id, empresa_id, documento_tipo, documento_id, motivo                                                                        |
+| `fel.contingencia_cambiada`                        | A3            | empresa_id, activa, motivo                                                                                                      |
+| `compra.registrada` / `compra.anulada`             | A3            | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva                                                                    |
+| `libro.bloqueo_cambiado`                           | A3            | empresa_id, tipo, hasta, anterior                                                                                               |
+| `ejercicio.cerrado`                                | A3            | empresa_id, anio, resultado, reserva_legal                                                                                      |
+| `declaracion.calculada` / `declaracion.presentada` | A3            | declaracion_id, empresa_id, impuesto, periodo_desde, periodo_hasta, vence_en, monto                                             |
+| `fiscal.vencimiento_proximo`                       | A3 (cron)     | obligacion_id, empresa_id, impuesto, vence_en, dias (7, 3, 1, 0; una vez por umbral)                                            |
+| `fiscal.limite_pc`                                 | A3            | empresa_id, umbral_pct, acumulado, limite, anio (una vez por umbral y año)                                                      |
+| `cobros.liquidados`                                | A3            | liquidacion_id, empresa_id, proveedor, bruto, comision, neto, pagos[]                                                           |
+| `caja.depositada`                                  | A3            | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, monto                                                                     |
+| `banco.extracto_importado` / `banco.conciliado`    | A3            | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, lineas, monto                                                    |
+| `libro.checks_verificados`                         | A3            | empresa_id, tipo, periodo, anomalias[] (claves)                                                                                 |
+| `libro.integridad_rota`                            | A3 (sellador) | empresa_id, sello, asiento_id, esperado, obtenido                                                                               |
+| `factura.sustituida`                               | A3            | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo                                                       |
+| `cartera.castigada`                                | A3            | castigo_id, empresa_id, cliente_id, facturas[], monto                                                                           |
+| `activo.dado_de_baja`                              | A3            | activo_id, empresa_id, motivo, valor_libros                                                                                     |
 
 Cambio de significado: en modo `obligatoria` con `certificar_al = emitir`, `factura.emitida` sale al certificarse. El payload no cambia. Se actualiza `contratos/eventos.md` y la tabla de `CLAUDE.md` en la PR que lo implemente.
 
-### 10.4 Errores (RFC 9457)
+### 11.4 Errores (RFC 9457)
 
-| `type` (sufijo)                 | Estado | Cuándo                                                                     |
-| ------------------------------- | ------ | -------------------------------------------------------------------------- |
-| `pais_no_soportado`             | 422    | País sin paquete                                                           |
-| `campo_solo_lectura`            | 422    | `PUT /empresas/:id` con otro `regimen_isr` o `codigo_establecimiento` (A1) |
-| `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                              |
-| `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                           |
-| `parametro_no_editable`         | 422    | Alcance `N`                                                                |
-| `parametro_fuera_de_rango`      | 422    | Fuera de `minimo`/`maximo`                                                 |
-| `parametro_sin_confirmar`       | 422    | Falta un valor marcado contador                                            |
-| `vigencia_en_periodo_bloqueado` | 422    | `vigente_desde` bajo bloqueo                                               |
-| `regimen_fuera_de_plazo`        | 422    | Cambio de régimen que no empieza el 1-ene                                  |
-| `fel_no_configurada`            | 422    | Certificar sin proveedor o credenciales                                    |
-| `fel_proveedor_no_disponible`   | 503    | El certificador no responde (en la petición síncrona de prueba)            |
-| `tipo_dte_no_permitido`         | 422    | DTE que no corresponde al régimen                                          |
-| `receptor_requerido`            | 422    | CF desde el límite                                                         |
-| `certificar_al_incompatible`    | 422    | `nunca` con FEL obligatoria                                                |
-| `dte_en_proceso`                | 409    | Acción sobre un DTE `enviando`                                             |
-| `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                           |
-| `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                                    |
-| `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                                      |
-| `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                                          |
-| `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                                        |
-| `folios_agotados`               | 422    | Sin rango habilitado                                                       |
-| `bloqueo_duro`                  | 409    | Reabrir o fechar bajo bloqueo duro                                         |
-| `bloqueo_regresivo`             | 422    | Mover el bloqueo duro hacia atrás                                          |
-| `ejercicio_incompleto`          | 422    | Meses abiertos, DTE pendientes o ISR anual sin revisar                     |
-| `ejercicio_cerrado`             | 409    | Cerrar dos veces                                                           |
-| `declaracion_desactualizada`    | 409    | El `datos_hash` cambió                                                     |
-| `declaracion_presentada`        | 409    | Recalcular una presentada (se crea una sustitutiva)                        |
+| `type` (sufijo)                 | Estado | Cuándo                                                                        |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `pais_no_soportado`             | 422    | País sin paquete                                                              |
+| `campo_solo_lectura`            | 422    | `PUT /empresas/:id` con otro `regimen_isr` o `codigo_establecimiento` (A1)    |
+| `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                                 |
+| `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                              |
+| `parametro_no_editable`         | 422    | Alcance `N`                                                                   |
+| `parametro_fuera_de_rango`      | 422    | Fuera de `minimo`/`maximo`                                                    |
+| `parametro_sin_confirmar`       | 422    | Falta un valor marcado contador                                               |
+| `vigencia_en_periodo_bloqueado` | 422    | `vigente_desde` bajo bloqueo                                                  |
+| `regimen_fuera_de_plazo`        | 422    | Cambio de régimen que no empieza el 1-ene                                     |
+| `fel_no_configurada`            | 422    | Certificar sin proveedor o credenciales                                       |
+| `fel_proveedor_no_disponible`   | 503    | El certificador no responde (en la petición síncrona de prueba)               |
+| `tipo_dte_no_permitido`         | 422    | DTE que no corresponde al régimen                                             |
+| `receptor_requerido`            | 422    | CF desde el límite                                                            |
+| `certificar_al_incompatible`    | 422    | `nunca` con FEL obligatoria                                                   |
+| `dte_en_proceso`                | 409    | Acción sobre un DTE `enviando`                                                |
+| `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                              |
+| `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                                       |
+| `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                                         |
+| `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                                             |
+| `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                                           |
+| `folios_agotados`               | 422    | Sin rango habilitado                                                          |
+| `bloqueo_duro`                  | 409    | Reabrir o fechar bajo bloqueo duro                                            |
+| `bloqueo_regresivo`             | 422    | Mover el bloqueo duro hacia atrás                                             |
+| `ejercicio_incompleto`          | 422    | Meses abiertos, DTE pendientes o ISR anual sin revisar                        |
+| `ejercicio_cerrado`             | 409    | Cerrar dos veces                                                              |
+| `declaracion_desactualizada`    | 409    | El `datos_hash` cambió                                                        |
+| `declaracion_presentada`        | 409    | Recalcular una presentada (se crea una sustitutiva)                           |
+| `periodo_bloqueado`             | 422    | Asiento manual con fecha bajo un bloqueo (`errors[0].rule` = el tipo)         |
+| `checks_pendientes`             | 422    | Cerrar, revisar o bloquear con checks en anomalía (`errors[]` con las claves) |
+| `excepcion_sin_fin`             | 422    | Excepción de bloqueo sin `hasta_en` o sobre el duro                           |
+| `extracto_duplicado`            | 409    | Líneas con huella ya importada                                                |
+| `extracto_no_encadena`          | 422    | Saldo inicial distinto del final anterior (se puede forzar con motivo)        |
+| `conciliacion_descuadrada`      | 422    | La línea y los movimientos no suman lo mismo                                  |
+| `sustitucion_no_permitida`      | 409    | Factura con pagos o fuera de plazo de anulación sin NCRE posible              |
+| `castigo_sin_evidencia`         | 422    | Castigo sin motivo ni evidencia de gestión de cobro                           |
+| `diferencia_sobre_tope`         | 422    | Diferencia mayor que `diferencia_cobro_tope`                                  |
+| `tasa_sobre_tope`               | 422    | Tasa de depreciación sobre el máximo legal de la clase                        |
+| `integridad_rota`               | 409    | Cerrar o bloquear con la cadena de hash rota                                  |
 
 Todos con `errors[]` por campo cuando aplica.
 
-## 11. Migración de lo existente
+## 12. Migración de lo existente
 
 1. **A1**: `core.empresas.pais = 'GT'` para todas. Datos fiscales del cliente con `tipo_documento_fiscal = 'nit'` si `nit_cui` parece NIT, `cui` si tiene 13 dígitos, si no `cf`. Es una migración de datos de `core`, que sí admite `UPDATE`.
 2. **A3**: instala `gt-2026.1` en cada empresa: cuentas que faltan (aditivo), valores del paquete con `vigente_desde = 2013-01-01` (o la fecha de la reforma que cita la fuente), `regimen` desde `core.empresas.regimen_isr` (`sujeto_pagos_trimestrales` → `utilidades`, `retencion_definitiva` → `opcional_simplificado`, `pequeno_contribuyente` igual) y el establecimiento 1 desde `codigo_establecimiento`.
@@ -540,8 +807,12 @@ Todos con `errors[]` por campo cuando aplica.
 5. `inicio_libros` = la fecha de instalación. Antes de esa fecha, los libros de IVA y las declaraciones no se calculan (la FEL y el IVA salían del sistema anterior; PLAN, semana 5): el borrador responde 422 `antes_de_inicio_libros`. Las facturas importadas (contrapartida `2.9.01`) y los pagos históricos nunca entran a los libros de IVA.
 6. Los asientos, egresos, notas y pagos existentes **no se tocan**. Los egresos que tienen factura se pueden pasar a compras con `compras.registrar_desde_egreso` (reclasificación, §3.4).
 7. Los cambios de `CHECK` (`tipo` de cuenta, `origen_tipo`) son DDL; ninguna fila del libro se actualiza.
+8. Numeración (§10.7): una sola inserción en `ledger.asientos_numeros` para los asientos existentes, en orden `(fecha, id)` por empresa y diario derivado; `ledger.asientos_partidas` para los meses ya cerrados. `ledger.asientos` no se actualiza.
+9. Cadena de hash (§10.10): el sellador sella los asientos existentes en su primera corrida, en orden de id; el primer `hash_anterior` es 64 ceros.
+10. Etiquetas de impuesto (§10.2) y diarios: solo en asientos nuevos. Los checks que dependen de ellas (`iva_cuadrado`) empiezan en `inicio_libros`.
+11. Pagos de pasarela, agente y débito ya registrados contra `1.1.02.01` quedan así; desde la fase 4 los nuevos van a `1.1.10.NN`. Los anteriores sin conciliar se concilian contra el extracto como cualquier movimiento del banco.
 
-## 12. Pruebas mínimas (Japa, contra Postgres)
+## 13. Pruebas mínimas (Japa, contra Postgres)
 
 | Caso                           | Qué se comprueba                                                                                                                                                                   |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -559,7 +830,28 @@ Todos con `errors[]` por campo cuando aplica.
 | Libros                         | Folios correlativos, `sha256` guardado, 422 sin bloqueo                                                                                                                            |
 | Multiempresa                   | Parámetros, régimen, DTE, compras y declaraciones de la empresa A no se ven ni se mezclan en la B                                                                                  |
 
-## 13. Qué hace cada agente
+**Invariantes del auditor contable** (`apps/api/tests/contabilidad/`, agente independiente; decisión del PM). Corren después de cada escenario de todas las fases; una fase no se fusiona con uno en rojo:
+
+| Invariante                   | Comprobación                                                                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cuadre                       | Debe = Haber por asiento, por empresa y en total                                                                                                                                    |
+| Inmutabilidad                | Ninguna fila de `ledger.*`, `audit.*`, `fiscal.parametros_valores`, `fiscal.impuestos` ni de las tablas de solo inserción de §10 cambia ni desaparece entre dos fotos del escenario |
+| Auxiliares                   | Σ auxiliar de clientes = `1.1.03`; Σ anticipos = `2.1.01`; Σ proveedores = `2.1.03`; antigüedad de CxC = `1.1.03`                                                                   |
+| IVA por certificar           | `2.1.11` = Σ IVA de avisos sin DTE (§10.1), también después de pago parcial, pago anulado, nota y castigo                                                                           |
+| Pago anulado tras certificar | El DTE sigue certificado y `2.1.02` no cambia                                                                                                                                       |
+| Impuestos                    | Σ cuadrículas del periodo = libro de ventas y de compras = borrador de la declaración                                                                                               |
+| Liquidación                  | Tras revisar el IVA: `2.1.02` del periodo en cero, bloqueo `impuestos` en el último día                                                                                             |
+| Puentes                      | `1.1.10.NN` = pagos sin liquidar; `1.1.11` = depósitos sin conciliar; `2.9.01` = 0 después de importar                                                                              |
+| Conciliación                 | Saldo del extracto = saldo del libro ± partidas en tránsito, por cuenta                                                                                                             |
+| Bloqueos                     | Ningún asiento con fecha bajo un bloqueo que le aplique, salvo con `excepcion_id` vigente; nada bajo el duro                                                                        |
+| Numeración                   | Números de diario y de documentos sin huecos ni repetidos; partidas de un mes cerrado no cambian                                                                                    |
+| Integridad                   | La cadena de hash verifica; alterar una fila de prueba (como superusuario) la rompe en ese sello                                                                                    |
+| Cierre anual                 | Cuentas `reinicia_anual` en cero; estado de resultados del año sin el asiento de cierre; balance de comprobación cuadra antes y después                                             |
+| Activos y diferidos          | Σ cuotas ≤ costo − residual; repetir los crons no duplica; `1.2.02` = Σ cuotas de activos vivos                                                                                     |
+| Libros                       | Diario = asientos del periodo; Mayor = movimientos; los libros emitidos guardan el hash que corresponde                                                                             |
+| Multiempresa                 | Ningún asiento, conciliación, cuota o check mezcla empresas                                                                                                                         |
+
+## 14. Qué hace cada agente
 
 | Agente | Trabajo                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Orden                                 |
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -569,37 +861,71 @@ Todos con `errors[]` por campo cuando aplica.
 | **A5** | Portal: lista de facturas con su DTE (autorización, serie, número), descarga del PDF FEL con la marca de la empresa y del XML; el aviso de cobro cambia a "Factura" cuando tiene autorización; NCRE visibles en el estado de cuenta                                                                                                                                                                                                                                                                         | Con la PR de FEL                      |
 | **A6** | Avisos por `fiscal.vencimiento_proximo`, `fiscal.limite_pc`, `dte.rechazado` (definitivo o agotado), `fel.contingencia_cambiada` y libros por emitir, por Telegram al equipo y correo a contabilidad; importación de compras desde CSV o XLSX del portal de la SAT o del certificador, por la acción `compras.registrar` (neutral al origen, como `contratos/importacion.md`)                                                                                                                               | Con las PR de declaraciones y compras |
 
-## 14. Confirmar con contador
+Reparto de §10 por fase (la tabla de fases está en `PLAN.md`):
 
-| #   | Tema                                             | Qué decidir                                                                                                  | Valor provisional                        | Fuente                                        |
-| --- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------- | --------------------------------------------- |
-| 1   | Plazo del ISR trimestral                         | 10 días (LAT compilada) o mes siguiente (SAT)                                                                | Mes siguiente                            | inv. A.2; NO VERIFICADO 17                    |
-| 2   | Art. 46 frente al art. 44                        | Si el 7 % directo sustituye la escala para ingresos no retenidos                                             | `art46_directo`, con los dos cálculos    | inv. E.1; NO VERIFICADO 14                    |
-| 3   | ISO: regla de 4 veces y exención de 4 trimestres | Si aplican y cómo                                                                                            | Sin valor (no se aplican)                | inv. A.4; NO VERIFICADO 4                     |
-| 4   | ISO: periodo de la base                          | Activo neto e ingresos de qué periodo                                                                        | Sin valor                                | inv. A.4                                      |
-| 5   | Depreciación del equipo de telecomunicaciones    | 33.33, 20 o 10 %                                                                                             | 10 % (otros bienes)                      | inv. A.2; NO VERIFICADO 5                     |
-| 6   | Catálogo de DTE y frases                         | Lista completa (Reglas y Validaciones v2.x), NABN frente a NCRE, código de la frase de pequeño contribuyente | Solo FACT, FCAM, FPEQ, FCAP, NCRE, NDEB  | inv. C.1, C.2; NO VERIFICADO 6                |
-| 7   | Contingencia FEL                                 | Procedimiento y plazo para transmitir                                                                        | Sin plazo; activación manual             | inv. C.3; NO VERIFICADO 7                     |
-| 8   | Certificadores autorizados                       | Lista vigente                                                                                                | Solo INFILE                              | inv. C.3; NO VERIFICADO 8                     |
-| 9   | Interés resarcitorio 2026                        | Tasa vigente                                                                                                 | Sin valor                                | inv. E.2; NO VERIFICADO 9                     |
-| 10  | Retenciones de ISR                               | Medio y formulario que sustituyen a RetenISR                                                                 | Sin formulario                           | inv., cambios recientes 5; NO VERIFICADO 10   |
-| 11  | Libros electrónicos                              | Si se aceptan 100 % electrónicos sin hojas habilitadas; aranceles                                            | Emisión con folio sobre rango habilitado | inv. B.1; NO VERIFICADO 11                    |
-| 12  | Columnas de los libros de IVA                    | Formato exacto que pide la SAT                                                                               | Columnas de §7                           | No está en el informe                         |
-| 13  | Umbral de retención de IVA del sector público    | Q2,500 o Q30,000                                                                                             | Q2,500                                   | inv. A.1; NO VERIFICADO 18                    |
-| 14  | Exención de IVA para servicios de internet       | Confirmar que no existe                                                                                      | Gravado al 12 %                          | inv. A.1                                      |
-| 15  | IVA en recargos por mora y NDEB                  | Si la mora lleva IVA y sale como NDEB                                                                        | No (`mora_con_iva = no`, decisión del PM) | inv. A.1 (art. 12), C.1; interpretación de A3 |
-| 16  | Momento del IVA al certificar al pagar           | Si el aviso de cobro puede diferir el débito hasta el pago                                                   | Permitido, con `2.1.11`                  | inv. A.1 (art. 4), C.3 (art. 34)              |
-| 17  | FEL desactivada                                  | Si se permite en producción para el régimen general                                                          | Permitida con alerta                     | inv. C.3 (inferencia)                         |
-| 18  | Base de la reserva legal                         | Antes o después del ISR                                                                                      | Después                                  | inv. B.3 (confianza baja)                     |
-| 19  | Asientos de cierre anual                         | Procedimiento                                                                                                | §9.1                                     | inv. B.3 (NO VERIFICADO)                      |
-| 20  | Timbre fiscal                                    | Tasa del 3 % y exención de documentos con IVA                                                                | No se calcula en facturas                | inv. A.5; NO VERIFICADO 1                     |
-| 21  | SIT, FONDETEL y arbitrios                        | Si el ISP debe algo                                                                                          | No se calcula                            | inv. A.5; NO VERIFICADO 2                     |
-| 22  | Feriados y días hábiles                          | Calendario para plazos en días hábiles                                                                       | Tabla vacía editable                     | inv. A.1, A.2                                 |
-| 23  | Tipo de cambio del Banguat                       | Hora de publicación y días sin publicación                                                                   | Último publicado                         | inv. B.4                                      |
-| 24  | Marco contable                                   | NIIF para las PYMES o completas                                                                              | PYMES                                    | inv. B.2 (confianza baja-media)               |
-| 25  | Fecha de vigencia de los valores del paquete     | Reformas sin fecha exacta en el informe (AG 12-2023, AG 245-2022 para CF y frases): el paquete usa 2013-01-01 (§11.2). El límite de pequeño contribuyente solo trae 2026 | 2013-01-01; PC desde 2026-01-01          | inv. A.3, C.2; A3 (fase 2)                    |
-| 26  | Cuadrículas de impuesto                          | Qué renglón del SAT-2237 (y de los demás formularios) corresponde a cada cuadrícula de `fiscal.impuestos`   | Etiquetas internas (`iva_debito`, …)     | No está en el informe; A3 (fase 2)            |
-| 27  | Flujo de efectivo por cuenta                     | Clasificación de cada cuenta (efectivo, operación, inversión, financiamiento) para el método indirecto       | Por prefijo (`categoriaFlujoGt`)         | Estudio de Odoo #1; A3 (fase 2)               |
-| 28  | Frases en FCAM y FCAP                            | Si la frase del régimen va también en la factura cambiaria (FCAM) y la de pequeño contribuyente en FCAP      | Solo FACT, NCRE, NDEB y FPEQ (§6.2)      | inv. C.2; A3 (fase 2)                         |
-| 29  | Retención de tarjeta en combustibles             | Si el 1.5 % es sobre el IVA o sobre el total                                                                 | Sobre el IVA (como el 15 %)              | inv. A.1 (media); A3 (fase 2)                 |
-| 30  | Equipo de red: tope de depreciación              | Hoy en «otros bienes» (10 %); si el contador lo pasa a computación (33.33 %) se publica otra versión del paquete | 10 %                                   | inv. A.2 (art. 28); NO VERIFICADO 5           |
+| Pieza                                                                                                                                  | Dueño                                                                                                  | Fase  |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----- |
+| `fiscal.impuestos`, etiquetas en movimientos, diarios, secuencias y numeración interna de avisos, recibos y notas                      | A3 (A4: pantallas de impuestos y diarios)                                                              | 2     |
+| Cadena de hash, sellador y `/libro/integridad`                                                                                         | A3 (A4: pantalla de integridad; A6: alerta de `libro.integridad_rota`)                                 | 2     |
+| Reglas de `2.1.11`, NC por línea, `facturas.sustituir`                                                                                 | A3 (A4: botón sustituir y nota por línea; A5: factura sustituta en el portal)                          | 3     |
+| `1.1.10` cobros por liquidar, liquidaciones, depósito de caja, traslados, extractos, conciliación y reglas                             | A3 (A4: conciliación bancaria y depósito en el cierre de caja; A6: adaptadores de extractos por banco) | 4     |
+| `pagos.cerrar_diferencia`, estimación y castigo de cartera                                                                             | A3 (A4: pantallas; A6: aviso de cartera > 60 días)                                                     | 4     |
+| Auxiliar y antigüedad de proveedores, activos fijos, depreciación y diferidos                                                          | A3 (A4: pantallas)                                                                                     | 5     |
+| Bloqueos por tipo y excepciones, checks de cierre, partidas al cierre, balance de comprobación, cierre anual con exclusión del asiento | A3 (A4: tablero de cierre con checks; A6: aviso de checks en anomalía)                                 | 6     |
+| Liquidación obligatoria con bloqueo de impuestos                                                                                       | A3 (A4)                                                                                                | 7     |
+| Invariantes del auditor contable                                                                                                       | Agente auditor (independiente de A3)                                                                   | todas |
+| Permisos nuevos de §11.2 en `permisos.ts` y roles                                                                                      | A1                                                                                                     | 1     |
+
+## 15. Confirmar con contador
+
+| #   | Tema                                             | Qué decidir                                                                                                                                                                                                            | Valor provisional                        | Fuente                                        |
+| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------- |
+| 1   | Plazo del ISR trimestral                         | 10 días (LAT compilada) o mes siguiente (SAT)                                                                                                                                                                          | Mes siguiente                            | inv. A.2; NO VERIFICADO 17                    |
+| 2   | Art. 46 frente al art. 44                        | Si el 7 % directo sustituye la escala para ingresos no retenidos                                                                                                                                                       | `art46_directo`, con los dos cálculos    | inv. E.1; NO VERIFICADO 14                    |
+| 3   | ISO: regla de 4 veces y exención de 4 trimestres | Si aplican y cómo                                                                                                                                                                                                      | Sin valor (no se aplican)                | inv. A.4; NO VERIFICADO 4                     |
+| 4   | ISO: periodo de la base                          | Activo neto e ingresos de qué periodo                                                                                                                                                                                  | Sin valor                                | inv. A.4                                      |
+| 5   | Depreciación del equipo de telecomunicaciones    | 33.33, 20 o 10 %                                                                                                                                                                                                       | 10 % (otros bienes)                      | inv. A.2; NO VERIFICADO 5                     |
+| 6   | Catálogo de DTE y frases                         | Lista completa (Reglas y Validaciones v2.x), NABN frente a NCRE, código de la frase de pequeño contribuyente                                                                                                           | Solo FACT, FCAM, FPEQ, FCAP, NCRE, NDEB  | inv. C.1, C.2; NO VERIFICADO 6                |
+| 7   | Contingencia FEL                                 | Procedimiento y plazo para transmitir                                                                                                                                                                                  | Sin plazo; activación manual             | inv. C.3; NO VERIFICADO 7                     |
+| 8   | Certificadores autorizados                       | Lista vigente                                                                                                                                                                                                          | Solo INFILE                              | inv. C.3; NO VERIFICADO 8                     |
+| 9   | Interés resarcitorio 2026                        | Tasa vigente                                                                                                                                                                                                           | Sin valor                                | inv. E.2; NO VERIFICADO 9                     |
+| 10  | Retenciones de ISR                               | Medio y formulario que sustituyen a RetenISR                                                                                                                                                                           | Sin formulario                           | inv., cambios recientes 5; NO VERIFICADO 10   |
+| 11  | Libros electrónicos                              | Si se aceptan 100 % electrónicos sin hojas habilitadas; aranceles                                                                                                                                                      | Emisión con folio sobre rango habilitado | inv. B.1; NO VERIFICADO 11                    |
+| 12  | Columnas de los libros de IVA                    | Formato exacto que pide la SAT                                                                                                                                                                                         | Columnas de §7                           | No está en el informe                         |
+| 13  | Umbral de retención de IVA del sector público    | Q2,500 o Q30,000                                                                                                                                                                                                       | Q2,500                                   | inv. A.1; NO VERIFICADO 18                    |
+| 14  | Exención de IVA para servicios de internet       | Confirmar que no existe                                                                                                                                                                                                | Gravado al 12 %                          | inv. A.1                                      |
+| 15  | IVA en recargos por mora y NDEB                  | Si la mora lleva IVA y sale como NDEB                                                                                                                                                                                  | No (`mora_con_iva = no`, decisión del PM)| inv. A.1 (art. 12), C.1; interpretación de A3 |
+| 16  | Momento del IVA al certificar al pagar           | Si el aviso de cobro puede diferir el débito hasta el pago                                                                                                                                                             | Permitido, con `2.1.11`                  | inv. A.1 (art. 4), C.3 (art. 34)              |
+| 17  | FEL desactivada                                  | Si se permite en producción para el régimen general                                                                                                                                                                    | Permitida con alerta                     | inv. C.3 (inferencia)                         |
+| 18  | Base de la reserva legal                         | Antes o después del ISR                                                                                                                                                                                                | Después                                  | inv. B.3 (confianza baja)                     |
+| 19  | Asientos de cierre anual                         | Procedimiento                                                                                                                                                                                                          | §9.1                                     | inv. B.3 (NO VERIFICADO)                      |
+| 20  | Timbre fiscal                                    | Tasa del 3 % y exención de documentos con IVA                                                                                                                                                                          | No se calcula en facturas                | inv. A.5; NO VERIFICADO 1                     |
+| 21  | SIT, FONDETEL y arbitrios                        | Si el ISP debe algo                                                                                                                                                                                                    | No se calcula                            | inv. A.5; NO VERIFICADO 2                     |
+| 22  | Feriados y días hábiles                          | Calendario para plazos en días hábiles                                                                                                                                                                                 | Tabla vacía editable                     | inv. A.1, A.2                                 |
+| 23  | Tipo de cambio del Banguat                       | Hora de publicación y días sin publicación                                                                                                                                                                             | Último publicado                         | inv. B.4                                      |
+| 24  | Marco contable                                   | NIIF para las PYMES o completas                                                                                                                                                                                        | PYMES                                    | inv. B.2 (confianza baja-media)               |
+| 25  | Certificar con pago parcial                      | Si un pago parcial causa el IVA (art. 4.1) y obliga a certificar                                                                                                                                                       | No se certifica hasta cubrir el aviso    | inv. A.1; §10.1                               |
+| 26  | Casillas de los formularios                      | Relación de las cuadrículas internas con las casillas del SAT-2237 y SAT-2046                                                                                                                                          | Cuadrículas de §10.2                     | No está en el informe                         |
+| 27  | Correlativo de partidas                          | Si se puede asignar al cerrar el mes en lugar de al registrar                                                                                                                                                          | Al cerrar el mes                         | inv. B.1 (art. 373); §10.7                    |
+| 28  | Partida de cierre frente al modelo de Odoo 19+   | Si la partida clásica con exclusión del estado de resultados sirve para los libros legales                                                                                                                             | Partida clásica                          | inv. B.3; odoo §7.2, §18                      |
+| 29  | Base de la estimación de incobrables             | Si el 3 % de los saldos deudores incluye el IVA de avisos sin DTE y cómo se acumula entre años                                                                                                                         | 3 % de `1.1.03` al cierre                | inv. A.2 (art. 21.20)                         |
+| 30  | IVA en el castigo de facturas certificadas       | Si se recupera con NCRE o queda como pérdida                                                                                                                                                                           | Solo con NCRE                            | inv. A.1 (art. 17)                            |
+| 31  | Inicio de la depreciación                        | Mes del alta o mes siguiente                                                                                                                                                                                           | Mes siguiente                            | inv. A.2 (art. 28)                            |
+| 32  | Diferir periodos que cruzan el fin de mes        | Si se difiere el ciclo `aniversario` en NIIF                                                                                                                                                                           | No                                       | odoo §9                                       |
+| 33  | Partida legal al reabrir un mes                  | Decisión del líder: las partidas asignadas no cambian; los asientos nuevos del mes reciben las siguientes al final del mes; solo se reabre un mes sin meses posteriores con partidas (409 `reapertura_fuera_de_orden`) | No                                       | inv. B.1 (art. 373); §10.7                    |
+| 34  | Fecha de vigencia de los valores del paquete     | Reformas sin fecha exacta en el informe (AG 12-2023, AG 245-2022 para CF y frases): el paquete usa 2013-01-01. El límite de pequeño contribuyente solo trae 2026                                                       | 2013-01-01; PC desde 2026-01-01          | inv. A.3, C.2; A3 (fase 2)                    |
+| 35  | Flujo de efectivo por cuenta                     | Clasificación de cada cuenta (efectivo, operación, inversión, financiamiento) para el método indirecto                                                                                                                 | Por prefijo (`categoriaFlujoGt`)         | odoo §3; A3 (fase 2)                          |
+| 36  | Frases en FCAM y FCAP                            | Si la frase del régimen va también en la factura cambiaria (FCAM) y la de pequeño contribuyente en FCAP                                                                                                                | Solo FACT, NCRE, NDEB y FPEQ (§6.2)      | inv. C.2; A3 (fase 2)                         |
+| 37  | Retención de tarjeta en combustibles             | Si el 1.5 % (`RET_IVA_TAR_COMB`) es sobre el IVA o sobre el total                                                                                                                                                      | Sobre el IVA (como el 15 %)              | inv. A.1 (confianza media); A3 (fase 2)       |
+
+## 16. Desvíos aprobados en la implementación (A3, fase 2)
+
+Aprobados por el coordinador el 2026-10-17. El código de la fase 2 los cumple; las secciones de arriba remiten aquí.
+
+- **Nivel `instalacion` en la cadena de lectura.** `parametro()` e `impuesto()` resuelven empresa (usuario) → instalación → global (usuario) → paquete. En cada nivel gana la fila más reciente con `vigente_desde <= fecha`. El nivel instalación (`origen = instalacion`) guarda lo que el instalador toma de la empresa al instalar: `inicio_libros` y el régimen que tenía en `core.empresas.regimen_isr`. Un valor del usuario lo reemplaza sin borrarlo.
+- **Frases del régimen calculadas al leer.** `fiscal.frases` guarda solo las `manual`. Las que exige el régimen salen del parámetro `regimen` vigente en la fecha del documento. Un cambio de régimen no deja filas que invalidar.
+- **Único con `pais` y `origen`** en `fiscal.parametros_valores` y `fiscal.impuestos_versiones`. Una fila del paquete y una del usuario con la misma fecha no chocan; la del usuario gana.
+- **`vigencia_en_periodo_bloqueado`** usa los meses cerrados sin reapertura (`ledger.cierres_mensuales`) hasta que la fase 5 traiga los bloqueos por tipo (§10.4).
+- **Feriados en la fase 6.** La tabla `fiscal.feriados` aún no existe; los plazos en días hábiles llegan con el calendario.
+- **Impuestos.** Un código por uso (`IVA12` venta, `IVA12_C` compra). Hay dos códigos además de los de §10.2: `RET_IVA_TAR_COMB` (1.5 %, fila 37 de §15) y `RET_ISR_NR_INT`. `IVA12` usa `exigibilidad = factura` con `cuenta_transicion = 2.1.11`, que se usa solo en `certificar_al = pagar` (§10.1). Las tasas de declaración (ISR, ISO) siguen siendo parámetros.
+- **Un solo punto de extensión: `#core/localizacion` (A1).** Billing registra su `InstaladorLocalizacion` en el preload `start/fiscal.ts`. El instalador da `paises`, `instalar`, `tieneDocumentos` (documentos fiscales) y `datosFiscales` (`regimen_isr` y `codigo_establecimiento` calculados de `fiscal`). Una empresa nueva nace con el paquete de su país ya instalado. `localizacion_no_instalada` (422) solo responde en empresas sin paquete instalado.

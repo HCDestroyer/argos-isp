@@ -31,7 +31,7 @@ Libro de doble partida inmutable, plan de cuentas, cajas, bancos y egresos. Todo
 
 - `imputable = false`: cuenta de agrupación, no recibe movimientos.
 - Localización fiscal (fase 2, `app/fiscal/README.md`): el paquete `gt-2026.1` agrega las cuentas GT (impuestos, activo fijo y depreciación, proveedores, **patrimonio** `3.x`, lealtad, no deducibles, ISR). Columnas nuevas: `pais` (el código es único por país; `cuentasPorCodigo` filtra `PAIS_PLAN = 'GT'`), `contracuenta`, `naturaleza` y `reinicia_anual` (generadas), `categoria_flujo`, `categoria_fiscal`, `auxiliar_proveedor`, `libro_inventario`. Los saldos (mayor, balance) usan la naturaleza: las contracuentas restan del total de su tipo y el balance cuadra con activo = pasivo + patrimonio + resultado.
-- `ledger.movimientos.impuesto_codigo` + `cuadricula`: etiqueta de impuesto (base o cuota, de `fiscal.impuestos`) que `registrarAsiento` acepta por movimiento y valida (van juntas; CHECK en la base). Las acciones la irán poniendo en las fases de FEL y declaraciones.
+- `ledger.movimientos.impuesto_codigo` + `cuadricula`: etiqueta de impuesto con signo (`+V_IVA`, de `CUADRICULAS_GT`) en la línea de la base y en la de la cuota (contrato §10.2). `registrarAsiento` la acepta por movimiento y la valida (van juntas; CHECK de formato en la base). Las acciones la irán poniendo en las fases de FEL y declaraciones.
 - `auxiliar_cliente = true`: todo movimiento lleva `cliente_id`. **El saldo de un cliente es la suma de sus movimientos en CxC**; no existe columna `saldo`.
 
 ## Acciones

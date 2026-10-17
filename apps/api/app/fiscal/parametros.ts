@@ -227,12 +227,15 @@ export interface FilaImpuesto {
     nombre: string
     calculo: string
     base_impuesto: string | null
+    /** por ciento, positiva */
     tasa: string
+    /** 1 impuesto; -1 retención */
+    signo: 1 | -1
     incluido: boolean
     exigibilidad: 'factura' | 'pago'
     cuenta_cuota: string
     cuenta_transicion: string | null
-    cuadricula_base: string
+    cuadricula_base: string | null
     cuadricula_cuota: string
     descripcion: string
     fuente: string
@@ -276,6 +279,7 @@ export async function filasImpuestos(
             'v.calculo',
             'v.base_impuesto',
             db.raw('v.tasa::text as tasa'),
+            'v.signo',
             'v.incluido',
             'v.exigibilidad',
             'v.cuenta_cuota',
@@ -296,6 +300,7 @@ export async function filasImpuestos(
         id: Number(f.id),
         empresa_id: f.empresa_id === null ? null : Number(f.empresa_id),
         tasa: formatearTasa(f.tasa),
+        signo: Number(f.signo) === -1 ? -1 : 1,
         creado_por: f.creado_por === null ? null : Number(f.creado_por),
         created_at: new Date(f.created_at).toISOString(),
     }))

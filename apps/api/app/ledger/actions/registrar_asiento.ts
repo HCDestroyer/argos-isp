@@ -8,6 +8,7 @@ import { periodoCerrado } from '#ledger/cierres'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
+import { CUADRICULAS_GT } from '#fiscal/l10n/gt/impuestos'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -349,7 +350,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         return lineas
     }
 
-    /** La cuadrícula debe ser la de base o cuota de alguna versión del impuesto (`fiscal.impuestos`). */
+    /** El impuesto existe en `fiscal.impuestos` y la cuadrícula es una del paquete, con signo (`+V_IVA`). */
     private async validarCuadriculas(
         trx: TransactionClientContract,
         lineas: LineaNormalizada[],
@@ -360,30 +361,27 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         ]
         if (codigos.length === 0) return
         const filas = (await trx
-            .from('fiscal.impuestos_versiones')
+            .from('fiscal.impuestos')
+            .where('pais', PAIS_PLAN)
             .whereIn('codigo', codigos)
-            .distinct('codigo', 'cuadricula_base', 'cuadricula_cuota')) as Array<{
-            codigo: string
-            cuadricula_base: string
-            cuadricula_cuota: string
-        }>
+            .select('codigo')) as Array<{ codigo: string }>
+        const existentes = new Set(filas.map((f) => f.codigo))
+        const cuadriculas = new Set<string>(CUADRICULAS_GT)
         lineas.forEach((linea, i) => {
-            if (linea.impuesto_codigo === null) return
-            const propias = filas.filter((f) => f.codigo === linea.impuesto_codigo)
-            if (propias.length === 0) {
+            if (linea.impuesto_codigo === null || linea.cuadricula === null) return
+            if (!existentes.has(linea.impuesto_codigo)) {
                 errores.push({
                     field: `movimientos.${i}.impuesto_codigo`,
                     message: `El impuesto ${linea.impuesto_codigo} no existe`,
                     rule: 'exists',
                 })
-            } else if (
-                !propias.some(
-                    (f) => f.cuadricula_base === linea.cuadricula || f.cuadricula_cuota === linea.cuadricula,
-                )
-            ) {
+            }
+            // con signo: +V_IVA suma a la casilla y -V_IVA resta (contrato §10.2)
+            const signo = linea.cuadricula[0]
+            if ((signo !== '+' && signo !== '-') || !cuadriculas.has(linea.cuadricula.slice(1))) {
                 errores.push({
                     field: `movimientos.${i}.cuadricula`,
-                    message: `La cuadrícula ${linea.cuadricula} no es de ${linea.impuesto_codigo}`,
+                    message: `Cuadrícula inválida: ${linea.cuadricula} (signo + o - y una de ${[...cuadriculas].join(', ')})`,
                     rule: 'cuadricula',
                 })
             }

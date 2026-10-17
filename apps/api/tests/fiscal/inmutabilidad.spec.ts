@@ -87,10 +87,7 @@ test.group('Localización fiscal · inmutabilidad', (group) => {
             /parametros_valores_paquete_global/,
         )
 
-        const version = await db
-            .from('fiscal.impuestos_versiones')
-            .where('codigo', 'RET_IVA_ESPECIAL_RECIBIDA')
-            .first()
+        const version = await db.from('fiscal.impuestos_versiones').where('codigo', 'RET_IVA_ESP').first()
         const { id: idOriginal, created_at: creadaEn, ...copia } = version
         void idOriginal
         void creadaEn
@@ -105,10 +102,10 @@ test.group('Localización fiscal · inmutabilidad', (group) => {
                             vigente_desde: '2099-01-01',
                             origen: 'usuario',
                             motivo: 'x',
-                            tasa: '15',
+                            signo: 1,
                         }),
                 ),
-            /signo incorrecto/,
+            /Signo 1 incorrecto/,
         )
     })
 })

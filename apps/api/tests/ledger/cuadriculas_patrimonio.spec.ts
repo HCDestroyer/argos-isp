@@ -43,13 +43,13 @@ test.group('Libro · cuadrículas de impuesto y patrimonio', (group) => {
                     cuenta: CUENTAS.OTROS_INGRESOS,
                     haber: '100.00',
                     impuesto_codigo: 'IVA12',
-                    cuadricula: 'iva_debito_base',
+                    cuadricula: '+V_BASE_SERV',
                 },
                 {
                     cuenta: CUENTAS.IVA_DEBITO,
                     haber: '12.00',
                     impuesto_codigo: 'IVA12',
-                    cuadricula: 'iva_debito',
+                    cuadricula: '+V_IVA',
                 },
             ],
         })
@@ -57,11 +57,11 @@ test.group('Libro · cuadrículas de impuesto y patrimonio', (group) => {
         const movimientos = vista.movimientos as Array<Record<string, unknown>>
         assert.deepEqual(
             movimientos.map((m) => m.cuadricula),
-            [null, 'iva_debito_base', 'iva_debito'],
+            [null, '+V_BASE_SERV', '+V_IVA'],
         )
         const sinImpuesto = await asiento(empresaId, {
             movimientos: [
-                { cuenta: CUENTAS.BANCO_PRINCIPAL, debe: '1.00', cuadricula: 'iva_debito' },
+                { cuenta: CUENTAS.BANCO_PRINCIPAL, debe: '1.00', cuadricula: '+V_IVA' },
                 { cuenta: CUENTAS.OTROS_INGRESOS, haber: '1.00' },
             ],
         }).catch((e) => e)
@@ -72,7 +72,7 @@ test.group('Libro · cuadrículas de impuesto y patrimonio', (group) => {
                     cuenta: CUENTAS.BANCO_PRINCIPAL,
                     debe: '1.00',
                     impuesto_codigo: 'IVA12',
-                    cuadricula: 'iso',
+                    cuadricula: 'V_IVA',
                 },
                 { cuenta: CUENTAS.OTROS_INGRESOS, haber: '1.00' },
             ],

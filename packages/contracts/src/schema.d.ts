@@ -4817,9 +4817,9 @@ export interface components {
             pais: string;
             codigo: string;
             /** @enum {string} */
-            grupo: "iva" | "retencion_iva" | "retencion_isr" | "isr" | "iso" | "pequeno_contribuyente";
+            grupo: "iva" | "retencion_iva" | "retencion_isr" | "pequeno_contribuyente";
             /** @enum {string} */
-            uso: "venta" | "compra" | "declaracion";
+            uso: "venta" | "compra";
             empresa_id: number | null;
             /** Format: date */
             vigente_desde: string;
@@ -4827,24 +4827,29 @@ export interface components {
             origen: "paquete" | "usuario";
             nombre: string;
             /** @enum {string} */
-            calculo: "precio_incluido" | "sobre_base" | "sobre_impuesto" | "sobre_total";
-            /** @description Impuesto sobre cuya cuota se calcula (sobre_impuesto) */
+            calculo: "porcentaje_incluido" | "porcentaje_del_impuesto" | "porcentaje_de_base" | "porcentaje_del_total";
+            /** @description Impuesto sobre cuya cuota se calcula (porcentaje_del_impuesto) */
             base_impuesto: string | null;
             /**
-             * @description Por ciento con signo (las retenciones son negativas), como string
+             * @description Por ciento, positiva, como string (el signo va en signo)
              * @example 12.00
-             * @example -15.00
+             * @example 15.00
              */
             tasa: string;
+            /**
+             * @description 1 impuesto; -1 retención (impuesto negativo)
+             * @enum {integer}
+             */
+            signo: -1 | 1;
             incluido: boolean;
             /** @enum {string} */
-            exigibilidad: "factura" | "pago";
+            exigibilidad: "factura" | "certificacion";
             /** @description Código de la cuenta de la cuota */
             cuenta_cuota: string;
             /** @description Cuenta mientras no es exigible (IVA por certificar) */
             cuenta_transicion: string | null;
-            /** @description Etiqueta de los movimientos de la base */
-            cuadricula_base: string;
+            /** @description Etiqueta de los movimientos de la base (null en las retenciones) */
+            cuadricula_base: string | null;
             /** @description Etiqueta de los movimientos de la cuota */
             cuadricula_cuota: string;
             descripcion: string;
@@ -11387,7 +11392,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description Por ciento con signo: las retenciones son negativas ("-15.00") */
+                    /** @description Por ciento positivo ("15.00"); el signo de la retención es del impuesto */
                     tasa: string;
                     /** Format: date */
                     vigente_desde: string;

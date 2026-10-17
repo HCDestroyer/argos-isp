@@ -257,13 +257,16 @@ test.group('Localización fiscal · instalación', (group) => {
         const { token } = await usuarioConRoles(['admin'])
         const cuerpoNit = String(Math.floor(1_000_000 + Math.random() * 8_999_999))
         const creada = await estado(
-            client.post('/api/v1/empresas').bearerToken(token).json({
-                nit: `${cuerpoNit}${verificadorNit(cuerpoNit)}`,
-                razon_social: 'Fiscal de Prueba, S.A.',
-                nombre_comercial: 'Fiscal de Prueba',
-                regimen_isr: 'retencion_definitiva',
-                codigo_establecimiento: 4,
-            }),
+            client
+                .post('/api/v1/empresas')
+                .bearerToken(token)
+                .json({
+                    nit: `${cuerpoNit}${verificadorNit(cuerpoNit)}`,
+                    razon_social: 'Fiscal de Prueba, S.A.',
+                    nombre_comercial: 'Fiscal de Prueba',
+                    regimen_isr: 'retencion_definitiva',
+                    codigo_establecimiento: 4,
+                }),
             201,
         )
         const empresaId = creada.body().id as number

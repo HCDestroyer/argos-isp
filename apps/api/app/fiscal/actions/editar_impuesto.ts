@@ -15,8 +15,8 @@ import { resolverImpuesto, type ImpuestoVigente } from '#fiscal/impuestos'
  * `vigente_desde`. Copia el resto (cálculo, cuentas, cuadrículas) de la versión vigente en esa
  * fecha. Nunca edita una versión: lo anterior a la fecha no cambia.
  *
- * - Una retención lleva tasa negativa y un impuesto positiva (422 `parametro_fuera_de_rango`,
- *   regla `signo`; también lo valida un trigger).
+ * - La tasa va en positivo (422 `parametro_fuera_de_rango` si no). El `signo` (-1 en las
+ *   retenciones) se copia de la versión vigente; un trigger lo valida contra el grupo.
  * - `ambito = global` exige alcance global. 422 `vigencia_en_periodo_bloqueado`; 409
  *   `vigencia_duplicada`.
  * - `audit.cambios` (`impuesto_fiscal`: tasa y activo); evento `fiscal.parametros_cambiados` con la
@@ -25,7 +25,7 @@ import { resolverImpuesto, type ImpuestoVigente } from '#fiscal/impuestos'
 
 export interface EntradaEditarImpuesto {
     codigo: string
-    /** por ciento con signo, string: "12.00", "-15.00" */
+    /** por ciento positivo, string: "12.00" */
     tasa: string
     vigente_desde: string
     motivo: string
@@ -34,7 +34,7 @@ export interface EntradaEditarImpuesto {
     empresa_id?: number | null
 }
 
-const TASA = /^-?\d{1,3}(\.\d{1,6})?$/
+const TASA = /^\d{1,3}(\.\d{1,6})?$/
 
 export default class EditarImpuesto extends DomainAction<EntradaEditarImpuesto, ImpuestoVigente> {
     readonly nombre = 'fiscal.editar_impuesto'
@@ -59,20 +59,14 @@ export default class EditarImpuesto extends DomainAction<EntradaEditarImpuesto, 
         const base = resolverImpuesto(filas, input.codigo, vigenteDesde) ?? filas.at(-1)!
 
         const tasa = input.tasa.trim()
-        if (!TASA.test(tasa) || dec(tasa).abs().gt(100)) {
-            throw new ParametroFueraDeRango([
-                { field: 'tasa', message: 'Por ciento con signo, entre -100 y 100 ("12.00")', rule: 'tasa' },
-            ])
-        }
-        const retencion = base.grupo.startsWith('retencion')
-        if (!dec(tasa).isZero() && retencion !== dec(tasa).isNegative()) {
+        // la tasa va en positivo; el signo (-1 en las retenciones) es del impuesto y no se edita
+        if (!TASA.test(tasa) || dec(tasa).gt(100)) {
             throw new ParametroFueraDeRango([
                 {
                     field: 'tasa',
-                    message: retencion
-                        ? 'Una retención es un impuesto negativo: la tasa va con signo menos'
-                        : 'La tasa de un impuesto no es negativa',
-                    rule: 'signo',
+                    message:
+                        'Por ciento positivo, de 0 a 100 ("12.00"); el signo de la retención no se escribe',
+                    rule: 'tasa',
                 },
             ])
         }
@@ -102,6 +96,7 @@ export default class EditarImpuesto extends DomainAction<EntradaEditarImpuesto, 
                 calculo: base.calculo,
                 base_impuesto: base.base_impuesto,
                 tasa,
+                signo: base.signo,
                 incluido: base.incluido,
                 exigibilidad: base.exigibilidad,
                 cuenta_cuota: base.cuenta_cuota,

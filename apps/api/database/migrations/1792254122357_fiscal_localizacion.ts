@@ -85,7 +85,8 @@ const SQL_LEDGER = `
         ADD COLUMN impuesto_codigo text,
         ADD COLUMN cuadricula text,
         ADD CONSTRAINT movimientos_cuadricula_completa
-            CHECK ((impuesto_codigo IS NULL) = (cuadricula IS NULL));
+            CHECK ((impuesto_codigo IS NULL) = (cuadricula IS NULL)),
+        ADD CONSTRAINT movimientos_cuadricula_formato CHECK (cuadricula ~ '^[+-][A-Z][A-Z_]*$');
 
 `
 
@@ -191,10 +192,8 @@ const SQL_FISCAL = `
     CREATE TABLE fiscal.impuestos (
         pais char(2) NOT NULL,
         codigo text NOT NULL CHECK (codigo ~ '^[A-Z0-9_]+$'),
-        grupo text NOT NULL CHECK (grupo IN (
-            'iva', 'retencion_iva', 'retencion_isr', 'isr', 'iso', 'pequeno_contribuyente'
-        )),
-        uso text NOT NULL CHECK (uso IN ('venta', 'compra', 'declaracion')),
+        grupo text NOT NULL CHECK (grupo IN ('iva', 'retencion_iva', 'retencion_isr', 'pequeno_contribuyente')),
+        uso text NOT NULL CHECK (uso IN ('venta', 'compra')),
         localizacion_codigo text NOT NULL REFERENCES fiscal.localizaciones (codigo),
         created_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (pais, codigo)
@@ -208,14 +207,17 @@ const SQL_FISCAL = `
         vigente_desde date NOT NULL,
         origen text NOT NULL CHECK (origen IN ('paquete', 'usuario')),
         nombre text NOT NULL,
-        calculo text NOT NULL CHECK (calculo IN ('precio_incluido', 'sobre_base', 'sobre_impuesto', 'sobre_total')),
+        calculo text NOT NULL CHECK (calculo IN (
+            'porcentaje_incluido', 'porcentaje_del_impuesto', 'porcentaje_de_base', 'porcentaje_del_total'
+        )),
         base_impuesto text,
-        tasa numeric(9, 6) NOT NULL CHECK (tasa BETWEEN -100 AND 100),
+        tasa numeric(9, 6) NOT NULL CHECK (tasa BETWEEN 0 AND 100),
+        signo smallint NOT NULL CHECK (signo IN (-1, 1)),
         incluido boolean NOT NULL,
-        exigibilidad text NOT NULL CHECK (exigibilidad IN ('factura', 'pago')),
+        exigibilidad text NOT NULL CHECK (exigibilidad IN ('factura', 'certificacion')),
         cuenta_cuota text NOT NULL,
         cuenta_transicion text,
-        cuadricula_base text NOT NULL,
+        cuadricula_base text,
         cuadricula_cuota text NOT NULL,
         descripcion text NOT NULL,
         fuente text NOT NULL,
@@ -230,21 +232,24 @@ const SQL_FISCAL = `
         FOREIGN KEY (pais, base_impuesto) REFERENCES fiscal.impuestos (pais, codigo),
         CONSTRAINT impuestos_versiones_paquete_global CHECK (origen <> 'paquete' OR empresa_id IS NULL),
         CONSTRAINT impuestos_versiones_motivo CHECK (origen = 'paquete' OR length(trim(motivo)) > 0),
-        CONSTRAINT impuestos_versiones_base CHECK ((calculo = 'sobre_impuesto') = (base_impuesto IS NOT NULL))
+        CONSTRAINT impuestos_versiones_base CHECK (
+            (calculo = 'porcentaje_del_impuesto') = (base_impuesto IS NOT NULL)
+        ),
+        CONSTRAINT impuestos_versiones_transicion CHECK (exigibilidad <> 'certificacion' OR cuenta_transicion IS NOT NULL)
     );
-    COMMENT ON COLUMN fiscal.impuestos_versiones.tasa IS 'por ciento con signo: las retenciones son negativas';
+    COMMENT ON COLUMN fiscal.impuestos_versiones.tasa IS 'por ciento, positiva; signo -1 = retención';
     CREATE UNIQUE INDEX impuestos_versiones_unico
         ON fiscal.impuestos_versiones (pais, codigo, empresa_id, vigente_desde, origen) NULLS NOT DISTINCT;
 
-    -- una retención siempre resta y un impuesto nunca (Odoo: retención = impuesto negativo)
+    -- una retención siempre resta (signo -1) y un impuesto nunca (Odoo: retención = impuesto negativo)
     CREATE OR REPLACE FUNCTION fiscal.validar_impuesto_version() RETURNS trigger
     LANGUAGE plpgsql AS $fn$
     DECLARE
         v_grupo text;
     BEGIN
         SELECT grupo INTO v_grupo FROM fiscal.impuestos WHERE pais = NEW.pais AND codigo = NEW.codigo;
-        IF NEW.tasa <> 0 AND (v_grupo LIKE 'retencion%') <> (NEW.tasa < 0) THEN
-            RAISE EXCEPTION 'Tasa % con signo incorrecto para % (grupo %)', NEW.tasa, NEW.codigo, v_grupo
+        IF (v_grupo LIKE 'retencion%') <> (NEW.signo = -1) THEN
+            RAISE EXCEPTION 'Signo % incorrecto para % (grupo %)', NEW.signo, NEW.codigo, v_grupo
                 USING ERRCODE = 'check_violation', CONSTRAINT = 'impuesto_signo';
         END IF;
         RETURN NEW;
