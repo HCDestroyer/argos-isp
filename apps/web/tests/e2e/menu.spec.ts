@@ -7,9 +7,13 @@ import { entrar } from './ayudas'
  */
 test('buscador de secciones con Ctrl+K, solo con las permitidas', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    await page.keyboard.press('ControlOrMeta+k')
+    // El atajo vive en el layout: esperar a que la página de inicio esté pintada.
+    await expect(page.getByRole('heading', { name: /^Hola,/ })).toBeVisible()
     const buscador = page.getByRole('dialog')
-    await expect(buscador.getByPlaceholder('Ir a una sección…')).toBeVisible()
+    await expect(async () => {
+        await page.keyboard.press('ControlOrMeta+k')
+        await expect(buscador.getByPlaceholder('Ir a una sección…')).toBeVisible({ timeout: 1000 })
+    }).toPass()
     await page.keyboard.type('Rout')
     await expect(buscador.getByRole('option', { name: /Routers/ })).toHaveCount(0)
     await buscador.getByPlaceholder('Ir a una sección…').fill('Caja')
