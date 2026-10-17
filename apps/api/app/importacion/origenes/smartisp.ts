@@ -172,7 +172,7 @@ export function filasDesdeDumpSmartisp(
             ESQUEMA[vieja].tabla,
             0,
             null,
-            `${ESQUEMA[vieja].tabla} trae ${n} filas que no se importan (se leen ${ESQUEMA.facturas.tabla} ` +
+            `${ESQUEMA[vieja].tabla} trae ${n} ${n === 1 ? 'fila que no se importa' : 'filas que no se importan'} (se leen ${ESQUEMA.facturas.tabla} ` +
                 `y ${ESQUEMA.pagos.tabla}); confirmar con el ISP cuál usa`,
         )
     }

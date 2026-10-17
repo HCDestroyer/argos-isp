@@ -3,7 +3,7 @@
 102,2,1,2,pppoe,mw.elsol,clave102,198.18.10.20,,no,,,2023-11-02,ACTIVO
 103,3,2,1,pppoe,mw.elsol.bodega,clave103,,,no,,,0000-00-00,ACTIVO
 104,4,1,1,pppoe,mw.bruno,clave104,198.18.10.40,,no,,,0000-00-00,SUSPENDIDO
-105,5,2,1,pppoe,mw.carla,clave105,198.18.20.50,,no,,,0000-00-00,ACTIVO
+105,5,2,1,pppoe,mw.carla,clave105,,,no,,,0000-00-00,ACTIVO
 106,6,2,1,pppoe,mw.elena,clave106,198.18.20.60,,no,,,0000-00-00,ACTIVO
 107,7,1,0,pppoe,mw.ernesto,clave107,198.18.10.70,,no,,,0000-00-00,ACTIVO
 108,8,1,2,ip_estatica,,,198.18.10.80,aabb.cc00.0801,si,"Finca Las Flores, casa patronal",,0000-00-00,ACTIVO

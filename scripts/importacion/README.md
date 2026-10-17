@@ -12,6 +12,12 @@ Datos de prueba del importador (`apps/api/app/importacion`, runbook en `docs/run
 cat scripts/importacion/esquemas/mikrowisp6.sql scripts/importacion/mikrowisp-sintetico.sql > /tmp/mikrowisp.sql
 ```
 
+`smartisp-sintetico.sql`: lo mismo para el esquema real de SmartISP (`esquemas/smartisp.sql`): tipo de conexión por `control_routers` (PPPoE, colas con amarre, DHCP, hotspot), estados de factura y de servicio, pagos borrados, pago cruzado, saldo a favor en `wallet_balance`, `balance` que no cuadra y la tabla vieja `invoices` con filas. Suma de saldos Q 925.00.
+
+```sh
+cat scripts/importacion/esquemas/smartisp.sql scripts/importacion/smartisp-sintetico.sql > /tmp/smartisp.sql
+```
+
 `sintetico-csv/`: los mismos datos que `mikrowisp-sintetico.sql`, traducidos por el adaptador de Mikrowisp al formato canónico y escritos como CSV. El importador da el mismo reporte con los dos (`tests/importacion/origenes.spec.ts`). Si cambian los datos sintéticos, se regeneran:
 
 ```sh
@@ -21,6 +27,7 @@ pnpm --filter @argosisp/api exec node --import ts-node-maintained/register/esm .
 ```sh
 pnpm importar --origen=csv --fuente=scripts/importacion/ejemplo --sistema=mikrowisp --dry-run
 pnpm importar --origen=mikrowisp --fuente=/tmp/mikrowisp.sql --dry-run --salida=/tmp/reporte
+pnpm importar --origen=smartisp --fuente=/tmp/smartisp.sql --dry-run --salida=/tmp/reporte-smartisp
 pnpm importar --origen=csv --fuente=scripts/importacion/sintetico-csv --dry-run
 pnpm importar:plantillas /tmp/plantillas
 ```

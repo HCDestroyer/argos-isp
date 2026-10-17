@@ -8,8 +8,9 @@ import { COLUMNAS, ENTIDADES } from '#importacion/canonico'
 import { leerCsv } from '#importacion/csv'
 import { importar } from '#importacion/importador'
 import type { ReporteImportacion } from '#importacion/reporte'
+import type { ProblemaFila } from '#importacion/canonico'
 import { ARCHIVOS, generarPlantillas, leerDirectorio } from '#importacion/origenes/csv'
-import { fuenteDesdeDump, leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
+import { filasDesdeDump, fuenteDesdeDump, leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
 import { fuenteDesdeDumpSmartisp } from '#importacion/origenes/smartisp'
 import { EsquemaIncompleto } from '#importacion/origenes/esquema_sql'
 import { leerOrigen } from '#importacion/origenes/index'
@@ -29,12 +30,15 @@ const CSV = fileURLToPath(new URL('../../../../scripts/importacion/sintetico-csv
 /**
  * Lo que debe coincidir entre orígenes: todo salvo request_id, horas, nombre del origen y de la
  * fuente, y el archivo y la línea de los problemas de formato (`tblservicios` fila 13 frente a
- * `servicios.csv` línea 14).
+ * `servicios.csv` línea 14). `propios`: los problemas que solo ve el adaptador del volcado (filas
+ * que no traduce, avisos de datos que el formato canónico no lleva); el CSV no los puede tener.
  */
-function comparable(r: ReporteImportacion) {
+function comparable(r: ReporteImportacion, propios: ProblemaFila[] = []) {
     const copia: Partial<ReporteImportacion> = { ...r }
     for (const campo of ['request_id', 'inicio', 'fin', 'origen', 'fuente'] as const) delete copia[campo]
-    copia.formato = r.formato.map(({ id, mensaje, aviso }) => ({ archivo: '', linea: 0, id, mensaje, aviso }))
+    copia.formato = r.formato
+        .filter((x) => !propios.some((p) => p.id === x.id && p.mensaje === x.mensaje))
+        .map(({ id, mensaje, aviso }) => ({ archivo: '', linea: 0, id, mensaje, aviso }))
     return copia
 }
 
@@ -84,11 +88,13 @@ test.group('importacion · orígenes', (group) => {
             dryRun: true,
             plantillaId,
         })
-        assert.deepEqual(comparable(desdeCsv), comparable(desdeSql))
+        const { problemas: propios } = filasDesdeDump(await readFile(SQL, 'utf8'), 'mikrowisp-sintetico.sql')
+        assert.lengthOf(propios, 8) // monedas, estado desconocido, tv, avisos (ver la cabecera del fixture)
+        assert.deepEqual(comparable(desdeCsv), comparable(desdeSql, propios))
         assert.equal(desdeCsv.origen, 'csv')
         assert.match(desdeCsv.request_id, /^importacion-csv-/)
         assert.isTrue(desdeCsv.saldos.cuadra)
-        assert.equal(desdeCsv.saldos.suma_origen, '1830.00')
+        assert.equal(desdeCsv.saldos.suma_origen, '1780.00')
         assert.deepEqual(desdeCsv.errores, [])
     })
 

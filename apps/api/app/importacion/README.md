@@ -53,7 +53,7 @@ Mismo origen y mismo id = misma entidad (una segunda corrida no crea nada). Otro
 - **Valores supuestos**: los códigos que solo se confirman con datos reales viven en constantes con nombre (`SEGURIDAD` en Mikrowisp; `ESTADOS_FACTURA`, `ESTADOS_SERVICIO` y `TIPOS_CONTROL` en SmartISP). Un valor desconocido omite la fila con el valor en el mensaje: nunca se adivina.
 - **Contraseñas**: la clave PPPoE (y las credenciales del router) viajan a `CrearServicio` / `CrearRouter`, que las cifran; ningún mensaje del adaptador ni del reporte las lleva (lo comprueba `tests/importacion/mikrowisp.spec.ts`).
 
-Datos de prueba: `scripts/importacion/mikrowisp-sintetico.sql` son solo `INSERT` con datos inventados; el volcado de prueba es la estructura real seguida de esos datos (`tests/importacion/ayudas_importacion.ts`). `scripts/importacion/sintetico-csv/` son los datos de Mikrowisp como CSV canónicos (`generar-csv-sintetico.mts`): el importador da el mismo reporte con los dos.
+Datos de prueba: `scripts/importacion/mikrowisp-sintetico.sql` y `scripts/importacion/smartisp-sintetico.sql` son solo `INSERT` con datos inventados (los casos difíciles de cada uno en su cabecera); el volcado de prueba es la estructura real seguida de esos datos (`tests/importacion/ayudas_importacion.ts`). `scripts/importacion/sintetico-csv/` son los datos de Mikrowisp como CSV canónicos (`generar-csv-sintetico.mts`): el importador da el mismo reporte con los dos.
 
 ## Origen `csv`: plantillas
 
@@ -206,4 +206,5 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | `commands/importar_plantillas.ts`      | `node ace importar:plantillas <dir>` (`pnpm importar:plantillas`)                                    |
 | `tests/importacion/importador.spec.ts` | Pruebas con el ejemplo CSV (`scripts/importacion/ejemplo/`)                                          |
 | `tests/importacion/mikrowisp.spec.ts`  | Volcado sintético sobre el esquema real: dos en seco iguales, real dos veces sin duplicar, saldos    |
+| `tests/importacion/smartisp.spec.ts`   | Lo mismo con el volcado sintético de SmartISP sobre su esquema real                                  |
 | `tests/importacion/origenes.spec.ts`   | Esquemas reales, CSV = Mikrowisp con los mismos datos, idempotencia por origen, plantillas           |
