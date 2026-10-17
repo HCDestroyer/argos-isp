@@ -25,13 +25,13 @@ export const ADAPTADORES: Record<NombreOrigen, AdaptadorOrigen> = {
     mikrowisp: {
         nombre: 'mikrowisp',
         fuente: 'archivo',
-        descripcion: 'Volcado SQL de la base MySQL de Mikrowisp (esquema supuesto en origenes/mikrowisp.ts)',
+        descripcion: 'Volcado SQL de la base MySQL de Mikrowisp 6 (docs/importacion/mapeo-mikrowisp.md)',
         leer: leerDumpMikrowisp,
     },
     smartisp: {
         nombre: 'smartisp',
         fuente: 'archivo',
-        descripcion: 'Volcado SQL de la base MySQL de SmartISP (esquema SUPUESTO en origenes/smartisp.ts)',
+        descripcion: 'Volcado SQL de la base MySQL de SmartISP (docs/importacion/mapeo-smartisp.md)',
         leer: leerDumpSmartisp,
     },
     csv: {

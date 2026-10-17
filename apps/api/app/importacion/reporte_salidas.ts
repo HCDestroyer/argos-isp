@@ -29,14 +29,15 @@ export interface LineaDiferencia {
 const ORDEN_ENTIDADES = ['router', 'red', 'plan', 'zona', 'cliente', 'servicio', 'factura', 'pago', 'saldo']
 
 const ENTIDAD_DE_ARCHIVO: Array<[RegExp, string]> = [
-    [/routers/, 'router'],
-    [/redes|networks/, 'red'],
+    // Nombres canónicos (CSV) y tablas de Mikrowisp 6 y SmartISP. `address_routers` antes que `routers`.
+    [/redes|networks|^ipv4$|address_routers/, 'red'],
+    [/routers|^server$|^nas$/, 'router'],
     [/planes|perfiles|plans/, 'plan'],
     [/saldo|balance/, 'saldo'],
     [/servicios|services/, 'servicio'],
     [/clientes|usuarios|clients/, 'cliente'],
-    [/facturas|bills/, 'factura'],
-    [/pagos|operaciones|payments/, 'pago'],
+    [/facturas|bills|bill_customers|invoices/, 'factura'],
+    [/pagos|operaciones|payment/, 'pago'],
 ]
 
 export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
