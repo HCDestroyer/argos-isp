@@ -7,6 +7,7 @@ import {
     sellarPendientes,
     ultimoSello,
     avisarRuptura,
+    sellosEnMesCerrado,
     type RupturaCadena,
 } from '#ledger/sellos'
 
@@ -84,6 +85,24 @@ export default class SellarAsientos extends DomainAction<EntradaSellarAsientos, 
             }
 
             const nuevos = await sellarPendientes(t.trx, empresaId, limite)
+            // un asiento con fecha de un mes ya cerrado no debió existir (H10): se sella igual (la cadena
+            // queda completa) y se avisa; la verificación lo reporta como `asiento_en_mes_cerrado`
+            const enCerrado = await sellosEnMesCerrado(
+                t.trx,
+                empresaId,
+                nuevos.map((n) => n.sello),
+            )
+            for (const x of enCerrado) {
+                const ruptura: RupturaCadena = {
+                    sello: x.sello,
+                    asiento_id: x.asiento_id,
+                    motivo: 'asiento_en_mes_cerrado',
+                    esperado: `sello <= ${x.ultimo_sello} (cierre de ${x.periodo})`,
+                    obtenido: String(x.sello),
+                }
+                salida.rupturas.push({ empresa_id: empresaId, ...ruptura })
+                await avisarRuptura(t, empresaId, ruptura)
+            }
             const fin = nuevos.at(-1)
             salida.empresas.push({
                 empresa_id: empresaId,

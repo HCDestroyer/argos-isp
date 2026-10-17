@@ -10525,7 +10525,7 @@
       "get": {
         "operationId": "libroIntegridad",
         "summary": "Verificar la cadena de hash del libro (una sección por empresa)",
-        "description": "Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.",
+        "description": "Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` y número de sello en `desde_sello`–`hasta_sello` (sin rango, todos). Un sello posterior al cierre de un mes con un asiento de ese mes es una ruptura `asiento_en_mes_cerrado`. Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.",
         "tags": [
           "libro"
         ],
@@ -10570,6 +10570,26 @@
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
               "format": "date"
+            }
+          },
+          {
+            "name": "desde_sello",
+            "in": "query",
+            "required": false,
+            "description": "Recalcula el hash de los sellos desde este número (inclusive)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "hasta_sello",
+            "in": "query",
+            "required": false,
+            "description": "Hasta este sello",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         ],
@@ -31637,7 +31657,8 @@
                   "encadenamiento",
                   "sello_faltante",
                   "asiento_inexistente",
-                  "cierre_distinto"
+                  "cierre_distinto",
+                  "asiento_en_mes_cerrado"
                 ]
               },
               "esperado": {

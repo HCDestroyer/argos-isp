@@ -240,7 +240,7 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.integridadValidator,
         descripcion:
-            'Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.',
+            'Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` y número de sello en `desde_sello`–`hasta_sello` (sin rango, todos). Un sello posterior al cierre de un mes con un asiento de ese mes es una ruptura `asiento_en_mes_cerrado`. Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.',
         respuesta: {
             status: 200,
             descripcion: 'Integridad por empresa',
@@ -248,7 +248,12 @@ const libro: Ruta[] = [
         },
         handler: (ctx, { query }) =>
             integridadLibro(
-                { desde: query.desde, hasta: query.hasta },
+                {
+                    desde: query.desde,
+                    hasta: query.hasta,
+                    desde_sello: query.desde_sello,
+                    hasta_sello: query.hasta_sello,
+                },
                 empresasDeLaLista(ctx.empresa, query.empresas),
             ),
     }),
