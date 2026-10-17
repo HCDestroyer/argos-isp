@@ -67,15 +67,18 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            // 25 pantallas con axe; en CI corre en paralelo con el resto.
-            test.setTimeout(600_000)
+            test.setTimeout(180_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
-                await page.goto(ruta)
-                await page.locator('main, [id^="dashboard-panel"]').first().waitFor()
-                await page.waitForLoadState('networkidle')
-                await page.waitForTimeout(400)
-                await revisar(page, nombre)
+                // Un paso por pantalla y esperas acotadas: si una no llega a estar lista, falla
+                // con su nombre en segundos en vez de agotar el plazo de la prueba.
+                await test.step(nombre, async () => {
+                    await page.goto(ruta)
+                    await page.locator('main, [id^="dashboard-panel"]').first().waitFor({ timeout: 15_000 })
+                    await page.waitForLoadState('networkidle', { timeout: 15_000 })
+                    await page.waitForTimeout(400)
+                    await revisar(page, nombre)
+                })
             }
         })
 
