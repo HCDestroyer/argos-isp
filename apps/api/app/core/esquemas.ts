@@ -361,6 +361,15 @@ export const AccionAuditoria = definirEsquema(
         resultado: enumerado(['ok', 'error']),
         error: nulable(texto),
         request_id: nulable(texto),
+        empresa_id: {
+            type: ['integer', 'null'],
+            description:
+                'Empresa (NIT) de lo que se hizo, o la empresa activa de quien lo hizo; null si no es de ninguna (login, usuarios, clientes, sistema)',
+        },
+        empresa_nombre: {
+            type: ['string', 'null'],
+            description: 'Nombre comercial de esa empresa (null sin empresa)',
+        },
         created_at: instante,
     }),
 )

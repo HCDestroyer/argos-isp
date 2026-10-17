@@ -939,7 +939,7 @@ const bitacora: Ruta[] = [
         permiso: 'bitacora.ver',
         query: v.listarAccionesValidator,
         respuesta: { status: 200, descripcion: 'Página de acciones', esquema: pagina(AccionAuditoria) },
-        handler: (_ctx, { query }) => listarAcciones(query),
+        handler: (ctx, { query }) => listarAcciones(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',

@@ -87,6 +87,8 @@ describe('ficha del cliente · composables', () => {
             entidad_id: 4,
             resultado: 'ok' as const,
             error: null,
+            empresa_id: 1,
+            empresa_nombre: 'ArgosIsp',
             created_at: '2026-10-15T16:06:00Z',
         }
         const acciones = [
@@ -113,6 +115,8 @@ describe('ficha del cliente · composables', () => {
             resultado: 'ok' as const,
             error: null,
             request_id: null,
+            empresa_id: 1,
+            empresa_nombre: 'ArgosIsp',
             created_at: '2026-10-11T14:00:00Z',
         }
         expect(etiquetaActor({ ...base, actor_tipo: 'sistema', actor_id: null })).toBe('Sistema')
