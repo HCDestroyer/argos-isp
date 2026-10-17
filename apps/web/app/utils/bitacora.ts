@@ -93,6 +93,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'empresas.editar': 'Empresa editada',
     'empresas.desactivar': 'Empresa desactivada',
     'empresas.cambiar_logo': 'Logo de la empresa cambiado',
+    'empresas.cambiar_pais': 'País de la empresa cambiado',
     'facturas.importar_pendiente': 'Aviso de cobro importado',
     'importacion.archivar': 'Filas del sistema anterior archivadas',
     'facturas.registrar_saldo_inicial': 'Saldo inicial registrado',
