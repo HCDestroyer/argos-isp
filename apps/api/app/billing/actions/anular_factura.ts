@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
@@ -46,6 +47,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             .forUpdate()
             .select(
                 'id',
+                'empresa_id',
                 'cliente_id',
                 'servicio_id',
                 'tipo',
@@ -55,6 +57,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 t.trx.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
             )) as Array<{
             id: number
+            empresa_id: number
             cliente_id: number
             servicio_id: number | null
             tipo: 'servicio' | 'mora'
@@ -64,6 +67,8 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             vence_en: string
         }>
         const factura = facturas.find((f) => f.id === input.factura_id)!
+        exigirAccesoEmpresa(t.ctx, Number(factura.empresa_id))
+        t.fijarEmpresa(Number(factura.empresa_id))
         if (factura.estado === 'anulada') {
             throw new Conflicto(
                 `La factura ${factura.id} ya está anulada`,
@@ -140,6 +145,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             )
             await t.emit('factura.anulada', {
                 factura_id: f.id,
+                empresa_id: Number(f.empresa_id),
                 servicio_id: f.servicio_id,
                 cliente_id: f.cliente_id,
                 total: f.total,

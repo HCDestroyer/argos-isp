@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
@@ -42,6 +43,7 @@ export interface ResultadoAnularSaldoInicial {
 
 interface FilaSaldo {
     id: number
+    empresa_id: number
     origen: string
     clave_externa: string
     cliente_id: number
@@ -78,10 +80,21 @@ export default class AnularSaldoInicial extends DomainAction<
                     (q) => q.where('id', input.saldo_inicial_id!),
                     (q) => q.where('origen', clave!.origen).where('clave_externa', clave!.id_externo),
                 )
-                .select('id', 'origen', 'clave_externa', 'cliente_id', 'monto', 'factura_id', 'anulado_en')
+                .select(
+                    'id',
+                    'empresa_id',
+                    'origen',
+                    'clave_externa',
+                    'cliente_id',
+                    'monto',
+                    'factura_id',
+                    'anulado_en',
+                )
         const previo = (await buscar().first()) as FilaSaldo | null
         if (!previo) throw new NoEncontrado('El saldo inicial no existe')
         t.fijarEntidad('saldo_inicial', previo.id)
+        exigirAccesoEmpresa(t.ctx, Number(previo.empresa_id))
+        t.fijarEmpresa(Number(previo.empresa_id))
         await bloquearCliente(t.trx, previo.cliente_id)
         const saldo = (await buscar().forUpdate().firstOrFail()) as FilaSaldo
         if (saldo.anulado_en) {
@@ -167,6 +180,7 @@ export default class AnularSaldoInicial extends DomainAction<
                 .forUpdate()
                 .select(
                     'id',
+                    'empresa_id',
                     'cliente_id',
                     'servicio_id',
                     'total',

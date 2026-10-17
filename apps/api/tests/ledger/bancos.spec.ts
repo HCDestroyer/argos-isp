@@ -45,6 +45,7 @@ test.group('ledger · bancos del libro', () => {
         const fila = bancos.find((b) => b.id === Number(nuevo.id))
         assert.deepEqual(fila, {
             id: Number(nuevo.id),
+            empresa_id: 1,
             nombre,
             banco_id: Number(catalogo.id),
             banco: catalogo.nombre,

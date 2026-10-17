@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
@@ -39,9 +40,19 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
         const caja = (await t.trx
             .from('ledger.cajas')
             .where('id', input.caja_id)
-            .select('id', 'nombre', 'cuenta_id', 'cajero_id')
-            .first()) as { id: number; nombre: string; cuenta_id: number; cajero_id: number | null } | null
+            .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'cajero_id')
+            .first()) as {
+            id: number
+            empresa_id: number
+            nombre: string
+            cuenta_id: number
+            cajero_id: number | null
+        } | null
         if (!caja) throw new NoEncontrado(`La caja ${input.caja_id} no existe`)
+        // el cierre es por empresa: el asiento de la diferencia va al libro de la caja
+        const empresaId = Number(caja.empresa_id)
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
 
         const turno = (await t.trx
             .from('ledger.cajas_turnos')
@@ -106,6 +117,7 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
                   ]
             await new RegistrarAsiento().execute(
                 {
+                    empresa_id: empresaId,
                     descripcion: `Cierre del turno ${turno.id} de ${caja.nombre}: ${diferencia.isNegative() ? 'faltante' : 'sobrante'} Q${monto} · ${motivo}`,
                     origen_tipo: 'cierre_caja',
                     origen_id: turno.id,
@@ -118,6 +130,7 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
 
         await t.emit('caja.cerrada', {
             caja_id: caja.id,
+            empresa_id: empresaId,
             cajero_id: caja.cajero_id ?? turno.abierto_por,
             esperado: aTexto(esperado),
             contado: aTexto(contado),

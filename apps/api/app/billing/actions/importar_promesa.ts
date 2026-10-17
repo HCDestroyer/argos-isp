@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
@@ -34,6 +35,8 @@ import { CANALES_PROMESA, type CanalPromesa } from '#billing/reglas_promesa'
  */
 
 export interface EntradaImportarPromesa {
+    /** multiempresa: si viene, debe ser la empresa del servicio (la promesa es de esa empresa) */
+    empresa_id?: number | null
     /** sistema de origen (`mikrowisp`, `smartisp`, `csv`…); ver `claveImportacion` */
     origen?: string
     /** id de la promesa en el origen (único por origen) */
@@ -155,6 +158,17 @@ export default class ImportarPromesa extends DomainAction<EntradaImportarPromesa
 
         t.fijarEntidad('servicio', servicioId!)
         const servicio = await leerServicio(t.trx, servicioId!)
+        if (input.empresa_id && input.empresa_id !== servicio.empresa_id) {
+            throw new ValidacionFallida([
+                {
+                    field: 'empresa_id',
+                    message: `El servicio ${servicio.id} es de la empresa ${servicio.empresa_id}`,
+                    rule: 'empresa_servicio',
+                },
+            ])
+        }
+        exigirAccesoEmpresa(t.ctx, servicio.empresa_id)
+        t.fijarEmpresa(servicio.empresa_id)
         await bloquearCliente(t.trx, servicio.cliente_id)
 
         const existente = (await t.trx
@@ -239,6 +253,7 @@ export default class ImportarPromesa extends DomainAction<EntradaImportarPromesa
             .insertQuery()
             .table('billing.promesas')
             .insert({
+                empresa_id: servicio.empresa_id,
                 servicio_id: servicio.id,
                 cliente_id: servicio.cliente_id,
                 vence_en: vence,

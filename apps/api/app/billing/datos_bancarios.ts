@@ -30,6 +30,8 @@ export interface DatosBancarios {
     bancoOrigenId: number | null
     /** subcuenta del libro de la cuenta bancaria de destino */
     cuentaLibro: number | null
+    /** empresa (NIT) dueña de la cuenta bancaria de destino: el pago es de esa empresa */
+    empresaCuenta: number | null
 }
 
 /**
@@ -67,11 +69,12 @@ export async function validarDatosBancarios(
         }
     }
     let cuentaLibro: number | null = null
+    let empresaCuenta: number | null = null
     if (valores.cuenta_bancaria_id !== null && requeridos.includes('cuenta_bancaria_id')) {
         const cuenta = await cliente
             .from('billing.cuentas_bancarias')
             .where('id', valores.cuenta_bancaria_id)
-            .select('cuenta_id', 'activa', 'moneda')
+            .select('cuenta_id', 'activa', 'moneda', 'empresa_id')
             .first()
         if (!cuenta || !cuenta.activa) {
             errores.push({
@@ -87,6 +90,7 @@ export async function validarDatosBancarios(
             })
         } else {
             cuentaLibro = cuenta.cuenta_id as number
+            empresaCuenta = Number(cuenta.empresa_id)
         }
     }
     if (valores.banco_origen_id !== null && requeridos.includes('banco_origen_id')) {
@@ -108,22 +112,26 @@ export async function validarDatosBancarios(
         cuentaBancariaId: requeridos.includes('cuenta_bancaria_id') ? valores.cuenta_bancaria_id : null,
         bancoOrigenId: requeridos.includes('banco_origen_id') ? valores.banco_origen_id : null,
         cuentaLibro,
+        empresaCuenta,
     }
 }
 
 /**
- * 409 `referencia_duplicada` si la referencia ya está en un pago (cualquier estado) del mismo
- * método y cuenta bancaria. Es la misma clave que el índice único `billing.pagos_metodo_referencia`.
+ * 409 `referencia_duplicada` si la referencia ya está en un pago (cualquier estado) de la misma
+ * empresa, método y cuenta bancaria. Es la misma clave que el índice único
+ * `billing.pagos_metodo_referencia`.
  */
 export async function exigirReferenciaLibre(
     cliente: QueryClientContract,
     metodo: MetodoPago,
     referencia: string | null,
     cuentaBancariaId: number | null,
+    empresaId: number,
 ): Promise<void> {
     if (!referencia) return
     const repetido = await cliente
         .from('billing.pagos')
+        .where('empresa_id', empresaId)
         .where('metodo', metodo)
         .where('referencia', referencia)
         .if(

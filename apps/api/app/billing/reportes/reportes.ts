@@ -6,6 +6,7 @@ import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
 import type { MetodoPago } from '#shared/eventos'
 import {
+    COLUMNAS_EMPRESA,
     armarReporte,
     definirColumnas,
     porcentaje,
@@ -48,6 +49,47 @@ export function rangoPorDefecto(filtros: { desde?: string; hasta?: string }) {
 const dimensionesClienteServicio: FiltrosDimension = {
     zona: (q, ids) => q.whereIn('c.zona_id', ids),
     router: (q, ids) => q.whereIn('s.router_id', ids),
+}
+
+/**
+ * Empresas del reporte (multiempresa): `empresas` filtra (null = todas) y `consolidado` agrega
+ * las columnas `empresa_id` y `empresa` (una fila por empresa y grupo; el total es el del grupo).
+ */
+export interface EmpresasReporte {
+    empresas: number[] | null
+    consolidado: boolean
+}
+
+export const UNA_EMPRESA: EmpresasReporte = { empresas: null, consolidado: false }
+
+const nombreEmpresa = (columna: string) =>
+    `(select e.nombre_comercial from core.empresas e where e.id = ${columna})`
+
+/** Filtra por empresa y, en el consolidado, agrupa y selecciona la empresa. */
+function porEmpresa<Q extends { whereIn: any; groupBy: any; select: any; orderBy: any }>(
+    consulta: Q,
+    columna: string,
+    op: EmpresasReporte,
+    agrupar = true,
+): Q {
+    if (op.empresas !== null) consulta.whereIn(columna, op.empresas)
+    if (op.consolidado) {
+        if (agrupar) consulta.groupBy(columna)
+        consulta.select(db.raw(`${columna} as empresa_id`), db.raw(`${nombreEmpresa(columna)} as empresa`))
+        consulta.orderBy(columna, 'asc')
+    }
+    return consulta
+}
+
+function columnasCon<C extends readonly import('#billing/reportes/definicion').Columna[]>(
+    op: EmpresasReporte,
+    columnas: C,
+) {
+    return op.consolidado ? [...COLUMNAS_EMPRESA, ...columnas] : columnas
+}
+
+function filtrosCon(op: EmpresasReporte, filtros: Record<string, unknown>) {
+    return { ...filtros, empresas: op.consolidado ? 'todas' : (op.empresas ?? null) }
 }
 
 function dinero(valor: unknown): string {
@@ -99,7 +141,11 @@ const GRUPOS_CARTERA: Record<AgruparCartera, { id: string; nombre: string; vacio
  * defecto): `dias = corte − vence_en`; ≤ 0 por vencer, 1–30, 31–60, 61–90 y más de 90. Es el saldo
  * actual de cada factura (lo pagado hasta hoy), agrupado por cliente, zona, router o plan.
  */
-export async function carteraVencida(filtros: FiltrosCartera, alcance?: Alcance): Promise<Reporte> {
+export async function carteraVencida(
+    filtros: FiltrosCartera,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const corte = filtros.corte ?? hoyGuatemala()
     const agrupar = filtros.agrupar ?? 'cliente'
     const grupo = GRUPOS_CARTERA[agrupar]
@@ -137,6 +183,7 @@ export async function carteraVencida(filtros: FiltrosCartera, alcance?: Alcance)
             db.raw('coalesce(sum(f.total - f.pagado), 0)::text as total'),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
+    porEmpresa(consulta, 'f.empresa_id', op)
     const filas = ((await consulta) as Fila[]).map((fila) => ({
         ...fila,
         ...Object.fromEntries(
@@ -148,9 +195,9 @@ export async function carteraVencida(filtros: FiltrosCartera, alcance?: Alcance)
     return armarReporte({
         reporte: 'cartera-vencida',
         titulo: 'Cartera vencida por antigüedad',
-        columnas: COLUMNAS_CARTERA,
+        columnas: columnasCon(op, COLUMNAS_CARTERA),
         filas,
-        filtros: { ...filtros, corte, agrupar },
+        filtros: filtrosCon(op, { ...filtros, corte, agrupar }),
     })
 }
 
@@ -187,7 +234,11 @@ export interface FiltrosIngresos extends FiltrosCliente {
  * Incluye los pagos históricos importados en su mes de origen (decisión del PM): su fecha es la
  * del sistema de origen. `pagos_importados`/`monto_importado` separan esa parte; `origen` filtra.
  */
-export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Promise<Reporte> {
+export async function ingresos(
+    filtros: FiltrosIngresos,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const agrupar = filtros.agrupar ?? 'mes'
     const periodo =
@@ -214,6 +265,7 @@ export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Pro
             db.raw('coalesce(sum(p.monto) filter (where p.historico), 0)::text as monto_importado'),
         )
     filtrarPorAlcance(consulta, alcance, { zona: (q, ids) => q.whereIn('c.zona_id', ids) })
+    porEmpresa(consulta, 'p.empresa_id', op)
     const filas = ((await consulta) as Fila[]).map((f) => ({
         ...f,
         monto: dinero(f.monto),
@@ -224,9 +276,9 @@ export async function ingresos(filtros: FiltrosIngresos, alcance?: Alcance): Pro
     return armarReporte({
         reporte: 'ingresos',
         titulo: 'Ingresos por periodo y método',
-        columnas: COLUMNAS_INGRESOS,
+        columnas: columnasCon(op, COLUMNAS_INGRESOS),
         filas,
-        filtros: { ...filtros, desde, hasta, agrupar },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta, agrupar }),
     })
 }
 
@@ -266,7 +318,11 @@ export interface FiltrosFacturado extends FiltrosCliente {
  * (`clave_externa`, con sus pagos históricos) cuentan en el mes de su periodo de origen;
  * `facturado_importado`/`cobrado_importado` separan esa parte y `origen` filtra.
  */
-export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Alcance): Promise<Reporte> {
+export async function facturadoVsCobrado(
+    filtros: FiltrosFacturado,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const periodo = `to_char(f.periodo, 'YYYY-MM')`
     const consulta = db
@@ -299,6 +355,7 @@ export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Al
             ),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
+    porEmpresa(consulta, 'f.empresa_id', op)
     const filas = ((await consulta) as Fila[]).map((f) => ({
         ...f,
         facturado: dinero(f.facturado),
@@ -312,9 +369,9 @@ export async function facturadoVsCobrado(filtros: FiltrosFacturado, alcance?: Al
     const reporte = armarReporte({
         reporte: 'facturado-vs-cobrado',
         titulo: 'Facturado vs cobrado',
-        columnas: COLUMNAS_FACTURADO,
+        columnas: columnasCon(op, COLUMNAS_FACTURADO),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
     reporte.totales.cobranza_pct = porcentaje(
         reporte.totales.cobrado as string,
@@ -348,7 +405,11 @@ export interface FiltrosCobranza {
 }
 
 /** Cobros por día (Guatemala), método y caja; los anulados aparte (no suman en `monto`). */
-export async function cobranzaDiaria(filtros: FiltrosCobranza, alcance?: Alcance): Promise<Reporte> {
+export async function cobranzaDiaria(
+    filtros: FiltrosCobranza,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const desde = filtros.desde ?? DateTime.fromISO(hasta, { zone: 'utc' }).startOf('month').toISODate()!
     const dia = diaGt('p.created_at')
@@ -372,6 +433,7 @@ export async function cobranzaDiaria(filtros: FiltrosCobranza, alcance?: Alcance
             db.raw(`coalesce(sum(p.monto) filter (where p.estado = 'anulado'), 0)::text as monto_anulado`),
         )
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('p.caja_id', ids) })
+    porEmpresa(consulta, 'p.empresa_id', op)
     const filas = ((await consulta) as Fila[]).map((f) => ({
         ...f,
         monto: dinero(f.monto),
@@ -380,9 +442,9 @@ export async function cobranzaDiaria(filtros: FiltrosCobranza, alcance?: Alcance
     return armarReporte({
         reporte: 'cobranza-diaria',
         titulo: 'Cobranza diaria',
-        columnas: COLUMNAS_COBRANZA,
+        columnas: columnasCon(op, COLUMNAS_COBRANZA),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
 }
 
@@ -404,7 +466,11 @@ export const COLUMNAS_CIERRES = definirColumnas([
 ])
 
 /** Turnos cerrados en el rango (día de cierre en Guatemala) con esperado, contado y diferencia. */
-export async function cierresCaja(filtros: FiltrosCobranza, alcance?: Alcance): Promise<Reporte> {
+export async function cierresCaja(
+    filtros: FiltrosCobranza,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const desde = filtros.desde ?? DateTime.fromISO(hasta, { zone: 'utc' }).startOf('month').toISODate()!
     const consulta = db
@@ -439,6 +505,7 @@ export async function cierresCaja(filtros: FiltrosCobranza, alcance?: Alcance): 
             't.motivo',
         )
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('t.caja_id', ids) })
+    porEmpresa(consulta, 'cj.empresa_id', op, false)
     const filas = ((await consulta) as Fila[]).map((f) => ({
         ...f,
         ...Object.fromEntries(
@@ -451,9 +518,9 @@ export async function cierresCaja(filtros: FiltrosCobranza, alcance?: Alcance): 
     return armarReporte({
         reporte: 'cierres-caja',
         titulo: 'Cierres de caja',
-        columnas: COLUMNAS_CIERRES,
+        columnas: columnasCon(op, COLUMNAS_CIERRES),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
         totales: { fondo_inicial: null, esperado: null, contado: null },
     })
 }
@@ -485,20 +552,28 @@ export const COLUMNAS_IVA = definirColumnas([
  * nota). `iva_neto = facturado − anulado − acreditado`. `iva_libro` es el movimiento neto de la cuenta IVA
  * débito fiscal del mes; debe ser igual a `iva_neto`.
  */
-export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string }): Promise<Reporte> {
+export async function ivaDelPeriodo(
+    filtros: { desde?: string; hasta?: string },
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
+    // el IVA se calcula por NIT: cada empresa declara el suyo
+    const empresa = op.consolidado
+        ? `i.empresa_id AS empresa_id, ${nombreEmpresa('i.empresa_id')} AS empresa,`
+        : ''
     const resultado = await db.rawQuery(
         `
         WITH iva AS (
-            SELECT to_char(a.fecha, 'YYYY-MM') AS periodo, a.id, a.origen_tipo, a.origen_id, a.reversa_de,
-                   sum(m.haber) AS haber, sum(m.debe) AS debe
+            SELECT to_char(a.fecha, 'YYYY-MM') AS periodo, a.id, a.empresa_id, a.origen_tipo, a.origen_id,
+                   a.reversa_de, sum(m.haber) AS haber, sum(m.debe) AS debe
               FROM ledger.movimientos m
               JOIN ledger.asientos a ON a.id = m.asiento_id
               JOIN ledger.cuentas c ON c.id = m.cuenta_id
              WHERE c.codigo = ? AND a.fecha BETWEEN date_trunc('month', ?::date) AND ?::date
+               AND (?::bigint[] IS NULL OR a.empresa_id = ANY(?::bigint[]))
              GROUP BY a.id
         )
-        SELECT i.periodo,
+        SELECT ${empresa} i.periodo,
                count(*) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo = 'factura')::int AS facturas,
                coalesce(sum(f.subtotal) FILTER (WHERE i.reversa_de IS NULL), 0)::text AS base,
                coalesce(sum(i.haber) FILTER (WHERE i.reversa_de IS NULL AND i.origen_tipo <> 'nota_credito'), 0)::text AS iva_facturado,
@@ -512,10 +587,10 @@ export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string })
           FROM iva i
           LEFT JOIN billing.facturas f ON i.origen_tipo = 'factura' AND f.id = i.origen_id
           LEFT JOIN billing.notas_credito n ON i.origen_tipo = 'nota_credito' AND n.id = i.origen_id
-         GROUP BY i.periodo
-         ORDER BY i.periodo
+         GROUP BY i.periodo${op.consolidado ? ', i.empresa_id' : ''}
+         ORDER BY i.periodo${op.consolidado ? ', i.empresa_id' : ''}
         `,
-        [CUENTAS.IVA_DEBITO, desde, hasta],
+        [CUENTAS.IVA_DEBITO, desde, hasta, op.empresas, op.empresas],
     )
     const filas = (resultado.rows as Fila[]).map((f) => ({
         ...f,
@@ -535,9 +610,9 @@ export async function ivaDelPeriodo(filtros: { desde?: string; hasta?: string })
     return armarReporte({
         reporte: 'iva',
         titulo: 'IVA del periodo',
-        columnas: COLUMNAS_IVA,
+        columnas: columnasCon(op, COLUMNAS_IVA),
         filas,
-        filtros: { desde, hasta },
+        filtros: filtrosCon(op, { desde, hasta }),
     })
 }
 
@@ -571,7 +646,11 @@ export interface FiltrosPromesasReporte extends FiltrosCliente {
  * Promesas por mes de creación y canal, con su estado actual. `monto_prometido` excluye las
  * rechazadas; `tasa_cumplimiento = cumplidas / (cumplidas + incumplidas)`.
  */
-export async function promesas(filtros: FiltrosPromesasReporte, alcance?: Alcance): Promise<Reporte> {
+export async function promesas(
+    filtros: FiltrosPromesasReporte,
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const periodo = mesGt('p.created_at')
     const cuenta = (estado: string, alias: string) =>
@@ -603,6 +682,7 @@ export async function promesas(filtros: FiltrosPromesasReporte, alcance?: Alcanc
             ),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
+    porEmpresa(consulta, 'p.empresa_id', op)
     const tasa = (f: Fila) => porcentaje(Number(f.cumplidas), Number(f.cumplidas) + Number(f.incumplidas))
     const filas = ((await consulta) as Fila[]).map((f) => ({
         ...f,
@@ -612,9 +692,9 @@ export async function promesas(filtros: FiltrosPromesasReporte, alcance?: Alcanc
     const reporte = armarReporte({
         reporte: 'promesas',
         titulo: 'Promesas de pago',
-        columnas: COLUMNAS_PROMESAS,
+        columnas: columnasCon(op, COLUMNAS_PROMESAS),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
     reporte.totales.tasa_cumplimiento = tasa(reporte.totales)
     return reporte
@@ -644,6 +724,7 @@ export const COLUMNAS_ALTAS = definirColumnas([
 export async function altasBajas(
     filtros: { desde?: string; hasta?: string; zona_id?: number; router_id?: number; plan_id?: number },
     alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
 ): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const alta = `coalesce(s.fecha_instalacion, ${diaGt('s.created_at')})`
@@ -657,6 +738,7 @@ export async function altasBajas(
         .groupByRaw(`to_char(${alta}, 'YYYY-MM')`)
         .select(db.raw(`to_char(${alta}, 'YYYY-MM') as periodo`), db.raw('count(*)::int as altas'))
     filtrarPorAlcance(altas, alcance, dimensionesClienteServicio)
+    porEmpresa(altas, 's.empresa_id', op)
 
     const a = `o.payload->>'a'`
     const cambios = db
@@ -679,11 +761,14 @@ export async function altasBajas(
             ),
         )
     filtrarPorAlcance(cambios, alcance, dimensionesClienteServicio)
+    porEmpresa(cambios, 's.empresa_id', op)
 
     const porPeriodo = new Map<string, Fila>()
-    const fila = (periodo: string) => {
-        if (!porPeriodo.has(periodo)) {
-            porPeriodo.set(periodo, {
+    const fila = (periodo: string, empresa?: Fila) => {
+        const clave = op.consolidado ? `${empresa?.empresa_id}|${periodo}` : periodo
+        if (!porPeriodo.has(clave)) {
+            porPeriodo.set(clave, {
+                ...(op.consolidado ? { empresa_id: empresa!.empresa_id, empresa: empresa!.empresa } : {}),
                 periodo,
                 altas: 0,
                 bajas: 0,
@@ -693,21 +778,25 @@ export async function altasBajas(
                 neto: 0,
             })
         }
-        return porPeriodo.get(periodo)!
+        return porPeriodo.get(clave)!
     }
-    for (const f of (await altas) as Array<{ periodo: string; altas: number }>) {
-        fila(f.periodo).altas = f.altas
+    for (const f of (await altas) as Array<Fila & { periodo: string; altas: number }>) {
+        fila(f.periodo, f).altas = f.altas
     }
-    for (const f of (await cambios) as Fila[]) Object.assign(fila(f.periodo as string), { ...f })
+    for (const f of (await cambios) as Fila[]) Object.assign(fila(f.periodo as string, f), { ...f })
     const filas = [...porPeriodo.values()]
-        .sort((x, y) => String(x.periodo).localeCompare(String(y.periodo)))
+        .sort(
+            (x, y) =>
+                String(x.periodo).localeCompare(String(y.periodo)) ||
+                Number(x.empresa_id ?? 0) - Number(y.empresa_id ?? 0),
+        )
         .map((f) => ({ ...f, neto: Number(f.altas) - Number(f.bajas) }))
     return armarReporte({
         reporte: 'altas-bajas',
         titulo: 'Altas y bajas',
-        columnas: COLUMNAS_ALTAS,
+        columnas: columnasCon(op, COLUMNAS_ALTAS),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
 }
 
@@ -730,6 +819,7 @@ export const COLUMNAS_EGRESOS = definirColumnas([
 export async function egresosPorCategoria(
     filtros: { desde?: string; hasta?: string; categoria?: ClaveCategoriaEgreso; metodo?: string },
     alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
 ): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const periodo = `to_char(e.fecha, 'YYYY-MM')`
@@ -752,12 +842,13 @@ export async function egresosPorCategoria(
             db.raw('sum(e.monto)::text as monto'),
         )
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('e.caja_id', ids) })
+    porEmpresa(consulta, 'e.empresa_id', op)
     const filas = ((await consulta) as Fila[]).map((f) => ({ ...f, monto: dinero(f.monto) }))
     return armarReporte({
         reporte: 'egresos',
         titulo: 'Egresos por categoría',
-        columnas: COLUMNAS_EGRESOS,
+        columnas: columnasCon(op, COLUMNAS_EGRESOS),
         filas,
-        filtros: { ...filtros, desde, hasta },
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
 }

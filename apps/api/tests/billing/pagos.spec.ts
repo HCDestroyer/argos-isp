@@ -75,6 +75,8 @@ test.group('billing · registrarPago', () => {
         ])
         const [evento] = await eventosDe('pago.registrado', 'pago_id', pago.id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
+            cobro_id: pago.cobro_id,
             pago_id: pago.id,
             cliente_id: clienteId,
             monto: '100.00',

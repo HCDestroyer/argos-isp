@@ -5,6 +5,8 @@ import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import type { MetodoPago } from '#shared/eventos'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import { EMPRESA_PRINCIPAL } from '#core/empresas'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
  * Pagos: lectura (lista, detalle para el recibo) y la caja principal.
@@ -14,6 +16,10 @@ export type EstadoPago = 'registrado' | 'pendiente_verificacion' | 'anulado'
 
 export interface PagoVista {
     id: number
+    /** empresa (NIT) del pago: todas sus facturas son de ella */
+    empresa_id: number
+    /** cobro de caja repartido por empresa (`GET /cobros/:id`); null si no vino de un cobro */
+    cobro_id: number | null
     cliente_id: number
     /** nombre del pagador */
     cliente_nombre: string
@@ -47,6 +53,8 @@ export interface PagoVista {
 
 const COLUMNAS = [
     'p.id',
+    'p.empresa_id',
+    'p.cobro_id',
     'p.cliente_id',
     db.raw('(select cl.nombre from core.clientes cl where cl.id = p.cliente_id) as cliente_nombre'),
     'p.metodo',
@@ -133,6 +141,8 @@ export async function verPago(
 
 export interface FiltrosPagos extends OpcionesPaginacion {
     cliente_id?: number
+    /** pagos de un cobro repartido */
+    cobro_id?: number
     caja_id?: number
     cuenta_bancaria_id?: number
     metodo?: MetodoPago
@@ -148,7 +158,11 @@ const dimensionesPago: FiltrosDimension = {
     caja: (q, ids) => q.whereIn('p.caja_id', ids),
 }
 
-export async function listarPagos(filtros: FiltrosPagos, alcance?: Alcance) {
+export async function listarPagos(
+    filtros: FiltrosPagos,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
     const consulta = db
         .from('billing.pagos as p')
         .leftJoin('billing.bancos as bo', 'bo.id', 'p.banco_origen_id')
@@ -156,6 +170,7 @@ export async function listarPagos(filtros: FiltrosPagos, alcance?: Alcance) {
         .leftJoin('billing.bancos as bd', 'bd.id', 'cb.banco_id')
         .select(...COLUMNAS)
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
+        .if(filtros.cobro_id, (q) => q.where('p.cobro_id', filtros.cobro_id!))
         .if(filtros.caja_id, (q) => q.where('p.caja_id', filtros.caja_id!))
         .if(filtros.cuenta_bancaria_id, (q) => q.where('p.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
         .if(filtros.metodo, (q) => q.where('p.metodo', filtros.metodo!))
@@ -171,25 +186,32 @@ export async function listarPagos(filtros: FiltrosPagos, alcance?: Alcance) {
             ),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesPago)
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('p.empresa_id', ids))
     const pagina = await paginar<Omit<PagoVista, 'aplicaciones'>>(consulta, filtros, { columna: 'p.id' })
     return { data: await conAplicaciones(db.connection(), pagina.data), nextCursor: pagina.nextCursor }
 }
 
 /** Dimensiones de alcance de un pago (su caja, si tiene). */
 export async function dimensionesDePago(id: number) {
-    const fila = await db.from('billing.pagos').where('id', id).select('caja_id').first()
+    const fila = await db.from('billing.pagos').where('id', id).select('caja_id', 'empresa_id').first()
     if (!fila) throw new NoEncontrado(`El pago ${id} no existe`)
-    return { caja: [fila.caja_id as number | null] }
+    return { caja: [fila.caja_id as number | null], empresa_id: Number(fila.empresa_id) }
 }
 
-/** Caja a la que va un pago en efectivo sin `caja_id` (la del plan de cuentas `1.1.01.01`). */
+/**
+ * Caja a la que va un pago en efectivo sin `caja_id` ni turno abierto del cajero: la caja
+ * principal (cuenta `1.1.01.01`), que es de la empresa 1. Las demás empresas no tienen caja por
+ * defecto: sin caja abierta, su cobro responde 422 `caja_no_abierta`.
+ */
 export async function cajaPrincipalId(
     cliente: QueryClientContract = db.connection(),
+    empresaId: number = EMPRESA_PRINCIPAL,
 ): Promise<number | null> {
     const fila = await cliente
         .from('ledger.cajas as c')
         .join('ledger.cuentas as cu', 'cu.id', 'c.cuenta_id')
         .where('cu.codigo', CUENTAS.CAJA_PRINCIPAL)
+        .where('c.empresa_id', empresaId)
         .where('c.activa', true)
         .select('c.id')
         .first()

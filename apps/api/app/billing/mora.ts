@@ -25,6 +25,8 @@ export interface ReglaMora {
 
 export interface FacturaConMora {
     id: number
+    /** la mora es de la empresa de su factura */
+    empresa_id: number
     cliente_id: number
     servicio_id: number | null
     periodo: string
@@ -83,6 +85,7 @@ export async function crearMora(
         .knexQuery()
         .table('billing.facturas')
         .insert({
+            empresa_id: factura.empresa_id,
             cliente_id: factura.cliente_id,
             servicio_id: factura.servicio_id,
             tipo: 'mora',
@@ -118,6 +121,7 @@ export async function crearMora(
         })
     await new RegistrarAsiento().execute(
         {
+            empresa_id: factura.empresa_id,
             descripcion: `${concepto} (factura ${moraId})`,
             origen_tipo: 'mora',
             origen_id: moraId,
@@ -129,6 +133,6 @@ export async function crearMora(
         t.ctx,
         { trx: t.trx },
     )
-    await aplicarAnticipos(t, factura.cliente_id)
+    await aplicarAnticipos(t, factura.cliente_id, factura.empresa_id)
     return moraId
 }

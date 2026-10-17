@@ -53,6 +53,7 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
             .forUpdate()
             .select(
                 'id',
+                'empresa_id',
                 'cliente_id',
                 'servicio_id',
                 'tipo',
@@ -63,6 +64,8 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
                 t.trx.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
             )
             .firstOrFail()) as FilaFactura
+        factura.empresa_id = Number(factura.empresa_id)
+        t.fijarEmpresa(factura.empresa_id)
         const resultado: ResultadoVencerFactura = { factura_id: factura.id, vencida: false, moras: [] }
         if (factura.tipo !== 'servicio') return resultado
 
@@ -80,6 +83,7 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
             resultado.vencida = true
             await t.emit('factura.vencida', {
                 factura_id: factura.id,
+                empresa_id: factura.empresa_id,
                 servicio_id: factura.servicio_id,
                 cliente_id: factura.cliente_id,
                 total: factura.total,

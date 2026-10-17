@@ -11,6 +11,8 @@ import { NoEncontrado } from '#shared/errores'
 export type Moneda = 'GTQ' | 'USD'
 
 export interface EntradaCuentaBancaria {
+    /** empresa dueña de la cuenta (solo al crear); por defecto la activa */
+    empresa_id?: number | null
     banco_id: number
     numero: string
     alias: string
@@ -26,6 +28,8 @@ export interface BancoVista {
 
 export interface CuentaBancariaVista {
     id: number
+    /** empresa (NIT) dueña de la cuenta: sus depósitos son pagos de esa empresa */
+    empresa_id: number
     banco_id: number
     banco_nombre: string
     numero: string
@@ -60,6 +64,7 @@ function consultaCuentas(cliente: QueryClientContract) {
         .join('ledger.cuentas as c', 'c.id', 'cb.cuenta_id')
         .select(
             'cb.id',
+            'cb.empresa_id',
             'cb.banco_id',
             'b.nombre as banco_nombre',
             'cb.numero',
@@ -74,9 +79,13 @@ function consultaCuentas(cliente: QueryClientContract) {
         )
 }
 
-export async function listarCuentasBancarias(filtros: { activa?: boolean } = {}) {
+export async function listarCuentasBancarias(
+    filtros: { activa?: boolean } = {},
+    empresas: number[] | null = null,
+) {
     return (await consultaCuentas(db.connection())
         .if(filtros.activa !== undefined, (q) => q.where('cb.activa', filtros.activa!))
+        .if(empresas !== null, (q) => q.whereIn('cb.empresa_id', empresas!))
         .orderBy([
             { column: 'b.orden', order: 'asc' },
             { column: 'cb.alias', order: 'asc' },
@@ -100,15 +109,20 @@ export interface CuentaDeposito {
  * no recibe pagos: `POST /pagos` y los comprobantes la rechazan con 422 `moneda`). Mismo orden
  * que el panel (orden del banco, alias). El número va completo: el cliente lo necesita para
  * depositar, y es el dato que el ISP publica en sus avisos de cobro.
+ *
+ * Multiempresa: con `empresaId` solo las cuentas de esa empresa (la del servicio del cliente):
+ * un depósito a la cuenta de otra empresa se rechaza (`cuenta_de_otra_empresa`).
  */
 export async function listarCuentasDeposito(
     cliente: QueryClientContract = db.connection(),
+    empresaId: number | null = null,
 ): Promise<CuentaDeposito[]> {
     return (await cliente
         .from('billing.cuentas_bancarias as cb')
         .join('billing.bancos as b', 'b.id', 'cb.banco_id')
         .where('cb.activa', true)
         .where('cb.moneda', 'GTQ')
+        .if(empresaId !== null, (q) => q.where('cb.empresa_id', empresaId!))
         .orderBy([
             { column: 'b.orden', order: 'asc' },
             { column: 'cb.alias', order: 'asc' },
