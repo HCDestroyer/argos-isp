@@ -35,6 +35,11 @@ export default class NotifyWorker extends BaseCommand {
         const { programarCronParticiones } = await import('#notify/particiones')
         const { programarCronVigilancia } = await import('#notify/vigilancia')
 
+        // Configuración de canales del panel: siembra desde el entorno (una vez), carga y escucha
+        // invalidaciones de otros procesos.
+        const { prepararConfiguracionNotify } = await import('#notify/arranque')
+        await prepararConfiguracionNotify()
+
         const cola = new ColaEnviosBullmq()
         const workers = [crearWorkerEnvios(cola, { concurrencia: this.concurrencia })]
         this.logger.info(`notify:worker escuchando la cola ${cola.cola.name}`)
@@ -53,11 +58,16 @@ export default class NotifyWorker extends BaseCommand {
         const { EjecutorGrupo } = await import('#shared/eventos_bus')
         const { ConsumidorNotify } = await import('#notify/consumidor')
         const { ConsumidorAlertas } = await import('#notify/consumidor_alertas')
+        const { ConsumidorConfigNotify } = await import('#notify/consumidor_config')
         const grupo = this.sinEventos
             ? null
             : new EjecutorGrupo({
                   grupo: 'notify',
-                  consumidores: [new ConsumidorNotify(cola), new ConsumidorAlertas(cola)],
+                  consumidores: [
+                      new ConsumidorConfigNotify(),
+                      new ConsumidorNotify(cola),
+                      new ConsumidorAlertas(cola),
+                  ],
               })
         if (grupo) {
             grupo.iniciar()
@@ -66,6 +76,8 @@ export default class NotifyWorker extends BaseCommand {
 
         const terminar = async () => {
             await grupo?.detener()
+            const { dejarDeEscuchar } = await import('#notify/configuracion')
+            await dejarDeEscuchar()
             await Promise.all(workers.map((w) => w.close()))
             await colaCron?.close()
             await cola.cerrar()

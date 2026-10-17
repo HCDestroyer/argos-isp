@@ -21,6 +21,7 @@ export default defineConfig({
         () => import('#start/validator'),
         () => import('#start/routes'),
         () => import('#start/kernel'),
+        { file: () => import('#start/notify'), environment: ['web'] },
     ],
 
     tests: {
