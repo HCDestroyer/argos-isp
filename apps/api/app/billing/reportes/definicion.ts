@@ -61,6 +61,16 @@ export function definirColumnas<const C extends readonly Columna[]>(columnas: C)
     return columnas
 }
 
+/**
+ * Multiempresa: en la vista consolidada (`?empresas=todas` o varias empresas) cada reporte agrega
+ * estas dos columnas al principio (una fila por empresa y grupo); el total es el del grupo. En el
+ * esquema son opcionales: con una empresa no vienen.
+ */
+export const COLUMNAS_EMPRESA = definirColumnas([
+    { clave: 'empresa_id', titulo: 'Empresa', tipo: 'id', agregada: true },
+    { clave: 'empresa', titulo: 'Nombre de la empresa', tipo: 'texto', agregada: true },
+])
+
 const ColumnaReporte = definirEsquema(
     'ColumnaReporte',
     objeto(
@@ -79,7 +89,8 @@ const ColumnaReporte = definirEsquema(
 )
 
 /** Schema OpenAPI del reporte con sus filas tipadas. */
-export function esquemaReporte(nombre: string, columnas: readonly Columna[]): EsquemaJson {
+export function esquemaReporte(nombre: string, propias: readonly Columna[]): EsquemaJson {
+    const columnas: readonly Columna[] = [...COLUMNAS_EMPRESA, ...propias]
     const propiedades = Object.fromEntries(
         columnas.map((c) => {
             const base = TIPO_ESQUEMA[c.tipo]

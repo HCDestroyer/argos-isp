@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, permite, type Alcance } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
  * Cajas y turnos: lectura y la caja de un cajero. Las acciones (`abrirCaja`, `cerrarCaja`) están
@@ -11,6 +12,8 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 
 export interface CajaVista {
     id: number
+    /** empresa (NIT) de la caja: sus cobros y su cierre van al libro de esa empresa */
+    empresa_id: number
     nombre: string
     cajero_id: number | null
     cajero_nombre: string | null
@@ -62,13 +65,18 @@ const COLUMNAS_TURNO = [
     't.updated_at',
 ]
 
-/** `GET /cajas`: cajas con su turno abierto, filtradas por el alcance de caja. */
-export async function listarCajas(alcance?: Alcance): Promise<CajaVista[]> {
-    const consulta = db
+/** `GET /cajas`: cajas con su turno abierto, filtradas por el alcance de caja y por empresa. */
+export async function listarCajas(
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+    cliente: QueryClientContract = db.connection(),
+): Promise<CajaVista[]> {
+    const consulta = cliente
         .from('ledger.cajas as c')
         .leftJoin('ledger.cajas_turnos as t', (j) => j.on('t.caja_id', 'c.id').andOnNull('t.cerrado_en'))
         .select(
             'c.id',
+            'c.empresa_id',
             'c.nombre',
             'c.cajero_id',
             db.raw('(select u.nombre from core.usuarios u where u.id = c.cajero_id) as cajero_nombre'),
@@ -83,14 +91,20 @@ export async function listarCajas(alcance?: Alcance): Promise<CajaVista[]> {
             'c.created_at',
             'c.updated_at',
         )
-        .orderBy('c.nombre', 'asc')
+        .orderBy([
+            { column: 'c.empresa_id', order: 'asc' },
+            { column: 'c.nombre', order: 'asc' },
+        ])
     filtrarPorAlcance(consulta, alcance, { caja: (q, ids) => q.whereIn('c.id', ids) })
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('c.empresa_id', ids))
     return (await consulta) as CajaVista[]
 }
 
-export async function existeCaja(id: number): Promise<void> {
-    const fila = await db.from('ledger.cajas').where('id', id).select('id').first()
+/** 404 si la caja no existe; devuelve sus dimensiones (alcance por caja y empresa). */
+export async function existeCaja(id: number): Promise<{ caja: number[]; empresa_id: number }> {
+    const fila = await db.from('ledger.cajas').where('id', id).select('id', 'empresa_id').first()
     if (!fila) throw new NoEncontrado(`La caja ${id} no existe`)
+    return { caja: [id], empresa_id: Number(fila.empresa_id) }
 }
 
 export async function verTurno(id: number, cliente: QueryClientContract = db.connection()) {
@@ -105,7 +119,6 @@ export async function verTurno(id: number, cliente: QueryClientContract = db.con
 
 /** `GET /cajas/:id/turnos`: el más reciente primero. */
 export async function listarTurnos(cajaId: number, filtros: OpcionesPaginacion) {
-    await existeCaja(cajaId)
     const consulta = db
         .from('ledger.cajas_turnos as t')
         .where('t.caja_id', cajaId)
@@ -131,11 +144,13 @@ export async function turnoAbiertoDe(
  * Caja del cajero para un pago en efectivo sin `caja_id`: la del turno abierto que abrió él (el
  * más reciente) o, si no, una caja asignada a él (`cajas.cajero_id`) con turno abierto. Solo
  * cajas activas y dentro de su alcance. null si no tiene ninguna (se usa la caja principal).
+ * Multiempresa: con `empresaId`, solo cajas de esa empresa (un cajero abre una caja por empresa).
  */
 export async function cajaDelCajero(
     usuarioId: number | null,
     alcance?: Alcance,
     cliente: QueryClientContract = db.connection(),
+    empresaId: number | null = null,
 ): Promise<number | null> {
     if (!usuarioId) return null
     const filas = (await cliente
@@ -143,6 +158,7 @@ export async function cajaDelCajero(
         .join('ledger.cajas as c', 'c.id', 't.caja_id')
         .whereNull('t.cerrado_en')
         .where('c.activa', true)
+        .if(empresaId !== null, (q) => q.where('c.empresa_id', empresaId!))
         .where((q) => q.where('t.abierto_por', usuarioId).orWhere('c.cajero_id', usuarioId))
         .orderByRaw('(t.abierto_por = ?) DESC NULLS LAST, t.abierto_en DESC', [usuarioId])
         .select('c.id')) as Array<{ id: number }>

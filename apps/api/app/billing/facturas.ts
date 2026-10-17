@@ -2,9 +2,11 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, D, aTexto, dec, redondear, type Dec, type Monto } from '#ledger/dinero'
 import { notasDeFactura } from '#billing/notas_credito'
+import { emisorDeFactura } from '#billing/empresa'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -79,6 +81,10 @@ export const ESTADOS_PENDIENTES: readonly EstadoFactura[] = ['emitida', 'parcial
 
 export interface FacturaFila {
     id: number
+    /** empresa (NIT) que emite la factura: la del servicio al emitirse */
+    empresa_id: number
+    /** nombre comercial de la empresa (para la pantalla y el recibo) */
+    empresa_nombre: string
     cliente_id: number
     cliente_nombre: string
     servicio_id: number | null
@@ -115,6 +121,10 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
     const c = (columna: string) => `${alias}.${columna}`
     return [
         c('id'),
+        c('empresa_id'),
+        cliente.raw(
+            `(select e.nombre_comercial from core.empresas e where e.id = ${alias}.empresa_id) as empresa_nombre`,
+        ),
         c('cliente_id'),
         cliente.raw(
             `(select cl.nombre from core.clientes cl where cl.id = ${alias}.cliente_id) as cliente_nombre`,
@@ -163,7 +173,11 @@ export const dimensionesFactura: FiltrosDimension = {
     router: (q, ids) => q.whereIn('s.router_id', ids),
 }
 
-export async function listarFacturas(filtros: FiltrosFacturas, alcance?: Alcance) {
+export async function listarFacturas(
+    filtros: FiltrosFacturas,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
     const consulta = db
         .from('billing.facturas as f')
         .join('core.clientes as c', 'c.id', 'f.cliente_id')
@@ -175,6 +189,7 @@ export async function listarFacturas(filtros: FiltrosFacturas, alcance?: Alcance
         .if(filtros.periodo, (q) => q.where('f.periodo', filtros.periodo!))
         .if(filtros.tipo, (q) => q.where('f.tipo', filtros.tipo!))
     filtrarPorAlcance(consulta, alcance, dimensionesFactura)
+    filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('f.empresa_id', ids))
     return paginar<FacturaFila>(consulta, filtros, { columna: 'f.id' })
 }
 
@@ -200,7 +215,9 @@ export async function verFactura(id: number, cliente: QueryClientContract = db.c
             'total',
         )
     const notas = await notasDeFactura(id, cliente)
-    return { ...fila, lineas, notas_credito: notas }
+    // FEL (semana 5): la factura se certifica con el NIT y los datos fiscales de su empresa
+    const emisor = await emisorDeFactura(id, cliente)
+    return { ...fila, lineas, notas_credito: notas, emisor }
 }
 
 /** Dimensiones de alcance de una factura (para `exigirAlcance`). */
@@ -210,13 +227,31 @@ export async function dimensionesDeFactura(id: number) {
         .join('core.clientes as c', 'c.id', 'f.cliente_id')
         .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
         .where('f.id', id)
-        .select('c.zona_id', 's.router_id')
-        .first()) as { zona_id: number | null; router_id: number | null } | null
+        .select('c.zona_id', 's.router_id', 'f.empresa_id')
+        .first()) as { zona_id: number | null; router_id: number | null; empresa_id: number } | null
     if (!fila) throw new NoEncontrado(`La factura ${id} no existe`)
-    return { zona: [fila.zona_id], router: [fila.router_id] }
+    return { zona: [fila.zona_id], router: [fila.router_id], empresa_id: Number(fila.empresa_id) }
 }
 
 /** Pendiente de cobro de una factura. */
 export function pendienteDe(f: { total: Monto; pagado: Monto }): Dec {
     return dec(f.total).minus(dec(f.pagado))
+}
+
+/**
+ * Saldo pendiente de un servicio: lo que falta por cobrar de sus facturas vivas (`emitida`,
+ * `parcial`, `vencida`): `total − pagado` (el `pagado` incluye lo acreditado por notas de
+ * crédito). Lo usa `servicios.cambiar_empresa` (A1): un servicio con saldo no cambia de empresa.
+ */
+export async function saldoPendienteServicio(
+    servicioId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<Dec> {
+    const fila = (await cliente
+        .from('billing.facturas')
+        .where('servicio_id', servicioId)
+        .whereIn('estado', [...ESTADOS_PENDIENTES])
+        .select(cliente.raw('coalesce(sum(total - pagado), 0)::text AS saldo'))
+        .first()) as { saldo: string }
+    return dec(fila.saldo)
 }

@@ -654,6 +654,7 @@
       "get": {
         "operationId": "cajasListar",
         "summary": "Listar cajas con su turno abierto",
+        "description": "Cajas de la empresa activa (o de todas las del alcance; `empresas=todas` = consolidado con alcance global). Cada caja es de una empresa (`empresa_id`).",
         "tags": [
           "cajas"
         ],
@@ -663,6 +664,20 @@
           },
           {
             "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -698,9 +713,139 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "cajas.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cajasCrear",
+        "summary": "Crear caja de una empresa (crea su subcuenta de Cajas en el libro)",
+        "description": "La caja es de `empresa_id` o de la empresa activa (422 empresa_requerida, 403 empresa_no_permitida). Crea la subcuenta 1.1.01.NN marcada con esa empresa. 409 caja_duplicada si la empresa ya tiene una caja con ese nombre.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "cajero_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cajero asignado (opcional)"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa de la caja; por defecto la activa (X-Empresa-Id)"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Caja creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Caja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.crear",
         "x-implementado": true
       }
     },
@@ -2010,6 +2155,7 @@
       "get": {
         "operationId": "clientesEstadoCuenta",
         "summary": "Estado de cuenta del cliente (auxiliar CxC)",
+        "description": "Multiempresa: una sección por empresa (`empresas[]`, con su marca, saldo, saldo a favor, facturas y movimientos) dentro del alcance del usuario; `saldo` y `saldo_a_favor` de la raíz son el total, solo informativo. Con `empresa_id`, solo esa empresa (403 si no está en el alcance).",
         "tags": [
           "clientes"
         ],
@@ -2026,6 +2172,16 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -2065,6 +2221,16 @@
           },
           "404": {
             "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2455,6 +2621,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cobros/{id}": {
+      "get": {
+        "operationId": "cobrosVer",
+        "summary": "Ver cobro repartido por empresa (recibo con una sección por empresa)",
+        "description": "Un cobro de POST /pagos: sus pagos (uno por empresa) con la marca de cada empresa (nombre, razón social, NIT, dirección, logo) para el recibo. Solo las secciones de las empresas del alcance del usuario; 403 si ninguna lo está.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cobro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/comprobantes": {
       "get": {
         "operationId": "comprobantesListar",
@@ -2472,6 +2711,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -3030,6 +3281,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "activa",
             "in": "query",
             "required": false,
@@ -3132,6 +3395,14 @@
                   },
                   "activa": {
                     "type": "boolean"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña de la cuenta; por defecto la activa (X-Empresa-Id)"
                   }
                 },
                 "required": [
@@ -3414,6 +3685,20 @@
             "panel": []
           }
         ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Resumen",
@@ -3437,6 +3722,16 @@
           },
           "403": {
             "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3841,6 +4136,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -5574,6 +5881,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -7019,6 +7338,93 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/balance": {
+      "get": {
+        "operationId": "libroBalance",
+        "summary": "Balance de saldos por empresa (y total del grupo en el consolidado)",
+        "description": "Saldo de cada cuenta con movimiento al `hasta`, una sección por empresa (cada NIT tiene su libro) y `total` del grupo. cuadra = debe igual a haber y activo = pasivo + resultado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Saldos al día (por defecto hoy, Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceSaldos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/bancos": {
       "get": {
         "operationId": "libroBancos",
@@ -7033,6 +7439,20 @@
           },
           {
             "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -7068,6 +7488,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "egresos.ver",
@@ -7078,6 +7508,7 @@
       "get": {
         "operationId": "libroCuentas",
         "summary": "Plan de cuentas",
+        "description": "Catálogo común a todas las empresas; las subcuentas de una caja o cuenta bancaria (`empresa_id`) solo aparecen para su empresa.",
         "tags": [
           "libro"
         ],
@@ -7087,6 +7518,20 @@
           },
           {
             "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -7122,6 +7567,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "x-permiso": "libro.ver",
@@ -7144,6 +7599,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -7277,6 +7744,103 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/estado-resultados": {
+      "get": {
+        "operationId": "libroEstadoResultados",
+        "summary": "Estado de resultados por empresa (ingresos − gastos del rango)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el día 1 del mes de hasta",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de resultados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoResultados"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/mayor": {
       "get": {
         "operationId": "libroMayor",
@@ -7293,6 +7857,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -7438,6 +8014,18 @@
             }
           },
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "estado",
             "in": "query",
             "required": false,
@@ -7550,6 +8138,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se cierra o reabre; por defecto la activa (X-Empresa-Id)"
+                  },
                   "anio": {
                     "type": "integer",
                     "minimum": 2000,
@@ -7662,6 +8258,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se cierra o reabre; por defecto la activa (X-Empresa-Id)"
+                  },
                   "anio": {
                     "type": "integer",
                     "minimum": 2000,
@@ -7800,6 +8404,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -9412,6 +10028,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -9436,6 +10064,16 @@
             "name": "cliente_id",
             "in": "query",
             "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cobro_id",
+            "in": "query",
+            "required": false,
+            "description": "Pagos de un cobro repartido por empresa",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -9687,6 +10325,14 @@
                       "minimum": 1
                     },
                     "description": "Facturas a las que aplicar; por defecto la más antigua primero"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id)"
                   }
                 },
                 "required": [
@@ -9968,6 +10614,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "cursor",
             "in": "query",
@@ -14537,6 +15195,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -15449,6 +16119,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "formato",
             "in": "query",
             "required": false,
@@ -15575,6 +16257,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "formato",
             "in": "query",
@@ -15715,6 +16409,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "formato",
             "in": "query",
             "required": false,
@@ -15841,6 +16547,18 @@
         ],
         "parameters": [
           {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
             "name": "formato",
             "in": "query",
             "required": false,
@@ -15966,6 +16684,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "formato",
             "in": "query",
@@ -16095,6 +16825,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "formato",
             "in": "query",
@@ -16256,6 +16998,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "formato",
             "in": "query",
@@ -16452,6 +17206,18 @@
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
               "format": "date"
             }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
           }
         ],
         "responses": {
@@ -16517,6 +17283,18 @@
           }
         ],
         "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
           {
             "name": "formato",
             "in": "query",
@@ -16743,6 +17521,7 @@
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.crear",
                         "cajas.ver",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
@@ -16946,6 +17725,7 @@
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
+                        "cajas.crear",
                         "cajas.ver",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
@@ -21440,6 +22220,7 @@
                             "bitacora.ver",
                             "cajas.abrir",
                             "cajas.cerrar",
+                            "cajas.crear",
                             "cajas.ver",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
@@ -22968,6 +23749,11 @@
           "movimientos"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "id": {
             "type": "integer",
             "minimum": 1
@@ -23080,6 +23866,244 @@
           }
         }
       },
+      "BalanceSaldos": {
+        "type": "object",
+        "required": [
+          "hasta",
+          "consolidado",
+          "empresas",
+          "total"
+        ],
+        "properties": {
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "consolidado": {
+            "type": "boolean",
+            "description": "true sin filtro de empresa (empresas=todas)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "nombre_comercial",
+                "nit",
+                "cuentas",
+                "totales"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "nombre_comercial": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cuentas": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cuenta_id",
+                      "codigo",
+                      "nombre",
+                      "tipo",
+                      "debe",
+                      "haber",
+                      "saldo"
+                    ],
+                    "properties": {
+                      "cuenta_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "codigo": {
+                        "type": "string"
+                      },
+                      "nombre": {
+                        "type": "string"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "activo",
+                          "pasivo",
+                          "ingreso",
+                          "gasto"
+                        ]
+                      },
+                      "debe": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "haber": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo": {
+                        "$ref": "#/components/schemas/Dinero",
+                        "description": "Según la naturaleza de la cuenta"
+                      }
+                    }
+                  }
+                },
+                "totales": {
+                  "type": "object",
+                  "required": [
+                    "debe",
+                    "haber",
+                    "activo",
+                    "pasivo",
+                    "ingresos",
+                    "gastos",
+                    "resultado",
+                    "cuadra"
+                  ],
+                  "properties": {
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "activo": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "pasivo": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "ingresos": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "gastos": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "resultado": {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "ingresos − gastos"
+                    },
+                    "cuadra": {
+                      "type": "boolean",
+                      "description": "debe = haber y activo = pasivo + resultado"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Una sección por empresa (libro)"
+          },
+          "total": {
+            "type": "object",
+            "required": [
+              "cuentas",
+              "totales"
+            ],
+            "properties": {
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cuenta_id",
+                    "codigo",
+                    "nombre",
+                    "tipo",
+                    "debe",
+                    "haber",
+                    "saldo"
+                  ],
+                  "properties": {
+                    "cuenta_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "activo",
+                        "pasivo",
+                        "ingreso",
+                        "gasto"
+                      ]
+                    },
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo": {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "Según la naturaleza de la cuenta"
+                    }
+                  }
+                }
+              },
+              "totales": {
+                "type": "object",
+                "required": [
+                  "debe",
+                  "haber",
+                  "activo",
+                  "pasivo",
+                  "ingresos",
+                  "gastos",
+                  "resultado",
+                  "cuadra"
+                ],
+                "properties": {
+                  "debe": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "haber": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "activo": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "pasivo": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "ingresos": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "gastos": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "resultado": {
+                    "$ref": "#/components/schemas/Dinero",
+                    "description": "ingresos − gastos"
+                  },
+                  "cuadra": {
+                    "type": "boolean",
+                    "description": "debe = haber y activo = pasivo + resultado"
+                  }
+                }
+              }
+            },
+            "description": "Total del grupo"
+          }
+        }
+      },
       "Banco": {
         "type": "object",
         "required": [
@@ -23113,6 +24137,11 @@
           "cuenta_nombre"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "id": {
             "type": "integer",
             "minimum": 1,
@@ -23170,6 +24199,11 @@
           "updated_at"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "id": {
             "type": "integer",
             "minimum": 1
@@ -23481,6 +24515,11 @@
           "motivo_reapertura"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "id": {
             "type": "integer",
             "minimum": 1
@@ -23734,6 +24773,79 @@
           }
         }
       },
+      "Cobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "cliente_id",
+          "cliente_nombre",
+          "metodo",
+          "monto",
+          "registrado_por",
+          "created_at",
+          "secciones"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "caja",
+              "pasarela",
+              "deposito",
+              "transferencia",
+              "ach",
+              "remesa",
+              "agente",
+              "debito"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total cobrado (suma de los pagos de todas las empresas)"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "secciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa",
+                "pago"
+              ],
+              "properties": {
+                "empresa": {
+                  "$ref": "#/components/schemas/EmpresaRecibo"
+                },
+                "pago": {
+                  "$ref": "#/components/schemas/Pago"
+                }
+              }
+            },
+            "description": "Un pago por empresa con su marca (las del alcance del usuario)"
+          }
+        }
+      },
       "CobroPasarela": {
         "type": "object",
         "required": [
@@ -23762,6 +24874,11 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
           },
           "proveedor": {
             "type": "string"
@@ -23945,6 +25062,11 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
           },
           "cliente_id": {
             "type": "integer",
@@ -24633,6 +25755,14 @@
           "updated_at"
         ],
         "properties": {
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa de la subcuenta (caja o cuenta bancaria); null = cuenta común"
+          },
           "id": {
             "type": "integer",
             "minimum": 1
@@ -24705,6 +25835,11 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa dueña de la cuenta: sus depósitos son pagos de esa empresa"
           },
           "banco_id": {
             "type": "integer",
@@ -24894,6 +26029,11 @@
           "updated_at"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "id": {
             "type": "integer",
             "minimum": 1
@@ -25063,6 +26203,84 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "EmisorFactura": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "nit",
+          "razon_social",
+          "nombre_comercial",
+          "direccion_fiscal",
+          "municipio",
+          "departamento",
+          "correo",
+          "regimen_isr",
+          "codigo_establecimiento"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "razon_social": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "direccion_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "municipio": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "departamento": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "regimen_isr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "sujeto_pagos_trimestrales",
+              "retencion_definitiva",
+              "pequeno_contribuyente"
+            ],
+            "description": "Régimen ISR del emisor (frases de FEL)"
+          },
+          "codigo_establecimiento": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       },
@@ -25410,6 +26628,64 @@
           }
         }
       },
+      "EmpresaRecibo": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre_comercial",
+          "razon_social",
+          "nit",
+          "direccion_fiscal",
+          "telefono",
+          "correo",
+          "logo_url"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "razon_social": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "EmpresaResumen": {
         "type": "object",
         "required": [
@@ -25600,6 +26876,13 @@
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
             },
             "description": "Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo`"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeccionEstadoCuenta"
+            },
+            "description": "Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo"
           }
         }
       },
@@ -25645,6 +26928,202 @@
               }
             ],
             "description": "Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)"
+          }
+        }
+      },
+      "EstadoResultados": {
+        "type": "object",
+        "required": [
+          "desde",
+          "hasta",
+          "consolidado",
+          "empresas",
+          "total"
+        ],
+        "properties": {
+          "desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "consolidado": {
+            "type": "boolean"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "nombre_comercial",
+                "nit",
+                "cuentas",
+                "totales"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "nombre_comercial": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cuentas": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cuenta_id",
+                      "codigo",
+                      "nombre",
+                      "tipo",
+                      "debe",
+                      "haber",
+                      "saldo"
+                    ],
+                    "properties": {
+                      "cuenta_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "codigo": {
+                        "type": "string"
+                      },
+                      "nombre": {
+                        "type": "string"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "activo",
+                          "pasivo",
+                          "ingreso",
+                          "gasto"
+                        ]
+                      },
+                      "debe": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "haber": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo": {
+                        "$ref": "#/components/schemas/Dinero",
+                        "description": "Según la naturaleza de la cuenta"
+                      }
+                    }
+                  }
+                },
+                "totales": {
+                  "type": "object",
+                  "required": [
+                    "ingresos",
+                    "gastos",
+                    "resultado"
+                  ],
+                  "properties": {
+                    "ingresos": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "gastos": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "resultado": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "object",
+            "required": [
+              "cuentas",
+              "totales"
+            ],
+            "properties": {
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cuenta_id",
+                    "codigo",
+                    "nombre",
+                    "tipo",
+                    "debe",
+                    "haber",
+                    "saldo"
+                  ],
+                  "properties": {
+                    "cuenta_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "activo",
+                        "pasivo",
+                        "ingreso",
+                        "gasto"
+                      ]
+                    },
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo": {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "Según la naturaleza de la cuenta"
+                    }
+                  }
+                }
+              },
+              "totales": {
+                "type": "object",
+                "required": [
+                  "ingresos",
+                  "gastos",
+                  "resultado"
+                ],
+                "properties": {
+                  "ingresos": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "gastos": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "resultado": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -25903,6 +27382,15 @@
             "type": "integer",
             "minimum": 1
           },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
+          "empresa_nombre": {
+            "type": "string",
+            "description": "Nombre comercial de la empresa que emite"
+          },
           "cliente_id": {
             "type": "integer",
             "minimum": 1
@@ -26071,6 +27559,10 @@
                   "$ref": "#/components/schemas/NotaCredito"
                 },
                 "description": "Notas de crédito de la factura"
+              },
+              "emisor": {
+                "$ref": "#/components/schemas/EmisorFactura",
+                "description": "Empresa que emite la factura con sus datos fiscales (FEL)"
               }
             }
           }
@@ -26279,6 +27771,11 @@
           "cliente_id"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
           "movimiento_id": {
             "type": "integer",
             "minimum": 1
@@ -26527,6 +28024,11 @@
           "saldo"
         ],
         "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (libro) del asiento"
+          },
           "fecha": {
             "type": "string",
             "format": "date"
@@ -26581,6 +28083,11 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa de la factura (multiempresa)"
           },
           "factura_id": {
             "type": "integer",
@@ -26721,6 +28228,26 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+          },
+          "cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cobro de caja repartido por empresa (GET /cobros/:id); null si no vino de un cobro"
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pago"
+            },
+            "description": "Solo al registrar (POST /pagos): todos los pagos del cobro, uno por empresa; la raíz es el primero"
           },
           "cliente_id": {
             "type": "integer",
@@ -28591,6 +30118,11 @@
             "type": "integer",
             "minimum": 1
           },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa del servicio (multiempresa)"
+          },
           "servicio_id": {
             "type": "integer",
             "minimum": 1
@@ -29251,6 +30783,13 @@
                 "neto"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -29287,6 +30826,18 @@
               "neto"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -29383,6 +30934,13 @@
                 "total"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "grupo_id": {
                   "type": [
                     "integer",
@@ -29435,6 +30993,18 @@
               "total"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "grupo_id": {
                 "type": [
                   "number",
@@ -29581,6 +31151,13 @@
                 "motivo"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "turno_id": {
                   "type": "integer",
                   "minimum": 1
@@ -29656,6 +31233,18 @@
               "motivo"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "turno_id": {
                 "type": [
                   "number",
@@ -29816,6 +31405,13 @@
                 "monto_anulado"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "fecha": {
                   "type": "string",
                   "format": "date"
@@ -29864,6 +31460,18 @@
               "monto_anulado"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "fecha": {
                 "type": [
                   "number",
@@ -29970,6 +31578,13 @@
                 "monto"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -30002,6 +31617,18 @@
               "monto"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -30092,6 +31719,13 @@
                 "cobranza_pct"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -30134,6 +31768,18 @@
               "cobranza_pct"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -30262,6 +31908,13 @@
                 "neto"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -30300,6 +31953,18 @@
               "neto"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -30417,6 +32082,13 @@
                 "iva_libro"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -30470,6 +32142,18 @@
               "iva_libro"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -30629,6 +32313,13 @@
                 "tasa_cumplimiento"
               ],
               "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
                 "periodo": {
                   "type": "string"
                 },
@@ -30682,6 +32373,18 @@
               "tasa_cumplimiento"
             ],
             "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "periodo": {
                 "type": [
                   "number",
@@ -31451,6 +33154,68 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SeccionEstadoCuenta": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "nombre_comercial",
+          "razon_social",
+          "nit",
+          "logo_url",
+          "saldo",
+          "saldo_a_favor",
+          "facturas_pendientes",
+          "movimientos"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "razon_social": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Auxiliar CxC del cliente en esta empresa (positivo = debe)"
+          },
+          "saldo_a_favor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Anticipos del cliente en esta empresa"
+          },
+          "facturas_pendientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Factura"
+            }
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoEstadoCuenta"
+            },
+            "description": "Saldo acumulado dentro de la empresa"
           }
         }
       },

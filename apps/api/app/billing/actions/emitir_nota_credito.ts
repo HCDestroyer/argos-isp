@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
@@ -68,6 +69,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .forUpdate()
             .select(
                 'id',
+                'empresa_id',
                 'cliente_id',
                 'servicio_id',
                 'tipo',
@@ -78,6 +80,9 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 t.trx.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
             )
             .firstOrFail()) as FacturaNota
+        const empresaId = Number(factura.empresa_id)
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
         if (factura.estado === 'anulada') {
             throw new Conflicto(`La factura ${factura.id} está anulada`, 'factura_anulada', 'Factura anulada')
         }
@@ -109,6 +114,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .insertQuery()
             .table('billing.notas_credito')
             .insert({
+                empresa_id: empresaId,
                 factura_id: factura.id,
                 cliente_id: factura.cliente_id,
                 servicio_id: factura.servicio_id,
@@ -124,6 +130,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
 
         await new RegistrarAsiento().execute(
             {
+                empresa_id: empresaId,
                 fecha,
                 descripcion: `Nota de crédito ${notaId} · factura ${factura.id}: ${motivo}`,
                 origen_tipo: 'nota_credito',
@@ -145,6 +152,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         })
         await t.emit('nota_credito.emitida', {
             nota_credito_id: notaId,
+            empresa_id: empresaId,
             factura_id: factura.id,
             servicio_id: factura.servicio_id,
             cliente_id: factura.cliente_id,

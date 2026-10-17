@@ -50,6 +50,7 @@ export default class RechazarComprobante extends DomainAction<EntradaRechazarCom
         )
         await t.emit('comprobante.rechazado', {
             comprobante_id: comprobante.id,
+            empresa_id: comprobante.empresa_id,
             cliente_id: comprobante.cliente_id,
             pago_id: null,
             motivo,

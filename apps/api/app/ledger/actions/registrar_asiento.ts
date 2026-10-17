@@ -5,6 +5,8 @@ import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errore
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { periodoCerrado } from '#ledger/cierres'
+import { resolverEmpresaActiva } from '#core/empresas'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -37,6 +39,11 @@ export interface LineaAsiento {
 }
 
 export interface EntradaAsiento {
+    /**
+     * empresa (NIT) del libro en el que va el asiento: la del documento (factura, pago, caja…).
+     * Sin ella (asientos manuales), la empresa activa del contexto o la única activa.
+     */
+    empresa_id?: number | null
     /** fecha contable YYYY-MM-DD; por defecto hoy en Guatemala */
     fecha?: string
     descripcion: string
@@ -60,6 +67,7 @@ export interface MovimientoRegistrado {
 
 export interface AsientoRegistrado {
     id: number
+    empresa_id: number
     fecha: string
     descripcion: string
     origen_tipo: OrigenAsiento
@@ -77,6 +85,8 @@ interface FilaCuenta {
     activa: boolean
     imputable: boolean
     auxiliar_cliente: boolean
+    /** subcuenta de una empresa (caja, cuenta bancaria); null = común */
+    empresa_id: number | null
 }
 
 interface LineaNormalizada {
@@ -105,9 +115,13 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             ])
         }
 
-        const lineas = await this.normalizarLineas(t.trx, input.movimientos ?? [])
+        const empresaId = input.empresa_id ?? (await resolverEmpresaActiva(t.ctx, t.trx))
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
+
+        const lineas = await this.normalizarLineas(t.trx, input.movimientos ?? [], empresaId)
         const total = this.validarCuadre(lineas)
-        await this.verificarPeriodoAbierto(t.trx, fecha)
+        await this.verificarPeriodoAbierto(t.trx, fecha, empresaId)
 
         // Deferred al insertar (el asiento existe antes que sus movimientos) …
         await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre DEFERRED')
@@ -116,6 +130,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             .insertQuery()
             .table('ledger.asientos')
             .insert({
+                empresa_id: empresaId,
                 fecha,
                 descripcion,
                 origen_tipo: input.origen_tipo,
@@ -154,6 +169,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         const porId = new Map(lineas.map((l) => [l.cuenta.id, l.cuenta]))
         return {
             id: asiento!.id,
+            empresa_id: empresaId,
             fecha,
             descripcion,
             origen_tipo: input.origen_tipo,
@@ -198,6 +214,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
     private async normalizarLineas(
         trx: TransactionClientContract,
         movimientos: LineaAsiento[],
+        empresaId: number,
     ): Promise<LineaNormalizada[]> {
         if (movimientos.length < 2) {
             throw new ReglaNegocio('Un asiento necesita al menos 2 movimientos', 'asiento_descuadrado')
@@ -211,7 +228,15 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 q.whereIn('codigo', codigos.length > 0 ? codigos : [''])
                 q.orWhereIn('id', ids.length > 0 ? ids : [0])
             })
-            .select('id', 'codigo', 'nombre', 'activa', 'imputable', 'auxiliar_cliente')) as FilaCuenta[]
+            .select(
+                'id',
+                'codigo',
+                'nombre',
+                'activa',
+                'imputable',
+                'auxiliar_cliente',
+                'empresa_id',
+            )) as FilaCuenta[]
         const porCodigo = new Map(cuentas.map((c) => [c.codigo, c]))
         const porId = new Map(cuentas.map((c) => [c.id, c]))
 
@@ -240,6 +265,13 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 errores.push({
                     field: `${campo}.cuenta`,
                     message: `La cuenta ${cuenta.codigo} es de agrupación y no recibe movimientos`,
+                })
+            }
+            if (cuenta.empresa_id !== null && Number(cuenta.empresa_id) !== empresaId) {
+                errores.push({
+                    field: `${campo}.cuenta`,
+                    message: `La cuenta ${cuenta.codigo} es de la empresa ${cuenta.empresa_id}: un asiento no mezcla empresas`,
+                    rule: 'cuenta_de_otra_empresa',
                 })
             }
             const clienteId = movimiento.cliente_id ?? null
@@ -280,10 +312,10 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         return lineas
     }
 
-    private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string) {
+    private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string, empresaId: number) {
         const periodo = inicioDeMes(fecha)
-        // misma regla que los triggers: hay un cierre del mes sin reapertura
-        if (await periodoCerrado(trx, fecha)) {
+        // misma regla que los triggers: hay un cierre del mes (de esta empresa) sin reapertura
+        if (await periodoCerrado(trx, fecha, empresaId)) {
             throw new ReglaNegocio(
                 `Periodo ${periodo.slice(0, 7)} cerrado: no se registran asientos con fecha ${fecha}`,
                 'periodo_cerrado',

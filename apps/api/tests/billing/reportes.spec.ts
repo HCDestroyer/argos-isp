@@ -271,7 +271,8 @@ test.group('billing · reportes', () => {
         assert.equal(aTexto(dec(sobrante).negated().minus(faltante)), cierres.body().totales.diferencia)
 
         // IVA: lo facturado y lo anulado en el mes cambian iva_neto igual que la cuenta 2.1.02
-        const ivaAntes = await ivaDelPeriodo({ desde: `${MES}-01` })
+        // la ruta muestra la empresa activa (la 1): se compara contra el mismo libro
+        const ivaAntes = await ivaDelPeriodo({ desde: `${MES}-01` }, { empresas: [1], consolidado: false })
         const antes = ivaAntes.filas.find((f) => f.periodo === MES)
         const otro = await servicioCortado({ precio: '112.00' })
         const [, octubre] = await facturasDe(otro.servicioId)

@@ -122,10 +122,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar cajas con su turno abierto */
+        /**
+         * Listar cajas con su turno abierto
+         * @description Cajas de la empresa activa (o de todas las del alcance; `empresas=todas` = consolidado con alcance global). Cada caja es de una empresa (`empresa_id`).
+         */
         get: operations["cajasListar"];
         put?: never;
-        post?: never;
+        /**
+         * Crear caja de una empresa (crea su subcuenta de Cajas en el libro)
+         * @description La caja es de `empresa_id` o de la empresa activa (422 empresa_requerida, 403 empresa_no_permitida). Crea la subcuenta 1.1.01.NN marcada con esa empresa. 409 caja_duplicada si la empresa ya tiene una caja con ese nombre.
+         */
+        post: operations["cajasCrear"];
         delete?: never;
         options?: never;
         head?: never;
@@ -269,7 +276,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Estado de cuenta del cliente (auxiliar CxC) */
+        /**
+         * Estado de cuenta del cliente (auxiliar CxC)
+         * @description Multiempresa: una sección por empresa (`empresas[]`, con su marca, saldo, saldo a favor, facturas y movimientos) dentro del alcance del usuario; `saldo` y `saldo_a_favor` de la raíz son el total, solo informativo. Con `empresa_id`, solo esa empresa (403 si no está en el alcance).
+         */
         get: operations["clientesEstadoCuenta"];
         put?: never;
         post?: never;
@@ -330,6 +340,26 @@ export interface paths {
          * @description Fija `telegram_chat_id`; otro chat reemplaza al anterior. El cambio queda en la bitácora.
          */
         post: operations["clientesVincularTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver cobro repartido por empresa (recibo con una sección por empresa)
+         * @description Un cobro de POST /pagos: sus pagos (uno por empresa) con la marca de cada empresa (nombre, razón social, NIT, dirección, logo) para el recibo. Solo las secciones de las empresas del alcance del usuario; 403 si ninguna lo está.
+         */
+        get: operations["cobrosVer"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -972,6 +1002,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Balance de saldos por empresa (y total del grupo en el consolidado)
+         * @description Saldo de cada cuenta con movimiento al `hasta`, una sección por empresa (cada NIT tiene su libro) y `total` del grupo. cuadra = debe igual a haber y activo = pasivo + resultado.
+         */
+        get: operations["libroBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/bancos": {
         parameters: {
             query?: never;
@@ -999,7 +1049,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Plan de cuentas */
+        /**
+         * Plan de cuentas
+         * @description Catálogo común a todas las empresas; las subcuentas de una caja o cuenta bancaria (`empresa_id`) solo aparecen para su empresa.
+         */
         get: operations["libroCuentas"];
         put?: never;
         post?: never;
@@ -1018,6 +1071,23 @@ export interface paths {
         };
         /** Libro diario: asientos con sus movimientos */
         get: operations["libroDiario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/estado-resultados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado de resultados por empresa (ingresos − gastos del rango) */
+        get: operations["libroEstadoResultados"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3179,6 +3249,8 @@ export interface components {
             nota: string | null;
         };
         Asiento: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             id: number;
             /** Format: date */
             fecha: string;
@@ -3206,12 +3278,75 @@ export interface components {
             alcance_tipo: "router" | "zona" | "caja" | null;
             alcance_id: number | null;
         };
+        BalanceSaldos: {
+            /** Format: date */
+            hasta: string;
+            /** @description true sin filtro de empresa (empresas=todas) */
+            consolidado: boolean;
+            /** @description Una sección por empresa (libro) */
+            empresas: {
+                empresa_id: number | null;
+                nombre_comercial: string | null;
+                nit: string | null;
+                cuentas: {
+                    cuenta_id: number;
+                    codigo: string;
+                    nombre: string;
+                    /** @enum {string} */
+                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    /** @description Según la naturaleza de la cuenta */
+                    saldo: components["schemas"]["Dinero"];
+                }[];
+                totales: {
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    activo: components["schemas"]["Dinero"];
+                    pasivo: components["schemas"]["Dinero"];
+                    ingresos: components["schemas"]["Dinero"];
+                    gastos: components["schemas"]["Dinero"];
+                    /** @description ingresos − gastos */
+                    resultado: components["schemas"]["Dinero"];
+                    /** @description debe = haber y activo = pasivo + resultado */
+                    cuadra: boolean;
+                };
+            }[];
+            /** @description Total del grupo */
+            total: {
+                cuentas: {
+                    cuenta_id: number;
+                    codigo: string;
+                    nombre: string;
+                    /** @enum {string} */
+                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    /** @description Según la naturaleza de la cuenta */
+                    saldo: components["schemas"]["Dinero"];
+                }[];
+                totales: {
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    activo: components["schemas"]["Dinero"];
+                    pasivo: components["schemas"]["Dinero"];
+                    ingresos: components["schemas"]["Dinero"];
+                    gastos: components["schemas"]["Dinero"];
+                    /** @description ingresos − gastos */
+                    resultado: components["schemas"]["Dinero"];
+                    /** @description debe = haber y activo = pasivo + resultado */
+                    cuadra: boolean;
+                };
+            };
+        };
         Banco: {
             id: number;
             nombre: string;
             activo: boolean;
         };
         BancoLibro: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             /** @description banco_id que acepta POST /egresos con metodo banco */
             id: number;
             nombre: string;
@@ -3227,6 +3362,8 @@ export interface components {
             cuenta_nombre: string;
         };
         Caja: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             id: number;
             nombre: string;
             cajero_id: number | null;
@@ -3297,6 +3434,8 @@ export interface components {
             cuenta_nombre: string;
         };
         CierrePeriodo: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             id: number;
             /** @description YYYY-MM */
             periodo: string;
@@ -3361,8 +3500,27 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Cobro: {
+            id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            /** @enum {string} */
+            metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            /** @description Total cobrado (suma de los pagos de todas las empresas) */
+            monto: components["schemas"]["Dinero"];
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Un pago por empresa con su marca (las del alcance del usuario) */
+            secciones: {
+                empresa: components["schemas"]["EmpresaRecibo"];
+                pago: components["schemas"]["Pago"];
+            }[];
+        };
         CobroPasarela: {
             id: number;
+            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             proveedor: string;
             /** @description Id del cobro en el proveedor */
             id_proveedor: string | null;
@@ -3405,6 +3563,8 @@ export interface components {
         };
         Comprobante: {
             id: number;
+            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             cliente_id: number;
             cliente_nombre: string;
             servicio_id: number | null;
@@ -3573,6 +3733,8 @@ export interface components {
             pass_ppp: string;
         };
         Cuenta: {
+            /** @description Empresa de la subcuenta (caja o cuenta bancaria); null = cuenta común */
+            empresa_id?: number | null;
             id: number;
             codigo: string;
             nombre: string;
@@ -3593,6 +3755,8 @@ export interface components {
         };
         CuentaBancaria: {
             id: number;
+            /** @description Empresa dueña de la cuenta: sus depósitos son pagos de esa empresa */
+            empresa_id?: number;
             banco_id: number;
             banco_nombre: string;
             numero: string;
@@ -3645,6 +3809,8 @@ export interface components {
          */
         Dinero: string;
         Egreso: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             id: number;
             /** Format: date */
             fecha: string;
@@ -3684,6 +3850,22 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        EmisorFactura: {
+            empresa_id: number;
+            nit: string | null;
+            razon_social: string | null;
+            nombre_comercial: string;
+            direccion_fiscal: string | null;
+            municipio: string | null;
+            departamento: string | null;
+            correo: string | null;
+            /**
+             * @description Régimen ISR del emisor (frases de FEL)
+             * @enum {string|null}
+             */
+            regimen_isr: "sujeto_pagos_trimestrales" | "retencion_definitiva" | "pequeno_contribuyente" | null;
+            codigo_establecimiento: number | null;
         };
         Empresa: {
             nombre: string;
@@ -3757,6 +3939,16 @@ export interface components {
             /** @description Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita) */
             pago_en_linea: boolean;
         };
+        EmpresaRecibo: {
+            id: number;
+            nombre_comercial: string;
+            razon_social: string | null;
+            nit: string | null;
+            direccion_fiscal: string | null;
+            telefono: string | null;
+            correo: string | null;
+            logo_url: string | null;
+        };
         EmpresaResumen: {
             id: number;
             nombre_comercial: string;
@@ -3800,6 +3992,8 @@ export interface components {
             facturas_pendientes: components["schemas"]["Factura"][];
             /** @description Auxiliar CxC por asiento, en orden contable; el último saldo es `saldo` */
             movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
+            /** @description Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo */
+            empresas?: components["schemas"]["SeccionEstadoCuenta"][];
         };
         /** @enum {string} */
         EstadoFactura: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
@@ -3809,6 +4003,52 @@ export interface components {
             estado: components["schemas"]["EstadoServicio"] | null;
             /** @description Saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas) */
             monto_adeudado: components["schemas"]["Dinero"] | null;
+        };
+        EstadoResultados: {
+            /** Format: date */
+            desde: string;
+            /** Format: date */
+            hasta: string;
+            consolidado: boolean;
+            empresas: {
+                empresa_id: number | null;
+                nombre_comercial: string | null;
+                nit: string | null;
+                cuentas: {
+                    cuenta_id: number;
+                    codigo: string;
+                    nombre: string;
+                    /** @enum {string} */
+                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    /** @description Según la naturaleza de la cuenta */
+                    saldo: components["schemas"]["Dinero"];
+                }[];
+                totales: {
+                    ingresos: components["schemas"]["Dinero"];
+                    gastos: components["schemas"]["Dinero"];
+                    resultado: components["schemas"]["Dinero"];
+                };
+            }[];
+            total: {
+                cuentas: {
+                    cuenta_id: number;
+                    codigo: string;
+                    nombre: string;
+                    /** @enum {string} */
+                    tipo: "activo" | "pasivo" | "ingreso" | "gasto";
+                    debe: components["schemas"]["Dinero"];
+                    haber: components["schemas"]["Dinero"];
+                    /** @description Según la naturaleza de la cuenta */
+                    saldo: components["schemas"]["Dinero"];
+                }[];
+                totales: {
+                    ingresos: components["schemas"]["Dinero"];
+                    gastos: components["schemas"]["Dinero"];
+                    resultado: components["schemas"]["Dinero"];
+                };
+            };
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
@@ -3878,6 +4118,10 @@ export interface components {
         };
         Factura: {
             id: number;
+            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
+            /** @description Nombre comercial de la empresa que emite */
+            empresa_nombre?: string;
             cliente_id: number;
             cliente_nombre?: string;
             servicio_id: number | null;
@@ -3936,6 +4180,8 @@ export interface components {
             };
             /** @description Notas de crédito de la factura */
             notas_credito?: components["schemas"]["NotaCredito"][];
+            /** @description Empresa que emite la factura con sus datos fiscales (FEL) */
+            emisor?: components["schemas"]["EmisorFactura"];
         };
         FacturaLinea: {
             id: number;
@@ -3990,6 +4236,8 @@ export interface components {
             updated_at: string;
         };
         LineaMayor: {
+            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
             movimiento_id: number;
             asiento_id: number;
             /** Format: date */
@@ -4063,6 +4311,8 @@ export interface components {
             cliente_nombre?: string | null;
         };
         MovimientoEstadoCuenta: {
+            /** @description Empresa (libro) del asiento */
+            empresa_id?: number;
             /** Format: date */
             fecha: string;
             /** @enum {string} */
@@ -4075,6 +4325,8 @@ export interface components {
         };
         NotaCredito: {
             id: number;
+            /** @description Empresa de la factura (multiempresa) */
+            empresa_id?: number;
             factura_id: number;
             cliente_id: number;
             cliente_nombre: string;
@@ -4110,6 +4362,12 @@ export interface components {
         };
         Pago: {
             id: number;
+            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
+            empresa_id?: number;
+            /** @description Cobro de caja repartido por empresa (GET /cobros/:id); null si no vino de un cobro */
+            cobro_id?: number | null;
+            /** @description Solo al registrar (POST /pagos): todos los pagos del cobro, uno por empresa; la raíz es el primero */
+            pagos?: components["schemas"]["Pago"][];
             cliente_id: number;
             /** @description Nombre del pagador */
             cliente_nombre?: string;
@@ -4597,6 +4855,8 @@ export interface components {
         };
         Promesa: {
             id: number;
+            /** @description Empresa del servicio (multiempresa) */
+            empresa_id?: number;
             servicio_id: number;
             cliente_id: number;
             cliente_nombre?: string;
@@ -4762,6 +5022,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 altas: number;
                 bajas: number;
@@ -4772,6 +5034,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 altas: number | null;
                 bajas: number | null;
@@ -4791,6 +5055,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 grupo_id: number | null;
                 grupo: string;
                 facturas: number;
@@ -4804,6 +5070,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 grupo_id: number | null;
                 grupo: number | null;
                 facturas: number | null;
@@ -4826,6 +5094,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 turno_id: number;
                 caja_id: number;
                 caja: string;
@@ -4843,6 +5113,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 turno_id: number | null;
                 caja_id: number | null;
                 caja: number | null;
@@ -4869,6 +5141,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 /** Format: date */
                 fecha: string;
                 metodo: string;
@@ -4881,6 +5155,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 fecha: number | null;
                 metodo: number | null;
                 caja_id: number | null;
@@ -4901,6 +5177,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 categoria: string;
                 categoria_nombre: string;
@@ -4910,6 +5188,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 categoria: number | null;
                 categoria_nombre: number | null;
@@ -4928,6 +5208,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 facturas: number;
                 facturado: components["schemas"]["Dinero"];
@@ -4941,6 +5223,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 facturas: number | null;
                 facturado: components["schemas"]["Dinero"] | null;
@@ -4962,6 +5246,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 metodo: string;
                 pagos: number;
@@ -4973,6 +5259,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 metodo: number | null;
                 pagos: number | null;
@@ -4993,6 +5281,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 facturas: number;
                 base: components["schemas"]["Dinero"];
@@ -5008,6 +5298,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 facturas: number | null;
                 base: components["schemas"]["Dinero"] | null;
@@ -5032,6 +5324,8 @@ export interface components {
             };
             columnas: components["schemas"]["ColumnaReporte"][];
             filas: {
+                empresa_id?: number;
+                empresa?: string;
                 periodo: string;
                 canal: string;
                 creadas: number;
@@ -5047,6 +5341,8 @@ export interface components {
             }[];
             /** @description Suma de las columnas de dinero y enteros */
             totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
                 periodo: number | null;
                 canal: number | null;
                 creadas: number | null;
@@ -5265,6 +5561,20 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        SeccionEstadoCuenta: {
+            empresa_id: number;
+            nombre_comercial: string;
+            razon_social: string | null;
+            nit: string | null;
+            logo_url: string | null;
+            /** @description Auxiliar CxC del cliente en esta empresa (positivo = debe) */
+            saldo: components["schemas"]["Dinero"];
+            /** @description Anticipos del cliente en esta empresa */
+            saldo_a_favor: components["schemas"]["Dinero"];
+            facturas_pendientes: components["schemas"]["Factura"][];
+            /** @description Saldo acumulado dentro de la empresa */
+            movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
         };
         Servicio: {
             id: number;
@@ -5880,7 +6190,10 @@ export interface operations {
     };
     cajasListar: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5907,6 +6220,84 @@ export interface operations {
             };
             /** @description Sin el permiso cajas.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cajasCrear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre: string;
+                    /** @description Cajero asignado (opcional) */
+                    cajero_id?: number | null;
+                    /** @description Empresa de la caja; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Caja creada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Caja"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6581,7 +6972,10 @@ export interface operations {
     };
     clientesEstadoCuenta: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance */
+                empresa_id?: number;
+            };
             header?: never;
             path: {
                 id: number;
@@ -6619,6 +7013,15 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6859,9 +7262,60 @@ export interface operations {
             };
         };
     };
+    cobrosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cobro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cobro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     comprobantesListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -7175,6 +7629,8 @@ export interface operations {
     cuentasBancariasListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Solo activas (true) o inactivas */
                 activa?: boolean;
             };
@@ -7239,6 +7695,8 @@ export interface operations {
                     /** @enum {string} */
                     moneda?: "GTQ" | "USD";
                     activa?: boolean;
+                    /** @description Empresa dueña de la cuenta; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
                 };
             };
         };
@@ -7413,7 +7871,10 @@ export interface operations {
     };
     dashboardResumen: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7440,6 +7901,15 @@ export interface operations {
             };
             /** @description Sin el permiso reportes.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7689,6 +8159,8 @@ export interface operations {
     egresosListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -8597,6 +9069,8 @@ export interface operations {
     facturasListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -9463,9 +9937,64 @@ export interface operations {
             };
         };
     };
+    libroBalance: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Saldos al día (por defecto hoy, Guatemala) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Balance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceSaldos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     libroBancos: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9499,11 +10028,23 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     libroCuentas: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9537,11 +10078,22 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     libroDiario: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -9599,9 +10151,65 @@ export interface operations {
             };
         };
     };
+    libroEstadoResultados: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Por defecto el día 1 del mes de hasta */
+                desde?: string;
+                /** @description Por defecto hoy (Guatemala) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de resultados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoResultados"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     libroMayor: {
         parameters: {
             query: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -9663,6 +10271,8 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 estado?: "cerrado" | "reabierto";
             };
             header?: never;
@@ -9725,6 +10335,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Empresa cuyo libro se cierra o reabre; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
                     anio: number;
                     mes: number;
                 };
@@ -9791,6 +10403,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Empresa cuyo libro se cierra o reabre; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
                     anio: number;
                     mes: number;
                     motivo: string;
@@ -9877,6 +10491,8 @@ export interface operations {
     notasCreditoListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -10757,11 +11373,15 @@ export interface operations {
     pagosListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
                 cliente_id?: number;
+                /** @description Pagos de un cobro repartido por empresa */
+                cobro_id?: number;
                 caja_id?: number;
                 cuenta_bancaria_id?: number;
                 metodo?: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
@@ -10850,6 +11470,8 @@ export interface operations {
                     nota?: string | null;
                     /** @description Facturas a las que aplicar; por defecto la más antigua primero */
                     facturas?: number[];
+                    /** @description Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id) */
+                    empresa_id?: number | null;
                 };
             };
         };
@@ -11029,6 +11651,8 @@ export interface operations {
     pasarelaListarCobros: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -13572,6 +14196,8 @@ export interface operations {
     promesasListar: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
@@ -14067,6 +14693,8 @@ export interface operations {
     reportesAltasBajas: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hace 11 meses */
@@ -14124,6 +14752,8 @@ export interface operations {
     reportesCarteraVencida: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 cliente_id?: number;
@@ -14181,6 +14811,8 @@ export interface operations {
     reportesCierresCaja: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hasta */
@@ -14236,6 +14868,8 @@ export interface operations {
     reportesCobranzaDiaria: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hasta */
@@ -14291,6 +14925,8 @@ export interface operations {
     reportesEgresos: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hace 11 meses */
@@ -14347,6 +14983,8 @@ export interface operations {
     reportesFacturadoCobrado: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hace 11 meses */
@@ -14408,6 +15046,8 @@ export interface operations {
     reportesIngresos: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hace 11 meses */
@@ -14474,6 +15114,8 @@ export interface operations {
                 desde?: string;
                 /** @description Por defecto: hoy (Guatemala) */
                 hasta?: string;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
             };
             header?: never;
             path?: never;
@@ -14522,6 +15164,8 @@ export interface operations {
     reportesPromesas: {
         parameters: {
             query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
                 /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
                 formato?: "json" | "csv" | "xlsx";
                 /** @description Por defecto: el día 1 del mes de hace 11 meses */
@@ -14628,7 +15272,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -14686,7 +15330,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -17017,7 +17661,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

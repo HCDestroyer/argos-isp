@@ -141,9 +141,15 @@ export async function bancoId(nombre = 'Banrural'): Promise<number> {
 }
 
 /** Cuenta bancaria propia nueva (con su subcuenta de Bancos) creada por la acción. */
-export async function cuentaBancariaPrueba(banco = 'Banrural') {
+/** Cuenta de la empresa indicada (por defecto la principal): con varias empresas activas la acción la exige. */
+export async function cuentaBancariaPrueba(banco = 'Banrural', empresaId = 1) {
     return new CrearCuentaBancaria().execute(
-        { banco_id: await bancoId(banco), numero: unico('300'), alias: unico('Recaudación') },
+        {
+            banco_id: await bancoId(banco),
+            numero: unico('300'),
+            alias: unico('Recaudación'),
+            empresa_id: empresaId,
+        },
         contextoPrueba(),
     )
 }

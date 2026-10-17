@@ -1,5 +1,6 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { ReglaNegocio } from '#shared/errores'
+import { EMPRESA_PRINCIPAL } from '#core/empresas'
 
 /**
  * Plan de cuentas base de ArgosIsp.
@@ -247,10 +248,21 @@ export async function sembrarPlanCuentas(cliente: QueryClientContract): Promise<
         await cliente
             .knexQuery()
             .table('ledger.cajas')
-            .insert({ nombre: CAJA_INICIAL.nombre, cuenta_id: ids.get(CAJA_INICIAL.cuenta)! })
-            .onConflict('nombre')
+            .insert({
+                nombre: CAJA_INICIAL.nombre,
+                cuenta_id: ids.get(CAJA_INICIAL.cuenta)!,
+                empresa_id: EMPRESA_PRINCIPAL,
+            })
+            .onConflict(['empresa_id', 'nombre'])
             .ignore()
     }
+    // multiempresa: la caja principal es de la empresa 1 y su cuenta también (el banco principal
+    // 1.1.02.01 queda común: cada empresa lo usa como su banco por defecto)
+    await cliente
+        .from('ledger.cuentas')
+        .where('codigo', CAJA_INICIAL.cuenta)
+        .whereNull('empresa_id')
+        .update({ empresa_id: EMPRESA_PRINCIPAL })
 
     const banco = await cliente
         .from('ledger.bancos')
@@ -260,7 +272,11 @@ export async function sembrarPlanCuentas(cliente: QueryClientContract): Promise<
         await cliente
             .insertQuery()
             .table('ledger.bancos')
-            .insert({ nombre: BANCO_INICIAL.nombre, cuenta_id: ids.get(BANCO_INICIAL.cuenta)! })
+            .insert({
+                nombre: BANCO_INICIAL.nombre,
+                cuenta_id: ids.get(BANCO_INICIAL.cuenta)!,
+                empresa_id: EMPRESA_PRINCIPAL,
+            })
     }
 }
 

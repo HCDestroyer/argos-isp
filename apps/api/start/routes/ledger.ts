@@ -16,6 +16,8 @@ import {
     Cuenta,
     Egreso,
     Mayor,
+    BalanceSaldos,
+    EstadoResultados,
 } from '#ledger/esquemas'
 import { listarCierres } from '#ledger/cierres'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
@@ -28,7 +30,10 @@ import { libroDiario, libroMayor, listarCuentas, verAsiento } from '#ledger/cons
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { listarBancosLibro } from '#ledger/bancos'
 import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
-import { exigirAlcance } from '#core/acl'
+import { empresasDeLaLista } from '#shared/empresa_activa'
+import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
+import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
+import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
 
@@ -40,8 +45,25 @@ const cajas: Ruta[] = [
         resumen: 'Listar cajas con su turno abierto',
         etiqueta: 'cajas',
         permiso: 'cajas.ver',
+        query: v.listarCajasValidator,
+        descripcion:
+            'Cajas de la empresa activa (o de todas las del alcance; `empresas=todas` = consolidado con alcance global). Cada caja es de una empresa (`empresa_id`).',
         respuesta: { status: 200, descripcion: 'Cajas', esquema: lista(Caja) },
-        handler: (ctx) => listarCajas(ctx.alcance),
+        handler: (ctx, { query }) => listarCajas(ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/cajas',
+        operacion: 'cajasCrear',
+        resumen: 'Crear caja de una empresa (crea su subcuenta de Cajas en el libro)',
+        etiqueta: 'cajas',
+        permiso: 'cajas.crear',
+        cuerpo: v.crearCajaValidator,
+        idempotente: true,
+        descripcion:
+            'La caja es de `empresa_id` o de la empresa activa (422 empresa_requerida, 403 empresa_no_permitida). Crea la subcuenta 1.1.01.NN marcada con esa empresa. 409 caja_duplicada si la empresa ya tiene una caja con ese nombre.',
+        respuesta: { status: 201, descripcion: 'Caja creada', esquema: Caja },
+        handler: (ctx, { cuerpo }) => new CrearCaja().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',
@@ -55,8 +77,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Turno abierto', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            await existeCaja(id)
-            exigirAlcance(ctx.alcance, { caja: [id] })
+            exigirAcceso(ctx, await existeCaja(id))
             return new AbrirCaja().execute(
                 { caja_id: id, fondo_inicial: cuerpo.fondo_inicial },
                 ctx.contextoAccion(),
@@ -77,8 +98,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Turno cerrado', esquema: CajaTurno },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            await existeCaja(id)
-            exigirAlcance(ctx.alcance, { caja: [id] })
+            exigirAcceso(ctx, await existeCaja(id))
             return new CerrarCaja().execute(
                 { caja_id: id, contado: cuerpo.contado, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -96,8 +116,7 @@ const cajas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de turnos', esquema: pagina(CajaTurno) },
         handler: async (ctx, { query, params }) => {
             const id = Number(params.id)
-            await existeCaja(id)
-            exigirAlcance(ctx.alcance, { caja: [id] })
+            exigirAcceso(ctx, await existeCaja(id))
             return listarTurnos(id, query)
         },
     }),
@@ -111,8 +130,11 @@ const libro: Ruta[] = [
         resumen: 'Plan de cuentas',
         etiqueta: 'libro',
         permiso: 'libro.ver',
+        query: v.libroEmpresasValidator,
+        descripcion:
+            'Catálogo común a todas las empresas; las subcuentas de una caja o cuenta bancaria (`empresa_id`) solo aparecen para su empresa.',
         respuesta: { status: 200, descripcion: 'Cuentas', esquema: lista(Cuenta) },
-        handler: () => listarCuentas(),
+        handler: (ctx, { query }) => listarCuentas(empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -123,8 +145,9 @@ const libro: Ruta[] = [
         permiso: 'egresos.ver',
         descripcion:
             'Cuentas bancarias contables de `ledger.bancos`: su `id` es el `banco_id` de POST /egresos con metodo banco (sin banco_id sale del banco principal, 1.1.02.01). No es el catálogo de bancos de Guatemala (GET /bancos) ni las cuentas que reciben depósitos (GET /cuentas-bancarias). El número va enmascarado.',
+        query: v.libroEmpresasValidator,
         respuesta: { status: 200, descripcion: 'Bancos del libro', esquema: lista(BancoLibro) },
-        handler: () => listarBancosLibro(),
+        handler: (ctx, { query }) => listarBancosLibro(empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -135,7 +158,7 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.diarioValidator,
         respuesta: { status: 200, descripcion: 'Página de asientos', esquema: pagina(Asiento) },
-        handler: (_ctx, { query }) => libroDiario(query),
+        handler: (ctx, { query }) => libroDiario(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -145,7 +168,11 @@ const libro: Ruta[] = [
         etiqueta: 'libro',
         permiso: 'libro.ver',
         respuesta: { status: 200, descripcion: 'Asiento', esquema: Asiento },
-        handler: (_ctx, { params }) => verAsiento(Number(params.id)),
+        handler: async (ctx, { params }) => {
+            const asiento = await verAsiento(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, asiento.empresa_id)
+            return asiento
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -176,7 +203,31 @@ const libro: Ruta[] = [
         permiso: 'libro.ver',
         query: v.mayorValidator,
         respuesta: { status: 200, descripcion: 'Mayor de la cuenta', esquema: Mayor },
-        handler: (_ctx, { query }) => libroMayor(query),
+        handler: (ctx, { query }) => libroMayor(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/balance',
+        operacion: 'libroBalance',
+        resumen: 'Balance de saldos por empresa (y total del grupo en el consolidado)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.balanceValidator,
+        descripcion:
+            'Saldo de cada cuenta con movimiento al `hasta`, una sección por empresa (cada NIT tiene su libro) y `total` del grupo. cuadra = debe igual a haber y activo = pasivo + resultado.',
+        respuesta: { status: 200, descripcion: 'Balance', esquema: BalanceSaldos },
+        handler: (ctx, { query }) => balanceSaldos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/estado-resultados',
+        operacion: 'libroEstadoResultados',
+        resumen: 'Estado de resultados por empresa (ingresos − gastos del rango)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.estadoResultadosValidator,
+        respuesta: { status: 200, descripcion: 'Estado de resultados', esquema: EstadoResultados },
+        handler: (ctx, { query }) => estadoResultados(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
 ]
 
@@ -200,7 +251,8 @@ const egresos: Ruta[] = [
         permiso: 'egresos.ver',
         query: v.listarEgresosValidator,
         respuesta: { status: 200, descripcion: 'Página de egresos', esquema: pagina(Egreso) },
-        handler: (ctx, { query }) => listarEgresos(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarEgresos(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -212,7 +264,7 @@ const egresos: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Egreso', esquema: Egreso },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeEgreso(id))
+            exigirAcceso(ctx, await dimensionesDeEgreso(id))
             return verEgreso(id)
         },
     }),
@@ -229,13 +281,18 @@ const egresos: Ruta[] = [
             'La categoría decide la cuenta de gasto. Con metodo caja el efectivo sale del turno abierto de la caja (baja el esperado del cierre); sin caja_id, la caja del turno abierto del usuario o la principal. 422 con un error por campo (no_aplica si se manda el origen de otro método).',
         respuesta: { status: 201, descripcion: 'Egreso registrado', esquema: Egreso },
         handler: async (ctx, { cuerpo }) => {
+            // efectivo sin caja: la del turno abierto del usuario en la empresa activa o su principal
+            const activa = ctx.empresa?.activa ?? null
             const cajaId =
                 cuerpo.metodo === 'caja'
                     ? (cuerpo.caja_id ??
-                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance)) ??
-                      (await cajaPrincipalId()))
+                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance, undefined, activa)) ??
+                      (await cajaPrincipalId(undefined, activa ?? undefined)))
                     : cuerpo.caja_id
-            if (cuerpo.metodo === 'caja' && cajaId) exigirAlcance(ctx.alcance, { caja: [cajaId] })
+            if (cuerpo.metodo === 'caja' && cajaId) {
+                const caja = await existeCaja(cajaId).catch(() => null)
+                exigirAcceso(ctx, caja ?? { caja: [cajaId] })
+            }
             return new RegistrarEgreso().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
         },
     }),
@@ -252,7 +309,7 @@ const egresos: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Egreso anulado', esquema: Egreso },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeEgreso(id))
+            exigirAcceso(ctx, await dimensionesDeEgreso(id))
             return new AnularEgreso().execute({ egreso_id: id, motivo: cuerpo.motivo }, ctx.contextoAccion())
         },
     }),
@@ -268,7 +325,7 @@ const periodos: Ruta[] = [
         permiso: 'libro.ver',
         query: v.listarCierresValidator,
         respuesta: { status: 200, descripcion: 'Página de cierres', esquema: pagina(CierrePeriodo) },
-        handler: (_ctx, { query }) => listarCierres(query),
+        handler: (ctx, { query }) => listarCierres(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',

@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { aTexto } from '#ledger/dinero'
@@ -42,6 +43,7 @@ export interface ResultadoResolverPromesa {
 
 export interface FilaPromesa {
     id: number
+    empresa_id: number
     servicio_id: number
     cliente_id: number
     estado: EstadoPromesa
@@ -72,8 +74,20 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
             .from('billing.promesas')
             .where('id', input.promesa_id)
             .forUpdate()
-            .select('id', 'servicio_id', 'cliente_id', 'estado', 'vence_en', 'monto', 'created_at')
+            .select(
+                'id',
+                'empresa_id',
+                'servicio_id',
+                'cliente_id',
+                'estado',
+                'vence_en',
+                'monto',
+                'created_at',
+            )
             .firstOrFail()) as FilaPromesa
+        promesa.empresa_id = Number(promesa.empresa_id)
+        exigirAccesoEmpresa(t.ctx, promesa.empresa_id)
+        t.fijarEmpresa(promesa.empresa_id)
 
         const sinCambio = {
             promesa_id: promesa.id,
@@ -110,6 +124,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
         if (cerrada) {
             await t.emit(decision.estado === 'cumplida' ? 'promesa.cumplida' : 'promesa.incumplida', {
                 promesa_id: promesa.id,
+                empresa_id: promesa.empresa_id,
                 servicio_id: promesa.servicio_id,
                 vence: new Date(promesa.vence_en).toISOString(),
                 monto: promesa.monto,

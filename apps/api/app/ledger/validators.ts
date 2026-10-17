@@ -1,6 +1,6 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
-import { dinero, fechaIso, idEntidad, motivo } from '#shared/validadores'
+import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
 import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
 import { METODOS_EGRESO } from '#ledger/egresos'
 
@@ -22,8 +22,39 @@ export const cerrarCajaValidator = vine.compile(
 
 export const listarTurnosValidator = vine.compile(vine.object({ ...reglasPaginacion }))
 
+export const listarCajasValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const crearCajaValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(80),
+        cajero_id: idEntidad().nullable().optional().meta({ description: 'Cajero asignado (opcional)' }),
+        empresa_id: idEntidad().nullable().optional().meta({
+            description: 'Empresa de la caja; por defecto la activa (X-Empresa-Id)',
+        }),
+    }),
+)
+
+/** Consultas del libro: la empresa activa o el consolidado. */
+export const libroEmpresasValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const balanceValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        hasta: fechaIso().optional().meta({ description: 'Saldos al día (por defecto hoy, Guatemala)' }),
+    }),
+)
+
+export const estadoResultadosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        desde: fechaIso().optional().meta({ description: 'Por defecto el día 1 del mes de hasta' }),
+        hasta: fechaIso().optional().meta({ description: 'Por defecto hoy (Guatemala)' }),
+    }),
+)
+
 export const diarioValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
@@ -38,6 +69,7 @@ export const diarioValidator = vine.compile(
 
 export const mayorValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         cuenta_id: idEntidad(),
         cliente_id: idEntidad().optional().meta({ description: 'Auxiliar de un cliente' }),
@@ -100,6 +132,7 @@ export const revertirAsientoValidator = vine.compile(
 
 export const listarEgresosValidator = vine.compile(
     vine.object({
+        empresas: empresasConsulta(),
         ...reglasPaginacion,
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
@@ -118,6 +151,9 @@ export const listarEgresosValidator = vine.compile(
 */
 
 const periodo = {
+    empresa_id: idEntidad().nullable().optional().meta({
+        description: 'Empresa cuyo libro se cierra o reabre; por defecto la activa (X-Empresa-Id)',
+    }),
     anio: vine.number().withoutDecimals().range([2000, 2100]),
     mes: vine.number().withoutDecimals().range([1, 12]),
 }
@@ -127,5 +163,9 @@ export const cerrarPeriodoValidator = vine.compile(vine.object(periodo))
 export const reabrirPeriodoValidator = vine.compile(vine.object({ ...periodo, motivo: motivo() }))
 
 export const listarCierresValidator = vine.compile(
-    vine.object({ ...reglasPaginacion, estado: vine.enum(['cerrado', 'reabierto'] as const).optional() }),
+    vine.object({
+        ...reglasPaginacion,
+        empresas: empresasConsulta(),
+        estado: vine.enum(['cerrado', 'reabierto'] as const).optional(),
+    }),
 )

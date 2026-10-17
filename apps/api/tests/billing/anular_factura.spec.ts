@@ -65,6 +65,7 @@ test.group('billing · anular factura', () => {
 
         const [evento] = await eventosDe('factura.anulada', 'factura_id', octubre.id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             factura_id: octubre.id,
             servicio_id: servicioId,
             cliente_id: clienteId,

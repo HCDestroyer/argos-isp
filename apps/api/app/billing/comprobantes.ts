@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
@@ -22,6 +23,8 @@ export type CanalComprobante = (typeof CANALES_COMPROBANTE)[number]
 
 export interface ComprobanteVista {
     id: number
+    /** la empresa de la cuenta bancaria de destino */
+    empresa_id: number
     cliente_id: number
     cliente_nombre: string
     servicio_id: number | null
@@ -61,6 +64,7 @@ function consulta(cliente: QueryClientContract) {
         .leftJoin('core.usuarios as uv', 'uv.id', 'k.verificado_por')
         .select(
             'k.id',
+            'k.empresa_id',
             'k.cliente_id',
             'c.nombre as cliente_nombre',
             'k.servicio_id',
@@ -129,6 +133,7 @@ function aplicarFiltros<Q extends ConsultaComprobantes>(
     q: Q,
     filtros: Omit<FiltrosComprobantes, 'estado'>,
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Q {
     q.if(filtros.cliente_id, (w) => w.where('k.cliente_id', filtros.cliente_id!))
         .if(filtros.metodo, (w) => w.where('k.metodo', filtros.metodo!))
@@ -136,12 +141,18 @@ function aplicarFiltros<Q extends ConsultaComprobantes>(
         .if(filtros.desde, (w) => w.where('k.fecha_deposito', '>=', filtros.desde!))
         .if(filtros.hasta, (w) => w.where('k.fecha_deposito', '<=', filtros.hasta!))
     filtrarPorAlcance(q, alcance, dimensionesComprobante)
+    filtrarPorEmpresa(q, empresas, (w, ids) => w.whereIn('k.empresa_id', ids))
     return q
 }
 
-export async function listarComprobantes(filtros: FiltrosComprobantes, alcance?: Alcance) {
-    const lista = aplicarFiltros(consulta(db.connection()), filtros, alcance).if(filtros.estado, (q) =>
-        q.where('k.estado', filtros.estado!),
+export async function listarComprobantes(
+    filtros: FiltrosComprobantes,
+    alcance?: Alcance,
+    empresas: number[] | null = null,
+) {
+    const lista = aplicarFiltros(consulta(db.connection()), filtros, alcance, empresas).if(
+        filtros.estado,
+        (q) => q.where('k.estado', filtros.estado!),
     )
     return paginar<ComprobanteVista>(lista, filtros, { columna: 'k.id' })
 }
@@ -164,8 +175,9 @@ export interface ResumenComprobantes {
 export async function resumenComprobantes(
     filtros: FiltrosComprobantes,
     alcance?: Alcance,
+    empresas: number[] | null = null,
 ): Promise<ResumenComprobantes> {
-    const base = aplicarFiltros(consulta(db.connection()), filtros, alcance)
+    const base = aplicarFiltros(consulta(db.connection()), filtros, alcance, empresas)
     const fila = (await db
         .from(base.as('k'))
         .select(
@@ -188,9 +200,13 @@ export async function resumenComprobantes(
 
 /** Dimensiones de alcance de un comprobante: las de su cliente. */
 export async function dimensionesDeComprobante(id: number) {
-    const fila = await db.from('billing.comprobantes').where('id', id).select('cliente_id').first()
+    const fila = await db
+        .from('billing.comprobantes')
+        .where('id', id)
+        .select('cliente_id', 'empresa_id')
+        .first()
     if (!fila) throw new NoEncontrado(`El comprobante ${id} no existe`)
-    return dimensionesDeCliente(fila.cliente_id as number)
+    return { ...(await dimensionesDeCliente(fila.cliente_id as number)), empresa_id: Number(fila.empresa_id) }
 }
 
 /** Ruta y tipo del archivo de un comprobante (para `GET /comprobantes/:id/archivo`). */

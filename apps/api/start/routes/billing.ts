@@ -17,17 +17,22 @@ import AnularPago from '#billing/actions/anular_pago'
 import AnularFactura from '#billing/actions/anular_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import { listarNotasCredito, verNotaCredito } from '#billing/notas_credito'
-import { cajaPrincipalId, dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
-import { cajaDelCajero } from '#ledger/cajas'
+import { dimensionesDePago, listarPagos, verPago } from '#billing/pagos'
+import { existeCaja } from '#ledger/cajas'
 import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
+import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
+import { empresasDeLaLista } from '#shared/empresa_activa'
+import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
+import { verCobro } from '#billing/cobros_vista'
+import type { EmpresasReporte } from '#billing/reportes/reportes'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { NoEncontrado, Prohibido } from '#shared/errores'
-import { dimensionesDePromesa, dimensionesDeServicio, listarPromesas, verPromesa } from '#billing/promesas'
+import { dimensionesDePromesa, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import { simularPromesa } from '#billing/simulador_promesas'
@@ -99,12 +104,28 @@ import {
     NotaCredito,
     NotaCreditoEmitida,
     Pago,
+    Cobro,
     PlantillaFacturacion,
     Promesa,
     ResultadoGeneracion,
     ResultadoCorte,
     ResultadoVencimiento,
 } from '#billing/esquemas'
+
+/** Empresas de un reporte: la activa o el consolidado (`?empresas=todas`, columna de empresa). */
+function empresasReporte(ctx: HttpContext, consulta?: 'todas' | null): EmpresasReporte {
+    const empresas = empresasDeLaLista(ctx.empresa, consulta)
+    return { empresas, consolidado: consulta === 'todas' || empresas === null || empresas.length > 1 }
+}
+
+/** Estado de cuenta: las empresas del alcance (null = todas) o solo la pedida. */
+function empresasEstadoCuenta(ctx: HttpContext, empresaId?: number): number[] | null {
+    if (empresaId) {
+        exigirEmpresaPeticion(ctx.empresa, empresaId)
+        return [empresaId]
+    }
+    return ctx.empresa?.permitidas ?? null
+}
 
 const plantillas: Ruta[] = [
     definirRuta({
@@ -163,7 +184,8 @@ const facturas: Ruta[] = [
         permiso: 'facturas.ver',
         query: v.listarFacturasValidator,
         respuesta: { status: 200, descripcion: 'Página de facturas', esquema: pagina(Factura) },
-        handler: (ctx, { query }) => listarFacturas(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarFacturas(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -175,7 +197,7 @@ const facturas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Factura', esquema: FacturaDetalle },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            exigirAcceso(ctx, await dimensionesDeFactura(id))
             return verFactura(id)
         },
     }),
@@ -229,7 +251,7 @@ const facturas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Factura anulada', esquema: Factura },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            exigirAcceso(ctx, await dimensionesDeFactura(id))
             return new AnularFactura().execute(
                 { factura_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -253,7 +275,7 @@ const notasCredito: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Nota de crédito emitida', esquema: NotaCreditoEmitida },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
+            exigirAcceso(ctx, await dimensionesDeFactura(id))
             return new EmitirNotaCredito().execute(
                 { factura_id: id, monto: cuerpo.monto, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -269,7 +291,8 @@ const notasCredito: Ruta[] = [
         permiso: 'facturas.ver',
         query: v.listarNotasCreditoValidator,
         respuesta: { status: 200, descripcion: 'Página de notas de crédito', esquema: pagina(NotaCredito) },
-        handler: (ctx, { query }) => listarNotasCredito(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarNotasCredito(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -281,7 +304,7 @@ const notasCredito: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Nota de crédito', esquema: NotaCredito },
         handler: async (ctx, { params }) => {
             const nota = await verNotaCredito(Number(params.id))
-            exigirAlcance(ctx.alcance, await dimensionesDeFactura(nota.factura_id))
+            exigirAcceso(ctx, await dimensionesDeFactura(nota.factura_id))
             return nota
         },
     }),
@@ -297,7 +320,8 @@ const pagos: Ruta[] = [
         permiso: 'pagos.ver',
         query: v.listarPagosValidator,
         respuesta: { status: 200, descripcion: 'Página de pagos', esquema: pagina(Pago) },
-        handler: (ctx, { query }) => listarPagos(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarPagos(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -309,7 +333,7 @@ const pagos: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Pago', esquema: Pago },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDePago(id))
+            exigirAcceso(ctx, await dimensionesDePago(id))
             return verPago(id)
         },
     }),
@@ -324,13 +348,6 @@ const pagos: Ruta[] = [
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Pago registrado', esquema: Pago },
         handler: async (ctx, { cuerpo }) => {
-            // Efectivo sin caja: la del turno abierto del cajero (dentro de su alcance) o la principal.
-            const cajaId =
-                cuerpo.metodo === 'caja'
-                    ? (cuerpo.caja_id ??
-                      (await cajaDelCajero(ctx.auth.user?.id ?? null, ctx.alcance)) ??
-                      (await cajaPrincipalId()))
-                    : null
             const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
                 throw new ValidacionFallida([
                     {
@@ -340,14 +357,35 @@ const pagos: Ruta[] = [
                     },
                 ])
             })
-            exigirAlcance(ctx.alcance, { ...dimensiones, ...(cajaId ? { caja: [cajaId] } : {}) })
-            // pago de terceros: cada factura pedida también debe estar en su alcance
+            exigirAlcance(ctx.alcance, {
+                ...dimensiones,
+                ...(cuerpo.caja_id ? { caja: [cuerpo.caja_id] } : {}),
+            })
+            if (cuerpo.caja_id) {
+                const caja = await existeCaja(cuerpo.caja_id).catch(() => null)
+                if (caja) exigirEmpresaPeticion(ctx.empresa, caja.empresa_id)
+            }
+            // pago de terceros: cada factura pedida también debe estar en su alcance (y su empresa)
             for (const facturaId of new Set(cuerpo.facturas ?? [])) {
                 const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
-                if (deFactura) exigirAlcance(ctx.alcance, deFactura)
+                if (deFactura) exigirAcceso(ctx, deFactura)
             }
-            return new RegistrarPago().execute({ ...cuerpo, caja_id: cajaId }, ctx.contextoAccion())
+            // la caja de cada empresa (efectivo sin caja_id) la elige la acción con el alcance
+            return new RegistrarPago().execute({ ...cuerpo, alcance: ctx.alcance }, ctx.contextoAccion())
         },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cobros/:id',
+        operacion: 'cobrosVer',
+        resumen: 'Ver cobro repartido por empresa (recibo con una sección por empresa)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.ver',
+        descripcion:
+            'Un cobro de POST /pagos: sus pagos (uno por empresa) con la marca de cada empresa (nombre, razón social, NIT, dirección, logo) para el recibo. Solo las secciones de las empresas del alcance del usuario; 403 si ninguna lo está.',
+        respuesta: { status: 200, descripcion: 'Cobro', esquema: Cobro },
+        handler: (ctx, { params }) =>
+            verCobro(Number(params.id), ctx.empresa?.permitidas ?? null, ctx.alcance),
     }),
     definirRuta({
         metodo: 'post',
@@ -363,7 +401,7 @@ const pagos: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Pago anulado', esquema: Pago },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDePago(id))
+            exigirAcceso(ctx, await dimensionesDePago(id))
             return new AnularPago().execute({ pago_id: id, motivo: cuerpo.motivo }, ctx.contextoAccion())
         },
     }),
@@ -379,7 +417,8 @@ const promesas: Ruta[] = [
         permiso: 'promesas.ver',
         query: v.listarPromesasValidator,
         respuesta: { status: 200, descripcion: 'Página de promesas', esquema: pagina(Promesa) },
-        handler: (ctx, { query }) => listarPromesas(query, ctx.alcance),
+        handler: (ctx, { query }) =>
+            listarPromesas(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -394,7 +433,7 @@ const promesas: Ruta[] = [
             'Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
         handler: async (ctx, { cuerpo }) => {
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(cuerpo.servicio_id))
+            await exigirServicio(ctx, cuerpo.servicio_id)
             const canal = await canalPromesa(ctx, cuerpo.canal)
             return new CrearPromesaPago().execute(
                 { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, monto: cuerpo.monto, canal },
@@ -414,7 +453,7 @@ const promesas: Ruta[] = [
             'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
         respuesta: { status: 200, descripcion: 'Simulación', esquema: SimulacionPromesa },
         handler: async (ctx, { cuerpo }) => {
-            exigirAlcance(ctx.alcance, await dimensionesDeServicio(cuerpo.servicio_id))
+            await exigirServicio(ctx, cuerpo.servicio_id)
             const canalPeticion = ctx.contextoAccion().canal
             return simularPromesa({
                 servicio_id: cuerpo.servicio_id,
@@ -439,7 +478,7 @@ const promesas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Promesa aprobada', esquema: Promesa },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            exigirAcceso(ctx, await dimensionesDePromesa(id))
             return new AprobarPromesa().execute({ promesa_id: id, nota: cuerpo.nota }, ctx.contextoAccion())
         },
     }),
@@ -457,7 +496,7 @@ const promesas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Promesa rechazada', esquema: Promesa },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            exigirAcceso(ctx, await dimensionesDePromesa(id))
             await new RechazarPromesa().execute(
                 { promesa_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -479,7 +518,7 @@ const promesas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Promesa cancelada', esquema: Promesa },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDePromesa(id))
+            exigirAcceso(ctx, await dimensionesDePromesa(id))
             await new CancelarPromesa().execute(
                 { promesa_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -501,10 +540,13 @@ const comprobantes: Ruta[] = [
         descripcion:
             'Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.',
         respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: PaginaComprobantes },
-        handler: async (ctx, { query }) => ({
-            ...(await listarComprobantes(query, ctx.alcance)),
-            resumen: await resumenComprobantes(query, ctx.alcance),
-        }),
+        handler: async (ctx, { query }) => {
+            const empresas = empresasDeLaLista(ctx.empresa, query.empresas)
+            return {
+                ...(await listarComprobantes(query, ctx.alcance, empresas)),
+                resumen: await resumenComprobantes(query, ctx.alcance, empresas),
+            }
+        },
     }),
     definirRuta({
         metodo: 'get',
@@ -516,7 +558,7 @@ const comprobantes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Comprobante', esquema: Comprobante },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
             return verComprobante(id)
         },
     }),
@@ -532,7 +574,7 @@ const comprobantes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Archivo', esquema: ArchivoComprobante },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
             const archivo = await archivoDeComprobante(id)
             const contenido = await leerArchivoComprobante(archivo.archivo)
             ctx.response.header('Content-Type', archivo.archivo_tipo)
@@ -559,10 +601,10 @@ const comprobantes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: Comprobante },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
             for (const facturaId of new Set(cuerpo.facturas ?? [])) {
                 const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
-                if (deFactura) exigirAlcance(ctx.alcance, deFactura)
+                if (deFactura) exigirAcceso(ctx, deFactura)
             }
             return new AprobarComprobante().execute(
                 { comprobante_id: id, facturas: cuerpo.facturas, nota: cuerpo.nota },
@@ -584,7 +626,7 @@ const comprobantes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Comprobante rechazado', esquema: Comprobante },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeComprobante(id))
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
             return new RechazarComprobante().execute(
                 { comprobante_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -645,7 +687,11 @@ const reportes: Ruta[] = [
             DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCarteraVencida },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await carteraVencida(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await carteraVencida(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -658,7 +704,11 @@ const reportes: Ruta[] = [
         descripcion: 'Por mes (o día con agrupar=dia) de Guatemala.' + DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteIngresos },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await ingresos(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await ingresos(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -673,7 +723,11 @@ const reportes: Ruta[] = [
             DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteFacturadoCobrado },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await facturadoVsCobrado(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await facturadoVsCobrado(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -686,7 +740,11 @@ const reportes: Ruta[] = [
         descripcion: 'Por defecto el mes en curso. Los anulados van aparte.' + DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCobranzaDiaria },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await cobranzaDiaria(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await cobranzaDiaria(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -699,7 +757,11 @@ const reportes: Ruta[] = [
         descripcion: 'Turnos cerrados en el rango (por defecto el mes en curso).' + DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCierresCaja },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await cierresCaja(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await cierresCaja(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -713,7 +775,12 @@ const reportes: Ruta[] = [
             'Desde el libro: IVA facturado, anulado (en el mes del reverso) y neto; iva_libro es el movimiento de la cuenta 2.1.02 del mes y es igual a iva_neto.' +
             DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteIva },
-        handler: async (ctx, { query }) => responderReporte(ctx, await ivaDelPeriodo(query), query.formato),
+        handler: async (ctx, { query }) =>
+            responderReporte(
+                ctx,
+                await ivaDelPeriodo(query, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -726,7 +793,11 @@ const reportes: Ruta[] = [
         descripcion: 'Por mes de creación y canal, con su estado actual.' + DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReportePromesas },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await reportePromesas(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await reportePromesas(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -741,7 +812,11 @@ const reportes: Ruta[] = [
             DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteAltasBajas },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await altasBajas(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await altasBajas(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -754,7 +829,11 @@ const reportes: Ruta[] = [
         descripcion: 'Egresos vigentes (sin anular) por mes contable.' + DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteEgresos },
         handler: async (ctx, { query }) =>
-            responderReporte(ctx, await egresosPorCategoria(query, ctx.alcance), query.formato),
+            responderReporte(
+                ctx,
+                await egresosPorCategoria(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
     }),
     definirRuta({
         metodo: 'get',
@@ -765,8 +844,10 @@ const reportes: Ruta[] = [
         permiso: 'reportes.ver',
         descripcion:
             'Lee solo vistas materializadas que el grupo billing refresca al recibir factura.*, pago.*, promesa.* y servicio.estado_cambiado (nunca por intervalo). actualizado_en dice cuándo se refrescó cada una.',
+        query: v.dashboardValidator,
         respuesta: { status: 200, descripcion: 'Resumen', esquema: ResumenDashboard },
-        handler: () => resumenDashboard(),
+        handler: (ctx, { query }) =>
+            resumenDashboard(new Date(), empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
 ]
 
@@ -834,7 +915,7 @@ const pasarelaRutas: Ruta[] = [
             'No mueve dinero: el pago se registra al llegar el webhook firmado del proveedor. monto por defecto = lo pendiente de las facturas pedidas o del cliente (422 sin_deuda). 503 pasarela_no_configurada si no hay proveedor.',
         respuesta: { status: 201, descripcion: 'Cobro creado', esquema: CobroPasarela },
         handler: async (ctx, { cuerpo }) => {
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(cuerpo.cliente_id))
+            await exigirCliente(ctx, cuerpo.cliente_id)
             return new CrearCobroPasarela().execute(cuerpo, ctx.contextoAccion())
         },
     }),
@@ -847,7 +928,8 @@ const pasarelaRutas: Ruta[] = [
         permiso: 'pagos.ver',
         query: v.listarCobrosPasarelaValidator,
         respuesta: { status: 200, descripcion: 'Página de cobros', esquema: pagina(CobroPasarela) },
-        handler: (_ctx, { query }) => listarCobrosPasarela(query),
+        handler: (ctx, { query }) =>
+            listarCobrosPasarela(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -859,7 +941,7 @@ const pasarelaRutas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Cobro', esquema: CobroPasarela },
         handler: async (ctx, { params }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCobroPasarela(id))
+            exigirAcceso(ctx, await dimensionesDeCobroPasarela(id))
             return verCobroPasarela(id)
         },
     }),
@@ -1001,7 +1083,8 @@ const bancos: Ruta[] = [
         permiso: 'cuentas_bancarias.ver',
         query: v.listarCuentasBancariasValidator,
         respuesta: { status: 200, descripcion: 'Cuentas bancarias', esquema: lista(CuentaBancaria) },
-        handler: (_ctx, { query }) => listarCuentasBancarias(query),
+        handler: (ctx, { query }) =>
+            listarCuentasBancarias(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -1011,7 +1094,11 @@ const bancos: Ruta[] = [
         etiqueta: 'pagos',
         permiso: 'cuentas_bancarias.ver',
         respuesta: { status: 200, descripcion: 'Cuenta bancaria', esquema: CuentaBancaria },
-        handler: (_ctx, { params }) => verCuentaBancaria(Number(params.id)),
+        handler: async (ctx, { params }) => {
+            const cuenta = await verCuentaBancaria(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, cuenta.empresa_id)
+            return cuenta
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -1047,11 +1134,14 @@ const estadoCuenta: Ruta[] = [
         resumen: 'Estado de cuenta del cliente (auxiliar CxC)',
         etiqueta: 'clientes',
         permiso: 'clientes.estado_cuenta',
+        query: v.estadoCuentaValidator,
+        descripcion:
+            'Multiempresa: una sección por empresa (`empresas[]`, con su marca, saldo, saldo a favor, facturas y movimientos) dentro del alcance del usuario; `saldo` y `saldo_a_favor` de la raíz son el total, solo informativo. Con `empresa_id`, solo esa empresa (403 si no está en el alcance).',
         respuesta: { status: 200, descripcion: 'Estado de cuenta', esquema: EstadoCuenta },
-        handler: async (ctx, { params }) => {
+        handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
-            exigirAlcance(ctx.alcance, await dimensionesDeCliente(id))
-            return leerEstadoCuenta(id)
+            await exigirCliente(ctx, id)
+            return leerEstadoCuenta(id, empresasEstadoCuenta(ctx, query.empresa_id))
         },
     }),
 ]

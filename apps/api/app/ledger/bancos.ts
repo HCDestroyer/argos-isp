@@ -9,6 +9,8 @@ import db from '@adonisjs/lucid/services/db'
 
 export interface BancoLibro {
     id: number
+    /** empresa dueña del banco del libro */
+    empresa_id: number
     nombre: string
     banco_id: number | null
     banco: string | null
@@ -30,13 +32,15 @@ export function enmascararNumero(numero: string | null): string | null {
     return numero.replace(/[0-9a-z]/gi, (c) => (++vistos > total - 4 ? c : '•'))
 }
 
-export async function listarBancosLibro(): Promise<BancoLibro[]> {
+export async function listarBancosLibro(empresas: number[] | null = null): Promise<BancoLibro[]> {
     const filas = (await db
         .from('ledger.bancos as b')
+        .if(empresas !== null, (q) => q.whereIn('b.empresa_id', empresas!))
         .join('ledger.cuentas as cu', 'cu.id', 'b.cuenta_id')
         .leftJoin('billing.bancos as bc', 'bc.id', 'b.banco_id')
         .select(
             'b.id',
+            'b.empresa_id',
             'b.nombre',
             'b.banco_id',
             'bc.nombre as banco',
@@ -52,6 +56,7 @@ export async function listarBancosLibro(): Promise<BancoLibro[]> {
     return filas.map(({ numero_mascarado: numero, ...fila }) => ({
         ...fila,
         id: Number(fila.id),
+        empresa_id: Number(fila.empresa_id),
         banco_id: fila.banco_id === null ? null : Number(fila.banco_id),
         cuenta_id: Number(fila.cuenta_id),
         numero_enmascarado: enmascararNumero(numero),

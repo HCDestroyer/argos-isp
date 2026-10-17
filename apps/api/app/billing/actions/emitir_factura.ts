@@ -19,6 +19,8 @@ import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
  * - Guarda `reglas_snapshot`: la configuración efectiva (plantilla + excepciones) y el precio con
  *   que se emitió. Vence `dias_gracia` días después del inicio del periodo.
  * - Asiento: `CxC (cliente) / Ingresos por internet + Otros ingresos + IVA débito`.
+ * - Multiempresa: la factura (y su asiento) es de la empresa del servicio (`empresa_id`): sale con
+ *   su NIT y va a su libro. El anticipo que se aplica es el de esa empresa.
  * - Emite `factura.emitida` y aplica el anticipo del cliente si tiene (excedentes de pagos).
  */
 
@@ -40,6 +42,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
     protected async handle(input: EntradaEmitirFactura, t: Transaccion): Promise<ResultadoEmitirFactura> {
         const servicio = await leerServicio(t.trx, input.servicio_id)
         t.fijarEntidad('servicio', servicio.id)
+        t.fijarEmpresa(servicio.empresa_id)
         await bloquearCliente(t.trx, servicio.cliente_id)
 
         const clave = claveFactura(servicio.id, input.periodo.periodo)
@@ -106,6 +109,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             .knexQuery()
             .table('billing.facturas')
             .insert({
+                empresa_id: servicio.empresa_id,
                 cliente_id: servicio.cliente_id,
                 servicio_id: servicio.id,
                 tipo: 'servicio',
@@ -135,6 +139,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
 
         await new RegistrarAsiento().execute(
             {
+                empresa_id: servicio.empresa_id,
                 descripcion: `Factura ${facturaId} · servicio ${servicio.id} · periodo ${periodo}`,
                 origen_tipo: 'factura',
                 origen_id: facturaId,
@@ -146,13 +151,14 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
 
         await t.emit('factura.emitida', {
             factura_id: facturaId,
+            empresa_id: servicio.empresa_id,
             servicio_id: servicio.id,
             cliente_id: servicio.cliente_id,
             total: aTexto(totales.total),
             vence: venceEn,
         })
 
-        await aplicarAnticipos(t, servicio.cliente_id)
+        await aplicarAnticipos(t, servicio.cliente_id, servicio.empresa_id)
         return { factura_id: facturaId, creada: true, motivo: null }
     }
 }

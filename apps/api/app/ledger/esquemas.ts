@@ -20,20 +20,27 @@ import {
 
 export const Cuenta = definirEsquema(
     'Cuenta',
-    objeto({
-        id,
-        codigo: texto,
-        nombre: texto,
-        tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
-        padre_id: nulable(id),
-        imputable: { ...booleano, description: 'Recibe movimientos (false = cuenta de agrupación)' },
-        auxiliar_cliente: {
-            ...booleano,
-            description: 'Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id',
+    objeto(
+        {
+            empresa_id: {
+                ...nulable(id),
+                description: 'Empresa de la subcuenta (caja o cuenta bancaria); null = cuenta común',
+            },
+            id,
+            codigo: texto,
+            nombre: texto,
+            tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
+            padre_id: nulable(id),
+            imputable: { ...booleano, description: 'Recibe movimientos (false = cuenta de agrupación)' },
+            auxiliar_cliente: {
+                ...booleano,
+                description: 'Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id',
+            },
+            activa: booleano,
+            ...auditable,
         },
-        activa: booleano,
-        ...auditable,
-    }),
+        ['empresa_id'],
+    ),
 )
 
 export const Movimiento = definirEsquema(
@@ -57,6 +64,11 @@ export const Asiento = definirEsquema(
     'Asiento',
     objeto(
         {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
             id,
             fecha,
             descripcion: texto,
@@ -88,22 +100,30 @@ export const Asiento = definirEsquema(
             created_at: instante,
             movimientos: lista(Movimiento),
         },
-        ['revertido_por', 'revertible', 'motivo_no_revertible'],
+        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id'],
     ),
 )
 
 export const LineaMayor = definirEsquema(
     'LineaMayor',
-    objeto({
-        movimiento_id: id,
-        asiento_id: id,
-        fecha,
-        descripcion: texto,
-        debe: Dinero,
-        haber: Dinero,
-        saldo: Dinero,
-        cliente_id: nulable(id),
-    }),
+    objeto(
+        {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            movimiento_id: id,
+            asiento_id: id,
+            fecha,
+            descripcion: texto,
+            debe: Dinero,
+            haber: Dinero,
+            saldo: Dinero,
+            cliente_id: nulable(id),
+        },
+        ['empresa_id'],
+    ),
 )
 
 export const Mayor = definirEsquema(
@@ -121,6 +141,11 @@ export const Caja = definirEsquema(
     'Caja',
     objeto(
         {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
             id,
             nombre: texto,
             cajero_id: nulable(id),
@@ -132,25 +157,33 @@ export const Caja = definirEsquema(
             turno_abierto_por_nombre: nulable(texto),
             ...auditable,
         },
-        ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre'],
+        ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre', 'empresa_id'],
     ),
 )
 
 export const BancoLibro = definirEsquema(
     'BancoLibro',
-    objeto({
-        id: { ...id, description: 'banco_id que acepta POST /egresos con metodo banco' },
-        nombre: texto,
-        banco_id: { ...nulable(id), description: 'Banco del catálogo (GET /bancos), si se conoce' },
-        banco: { ...nulable(texto), description: 'Nombre del banco del catálogo' },
-        numero_enmascarado: {
-            ...nulable(texto),
-            description: 'Número de cuenta con solo los últimos 4 caracteres visibles',
+    objeto(
+        {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            id: { ...id, description: 'banco_id que acepta POST /egresos con metodo banco' },
+            nombre: texto,
+            banco_id: { ...nulable(id), description: 'Banco del catálogo (GET /bancos), si se conoce' },
+            banco: { ...nulable(texto), description: 'Nombre del banco del catálogo' },
+            numero_enmascarado: {
+                ...nulable(texto),
+                description: 'Número de cuenta con solo los últimos 4 caracteres visibles',
+            },
+            cuenta_id: id,
+            cuenta_codigo: { ...texto, description: 'Cuenta contable del plan (1.1.02.xx)' },
+            cuenta_nombre: texto,
         },
-        cuenta_id: id,
-        cuenta_codigo: { ...texto, description: 'Cuenta contable del plan (1.1.02.xx)' },
-        cuenta_nombre: texto,
-    }),
+        ['empresa_id'],
+    ),
 )
 
 export const CajaTurno = definirEsquema(
@@ -190,54 +223,127 @@ export const CategoriaEgreso = definirEsquema(
 
 export const Egreso = definirEsquema(
     'Egreso',
-    objeto({
-        id,
-        fecha,
-        categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
-        categoria_nombre: texto,
-        cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
-        proveedor: nulable(texto),
-        descripcion: nulable(texto),
-        comprobante: { ...nulable(texto), description: 'Número o serie del documento del proveedor' },
-        monto: Dinero,
-        metodo: enumerado(['caja', 'banco', 'cuenta_bancaria']),
-        caja_id: nulable(id),
-        caja_nombre: nulable(texto),
-        turno_id: { ...nulable(id), description: 'Turno de caja abierto cuando salió el efectivo' },
-        banco_id: nulable(id),
-        banco_nombre: nulable(texto),
-        cuenta_bancaria_id: nulable(id),
-        cuenta_bancaria_nombre: nulable(texto),
-        asiento_id: nulable(id),
-        estado: enumerado(['registrado', 'anulado']),
-        registrado_por: nulable(id),
-        registrado_por_nombre: nulable(texto),
-        anulado_en: nulable(instante),
-        anulado_por: nulable(id),
-        motivo_anulacion: nulable(texto),
-        asiento_reverso_id: nulable(id),
-        ...auditable,
-    }),
+    objeto(
+        {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            id,
+            fecha,
+            categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
+            categoria_nombre: texto,
+            cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
+            proveedor: nulable(texto),
+            descripcion: nulable(texto),
+            comprobante: { ...nulable(texto), description: 'Número o serie del documento del proveedor' },
+            monto: Dinero,
+            metodo: enumerado(['caja', 'banco', 'cuenta_bancaria']),
+            caja_id: nulable(id),
+            caja_nombre: nulable(texto),
+            turno_id: { ...nulable(id), description: 'Turno de caja abierto cuando salió el efectivo' },
+            banco_id: nulable(id),
+            banco_nombre: nulable(texto),
+            cuenta_bancaria_id: nulable(id),
+            cuenta_bancaria_nombre: nulable(texto),
+            asiento_id: nulable(id),
+            estado: enumerado(['registrado', 'anulado']),
+            registrado_por: nulable(id),
+            registrado_por_nombre: nulable(texto),
+            anulado_en: nulable(instante),
+            anulado_por: nulable(id),
+            motivo_anulacion: nulable(texto),
+            asiento_reverso_id: nulable(id),
+            ...auditable,
+        },
+        ['empresa_id'],
+    ),
 )
 
 export const CierrePeriodo = definirEsquema(
     'CierrePeriodo',
-    objeto({
-        id,
-        periodo: { type: 'string', pattern: '^\\d{4}-\\d{2}$', description: 'YYYY-MM' },
-        estado: enumerado(['cerrado', 'reabierto']),
-        cerrado_en: instante,
-        cerrado_por: nulable(id),
-        cerrado_por_nombre: nulable(texto),
-        resumen: {
-            type: ['object', 'null'],
-            additionalProperties: true,
-            description:
-                'Al cerrar: desde, hasta, asientos, debe, haber y cuentas[] (codigo, nombre, debe, haber) del mes',
+    objeto(
+        {
+            empresa_id: {
+                ...id,
+                description:
+                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+            },
+            id,
+            periodo: { type: 'string', pattern: '^\\d{4}-\\d{2}$', description: 'YYYY-MM' },
+            estado: enumerado(['cerrado', 'reabierto']),
+            cerrado_en: instante,
+            cerrado_por: nulable(id),
+            cerrado_por_nombre: nulable(texto),
+            resumen: {
+                type: ['object', 'null'],
+                additionalProperties: true,
+                description:
+                    'Al cerrar: desde, hasta, asientos, debe, haber y cuentas[] (codigo, nombre, debe, haber) del mes',
+            },
+            reabierto_en: nulable(instante),
+            reabierto_por: nulable(id),
+            reabierto_por_nombre: nulable(texto),
+            motivo_reapertura: nulable(texto),
         },
-        reabierto_en: nulable(instante),
-        reabierto_por: nulable(id),
-        reabierto_por_nombre: nulable(texto),
-        motivo_reapertura: nulable(texto),
+        ['empresa_id'],
+    ),
+)
+
+const lineaEstado = objeto({
+    cuenta_id: id,
+    codigo: texto,
+    nombre: texto,
+    tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
+    debe: Dinero,
+    haber: Dinero,
+    saldo: { ...Dinero, description: 'Según la naturaleza de la cuenta' },
+})
+
+const totalesBalance = objeto({
+    debe: Dinero,
+    haber: Dinero,
+    activo: Dinero,
+    pasivo: Dinero,
+    ingresos: Dinero,
+    gastos: Dinero,
+    resultado: { ...Dinero, description: 'ingresos − gastos' },
+    cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + resultado' },
+})
+
+const totalesResultados = objeto({ ingresos: Dinero, gastos: Dinero, resultado: Dinero })
+
+function seccion(totales: ReturnType<typeof objeto>) {
+    return objeto({
+        empresa_id: nulable(id),
+        nombre_comercial: nulable(texto),
+        nit: nulable(texto),
+        cuentas: lista(lineaEstado),
+        totales,
+    })
+}
+
+export const BalanceSaldos = definirEsquema(
+    'BalanceSaldos',
+    objeto({
+        hasta: fecha,
+        consolidado: { ...booleano, description: 'true sin filtro de empresa (empresas=todas)' },
+        empresas: { ...lista(seccion(totalesBalance)), description: 'Una sección por empresa (libro)' },
+        total: {
+            ...objeto({ cuentas: lista(lineaEstado), totales: totalesBalance }),
+            description: 'Total del grupo',
+        },
+    }),
+)
+
+export const EstadoResultados = definirEsquema(
+    'EstadoResultados',
+    objeto({
+        desde: fecha,
+        hasta: fecha,
+        consolidado: booleano,
+        empresas: lista(seccion(totalesResultados)),
+        total: objeto({ cuentas: lista(lineaEstado), totales: totalesResultados }),
     }),
 )

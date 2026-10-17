@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
@@ -33,9 +34,12 @@ export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista
             .from('ledger.cajas')
             .where('id', input.caja_id)
             .forUpdate()
-            .select('id', 'activa')
+            .select('id', 'activa', 'empresa_id')
             .first()
         if (!caja) throw new NoEncontrado(`La caja ${input.caja_id} no existe`)
+        // la caja es de una empresa: solo la abre quien tiene acceso a ella
+        exigirAccesoEmpresa(t.ctx, Number(caja.empresa_id))
+        t.fijarEmpresa(Number(caja.empresa_id))
         if (!caja.activa) throw new ReglaNegocio(`La caja ${input.caja_id} está inactiva`, 'caja_inactiva')
 
         const abierto = await t.trx

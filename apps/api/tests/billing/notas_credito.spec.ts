@@ -121,6 +121,7 @@ test.group('billing · notas de crédito', () => {
         // evento por nota
         const [evento] = await eventosDe('nota_credito.emitida', 'nota_credito_id', parcial.body().id)
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             nota_credito_id: parcial.body().id,
             factura_id: septiembre!.id,
             servicio_id: servicioId,

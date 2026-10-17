@@ -121,6 +121,7 @@ test.group('billing · generarFacturas', () => {
         const eventos = await eventosDe('factura.emitida', 'servicio_id', servicioId)
         assert.lengthOf(eventos, 2)
         assert.deepEqual(eventos[0].payload, {
+            empresa_id: 1,
             factura_id: prorrateada!.id,
             servicio_id: servicioId,
             cliente_id: clienteId,

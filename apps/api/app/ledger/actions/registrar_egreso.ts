@@ -1,3 +1,5 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
@@ -97,11 +99,15 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
         const origen = await this.origen(t, input)
+        // el egreso es de la empresa de su caja, banco o cuenta bancaria
+        exigirAccesoEmpresa(t.ctx, origen.empresa_id)
+        t.fijarEmpresa(origen.empresa_id)
 
         const [fila] = (await t.trx
             .insertQuery()
             .table('ledger.egresos')
             .insert({
+                empresa_id: origen.empresa_id,
                 fecha,
                 categoria_id: categoria!.id,
                 proveedor: input.proveedor?.trim() || null,
@@ -121,6 +127,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
 
         await new RegistrarAsiento().execute(
             {
+                empresa_id: origen.empresa_id,
                 fecha,
                 descripcion:
                     `Egreso ${egresoId} · ${categoria!.nombre} · ${origen.nombre}` +
@@ -145,8 +152,14 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
             const caja = (await t.trx
                 .from('ledger.cajas')
                 .where('id', input.caja_id!)
-                .select('id', 'nombre', 'cuenta_id', 'activa')
-                .first()) as { id: number; nombre: string; cuenta_id: number; activa: boolean } | null
+                .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'activa')
+                .first()) as {
+                id: number
+                empresa_id: number
+                nombre: string
+                cuenta_id: number
+                activa: boolean
+            } | null
             if (!caja || !caja.activa) {
                 throw new ValidacionFallida([
                     {
@@ -166,6 +179,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
                 .first()
             return {
                 ...vacio,
+                empresa_id: Number(caja.empresa_id),
                 caja_id: caja.id,
                 turno_id: (turno?.id as number | undefined) ?? null,
                 cuenta_id: caja.cuenta_id,
@@ -173,34 +187,54 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
             }
         }
         if (input.metodo === 'banco') {
+            // sin banco_id: el banco principal de la empresa activa
+            const empresaActiva = input.banco_id ? null : await resolverEmpresaActiva(t.ctx, t.trx)
             const banco = (await t.trx
                 .from('ledger.bancos as b')
                 .join('ledger.cuentas as cu', 'cu.id', 'b.cuenta_id')
                 .if(
                     input.banco_id,
                     (q) => q.where('b.id', input.banco_id!),
-                    (q) => q.where('cu.codigo', CUENTAS.BANCO_PRINCIPAL),
+                    (q) =>
+                        q.where('cu.codigo', CUENTAS.BANCO_PRINCIPAL).where('b.empresa_id', empresaActiva!),
                 )
-                .select('b.id', 'b.nombre', 'b.cuenta_id')
-                .first()) as { id: number; nombre: string; cuenta_id: number } | null
+                .select('b.id', 'b.empresa_id', 'b.nombre', 'b.cuenta_id')
+                .first()) as { id: number; empresa_id: number; nombre: string; cuenta_id: number } | null
             if (!banco) {
                 throw new ValidacionFallida([
                     {
                         field: 'banco_id',
-                        message: `El banco ${input.banco_id ?? 'principal'} no existe`,
+                        message: input.banco_id
+                            ? `El banco ${input.banco_id} no existe`
+                            : `La empresa ${empresaActiva} no tiene banco principal en el libro: indica banco_id o usa una cuenta bancaria`,
                         rule: 'exists',
                     },
                 ])
             }
-            return { ...vacio, banco_id: banco.id, cuenta_id: banco.cuenta_id, nombre: banco.nombre }
+            return {
+                ...vacio,
+                empresa_id: Number(banco.empresa_id),
+                banco_id: banco.id,
+                cuenta_id: banco.cuenta_id,
+                nombre: banco.nombre,
+            }
         }
         const cuenta = (await t.trx
             .from('billing.cuentas_bancarias as cb')
             .join('billing.bancos as b', 'b.id', 'cb.banco_id')
             .where('cb.id', input.cuenta_bancaria_id!)
-            .select('cb.id', 'cb.alias', 'cb.cuenta_id', 'cb.activa', 'cb.moneda', 'b.nombre as banco')
+            .select(
+                'cb.id',
+                'cb.empresa_id',
+                'cb.alias',
+                'cb.cuenta_id',
+                'cb.activa',
+                'cb.moneda',
+                'b.nombre as banco',
+            )
             .first()) as {
             id: number
+            empresa_id: number
             alias: string
             cuenta_id: number
             activa: boolean
@@ -224,6 +258,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         }
         return {
             ...vacio,
+            empresa_id: Number(cuenta.empresa_id),
             cuenta_bancaria_id: cuenta.id,
             cuenta_id: cuenta.cuenta_id,
             nombre: `${cuenta.banco} · ${cuenta.alias}`,

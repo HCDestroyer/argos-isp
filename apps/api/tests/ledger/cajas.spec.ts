@@ -103,6 +103,7 @@ test.group('ledger · cajas y turnos', () => {
             .whereRaw(`(payload->>'caja_id')::bigint = ?`, [cajaId])
             .firstOrFail()
         assert.deepEqual(evento.payload, {
+            empresa_id: 1,
             caja_id: cajaId,
             cajero_id: usuario.id,
             esperado: '350.00',

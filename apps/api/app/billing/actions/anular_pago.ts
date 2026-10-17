@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { MetodoPago } from '#shared/eventos'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -26,6 +27,8 @@ import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
  *   vencido). Las filas de `pagos_aplicaciones` quedan como historia del pago anulado.
  * - Pago de terceros: revierte también los auxiliares CxC de los dueños de las facturas (el
  *   reverso es espejo del asiento) y re-evalúa sus servicios.
+ * - Multiempresa: anula solo ESTE pago (de una empresa); los demás pagos de su cobro siguen
+ *   vigentes. 403 `empresa_no_permitida` si el pago es de una empresa fuera del alcance.
  * - Evento `pago.anulado` (con `clientes`); luego aplica otros anticipos del cliente si los hay y re-evalúa cada
  *   servicio afectado (puede volver a limitar o cortar, respetando la hora de corte).
  */
@@ -61,14 +64,19 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             .from('billing.pagos')
             .where('id', input.pago_id)
             .forUpdate()
-            .select('id', 'cliente_id', 'metodo', 'monto', 'estado')
+            .select('id', 'empresa_id', 'cobro_id', 'cliente_id', 'metodo', 'monto', 'estado')
             .firstOrFail()) as {
             id: number
+            empresa_id: number
+            cobro_id: number | null
             cliente_id: number
             metodo: MetodoPago
             monto: string
             estado: string
         }
+        const empresaId = Number(pago.empresa_id)
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
         if (pago.estado === 'anulado') {
             throw new ReglaNegocio(`El pago ${pago.id} ya está anulado`, 'pago_anulado')
         }
@@ -89,7 +97,15 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             )
             .orderBy('id', 'asc')
             .forUpdate()
-            .select('id', 'cliente_id', 'servicio_id', 'total', 'pagado', 'vencida_en')) as FacturaPendiente[]
+            .select(
+                'id',
+                'empresa_id',
+                'cliente_id',
+                'servicio_id',
+                'total',
+                'pagado',
+                'vencida_en',
+            )) as FacturaPendiente[]
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!
             await sumarAPagado(t.trx, factura, dec(aplicado.monto).negated())
@@ -129,6 +145,8 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
 
         await t.emit('pago.anulado', {
             pago_id: pago.id,
+            empresa_id: empresaId,
+            cobro_id: pago.cobro_id === null ? null : Number(pago.cobro_id),
             cliente_id: pago.cliente_id,
             monto: pago.monto,
             metodo: pago.metodo,
@@ -136,7 +154,7 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             clientes: clientesDelPago(pago.cliente_id, facturas),
         })
 
-        const otras = await aplicarAnticipos(t, pago.cliente_id)
+        const otras = await aplicarAnticipos(t, pago.cliente_id, empresaId)
         const servicios: ResultadoAnularPago['servicios'] = []
         for (const servicioId of serviciosDe([...facturas, ...otras])) {
             const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, {

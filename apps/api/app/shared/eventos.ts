@@ -27,8 +27,13 @@ export type CanalNotificacion = 'correo' | 'telegram' | 'whatsapp'
 /** Monto decimal serializado, p. ej. "150.00". Nunca `number`. */
 export type Dinero = string
 
+/**
+ * Multiempresa (A3, 2026-10-17): todos los eventos de billing y ledger llevan `empresa_id`, la
+ * empresa (NIT) del documento. Aditivo: los consumidores que no lo lean no cambian.
+ */
 interface PayloadFactura {
     factura_id: number
+    empresa_id: number
     servicio_id: number | null
     cliente_id: number
     total: Dinero
@@ -38,6 +43,10 @@ interface PayloadFactura {
 
 interface PayloadPago {
     pago_id: number
+    /** un pago es de una sola empresa; un cobro de caja que cubre varias emite un evento por pago */
+    empresa_id: number
+    /** cobro de caja repartido por empresa (`billing.cobros`); null si el pago no vino de un cobro */
+    cobro_id: number | null
     /** quien paga */
     cliente_id: number
     monto: Dinero
@@ -54,6 +63,7 @@ interface PayloadPago {
 /** Nota de crédito interna (A3, semana 3): reduce el saldo de `factura_id` y la CxC del cliente. */
 interface PayloadNotaCredito {
     nota_credito_id: number
+    empresa_id: number
     factura_id: number
     servicio_id: number | null
     cliente_id: number
@@ -63,6 +73,7 @@ interface PayloadNotaCredito {
 
 interface PayloadPromesa {
     promesa_id: number
+    empresa_id: number
     servicio_id: number
     /** instante ISO 8601 */
     vence: string
@@ -72,6 +83,7 @@ interface PayloadPromesa {
 /** Comprobante de depósito (A3, día 4). `pago_id` solo al aprobar; `motivo` solo al rechazar. */
 interface PayloadComprobante {
     comprobante_id: number
+    empresa_id: number
     cliente_id: number
     pago_id: number | null
     motivo: string | null
@@ -207,6 +219,7 @@ export interface CatalogoEventos {
     // ledger (A3)
     'caja.cerrada': {
         caja_id: number
+        empresa_id: number
         cajero_id: number | null
         esperado: Dinero
         contado: Dinero

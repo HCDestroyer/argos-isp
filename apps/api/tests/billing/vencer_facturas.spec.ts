@@ -55,6 +55,7 @@ test.group('billing · vencerFacturas', () => {
         const eventos = await eventosDe('factura.vencida', 'servicio_id', servicioId)
         assert.lengthOf(eventos, 1)
         assert.deepEqual(eventos[0].payload, {
+            empresa_id: 1,
             factura_id: facturas[0]!.id,
             servicio_id: servicioId,
             cliente_id: clienteId,

@@ -82,6 +82,7 @@ test.group('billing · promesas: crear y evaluar', () => {
 
         const [creada] = await eventosDe('promesa.creada', 'promesa_id', promesa.id)
         assert.deepEqual(creada.payload, {
+            empresa_id: 1,
             promesa_id: promesa.id,
             servicio_id: servicioId,
             vence: gt('2026-10-12T18:00').toISOString(),

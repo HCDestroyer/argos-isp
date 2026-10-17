@@ -1,3 +1,5 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
@@ -53,6 +55,7 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
                 { field: 'cliente_id', message: `El cliente ${input.cliente_id} no existe`, rule: 'exists' },
             ])
         }
+        let empresaServicio: number | null = null
         if (input.servicio_id) {
             const servicio = await t.trx
                 .from('core.servicios')
@@ -64,18 +67,34 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
                     { field: 'servicio_id', message: 'El servicio no es de este cliente', rule: 'exists' },
                 ])
             }
+            empresaServicio = Number(servicio.empresa_id)
         }
 
         const facturas = [...new Set(input.facturas ?? [])]
+        // el pago en línea no mezcla empresas: las del servicio, la activa o las del alcance
+        const empresasCliente =
+            empresaServicio !== null
+                ? [empresaServicio]
+                : t.ctx.empresaId
+                  ? [t.ctx.empresaId]
+                  : (t.ctx.empresasPermitidas ?? null)
         const filas = (await t.trx
             .from('billing.facturas')
             .whereIn('estado', ['emitida', 'parcial', 'vencida'])
             .if(
                 facturas.length > 0,
                 (q) => q.whereIn('id', facturas),
-                (q) => q.where('cliente_id', cliente.id),
+                (q) =>
+                    q
+                        .where('cliente_id', cliente.id)
+                        .if(empresasCliente !== null, (w) => w.whereIn('empresa_id', empresasCliente!)),
             )
-            .select('id', 'total', 'pagado')) as Array<{ id: number; total: string; pagado: string }>
+            .select('id', 'empresa_id', 'total', 'pagado')) as Array<{
+            id: number
+            empresa_id: number
+            total: string
+            pagado: string
+        }>
         const faltantes = facturas
             .map((id, i) => ({ id, i }))
             .filter(({ id }) => !filas.some((f) => f.id === id))
@@ -88,6 +107,17 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
                 })),
             )
         }
+        const empresas = [...new Set(filas.map((f) => Number(f.empresa_id)))]
+        if (empresas.length > 1) {
+            throw new ReglaNegocio(
+                `Las facturas son de varias empresas (${empresas.join(', ')}): el pago en línea no mezcla empresas; indica las facturas o el servicio de una sola`,
+                'pago_de_varias_empresas',
+            )
+        }
+        const empresaId =
+            empresas[0] ?? empresaServicio ?? t.ctx.empresaId ?? (await resolverEmpresaActiva(t.ctx, t.trx))
+        exigirAccesoEmpresa(t.ctx, empresaId)
+        t.fijarEmpresa(empresaId)
         const pendiente = filas.reduce((suma, f) => suma.plus(pendienteDe(f)), CERO)
 
         const monto = input.monto ? dec(input.monto) : pendiente
@@ -108,6 +138,7 @@ export default class CrearCobroPasarela extends DomainAction<EntradaCrearCobroPa
             .insertQuery()
             .table('billing.pasarela_cobros')
             .insert({
+                empresa_id: empresaId,
                 proveedor,
                 cliente_id: cliente.id,
                 servicio_id: input.servicio_id ?? null,

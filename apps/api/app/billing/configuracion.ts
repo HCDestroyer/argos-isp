@@ -13,6 +13,8 @@ import { aplicarExcepciones, type ConfiguracionFacturacion } from '#billing/exce
 
 export interface ServicioFacturable {
     id: number
+    /** empresa (NIT) que factura el servicio */
+    empresa_id: number
     cliente_id: number
     plan_id: number
     plan_nombre: string
@@ -30,6 +32,7 @@ export interface ServicioFacturable {
 
 interface FilaServicio {
     id: number
+    empresa_id: number
     cliente_id: number
     plan_id: number
     plan_nombre: string
@@ -54,6 +57,7 @@ export async function leerServicio(
         .where('s.id', servicioId)
         .select(
             's.id',
+            's.empresa_id',
             's.cliente_id',
             's.plan_id',
             'p.nombre as plan_nombre',
@@ -71,6 +75,7 @@ export async function leerServicio(
     if (!fila) throw new NoEncontrado(`El servicio ${servicioId} no existe`)
     return {
         id: fila.id,
+        empresa_id: Number(fila.empresa_id),
         cliente_id: fila.cliente_id,
         plan_id: fila.plan_id,
         plan_nombre: fila.plan_nombre,

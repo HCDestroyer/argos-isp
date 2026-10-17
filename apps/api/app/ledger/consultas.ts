@@ -18,16 +18,21 @@ const COLUMNAS_CUENTA = [
     'padre_id',
     'imputable',
     'auxiliar_cliente',
+    'empresa_id',
     'activa',
     'version',
     'created_at',
     'updated_at',
 ] as const
 
-export async function listarCuentas() {
+/** Plan de cuentas: el catálogo común y las subcuentas de las empresas pedidas (null = todas). */
+export async function listarCuentas(empresas: number[] | null = null) {
     return db
         .from('ledger.cuentas')
         .select(...COLUMNAS_CUENTA)
+        .if(empresas !== null, (q) =>
+            q.where((w) => w.whereNull('empresa_id').orWhereIn('empresa_id', empresas!)),
+        )
         .orderBy('codigo', 'asc')
 }
 
@@ -46,6 +51,7 @@ export interface FiltrosDiario extends OpcionesPaginacion {
 
 interface FilaAsiento {
     id: number
+    empresa_id: number
     fecha: string
     descripcion: string
     origen_tipo: string
@@ -59,6 +65,7 @@ interface FilaAsiento {
 function columnasAsiento(cliente: QueryClientContract) {
     return [
         'a.id',
+        'a.empresa_id',
         cliente.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
         'a.descripcion',
         'a.origen_tipo',
@@ -93,11 +100,13 @@ export async function verAsiento(id: number, cliente: QueryClientContract = db.c
     return { ...conReverso(asiento), movimientos: movimientos.get(id) ?? [] }
 }
 
-export async function libroDiario(filtros: FiltrosDiario) {
+/** `empresas`: las del libro a mostrar (`empresasDeLaLista`); null = todas (consolidado). */
+export async function libroDiario(filtros: FiltrosDiario, empresas: number[] | null = null) {
     const conexion = db.connection()
     const consulta = conexion
         .from('ledger.asientos as a')
         .select(...columnasAsiento(conexion))
+        .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
         .if(filtros.desde, (q) => q.where('a.fecha', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('a.fecha', '<=', filtros.hasta!))
         .if(filtros.origen_tipo, (q) => q.where('a.origen_tipo', filtros.origen_tipo!))
@@ -161,6 +170,7 @@ export interface FiltrosMayor extends OpcionesPaginacion {
 interface FilaMayor {
     movimiento_id: number
     asiento_id: number
+    empresa_id: number
     fecha: string
     descripcion: string
     debe: string
@@ -177,7 +187,7 @@ export function saldoSegunNaturaleza(tipo: string, debe: Dec, haber: Dec): Dec {
  * Mayor de una cuenta (o auxiliar de un cliente), en orden de registro. Cada línea lleva el saldo
  * acumulado; `saldo_inicial` es lo anterior a `desde` y `saldo_final` el saldo hasta `hasta`.
  */
-export async function libroMayor(filtros: FiltrosMayor) {
+export async function libroMayor(filtros: FiltrosMayor, empresas: number[] | null = null) {
     const cuenta = (await db
         .from('ledger.cuentas')
         .where('id', filtros.cuenta_id)
@@ -190,6 +200,7 @@ export async function libroMayor(filtros: FiltrosMayor) {
             .from('ledger.movimientos as m')
             .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
             .where('m.cuenta_id', filtros.cuenta_id)
+            .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
             .if(filtros.cliente_id, (q) => q.where('m.cliente_id', filtros.cliente_id!))
             .if(filtros.hasta, (q) => q.where('a.fecha', '<=', filtros.hasta!))
 
@@ -218,6 +229,7 @@ export async function libroMayor(filtros: FiltrosMayor) {
         enRango().select(
             'm.id as movimiento_id',
             'm.asiento_id',
+            'a.empresa_id',
             db.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
             'a.descripcion',
             'm.debe',
@@ -250,21 +262,46 @@ export async function libroMayor(filtros: FiltrosMayor) {
 
 /**
  * Saldo del cliente = suma de sus movimientos en CxC (debe − haber). Positivo = nos debe.
- * Nunca una columna.
+ * Nunca una columna. Multiempresa: el saldo es por empresa (`empresaId`); sin ella, el consolidado
+ * de todas sus empresas (solo informativo: cada NIT cobra lo suyo).
  */
 export async function saldoCliente(
     clienteId: number,
     cliente: QueryClientContract = db.connection(),
+    empresaId: number | null = null,
 ): Promise<Dec> {
     const fila = (await cliente
         .from('ledger.movimientos as m')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
         .where('c.codigo', CUENTAS.CXC_CLIENTES)
         .where('m.cliente_id', clienteId)
+        .if(empresaId !== null, (q) => q.where('a.empresa_id', empresaId!))
         .select(
             cliente.raw('coalesce(sum(m.debe), 0)::text as debe'),
             cliente.raw('coalesce(sum(m.haber), 0)::text as haber'),
         )
         .first()) as { debe: string; haber: string }
     return dec(fila.debe).minus(dec(fila.haber))
+}
+
+/** Saldo CxC del cliente en cada empresa donde tiene movimientos (`empresa_id → saldo`). */
+export async function saldoClientePorEmpresa(
+    clienteId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<Map<number, Dec>> {
+    const filas = (await cliente
+        .from('ledger.movimientos as m')
+        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
+        .where('c.codigo', CUENTAS.CXC_CLIENTES)
+        .where('m.cliente_id', clienteId)
+        .groupBy('a.empresa_id')
+        .orderBy('a.empresa_id', 'asc')
+        .select(
+            'a.empresa_id',
+            cliente.raw('coalesce(sum(m.debe), 0)::text as debe'),
+            cliente.raw('coalesce(sum(m.haber), 0)::text as haber'),
+        )) as Array<{ empresa_id: number; debe: string; haber: string }>
+    return new Map(filas.map((f) => [Number(f.empresa_id), dec(f.debe).minus(dec(f.haber))]))
 }

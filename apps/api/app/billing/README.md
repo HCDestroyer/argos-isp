@@ -2,6 +2,17 @@
 
 Plantillas de facturación, facturas, pagos, promesas, `evaluarEstadoServicio` y crons. Todo lo que mueve dinero termina en el libro (`app/ledger`).
 
+## Multiempresa (varios NIT)
+
+Cada documento es de **una** empresa (`empresa_id`): la factura, la mora, la nota de crédito y la promesa toman la del servicio; el pago, la de sus facturas (o la de su cuenta bancaria); el comprobante, la de su cuenta bancaria; el cobro en línea, la de sus facturas. Contrato completo y tabla de orígenes en `.claude/integration/contratos/multiempresa.md` § «Implementación de billing y ledger».
+
+- `empresa.ts`: `exigirAcceso(ctx, dimensiones)` (alcance + empresa de un documento en una ruta, 403 `empresa_no_permitida`), `empresaDeImportacion`, `resumenEmpresas`, `emisorDeFactura` (datos fiscales para FEL).
+- **Cobro repartido** (`registrar_pago.ts`): un cobro en efectivo que cubre facturas de varias empresas se divide en un pago por empresa (mismo `cobro_id`, `billing.cobros`), cada uno con su caja abierta en esa empresa (422 `caja_no_abierta` con la empresa en `errors[0].rule`), su asiento y su `pago.registrado`. Métodos bancarios: 422 `cuenta_de_otra_empresa`; pasarela, agente y débito: 422 `pago_de_varias_empresas`. Recibo: `GET /cobros/:id` (`cobros_vista.ts`).
+- Anticipos y saldo a favor por empresa (`aplicarAnticipos(t, cliente, empresaId)`).
+- Listas con `empresasDeLaLista` + `filtrarPorEmpresa` y `?empresas=todas`; reportes y dashboard con columna de empresa en el consolidado (`EmpresasReporte`).
+- `saldoPendienteServicio(servicioId)` en `facturas.ts` (para `servicios.cambiar_empresa` de A1).
+- Pruebas: `tests/billing/multiempresa.spec.ts` (aislamiento, cobro repartido, `caja_no_abierta`, `cuenta_de_otra_empresa` y triggers, cierre por empresa, balance y consolidado, reportes, importación).
+
 ## Plantillas de facturación
 
 | Acción              | Archivo                       | Permiso                                            |
@@ -260,7 +271,7 @@ Japa contra Postgres real; después de cada paso, el SELECT de control del libro
 | `tests/billing/comprobantes.spec.ts`                                               | Tipo por contenido; registrar desde el portal (archivo en disco, evento, auditoría sin contenido, cola y archivo del panel); aprobar (pago, asiento a la subcuenta, reactivación, 409 al repetir); `facturas[]` y excedente; rechazar (motivo, notificación, referencia libre); referencia duplicada; archivo inválido y datos por método |
 | `tests/ledger/cajas.spec.ts`                                                       | Alcance por caja, turnos, cierre exacto, faltante y sobrante                                                                                                                                                                                                                                                                              |
 
-Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace test --files tests/billing --files tests/ledger`.
+Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace test --files='billing/*' --files='ledger/*'` (el filtro de Japa compara por segmentos: `tests/billing` sola no selecciona nada).
 
 ## Endpoints
 
@@ -274,6 +285,7 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 | POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
 | POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
 | GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
+| GET      | `/api/v1/cobros/:id`                              | `pagos.ver`                |
 | POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |
 | POST     | `/api/v1/pagos/:id/anular`                        | `pagos.anular`             |
 | GET      | `/api/v1/promesas`                                | `promesas.ver`             |
@@ -298,6 +310,6 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=3433 node ace te
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`.
 
 Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

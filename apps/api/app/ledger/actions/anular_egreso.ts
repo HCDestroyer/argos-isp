@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
@@ -22,8 +23,14 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
 
     protected async handle(input: EntradaAnularEgreso, t: Transaccion): Promise<EgresoVista> {
         t.fijarEntidad('egreso', input.egreso_id)
-        const egreso = await t.trx.from('ledger.egresos').where('id', input.egreso_id).select('id').first()
+        const egreso = await t.trx
+            .from('ledger.egresos')
+            .where('id', input.egreso_id)
+            .select('id', 'empresa_id')
+            .first()
         if (!egreso) throw new NoEncontrado(`El egreso ${input.egreso_id} no existe`)
+        exigirAccesoEmpresa(t.ctx, Number(egreso.empresa_id))
+        t.fijarEmpresa(Number(egreso.empresa_id))
         // dos anulaciones simultáneas: el índice único de egreso_id deja pasar una sola
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3004, input.egreso_id])
         const previa = await t.trx.from('ledger.egresos_anulaciones').where('egreso_id', egreso.id).first()

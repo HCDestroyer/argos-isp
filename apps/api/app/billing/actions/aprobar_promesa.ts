@@ -1,3 +1,4 @@
+import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
@@ -40,15 +41,18 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
             .from('billing.promesas')
             .where('id', input.promesa_id)
             .forUpdate()
-            .select('id', 'servicio_id', 'estado', 'vence_en', 'monto', 'aprobada_por')
+            .select('id', 'empresa_id', 'servicio_id', 'estado', 'vence_en', 'monto', 'aprobada_por')
             .firstOrFail()) as {
             id: number
+            empresa_id: number
             servicio_id: number
             estado: string
             vence_en: Date
             monto: string
             aprobada_por: number | null
         }
+        exigirAccesoEmpresa(t.ctx, Number(promesa.empresa_id))
+        t.fijarEmpresa(Number(promesa.empresa_id))
         if (promesa.estado !== 'pendiente_aprobacion') {
             throw new Conflicto(
                 `La promesa ${promesa.id} está ${promesa.estado}; solo se aprueban las pendientes`,
@@ -101,6 +105,7 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
 
         await t.emit('promesa.creada', {
             promesa_id: promesa.id,
+            empresa_id: Number(promesa.empresa_id),
             servicio_id: promesa.servicio_id,
             vence: new Date(promesa.vence_en).toISOString(),
             monto: promesa.monto,
