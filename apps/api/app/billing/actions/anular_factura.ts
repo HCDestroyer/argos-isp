@@ -7,6 +7,18 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { bloquearCliente } from '#billing/cobros'
 import { columnasFactura, type FacturaFila } from '#billing/facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import { hoyGuatemala } from '#ledger/fechas'
+import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } from '#fiscal/fel/dte'
+import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
+
+/** Bloquea el DTE sin esperar: si el worker lo está enviando, 409 `dte_en_proceso`. */
+async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
+    try {
+        await t.trx.rawQuery('SELECT id FROM fiscal.dte WHERE id = ? FOR UPDATE NOWAIT', [dteId])
+    } catch {
+        throw new DteEnProceso(dteId)
+    }
+}
 
 /**
  * `facturas.anular` (`POST /facturas/:id/anular`, permiso `facturas.anular`, con motivo).
@@ -20,11 +32,23 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  * - Evento `factura.anulada` y re-evaluación del servicio: si ya no le quedan vencidas, se
  *   reactiva en la misma transacción.
  * - La `clave_unica` del periodo sigue ocupada: `generarFacturas` no vuelve a emitir ese periodo.
+ * - FEL (contrato de localización fiscal §8.3): con DTE certificado, dentro de
+ *   `dte_anulacion_plazo` el DTE pasa a `anulacion_pendiente` y la factura se anula cuando el
+ *   certificador lo confirma (`fel.anular_dte`, en dos pasos); fuera de plazo 422
+ *   `anulacion_fuera_de_plazo` (sugiere nota de crédito). Un DTE aún sin certificar se descarta
+ *   (`rechazado` local, `documento_anulado`). La reclasificación del IVA del aviso se revierte con la
+ *   factura: `2.1.11` y `2.1.02` quedan como antes de emitirla. Una `por_certificar` (sin asiento)
+ *   no emite `factura.anulada`.
  */
 
 export interface EntradaAnularFactura {
     factura_id: number
     motivo: string
+    /**
+     * interno: el certificador ya confirmó la anulación del DTE (`fel.anular_dte`); se completa la
+     * anulación de la factura
+     */
+    tras_anular_dte?: boolean
 }
 
 export default class AnularFactura extends DomainAction<EntradaAnularFactura, FacturaFila> {
@@ -106,6 +130,105 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
 
         const motivo = input.motivo.trim()
         const anular = facturas.filter((f) => f.estado !== 'anulada')
+
+        // FEL: el DTE de cada documento del grupo (la factura y sus moras con NDEB)
+        const dtes: DteFila[] = []
+        for (const f of anular) {
+            const dte = await dteVigente(t.trx, f.tipo === 'mora' ? 'nota_debito' : 'factura', f.id)
+            if (dte) dtes.push(dte)
+        }
+        const certificados = dtes.filter(
+            (d) => d.estado === 'certificado' || d.estado === 'anulacion_pendiente',
+        )
+        if (!input.tras_anular_dte && certificados.length > 0) {
+            const principal = certificados.find((d) => d.documento_id === factura.id)
+            if (!principal || certificados.length > 1) {
+                throw new Conflicto(
+                    `La factura ${factura.id} tiene recargos de mora certificados como nota de débito: anúlalos primero`,
+                    'factura_con_ndeb',
+                    'Factura con nota de débito',
+                )
+            }
+            if (principal.estado === 'anulacion_pendiente') {
+                throw new Conflicto(
+                    `La anulación del DTE de la factura ${factura.id} ya se envió al certificador`,
+                    'anulacion_en_proceso',
+                    'Anulación en proceso',
+                )
+            }
+            const limite = finPlazoAnulacion(principal.certificado_en ?? principal.fecha_emision)
+            if (hoyGuatemala() > limite) throw new AnulacionFueraDePlazo(limite)
+            await bloquearDte(t, principal.id)
+            await t.trx
+                .from('fiscal.dte')
+                .where('id', principal.id)
+                .update({
+                    estado: 'anulacion_pendiente',
+                    motivo_anulacion: motivo,
+                    proximo_intento: t.trx.knexRawQuery('now()'),
+                    intentos: 0,
+                    version: t.trx.knexRawQuery('version + 1'),
+                    updated_at: t.trx.knexRawQuery('now()'),
+                } as Record<string, unknown>)
+            await t.registrarCambios(
+                { tipo: 'dte', id: principal.id },
+                { estado: 'certificado' },
+                { estado: 'anulacion_pendiente' },
+            )
+            t.fijarEntidad('factura', factura.id)
+            return (await t.trx
+                .from('billing.facturas as f')
+                .where('f.id', factura.id)
+                .select(...columnasFactura(t.trx))
+                .firstOrFail()) as FacturaFila
+        }
+        // DTE que aún no se enviaron: se descartan sin enviar
+        for (const dte of dtes.filter((d) =>
+            ['pendiente', 'error_temporal', 'contingencia'].includes(d.estado),
+        )) {
+            await bloquearDte(t, dte.id)
+            await t.trx
+                .from('fiscal.dte')
+                .where('id', dte.id)
+                .update({
+                    estado: 'rechazado',
+                    ultimo_error: ERROR_DOCUMENTO_ANULADO,
+                    definitivo: true,
+                    proximo_intento: null,
+                    version: t.trx.knexRawQuery('version + 1'),
+                    updated_at: t.trx.knexRawQuery('now()'),
+                } as Record<string, unknown>)
+            await t.emit('dte.rechazado', {
+                dte_id: dte.id,
+                empresa_id: dte.empresa_id,
+                documento_tipo: dte.documento_tipo,
+                documento_id: dte.documento_id,
+                error: `${ERROR_DOCUMENTO_ANULADO}: la factura se anuló antes de certificarse`,
+                definitivo: true,
+            })
+        }
+        const reclasificaciones = (await t.trx
+            .from('ledger.asientos as a')
+            .where('a.origen_tipo', 'reclasificacion')
+            .whereIn(
+                'a.origen_id',
+                dtes.map((d) => d.id),
+            )
+            .whereNull('a.reversa_de')
+            .whereNotExists((q) => q.from('ledger.asientos as r').whereRaw('r.reversa_de = a.id'))
+            .orderBy('a.id', 'asc')
+            .select('a.id')) as Array<{ id: number }>
+        for (const asiento of reclasificaciones) {
+            await new RevertirAsiento().execute(
+                {
+                    asiento_id: asiento.id,
+                    motivo: `anulación del DTE de la factura ${factura.id}: ${motivo}`,
+                    por_anulacion: true,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
         for (const f of anular) {
             const asientos = (await t.trx
                 .from('ledger.asientos as a')
@@ -143,6 +266,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 { estado: f.estado },
                 { estado: 'anulada' },
             )
+            if (f.estado === 'por_certificar') continue
             await t.emit('factura.anulada', {
                 factura_id: f.id,
                 empresa_id: Number(f.empresa_id),
