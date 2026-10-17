@@ -208,6 +208,7 @@ onMounted(cargar)
                                 :categorias="series.categorias"
                                 :categorias-largas="series.categoriasLargas"
                                 :series="series.montos"
+                                :hallazgo="hallazgoMontos(resumen)"
                             />
                             <UEmpty
                                 v-else
@@ -233,6 +234,7 @@ onMounted(cargar)
                                 :categorias="series.categorias"
                                 :categorias-largas="series.categoriasLargas"
                                 :series="series.conteos"
+                                :hallazgo="hallazgoConteos(resumen)"
                                 formato="entero"
                             />
                             <UEmpty

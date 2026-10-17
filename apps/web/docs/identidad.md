@@ -76,3 +76,14 @@ Nunca `primary` para un estado. Siempre `UBadge variant="subtle"` (salvo bandera
 Rechazos (comprobante, promesa) son `neutral`: son finales y no piden acción al operador. La
 decisión de la evaluación de una promesa sí usa `error` cuando la rechaza, porque el servicio sigue
 cortado.
+
+## Gráficas
+
+- Series con la paleta categórica de la skill (`utils/paletaGraficas.ts`, copia de
+  `chart-palette.ts`: cinco ranuras en orden fijo, valor por tema, re-tematiza sin recargar) y
+  rejilla, ejes y etiquetas con `CHART_INK`. La escala secuencial (antigüedad de cartera) es propia
+  del panel, de un solo tono. Nunca un color de estado como serie.
+- Cada gráfica lleva título (`h3` de la tarjeta), una frase con el hallazgo principal (`hallazgo`,
+  también como `aria-describedby` del SVG; `hallazgoMontos` y `hallazgoConteos` en
+  `utils/dashboard.ts`) y la tabla alternativa ("Ver tabla").
+- Los reportes (`/reportes/:reporte`) son tablas con exportación XLSX/CSV; hoy no tienen gráficas.

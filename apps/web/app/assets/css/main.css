@@ -495,26 +495,6 @@
     }
 }
 
-/* Series 2 y 3 y escala secuencial de `GraficaColumnas` (pasan a utils/paletaGraficas.ts). */
-:root,
-.light {
-    --viz-2: #eb6834;
-    --viz-3: #1baf7a;
-    --viz-sec-1: #86b6ef;
-    --viz-sec-2: #3987e5;
-    --viz-sec-3: #1c5cab;
-    --viz-sec-4: #0d366b;
-}
-
-.dark {
-    --viz-2: #d95926;
-    --viz-3: #199e70;
-    --viz-sec-1: #184f95;
-    --viz-sec-2: #2a78d6;
-    --viz-sec-3: #6da7ec;
-    --viz-sec-4: #b7d3f6;
-}
-
 @media (prefers-reduced-transparency: reduce) {
     .chrome-material,
     .glass-material {
