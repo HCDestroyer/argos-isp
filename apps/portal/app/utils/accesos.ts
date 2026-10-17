@@ -21,8 +21,9 @@ import type { RouteLocationRaw } from 'vue-router'
  * aparezca un momento después que ofrecer algo que falle.
  *
  * Multiempresa (contrato `.claude/integration/contratos/multiempresa.md`): los accesos marcados
- * `alcance: 'empresa'` se calculan por grupo de servicios de una misma empresa (pago en línea,
- * cuentas y contacto son de la empresa que factura); `alcance: 'cliente'` va una sola vez.
+ * `alcance: 'empresa'` se calculan por grupo de servicios de una misma empresa con los datos de
+ * ESA empresa (`GET /portal/empresa?empresa_id=`: pago en línea, cuentas, instrucciones y
+ * soporte); `alcance: 'cliente'` va una sola vez.
  */
 
 export type IdAcceso = 'pagar' | 'comprobante' | 'deposito' | 'promesa' | 'facturas' | 'telegram' | 'soporte'
@@ -159,12 +160,23 @@ export function accesosRapidos(entrada: EntradaAccesos): AccesoRapido[] {
     return accesos
 }
 
-/** Soporte: llamar al primer teléfono de la empresa (funciona con el servicio cortado) o `/contacto`. */
-export function soporteDe(empresa: Parameters<typeof enlacesContacto>[0]): EntradaAccesos['soporte'] {
+/**
+ * Soporte: llamar al primer teléfono de la empresa (funciona con el servicio cortado) o su página
+ * de contacto (`/contacto`, o `/contacto?empresa=<id>` para una empresa concreta en `/cuenta`).
+ */
+export function soporteDe(
+    empresa: Parameters<typeof enlacesContacto>[0],
+    rutaContacto = '/contacto',
+): EntradaAccesos['soporte'] {
     const telefono = enlacesContacto(empresa).find(enlace => enlace.tipo === 'telefono')
     return telefono
         ? { etiqueta: `Llamar al ${telefono.valor}`, to: telefono.to, externo: true }
-        : { etiqueta: 'Teléfonos, correo y horario', to: '/contacto', externo: false }
+        : { etiqueta: 'Teléfonos, correo y horario', to: rutaContacto, externo: false }
+}
+
+/** Página de contacto de una empresa concreta (`/cuenta` con varias empresas). */
+export function rutaContactoEmpresa(empresaId: number | null | undefined): string {
+    return empresaId ? `/contacto?empresa=${empresaId}` : '/contacto'
 }
 
 /**

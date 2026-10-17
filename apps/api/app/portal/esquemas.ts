@@ -20,6 +20,27 @@ import { METODOS_PAGO } from '#shared/eventos'
  * nombre recortado, estado del servicio y montos. Nunca datos personales completos.
  */
 
+/**
+ * Marca de la empresa que factura (multiempresa): la del servicio o la de la factura. Sale también
+ * por la IP: son datos públicos de la empresa (los mismos del aviso de cobro), no del cliente.
+ */
+export const PortalMarcaEmpresa = definirEsquema(
+    'PortalMarcaEmpresa',
+    objeto({
+        id,
+        nombre_comercial: texto,
+        logo_url: {
+            ...nulable(texto),
+            description:
+                'Logo por el mismo origen del portal (`/api/v1/portal/empresas/:id/logo?v=…`); null sin logo',
+        },
+        nit: nulable(texto),
+        direccion_fiscal: nulable(texto),
+        telefono: { ...nulable(texto), description: 'Teléfono de soporte' },
+        whatsapp: { ...nulable(texto), description: 'WhatsApp de soporte' },
+    }),
+)
+
 export const FacturasVencidasResumen = definirEsquema(
     'FacturasVencidasResumen',
     objeto({
@@ -45,6 +66,10 @@ export const QuienSoy = definirEsquema(
                 'Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas)',
         },
         facturas_vencidas: nulable(FacturasVencidasResumen),
+        empresa: {
+            ...nulable(PortalMarcaEmpresa),
+            description: 'Empresa del servicio de esa IP (su marca y su soporte); null sin identificar',
+        },
     }),
 )
 
@@ -92,6 +117,10 @@ export const PortalSesion = definirEsquema(
     objeto({
         cliente: objeto({ nombre_parcial: nulable(texto) }),
         expira_en: { ...instante, description: 'Vence por inactividad; cada consulta la extiende' },
+        empresa_principal: {
+            ...PortalMarcaEmpresa,
+            description: 'Empresa con más servicios sin retirar del cliente (título y marca del portal)',
+        },
     }),
 )
 
@@ -141,6 +170,7 @@ export const PortalServicio = definirEsquema(
         direccion: nulable(texto),
         promesa_activa: booleano,
         monto_adeudado: Dinero,
+        empresa: { ...PortalMarcaEmpresa, description: 'Empresa que factura este servicio' },
     }),
 )
 
@@ -149,7 +179,15 @@ export const PortalCuenta = definirEsquema(
     objeto({
         cliente: PortalContacto,
         servicios: lista(PortalServicio),
-        monto_adeudado: { ...Dinero, description: 'Saldo pendiente de todos los servicios' },
+        monto_adeudado: {
+            ...Dinero,
+            description:
+                'Saldo pendiente de todos los servicios (solo informativo con varias empresas: cada una cobra lo suyo)',
+        },
+        empresa_principal: {
+            ...PortalMarcaEmpresa,
+            description: 'Empresa con más servicios sin retirar (encabezado, título y manifiesto)',
+        },
     }),
 )
 
@@ -176,6 +214,7 @@ export const PortalFactura = definirEsquema(
         fel_uuid: nulable(texto),
         fel_serie: nulable(texto),
         fel_numero: nulable(texto),
+        empresa: { ...PortalMarcaEmpresa, description: 'Empresa que emite la factura' },
     }),
 )
 
@@ -346,11 +385,16 @@ export const CuentaDeposito = definirEsquema(
 export const EmpresaPublica = definirEsquema(
     'EmpresaPublica',
     objeto({
+        id: { ...id, description: 'Empresa de la que son estos datos' },
+        logo_url: {
+            ...nulable(texto),
+            description: 'Logo por el mismo origen del portal; null sin logo',
+        },
         ...camposEmpresa,
         cuentas_deposito: {
             ...lista(CuentaDeposito),
             description:
-                'Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran',
+                'Cuentas bancarias activas en quetzales de ESTA empresa para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran',
         },
         pago_en_linea: {
             ...booleano,

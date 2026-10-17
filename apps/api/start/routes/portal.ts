@@ -4,7 +4,8 @@
 |--------------------------------------------------------------------------
 */
 import type { HttpContext } from '@adonisjs/core/http'
-import { definirRuta, type Ruta } from '#shared/rutas'
+import db from '@adonisjs/lucid/services/db'
+import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import {
@@ -34,6 +35,7 @@ import {
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
+    empresaPortalValidator,
     iniciarPagoValidator,
     paginaPortalValidator,
     vistaPreviaDocumentoValidator,
@@ -47,6 +49,7 @@ import { DemasiadasPeticiones, limitarPorIp } from '#portal/limite_peticiones'
 import {
     borrarCookieSesion,
     clienteDeLaSesion,
+    clienteDeLaSesionSiHay,
     exigirSesionPortal,
     ponerCookieSesion,
 } from '#portal/acceso/sesion'
@@ -64,6 +67,10 @@ import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento
 import EditarEmpresa from '#portal/actions/editar_empresa'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
 import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
+import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#portal/marca'
+import { resolverServicio } from '#portal/consultas'
+import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
+import { leerArchivoLogo } from '#core/logos'
 import {
     avisoCobroPdf,
     pdfDesdePlantilla,
@@ -668,26 +675,97 @@ const pagosEnLinea: Ruta[] = [
     }),
 ]
 
+/**
+ * Empresa de `GET /portal/empresa` (multiempresa): `empresa_id` explícito (404 si no existe); con
+ * `de=cliente`, la principal del cliente de la sesión (401 sin ella); sin parámetros, la del
+ * servicio de la IP de origen, si no la principal del cliente de la sesión, si no la principal.
+ */
+async function empresaDeLaPeticion(
+    ctx: HttpContext,
+    ip: string,
+    query: { empresa_id?: number; de?: 'cliente' },
+): Promise<number> {
+    if (query.empresa_id !== undefined) {
+        await filaEmpresa(query.empresa_id)
+        return query.empresa_id
+    }
+    if (query.de === 'cliente') return empresaPrincipalDelCliente(await clienteDeLaSesion(ctx))
+    const servicioId = await resolverServicio(db.connection(), ip)
+    const porIp = servicioId ? await empresaDelServicio(servicioId) : null
+    if (porIp !== null) return porIp
+    const clienteId = await clienteDeLaSesionSiHay(ctx)
+    return clienteId === null ? EMPRESA_PRINCIPAL : empresaPrincipalDelCliente(clienteId)
+}
+
 const empresa: Ruta[] = [
     definirRuta({
         metodo: 'get',
         ruta: '/portal/empresa',
         operacion: 'portalEmpresa',
-        resumen: 'Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)',
-        descripcion: `Sin login: es información pública de la empresa. ${SOBRE_LA_IP}`,
+        resumen: 'Marca, contacto, instrucciones de pago y cuentas para depósito de una empresa',
+        descripcion:
+            'Sin login: es información pública de la empresa (la de sus avisos de cobro). Multiempresa: con ' +
+            '`empresa_id`, esa empresa (404 si no existe); con `de=cliente`, la principal del cliente de la ' +
+            'sesión (401 sin sesión); sin parámetros, la del servicio de la IP de origen (página de corte), ' +
+            'si no la principal del cliente de la sesión, si no la principal de la instalación. Las cuentas ' +
+            `de depósito son solo las de esa empresa. ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
         permiso: null,
+        query: empresaPortalValidator,
         respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaPublica },
-        handler: async (ctx) => {
-            await ipDelCliente(ctx, 'empresa')
-            const datos = await leerEmpresa()
+        handler: async (ctx, { query }) => {
+            const ip = await ipDelCliente(ctx, 'empresa')
+            const empresaId = await empresaDeLaPeticion(ctx, ip, query)
+            const datos = await leerEmpresa(undefined, empresaId)
+            const { logo_etag: etag } = await filaEmpresa(empresaId)
             return {
+                id: empresaId,
+                logo_url: urlLogoPortal(empresaId, etag),
                 ...datos,
-                cuentas_deposito: await fuenteCuentasDeposito().activas(),
+                cuentas_deposito: await fuenteCuentasDeposito().activas(empresaId),
+                // La pasarela es una sola para la instalación; cada cobro lleva facturas de una empresa.
                 pago_en_linea: pagoEnLineaDisponible(),
             }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/empresas/:id/logo',
+        operacion: 'portalEmpresaLogo',
+        resumen: 'Logo de una empresa por el mismo origen del portal (walled garden)',
+        descripcion:
+            'El mismo archivo que `GET /empresas/:id/logo`, bajo `/portal` para que el cliente suspendido lo ' +
+            'alcance. `ETag` y caché larga (la URL lleva `?v=<etag>`); con `If-None-Match` igual responde ' +
+            `304. 404 si la empresa no existe o no tiene logo. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Imagen del logo', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'logo')
+            const id = Number(params.id)
+            if (!Number.isSafeInteger(id) || id < 1) throw new NoEncontrado('La empresa no existe')
+            const fila = await filaEmpresa(id)
+            if (!fila.logo || !fila.logo_tipo || !fila.logo_etag) {
+                throw new NoEncontrado('La empresa no tiene logo')
+            }
+            // `ipDelCliente` pone no-store; el logo cambia de URL al cambiar (`?v=`), se puede guardar.
+            ctx.response.header('Cache-Control', 'public, max-age=86400')
+            ctx.response.header('ETag', `"${fila.logo_etag}"`)
+            ctx.response.header('X-Content-Type-Options', 'nosniff')
+            if (etagCoincide(ctx, fila.logo_etag)) return sinCambios()
+            const contenido = await leerArchivoLogo(fila.logo)
+            ctx.response.header('Content-Type', fila.logo_tipo)
+            if (fila.logo_tipo === 'image/svg+xml') {
+                ctx.response.header(
+                    'Content-Security-Policy',
+                    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                )
+            }
+            return contenido
         },
     }),
     definirRuta({

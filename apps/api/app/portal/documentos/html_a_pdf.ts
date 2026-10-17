@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit'
 import { Parser } from 'htmlparser2'
+import SVGtoPDF from 'svg-to-pdfkit'
 
 /**
  * HTML → PDF sin navegador (pdfkit + htmlparser2), para el aviso de cobro (tarea 8).
@@ -15,8 +16,18 @@ import { Parser } from 'htmlparser2'
  * - En línea: `strong`/`b`, `em`/`i`, `small`, `span`.
  * - Clases: `derecha`, `centro`, `tenue` (gris), `grande`, `negrita`, `caja` (tabla con borde),
  *   `sin-borde`. `style` admite `text-align`, `font-weight: bold`, `font-size: Npx|Npt`, `color: #rgb`.
- * - Se ignoran `script`, `style`, `head`, `title`, `img` y atributos desconocidos.
+ * - Imágenes: solo `<img src="clave">` con una clave de `opciones.imagenes` (hoy `empresa:logo`, el
+ *   logo de la empresa del documento, PNG o SVG saneado), como bloque propio (no dentro de una
+ *   tabla), con `height` (pt, 48 por defecto, de 12 a 120) y `width` opcional; `class="centro"` o
+ *   `"derecha"` la alinea. Nunca se descarga nada: un `src` que no está en el mapa se ignora.
+ * - Se ignoran `script`, `style`, `head`, `title` y atributos desconocidos.
  */
+
+/** Imagen que el documento puede dibujar con `<img src="clave">`. */
+export interface ImagenPdf {
+    tipo: 'image/png' | 'image/svg+xml'
+    contenido: Buffer
+}
 
 interface Nodo {
     tag: string
@@ -224,7 +235,57 @@ function normalizar(lista: Tramo[]): Tramo[] {
 type Doc = InstanceType<typeof PDFDocument>
 
 class Renderizador {
-    constructor(private readonly doc: Doc) {}
+    constructor(
+        private readonly doc: Doc,
+        private readonly imagenes: Record<string, ImagenPdf> = {},
+    ) {}
+
+    /** `<img src="clave">` del mapa de imágenes, como bloque; lo demás se ignora. */
+    imagen(nodo: Nodo, x: number, ancho: number): void {
+        const imagen = this.imagenes[nodo.attrs.src ?? '']
+        if (!imagen) return
+        const numero = (valor: string | undefined) => {
+            const n = Number.parseFloat(valor ?? '')
+            return Number.isFinite(n) && n > 0 ? n : null
+        }
+        const alto = Math.min(120, Math.max(12, numero(nodo.attrs.height) ?? 48))
+        const caja = Math.min(ancho, numero(nodo.attrs.width) ?? ancho / 2)
+        this.saltoSiHaceFalta(alto + 6)
+        const c = clases(nodo)
+        const alinear = c.has('centro') ? 'center' : c.has('derecha') ? 'right' : 'left'
+        const y = this.doc.y
+        try {
+            if (imagen.tipo === 'image/png') {
+                // tamaño en la cabecera IHDR del PNG (ancho y alto, 4 bytes cada uno desde el byte 16)
+                const anchoPng = imagen.contenido.readUInt32BE(16)
+                const altoPng = imagen.contenido.readUInt32BE(20)
+                const escala = Math.min(caja / anchoPng, alto / altoPng)
+                const w = anchoPng * escala
+                const posicion =
+                    alinear === 'right' ? x + ancho - w : alinear === 'center' ? x + (ancho - w) / 2 : x
+                this.doc.image(imagen.contenido, posicion, y, { width: w, height: altoPng * escala })
+            } else {
+                const posicion =
+                    alinear === 'right' ? x + ancho - caja : alinear === 'center' ? x + (ancho - caja) / 2 : x
+                const aspecto =
+                    alinear === 'right'
+                        ? 'xMaxYMin meet'
+                        : alinear === 'center'
+                          ? 'xMidYMin meet'
+                          : 'xMinYMin meet'
+                SVGtoPDF(this.doc as never, imagen.contenido.toString('utf8'), posicion, y, {
+                    width: caja,
+                    height: alto,
+                    preserveAspectRatio: aspecto,
+                })
+            }
+        } catch {
+            // Un logo dañado no impide el documento: queda el nombre de la empresa en texto.
+            return
+        }
+        this.doc.x = x
+        this.doc.y = y + alto + 6
+    }
 
     get ancho(): number {
         return this.doc.page.width - this.doc.page.margins.left - this.doc.page.margins.right
@@ -330,6 +391,11 @@ class Renderizador {
         for (const hijo of nodo.hijos) {
             if (typeof hijo === 'string') {
                 enLinea.push({ texto: hijo.replace(/\s+/g, ' '), estilo })
+                continue
+            }
+            if (hijo.tag === 'img') {
+                vaciar()
+                this.imagen(hijo, x, ancho)
                 continue
             }
             if (IGNORADOS.has(hijo.tag)) continue
@@ -502,6 +568,8 @@ export interface OpcionesPdf {
     titulo?: string
     /** comprimir los flujos del PDF (por defecto sí; las pruebas lo apagan para leer el texto) */
     comprimir?: boolean
+    /** imágenes que la plantilla puede dibujar con `<img src="clave">` (el logo de la empresa) */
+    imagenes?: Record<string, ImagenPdf>
 }
 
 /** Convierte el HTML (ya renderizado con Mustache) en un PDF tamaño carta. */
@@ -520,7 +588,7 @@ export function htmlAPdf(html: string, opciones: OpcionesPdf = {}): Promise<Buff
     })
     const raiz = parsearHtml(html)
     const cuerpo = buscar(raiz, 'body') ?? raiz
-    new Renderizador(doc).bloque(cuerpo, BASE, MARGEN, doc.page.width - MARGEN * 2)
+    new Renderizador(doc, opciones.imagenes).bloque(cuerpo, BASE, MARGEN, doc.page.width - MARGEN * 2)
     doc.end()
     return listo
 }

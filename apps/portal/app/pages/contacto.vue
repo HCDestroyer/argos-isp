@@ -2,8 +2,16 @@
 /**
  * Contacto de la empresa, configurado en el panel (`GET /portal/empresa`): teléfonos, WhatsApp,
  * correo, horario y dirección. Si no se pudo leer, error con "Reintentar".
+ *
+ * Multiempresa: `?empresa=<id>` muestra el de esa empresa (el soporte de un grupo de `/cuenta`); sin
+ * él, la que decide la API (la del servicio de la IP, o la principal del cliente o de la instalación).
  */
-const { empresa, problema, cargando, nombre, recargar } = useEmpresa()
+const route = useRoute()
+const empresaPedida = computed(() => {
+    const valor = Number(route.query.empresa)
+    return Number.isSafeInteger(valor) && valor > 0 ? valor : undefined
+})
+const { empresa, problema, cargando, nombre, recargar } = useEmpresa({ empresaId: empresaPedida })
 
 useHead({ title: computed(() => `Contacto · ${nombre.value}`) })
 
@@ -38,6 +46,27 @@ const enlaces = computed(() => enlacesContacto(empresa.value))
         />
 
         <template v-else-if="empresa">
+            <div
+                class="flex items-center gap-3"
+                data-testid="contacto-empresa"
+            >
+                <PortalMarcaEmpresa
+                    :nombre="empresa.nombre"
+                    :logo-url="empresa.logo_url"
+                    class="size-10"
+                />
+                <div class="min-w-0">
+                    <p class="truncate font-semibold text-highlighted">
+                        {{ empresa.nombre }}
+                    </p>
+                    <p
+                        v-if="empresa.nit"
+                        class="truncate text-xs text-muted"
+                    >
+                        NIT {{ empresa.nit }}
+                    </p>
+                </div>
+            </div>
             <div
                 v-if="enlaces.length > 0"
                 class="flex flex-col gap-2"

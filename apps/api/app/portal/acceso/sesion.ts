@@ -53,6 +53,20 @@ export async function clienteDeLaSesion(ctx: HttpContext): Promise<number> {
     return sesion.clienteId
 }
 
+/**
+ * `clienteId` de la sesión si la petición trae una vigente; `null` sin cookie o con una vencida
+ * (rutas públicas que solo la usan para elegir la marca, como `GET /portal/empresa`).
+ */
+export async function clienteDeLaSesionSiHay(ctx: HttpContext): Promise<number | null> {
+    if (!tokenDeLaPeticion(ctx)) return null
+    try {
+        return await clienteDeLaSesion(ctx)
+    } catch (error) {
+        if (error instanceof SesionPortalRequerida) return null
+        throw error
+    }
+}
+
 export class SesionPortalRequerida extends NoAutenticado {
     constructor(detalle = 'Entra con el código que te enviamos para ver esta información.') {
         super(detalle)

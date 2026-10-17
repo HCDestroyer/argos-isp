@@ -1882,10 +1882,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)
-         * @description Sin login: es información pública de la empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * Marca, contacto, instrucciones de pago y cuentas para depósito de una empresa
+         * @description Sin login: es información pública de la empresa (la de sus avisos de cobro). Multiempresa: con `empresa_id`, esa empresa (404 si no existe); con `de=cliente`, la principal del cliente de la sesión (401 sin sesión); sin parámetros, la del servicio de la IP de origen (página de corte), si no la principal del cliente de la sesión, si no la principal de la instalación. Las cuentas de depósito son solo las de esa empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalEmpresa"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/empresas/{id}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Logo de una empresa por el mismo origen del portal (walled garden)
+         * @description El mismo archivo que `GET /empresas/:id/logo`, bajo `/portal` para que el cliente suspendido lo alcance. `ETag` y caché larga (la URL lleva `?v=<etag>`); con `If-None-Match` igual responde 304. 404 si la empresa no existe o no tiene logo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalEmpresaLogo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3898,6 +3918,10 @@ export interface components {
             updated_at: string;
         };
         EmpresaPublica: {
+            /** @description Empresa de la que son estos datos */
+            id: number;
+            /** @description Logo por el mismo origen del portal; null sin logo */
+            logo_url: string | null;
             nombre: string;
             nit: string | null;
             direccion: string | null;
@@ -3910,7 +3934,7 @@ export interface components {
             horario: string | null;
             /** @description Texto que acompaña los datos de depósito */
             instrucciones_pago: string | null;
-            /** @description Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
+            /** @description Cuentas bancarias activas en quetzales de ESTA empresa para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
             /** @description Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita) */
             pago_en_linea: boolean;
@@ -4649,8 +4673,10 @@ export interface components {
         PortalCuenta: {
             cliente: components["schemas"]["PortalContacto"];
             servicios: components["schemas"]["PortalServicio"][];
-            /** @description Saldo pendiente de todos los servicios */
+            /** @description Saldo pendiente de todos los servicios (solo informativo con varias empresas: cada una cobra lo suyo) */
             monto_adeudado: components["schemas"]["Dinero"];
+            /** @description Empresa con más servicios sin retirar (encabezado, título y manifiesto) */
+            empresa_principal: components["schemas"]["PortalMarcaEmpresa"];
         };
         PortalFactura: {
             id: number;
@@ -4681,6 +4707,8 @@ export interface components {
             fel_uuid: string | null;
             fel_serie: string | null;
             fel_numero: string | null;
+            /** @description Empresa que emite la factura */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
         };
         PortalFacturaDetalle: components["schemas"]["PortalFactura"] & {
             lineas: components["schemas"]["PortalFacturaLinea"][];
@@ -4692,6 +4720,18 @@ export interface components {
             precio_unitario: components["schemas"]["Dinero"];
             iva: components["schemas"]["Dinero"];
             total: components["schemas"]["Dinero"];
+        };
+        PortalMarcaEmpresa: {
+            id: number;
+            nombre_comercial: string;
+            /** @description Logo por el mismo origen del portal (`/api/v1/portal/empresas/:id/logo?v=…`); null sin logo */
+            logo_url: string | null;
+            nit: string | null;
+            direccion_fiscal: string | null;
+            /** @description Teléfono de soporte */
+            telefono: string | null;
+            /** @description WhatsApp de soporte */
+            whatsapp: string | null;
         };
         PortalPago: {
             id: number;
@@ -4755,6 +4795,8 @@ export interface components {
             direccion: string | null;
             promesa_activa: boolean;
             monto_adeudado: components["schemas"]["Dinero"];
+            /** @description Empresa que factura este servicio */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
         };
         PortalSesion: {
             cliente: {
@@ -4765,6 +4807,8 @@ export interface components {
              * @description Vence por inactividad; cada consulta la extiende
              */
             expira_en: string;
+            /** @description Empresa con más servicios sin retirar del cliente (título y marca del portal) */
+            empresa_principal: components["schemas"]["PortalMarcaEmpresa"];
         };
         PortalSolicitudCodigo: {
             /**
@@ -4850,6 +4894,8 @@ export interface components {
             /** @description Suma del saldo de las facturas pendientes del servicio (emitidas, parciales y vencidas) */
             monto_adeudado: components["schemas"]["Dinero"] | null;
             facturas_vencidas: components["schemas"]["FacturasVencidasResumen"] | null;
+            /** @description Empresa del servicio de esa IP (su marca y su soporte); null sin identificar */
+            empresa: components["schemas"]["PortalMarcaEmpresa"] | null;
         };
         RecordatorioPago: {
             id: number;
@@ -13334,7 +13380,12 @@ export interface operations {
     };
     portalEmpresa: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Esta empresa (la de un servicio o una factura de `/cuenta`) */
+                empresa_id?: number;
+                /** @description `cliente`: la empresa principal del cliente de la sesión (401 sin sesión) */
+                de?: "cliente";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13348,6 +13399,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmpresaPublica"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalEmpresaLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen del logo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */

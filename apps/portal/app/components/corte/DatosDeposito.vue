@@ -4,12 +4,21 @@
  * `billing.cuentas_bancarias`, A3; la API no envía las de USD) e instrucciones de pago, ambas
  * configuradas en el panel (`GET /portal/empresa`). Cada cuenta: banco, alias, moneda y número.
  *
+ * Multiempresa: son las de UNA empresa (`empresaId` en `/cuenta`; en `/corte`, la del servicio de la
+ * IP), con su nombre en el título cuando se conoce: no se cruzan dineros entre NIT.
+ *
  * Sin cuentas no se muestra la sección de cuentas (nunca datos inventados). Si no se pudo leer
  * la configuración, error con "Reintentar".
  */
+const props = withDefaults(defineProps<{
+    empresaId?: number
+}>(), {
+    empresaId: undefined,
+})
+
 const open = defineModel<boolean>('open', { default: false })
 
-const { empresa, problema, cargando, recargar } = useEmpresa()
+const { empresa, problema, cargando, recargar } = useEmpresa({ empresaId: () => props.empresaId })
 const toast = useToast()
 
 const cuentas = computed(() => empresa.value?.cuentas_deposito ?? [])
@@ -29,7 +38,7 @@ async function copiar(numero: string) {
 <template>
     <UModal
         v-model:open="open"
-        title="Datos para depósito"
+        :title="empresa ? `Datos para depósito · ${empresa.nombre}` : 'Datos para depósito'"
         :description="cuentas.length > 0
             ? 'Deposita a cualquiera de estas cuentas y guarda tu comprobante.'
             : 'Así puedes pagar tu saldo.'"
