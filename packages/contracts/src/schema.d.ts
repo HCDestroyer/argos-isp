@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Iniciar sesión
-         * @description Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
+         * @description Límite de intentos por IP (todos, también los de cuerpo inválido) y por usuario (fallidos): 429 `demasiados_intentos` con `Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.
          */
         post: operations["authLogin"];
         delete?: never;

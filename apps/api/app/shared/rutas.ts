@@ -100,6 +100,12 @@ export interface DefinicionRuta<
     versionada?: boolean
     /** tiene límite de peticiones y puede responder 429 con `Retry-After` */
     limitada?: boolean
+    /**
+     * Gancho que corre después de autenticar, autorizar e idempotencia, pero **antes** de validar
+     * cuerpo y query con VineJS. Para el límite de peticiones: un cuerpo inválido (422) también
+     * consume el cupo. Si lanza, ni se valida ni corre el handler.
+     */
+    antes?: (ctx: HttpContext) => Promise<void>
     handler?: (ctx: HttpContext, entrada: EntradaHandler<Salida<VC>, Salida<VQ>>) => Promise<unknown>
 }
 
@@ -143,8 +149,9 @@ export function esStatusRedireccion(status: number): boolean {
     return status >= 300 && status < 400
 }
 
-/** Ejecuta validación y handler (o 501) para una ruta montada. */
+/** Ejecuta el gancho `antes`, la validación y el handler (o 501) para una ruta montada. */
 export async function despachar(ruta: Ruta, ctx: HttpContext) {
+    if (ruta.antes) await ruta.antes(ctx)
     // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined
     const query = ruta.query ? await ruta.query.validate(ctx.request.qs()) : undefined

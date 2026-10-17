@@ -12,7 +12,7 @@ import { pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
-import { conLimiteLogin } from '#core/auth/limite_login'
+import { conLimiteLogin, contarIpLogin } from '#core/auth/limite_login'
 import {
     borrarCookieSesionPanel,
     csrfDeSesion,
@@ -98,10 +98,12 @@ const auth: Ruta[] = [
         seguridad: 'publico',
         permiso: null,
         descripcion:
-            'Límite de intentos por IP (todos) y por usuario (fallidos): 429 `demasiados_intentos` con ' +
+            'Límite de intentos por IP (todos, también los de cuerpo inválido) y por usuario (fallidos): ' +
+            '429 `demasiados_intentos` con ' +
             '`Retry-After`. Variables `LOGIN_LIMITE_IP`, `LOGIN_LIMITE_USUARIO`, `LOGIN_LIMITE_VENTANA_S`.',
         cuerpo: v.loginValidator,
         limitada: true,
+        antes: contarIpLogin(),
         respuesta: { status: 200, descripcion: 'Sesión iniciada', esquema: Sesion },
         handler: async (ctx, { cuerpo }) => {
             const sesion = await conLimiteLogin(ctx, cuerpo.email, () =>
@@ -126,6 +128,7 @@ const auth: Ruta[] = [
             'Contrato: `.claude/integration/contratos/sesion-panel.md`.',
         cuerpo: v.loginValidator,
         limitada: true,
+        antes: contarIpLogin(),
         respuesta: { status: 200, descripcion: 'Sesión iniciada; cookie puesta', esquema: SesionPanel },
         handler: async (ctx, { cuerpo }) => {
             verificarOrigenLogin(ctx)

@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import type { HttpContext } from '@adonisjs/core/http'
+import vine from '@vinejs/vine'
 import { construirOpenApi } from '#shared/openapi/documento'
 import { generarOpenApi } from '#shared/openapi/generador'
 import { definirRuta, despachar, redirigir, type Ruta } from '#shared/rutas'
@@ -38,6 +39,62 @@ function ctxFalso(cuerpo: Record<string, unknown> = {}) {
     } as unknown as HttpContext
     return { ctx, registro }
 }
+
+test.group('Rutas: gancho antes de validar', () => {
+    const validador = vine.compile(vine.object({ nombre: vine.string().minLength(2) }))
+
+    test('corre antes de VineJS: un cuerpo inválido también pasa por el gancho', async ({ assert }) => {
+        const llamadas: string[] = []
+        const ruta = definirRuta({
+            metodo: 'post',
+            ruta: '/prueba/antes',
+            operacion: 'pruebaAntes',
+            resumen: 'prueba',
+            etiqueta: 'prueba',
+            seguridad: 'publico',
+            permiso: null,
+            cuerpo: validador,
+            limitada: true,
+            antes: async () => {
+                llamadas.push('antes')
+            },
+            respuesta: { status: 200, descripcion: 'ok', esquema: { type: 'object' } },
+            handler: async () => {
+                llamadas.push('handler')
+                return {}
+            },
+        })
+        await assert.rejects(() => despachar(ruta, ctxFalso({ nombre: 1 }).ctx))
+        assert.deepEqual(llamadas, ['antes'])
+
+        await despachar(ruta, ctxFalso({ nombre: 'válido' }).ctx)
+        assert.deepEqual(llamadas, ['antes', 'antes', 'handler'])
+    })
+
+    test('si el gancho lanza (429), no se valida ni corre el handler', async ({ assert }) => {
+        let validado = false
+        const ruta = definirRuta({
+            metodo: 'post',
+            ruta: '/prueba/antes',
+            operacion: 'pruebaAntes',
+            resumen: 'prueba',
+            etiqueta: 'prueba',
+            seguridad: 'publico',
+            permiso: null,
+            cuerpo: validador,
+            antes: async () => {
+                throw new Error('429 simulado')
+            },
+            respuesta: { status: 200, descripcion: 'ok', esquema: { type: 'object' } },
+            handler: async () => {
+                validado = true
+                return {}
+            },
+        })
+        await assert.rejects(() => despachar(ruta, ctxFalso({ nombre: 'válido' }).ctx), /429 simulado/)
+        assert.isFalse(validado)
+    })
+})
 
 test.group('Rutas: redirección 303', () => {
     test('el handler devuelve redirigir(url) y despachar pone 303 y Location', async ({ assert }) => {
