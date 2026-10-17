@@ -13,6 +13,8 @@ import CrearServicio from '#core/actions/crear_servicio'
 import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import type { ContextoAccion } from '#shared/contexto'
+import { construirVariables } from '#notify/variables'
+import { leerEmpresa } from '#portal/empresa'
 
 /**
  * Multiempresa, paso 2: `empresa_id` del servicio (resolución servicio > zona > router > empresa
@@ -333,5 +335,44 @@ test.group('Multiempresa: servicios.cambiar_empresa', (group) => {
             422,
         )
         assert.include(r.body().type, 'empresa_con_servicios')
+    })
+})
+
+test.group('Multiempresa: marca de la empresa del servicio', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('notificaciones y documentos toman los datos de la empresa del servicio', async ({ assert }) => {
+        const norte = await crearEmpresaFila({ nombre_comercial: 'Cable Norte', telefono: '7764-0000' })
+        const e = await escenario()
+        const servicio = await new CrearServicio().execute(
+            { cliente_id: e.clienteId, router_id: e.routerId, plan_id: e.planId, empresa_id: norte },
+            contextoPrueba(),
+        )
+        const destinatario = {
+            clienteId: e.clienteId,
+            nombre: 'Ana',
+            email: null,
+            canalPreferido: 'correo' as const,
+            telegramChatId: null,
+        }
+        const porServicio = await construirVariables(
+            db.connection(),
+            'servicio.estado_cambiado',
+            { servicio_id: servicio.id },
+            destinatario,
+        )
+        assert.include(porServicio.empresa as Record<string, unknown>, {
+            nombre: 'Cable Norte',
+            telefono: '7764-0000',
+        })
+        const porPayload = await construirVariables(
+            db.connection(),
+            'servicio.creado',
+            { servicio_id: servicio.id, empresa_id: 1 },
+            destinatario,
+        )
+        assert.notEqual((porPayload.empresa as Record<string, unknown>).nombre, 'Cable Norte')
+        const datos = await leerEmpresa(undefined, norte)
+        assert.equal(datos.nombre, 'Cable Norte')
     })
 })
