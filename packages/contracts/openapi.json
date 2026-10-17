@@ -10267,10 +10267,12 @@
                         "type": "boolean"
                       },
                       {
-                        "type": "array"
+                        "type": "array",
+                        "items": {}
                       },
                       {
-                        "type": "object"
+                        "type": "object",
+                        "additionalProperties": true
                       }
                     ],
                     "description": "Valor según el tipo del parámetro: porcentaje y monto como string decimal (\"12.00\", \"2500.00\"), entero, bool, fecha YYYY-MM-DD, texto, una de las opciones (enum) u objeto/lista con la forma del valor del paquete (json)"
@@ -34013,7 +34015,8 @@
           "version",
           "disponible",
           "actualizacion_disponible",
-          "instalaciones"
+          "instalaciones",
+          "tipos_dte"
         ],
         "properties": {
           "empresa_id": {
@@ -34104,6 +34107,38 @@
               }
             },
             "description": "La vigente primero"
+          },
+          "tipos_dte": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "nombre",
+                "regimenes",
+                "fuente"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "description": "FACT, FCAM, FPEQ, FCAP, NCRE, NDEB…"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "regimenes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Regímenes que lo emiten"
+                },
+                "fuente": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Catálogo de tipos de DTE de la localización vigente (vacío sin localización)"
           }
         }
       },
@@ -39378,6 +39413,7 @@
           "disponible",
           "actualizacion_disponible",
           "instalaciones",
+          "tipos_dte",
           "resumen"
         ],
         "properties": {
@@ -39469,6 +39505,38 @@
               }
             },
             "description": "La vigente primero"
+          },
+          "tipos_dte": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "nombre",
+                "regimenes",
+                "fuente"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "description": "FACT, FCAM, FPEQ, FCAP, NCRE, NDEB…"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "regimenes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Regímenes que lo emiten"
+                },
+                "fuente": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Catálogo de tipos de DTE de la localización vigente (vacío sin localización)"
           },
           "resumen": {
             "type": "object",
