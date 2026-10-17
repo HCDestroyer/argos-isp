@@ -429,6 +429,8 @@ onMounted(cargar)
                     <UTable
                         v-else
                         :data="cobros"
+                        tabindex="0"
+                        aria-label="Cobros del turno"
                         :columns="columnasCobros"
                         :loading="cargandoCobros"
                     >
@@ -476,8 +478,11 @@ onMounted(cargar)
                     <h3 class="text-sm font-semibold text-highlighted">
                         Turnos de {{ caja.nombre }}
                     </h3>
+                    <!-- Con scroll horizontal en el teléfono: enfocable para moverlo con el teclado (axe). -->
                     <UTable
                         :data="historial.filas.value"
+                        tabindex="0"
+                        :aria-label="`Turnos de ${caja.nombre}`"
                         :columns="columnasTurnos"
                         :loading="historial.cargando.value"
                     >

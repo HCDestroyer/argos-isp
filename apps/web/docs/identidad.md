@@ -124,3 +124,16 @@ cortado.
 - `h1` con tracking −0,015 em (regla base); KPIs con −0,02 em; jerarquía por peso y tamaño en `rem`.
 - Montos en quetzales con dos decimales (`formatearQuetzales`) y fechas `dd/mm/aaaa HH:mm` en
   America/Guatemala (`formatearFecha`, `formatearFechaHora`, `formatearHora`).
+
+## Accesibilidad
+
+- `tests/e2e/accesibilidad.spec.ts` corre axe (`@axe-core/playwright`, reglas WCAG 2.0/2.1 A y AA,
+  contraste incluido) en el login y en inicio, clientes, ficha de cliente, servicios, ficha de
+  servicio, cobro, facturas, caja, reportes, reporte de cartera y migración de router, en claro y
+  en oscuro, a 1280 y 390 px. Además comprueba que el foco se ve (contorno de 2 px, `:focus-visible`).
+- Lo que encontró y se corrigió: el enlace al cliente dentro del subtítulo de la ficha del
+  servicio solo se distinguía por color (ahora subrayado) y tres tablas con scroll horizontal en el
+  teléfono no se podían mover con el teclado (caja y reportes: `tabindex="0"` con `aria-label`).
+- Sobre vidrio, axe no puede calcular el fondo real (lo deja como "incompleto"); el contraste de
+  esas regiones se apoya en los tonos de la skill (600–800 en claro, 300–400 en oscuro).
+

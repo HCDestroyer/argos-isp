@@ -284,7 +284,7 @@ onMounted(cargar)
                     Servicio #{{ servicio.id }} ·
                     <ULink
                         :to="enlace(`/clientes/${servicio.cliente_id}`)"
-                        class="text-default hover:text-primary"
+                        class="text-default underline underline-offset-2 hover:text-primary"
                     >
                         {{ nombreCliente(servicio) }}
                     </ULink>

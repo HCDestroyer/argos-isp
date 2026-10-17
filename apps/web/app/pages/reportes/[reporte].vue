@@ -625,6 +625,8 @@ onMounted(async () => {
                 class="max-h-[70vh]"
                 :ui="{ td: 'py-2 text-sm', th: 'py-2 text-xs', tfoot: 'bg-elevated/50' }"
                 data-prueba="tabla-reporte"
+                tabindex="0"
+                :aria-label="presentacion?.titulo ?? 'Reporte'"
             >
                 <template #empty>
                     <UEmpty
