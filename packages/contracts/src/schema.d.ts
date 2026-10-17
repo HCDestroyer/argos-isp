@@ -3231,6 +3231,10 @@ export interface components {
             resultado: "ok" | "error";
             error: string | null;
             request_id: string | null;
+            /** @description Empresa (NIT) de lo que se hizo, o la empresa activa de quien lo hizo; null si no es de ninguna (login, usuarios, clientes, sistema) */
+            empresa_id: number | null;
+            /** @description Nombre comercial de esa empresa (null sin empresa) */
+            empresa_nombre: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -6082,6 +6086,8 @@ export interface operations {
                 canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
                 /** @description Oculta las acciones de este canal (p. ej. portal) */
                 excluir_canal?: "panel" | "portal" | "api" | "ia" | "cron" | "worker" | "webhook" | "interno" | "consola";
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
             };
             header?: never;
             path?: never;
