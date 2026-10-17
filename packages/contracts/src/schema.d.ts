@@ -64,6 +64,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/sso/canjear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canjear un ticket de autologin (panel, /sso/entrar#<ticket>)
+         * @description Un uso, 60 s, ligado al conector que lo pidió (410 `ticket_invalido` si venció, se usó o el conector ya no está conectado). Con vinculación: cookie del panel como `POST /auth/sesion` (permisos, alcance y límites del usuario local) y `ruta` del destino. Sin vinculación: `vinculacion_requerida` y un token de vinculación para `POST /auth/sso/vincular`. Nunca vincula por correo. Mismo control de `Origin` y límite por IP que el login.
+         */
+        post: operations["authSsoCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sso/vincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Iniciar sesión y vincular la cuenta del otro sistema (autologin)
+         * @description Login normal (mismas credenciales, límite de intentos y cookie que `POST /auth/sesion`) con el token de `vinculacion_requerida` (10 min, un uso; 410 `vinculacion_invalida`). Si entra, guarda la vinculación y devuelve la `ruta` del destino.
+         */
+        post: operations["authSsoVincular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bancos": {
         parameters: {
             query?: never;
@@ -718,6 +758,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/empresas/{id}/cambiar-pais": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el país de la localización fiscal de la empresa
+         * @description Instala la localización del país nuevo en la misma transacción. 422 `pais_no_soportado` sin paquete; 409 `empresa_con_documentos` si ya tiene facturas, notas, pagos, asientos, egresos o documentos fiscales; 409 si `version` cambió. Mismo país: 200 sin cambios.
+         */
+        post: operations["empresasCambiarPais"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/empresas/{id}/desactivar": {
         parameters: {
             query?: never;
@@ -756,6 +816,26 @@ export interface paths {
          * @description `multipart/form-data` con el archivo `logo`: PNG o SVG de hasta 512 KB. El tipo se decide por el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni referencias externas; con DOCTYPE, entidades o mal formado, 422 en `logo`. `quitar=true` sin archivo lo quita.
          */
         post: operations["empresasCambiarLogo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empresas/paises": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Países con localización fiscal (selector de país)
+         * @description Los que se pueden elegir al crear una empresa o en `cambiar-pais`. Hoy solo GT. Contrato: `.claude/integration/contratos/localizacion-fiscal.md`.
+         */
+        get: operations["empresasPaises"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1138,6 +1218,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/horus/resolver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver un lote de IPs a servicio, cliente y empresa (Horus)
+         * @description De 1 a 500 IPv4 o IPv6 en el cuerpo (nunca en la URL), en una sola consulta. Misma regla que `GET /ip/:ip` (prefijo más largo; la sesión activa sobre la asignación). Una IP de nadie o de un servicio fuera del alcance del token (router, zona, empresas) responde `{ ip, error: "no_encontrada" }`. Cada llamada queda en la bitácora (`ip.resolver`) con los servicios y clientes devueltos.
+         */
+        post: operations["integracionesHorusResolver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/sso/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir un ticket de autologin para un usuario de Horus (servidor a servidor)
+         * @description Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje abre la sesión del usuario local vinculado, o pide su login.
+         */
+        post: operations["integracionesHorusSsoTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tokens de la integración Horus (sin su valor) */
+        get: operations["integracionesHorusTokens"];
+        put?: never;
+        /**
+         * Generar el token atk_ de Horus (se muestra una sola vez)
+         * @description Crea, la primera vez, el usuario técnico "Horus" y su rol `integracion_horus`. El token solo lleva `ip.resolver`, `clientes.ver` y `servicios.ver`, y opcionalmente routers o zonas. No revoca los anteriores.
+         */
+        post: operations["integracionesHorusGenerarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/tokens/{id}/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar un token de la integración Horus */
+        post: operations["integracionesHorusRevocarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -1432,6 +1590,40 @@ export interface paths {
         get: operations["me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/vinculaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mis vinculaciones de autologin con otros sistemas */
+        get: operations["meVinculaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/vinculaciones/{id}/quitar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quitar una de mis vinculaciones de autologin */
+        post: operations["meVinculacionesQuitar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3374,6 +3566,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vinculaciones/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar vinculaciones de autologin (todas, de un usuario o de un conector) */
+        post: operations["vinculacionesRevocar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/zonas": {
         parameters: {
             query?: never;
@@ -3687,6 +3896,31 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        CanjeSso: {
+            /**
+             * @description `sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`
+             * @enum {string}
+             */
+            resultado: "sesion" | "vinculacion_requerida";
+            /** @description Ruta local del panel del destino, p. ej. `/servicios/812` */
+            ruta: string;
+            /** @description Sistema que pidió el autologin (`horus`) */
+            conector: string;
+            /** @description Solo con `resultado: sesion` */
+            sesion: components["schemas"]["SesionPanel"] | null;
+            /** @description Solo con `resultado: vinculacion_requerida` */
+            vinculacion: {
+                /** @description Token de vinculación: 10 min, un solo uso */
+                token: string;
+                /** Format: date-time */
+                expira_en: string;
+                usuario_externo: {
+                    id_externo: string;
+                    correo: string | null;
+                    nombre: string | null;
+                };
+            } | null;
+        };
         CategoriaEgreso: {
             id: number;
             /** @enum {string} */
@@ -3734,12 +3968,30 @@ export interface components {
         };
         Cliente: {
             id: number;
+            /** @description Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan */
+            codigo?: string;
+            /** @description Código en el sistema anterior (importador); no reemplaza a `codigo` */
+            codigo_externo?: string | null;
             nombre: string;
             /** @enum {string} */
             tipo: "persona" | "empresa";
+            /**
+             * @description Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)
+             * @enum {string}
+             */
+            tipo_documento_fiscal?: "nit" | "cui" | "pasaporte" | "cf";
+            /** @description Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf */
             nit_cui: string | null;
+            /** @description true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo */
+            nit_cui_invalido?: boolean;
             nombre_fiscal: string | null;
             direccion_fiscal: string | null;
+            /** @description País del receptor (ISO 3166-1 alfa-2) */
+            pais_fiscal?: string;
+            /** @description Agente de retención de IVA */
+            agente_retencion_iva?: boolean;
+            /** @description Entidad del sector público */
+            sector_publico?: boolean;
             email: string | null;
             telefono: string | null;
             movil: string | null;
@@ -4181,8 +4433,14 @@ export interface components {
             instrucciones_pago: string | null;
             /** @description `#RRGGBB`; solo PDF y correo */
             color_marca: string | null;
-            /** @enum {string|null} */
+            /** @description País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan */
+            pais?: string;
+            /**
+             * @description Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen
+             * @enum {string|null}
+             */
             regimen_isr: "sujeto_pagos_trimestrales" | "retencion_definitiva" | "pequeno_contribuyente" | null;
+            /** @description Solo lectura (localización fiscal): establecimiento por defecto en la SAT */
             codigo_establecimiento: number | null;
             /** @description Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo */
             logo_url: string | null;
@@ -4608,6 +4866,45 @@ export interface components {
             pais: string;
             impuestos: components["schemas"]["ImpuestoFiscal"][];
         };
+        IpNoEncontradaHorus: {
+            ip: string;
+            /** @enum {string} */
+            error: "no_encontrada";
+        };
+        IpResueltaHorus: {
+            /** @description La IP tal como se pidió */
+            ip: string;
+            servicio_id: number;
+            cliente_id: number;
+            /** @description Asignación o sesión que contiene la IP (prefijo más largo) */
+            prefijo: string;
+            cliente: {
+                nombre: string;
+                /** @description Código estable del cliente (`C-000455`) */
+                codigo: string;
+                /** @enum {string} */
+                tipo: "persona" | "empresa";
+            };
+            servicio: {
+                user_ppp: string | null;
+                /** @description Nombre del plan */
+                plan: string;
+                /** @enum {string} */
+                estado: "activo" | "limitado" | "suspendido" | "retirado";
+                router_id: number;
+            };
+            empresa: {
+                id: number;
+                /** @description Nombre comercial de la empresa (NIT) del servicio */
+                nombre: string;
+                nit: string | null;
+            };
+            /**
+             * Format: date-time
+             * @description Inicio de la sesión o asignación vigente que contiene la IP
+             */
+            desde: string;
+        };
         Ipv6Bloque: {
             id: number;
             router_id: number;
@@ -4852,6 +5149,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PaisLocalizacion: {
+            /** @description ISO 3166-1 alfa-2 */
+            codigo: string;
+            nombre: string;
         };
         ParametroFiscal: {
             pais: string;
@@ -5905,6 +6207,10 @@ export interface components {
             /** @description Asignación que contiene la IP (prefijo más largo) */
             prefijo: string;
         };
+        ResolucionIpsHorus: {
+            /** @description Uno por IP pedida, en el mismo orden */
+            resultados: (components["schemas"]["IpResueltaHorus"] | components["schemas"]["IpNoEncontradaHorus"])[];
+        };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
             horas: string[];
@@ -6089,6 +6395,9 @@ export interface components {
             /** @description De esos servicios, los que tuvieron sesión viva en o después de `desde` */
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
+        };
+        RevocacionVinculaciones: {
+            revocadas: number;
         };
         Rol: {
             id: number;
@@ -6343,6 +6652,12 @@ export interface components {
         TelegramWebhookRespuesta: {
             ok: boolean;
         };
+        TicketSsoEmitido: {
+            /** @description `https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso */
+            url: string;
+            /** Format: date-time */
+            expira_en: string;
+        };
         TokenApi: {
             id: number;
             usuario_id: number;
@@ -6361,6 +6676,13 @@ export interface components {
             /** @description Se muestra una sola vez */
             token: string;
             datos: components["schemas"]["TokenApi"];
+        };
+        TokenHorusCreado: {
+            /** @description Valor `atk_…`; se muestra una sola vez */
+            token: string;
+            datos: components["schemas"]["TokenApi"];
+            /** @description Usuario técnico Horus */
+            usuario_id: number;
         };
         TramoAsignacion: {
             id: number;
@@ -6441,6 +6763,19 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VinculacionExterna: {
+            id: number;
+            conector: string;
+            /** @description Usuario en el otro sistema */
+            id_externo: string;
+            usuario_id: number;
+            correo_externo: string | null;
+            nombre_externo: string | null;
+            /** Format: date-time */
+            revocada_en: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         VistaPreviaControl: {
             router_id: number;
@@ -6635,6 +6970,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SesionPanel"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    authSsoCanjear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ticket: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta o vinculación requerida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeSso"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    authSsoVincular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token_vinculacion: string;
+                    /** Format: email */
+                    email: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta y cuenta vinculada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeSso"];
                 };
             };
             /** @description Datos inválidos */
@@ -7169,7 +7595,7 @@ export interface operations {
                 limit?: number;
                 /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
                 empresas?: "todas";
-                /** @description Busca por nombre, NIT/CUI, teléfono, user_ppp o IP */
+                /** @description Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
                 zona_id?: number;
                 /** @description Clientes con al menos un servicio en este estado */
@@ -7180,6 +7606,8 @@ export interface operations {
                 plan_id?: number;
                 /** @description true: con alguna factura vencida; false: sin ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal) */
+                nit_cui_invalido?: boolean;
                 /** @description true: con alguna promesa de pago activa; false: sin ninguna */
                 con_promesa_activa?: boolean;
                 /** @description Dependientes de este responsable de pago */
@@ -7248,10 +7676,21 @@ export interface operations {
                     nombre: string;
                     /** @enum {string} */
                     tipo?: "persona" | "empresa";
-                    /** @description NIT (con dígito verificador), CUI de 13 dígitos o CF */
+                    /**
+                     * @description Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)
+                     * @enum {string}
+                     */
+                    tipo_documento_fiscal?: "nit" | "cui" | "pasaporte" | "cf";
+                    /** @description NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios */
                     nit_cui?: string | null;
                     nombre_fiscal?: string | null;
                     direccion_fiscal?: string | null;
+                    /** @description País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte */
+                    pais_fiscal?: string;
+                    /** @description El cliente es agente de retención de IVA (retiene al pagar) */
+                    agente_retencion_iva?: boolean;
+                    /** @description Entidad del sector público (reglas propias de retención) */
+                    sector_publico?: boolean;
                     /** Format: email */
                     email?: string | null;
                     telefono?: string | null;
@@ -7265,6 +7704,8 @@ export interface operations {
                     };
                     /** @enum {string} */
                     canal_preferido?: "correo" | "telegram" | "whatsapp";
+                    /** @description Código del cliente en el sistema anterior (importador); no reemplaza a `codigo` */
+                    codigo_externo?: string | null;
                 };
             };
         };
@@ -7380,10 +7821,21 @@ export interface operations {
                     nombre?: string;
                     /** @enum {string} */
                     tipo?: "persona" | "empresa";
-                    /** @description NIT (con dígito verificador), CUI de 13 dígitos o CF */
+                    /**
+                     * @description Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)
+                     * @enum {string}
+                     */
+                    tipo_documento_fiscal?: "nit" | "cui" | "pasaporte" | "cf";
+                    /** @description NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios */
                     nit_cui?: string | null;
                     nombre_fiscal?: string | null;
                     direccion_fiscal?: string | null;
+                    /** @description País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte */
+                    pais_fiscal?: string;
+                    /** @description El cliente es agente de retención de IVA (retiene al pagar) */
+                    agente_retencion_iva?: boolean;
+                    /** @description Entidad del sector público (reglas propias de retención) */
+                    sector_publico?: boolean;
                     /** Format: email */
                     email?: string | null;
                     telefono?: string | null;
@@ -7397,6 +7849,8 @@ export interface operations {
                     };
                     /** @enum {string} */
                     canal_preferido?: "correo" | "telegram" | "whatsapp";
+                    /** @description Código del cliente en el sistema anterior (importador); no reemplaza a `codigo` */
+                    codigo_externo?: string | null;
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                 };
@@ -9280,6 +9734,8 @@ export interface operations {
                     nit: string;
                     razon_social: string;
                     nombre_comercial: string;
+                    /** @description País de la localización fiscal (por defecto GT; hoy solo GT, ver GET /empresas/paises). 422 `pais_no_soportado` sin paquete */
+                    pais?: string;
                     direccion_fiscal?: string | null;
                     municipio?: string | null;
                     departamento?: string | null;
@@ -9294,9 +9750,9 @@ export interface operations {
                     instrucciones_pago?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
-                    /** @description Régimen de ISR para las frases de FEL */
+                    /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
                     regimen_isr?: ("sujeto_pagos_trimestrales" | "retencion_definitiva" | "pequeno_contribuyente") | null;
-                    /** @description Código de establecimiento en la SAT (FEL) */
+                    /** @description Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos) */
                     codigo_establecimiento?: number | null;
                 };
             };
@@ -9430,9 +9886,9 @@ export interface operations {
                     instrucciones_pago?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
-                    /** @description Régimen de ISR para las frases de FEL */
+                    /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
                     regimen_isr?: ("sujeto_pagos_trimestrales" | "retencion_definitiva" | "pequeno_contribuyente") | null;
-                    /** @description Código de establecimiento en la SAT (FEL) */
+                    /** @description Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos) */
                     codigo_establecimiento?: number | null;
                 };
             };
@@ -9457,6 +9913,85 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso empresas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    empresasCambiarPais: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description País nuevo (ISO 3166-1 alfa-2); ver GET /empresas/paises */
+                    pais: string;
+                    /** @description version leída de la empresa; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Empresa con su país */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpresaGrupo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso empresas.cambiar_pais; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9682,6 +10217,44 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    empresasPaises: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Países */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaisLocalizacion"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso empresas.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11205,6 +11778,269 @@ export interface operations {
             };
         };
     };
+    integracionesHorusResolver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden */
+                    ips: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Un resultado por IP, en orden */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolucionIpsHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusSsoTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    usuario: {
+                        /** @description Id del usuario en Horus; con el conector forma la vinculación */
+                        id_externo: string;
+                        /** @description Solo informativo: nunca se vincula por correo */
+                        correo?: string | null;
+                        nombre?: string | null;
+                    };
+                    destino: {
+                        /** @enum {string} */
+                        tipo: "cliente" | "servicio" | "router";
+                        /** @description Id del recurso en ArgosIsp (cliente, servicio o router) */
+                        id_externo: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Ticket emitido */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketSsoEmitido"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens, los más nuevos primero */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso integraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusGenerarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre?: string;
+                    /** @description Restringe el token a servicios de estos routers */
+                    routers?: number[];
+                    /** @description Restringe el token a clientes de estas zonas */
+                    zonas?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Token generado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenHorusCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso integraciones.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusRevocarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revocado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso integraciones.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     internoAaaServicio: {
         parameters: {
             query: {
@@ -12139,6 +12975,84 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    meVinculaciones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vinculaciones vigentes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VinculacionExterna"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    meVinculacionesQuitar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vinculación revocada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VinculacionExterna"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16948,7 +17862,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "integraciones.generar_token" | "integraciones.revocar_token" | "integraciones.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -17006,7 +17920,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "integraciones.generar_token" | "integraciones.revocar_token" | "integraciones.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -19337,7 +20251,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "integraciones.generar_token" | "integraciones.revocar_token" | "integraciones.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
@@ -19743,6 +20657,62 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    vinculacionesRevocar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo las de este usuario; sin él, todas */
+                    usuario_id?: number;
+                    /** @enum {string} */
+                    conector?: "horus";
+                };
+            };
+        };
+        responses: {
+            /** @description Cuántas se revocaron */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevocacionVinculaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso vinculaciones.revocar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

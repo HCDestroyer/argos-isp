@@ -1,13 +1,13 @@
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { DefinicionCuenta } from '#ledger/plan_cuentas'
 
 /**
  * Localización fiscal (`contratos/localizacion-fiscal.md` §2 y §4).
  *
  * Un **paquete** (`l10n/<pais>/`) es código versionado: cuentas, parámetros con su vigencia,
- * régimenes, frases y tipos de DTE. Su `Instalador` lo aplica a una empresa insertando solo lo que
+ * régimenes, frases y tipos de DTE. `instalarPaquete` (`#fiscal/instalador`) lo aplica a una empresa insertando solo lo que
  * falta; nunca borra ni cambia una cuenta, un valor o una frase. Otro país = otra carpeta con la
- * misma interfaz, registrada en `INSTALADORES`.
+ * misma forma, en `ULTIMO_PAQUETE`. El núcleo la instala por su punto de extensión
+ * (`#core/localizacion`), que registra `#fiscal/instalador_localizacion`.
  */
 
 export const TIPOS_PARAMETRO = [
@@ -230,19 +230,4 @@ export interface OpcionesInstalacion {
     instaladaPor: number | null
     /** fecha (YYYY-MM-DD, Guatemala) de los valores de la empresa (`inicio_libros`, régimen migrado) */
     hoy: string
-}
-
-/**
- * Punto de extensión por país. A1 lo llama desde `empresas.cambiar_pais` (misma transacción);
- * la versión GT está en `l10n/gt/`.
- */
-export interface InstaladorLocalizacion {
-    readonly pais: string
-    /** versión más reciente del paquete de ese país */
-    readonly codigo: string
-    instalar(
-        trx: TransactionClientContract,
-        empresaId: number,
-        opciones: OpcionesInstalacion,
-    ): Promise<ResumenInstalacion>
 }

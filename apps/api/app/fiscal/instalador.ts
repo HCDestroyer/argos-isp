@@ -6,7 +6,6 @@ import { DESDE_PAQUETE } from '#fiscal/l10n/gt/parametros'
 import { PAQUETE_GT_2026_1 } from '#fiscal/l10n/gt/index'
 import type {
     DatosEmpresaInstalacion,
-    InstaladorLocalizacion,
     OpcionesInstalacion,
     PaqueteLocalizacion,
     ResumenInstalacion,
@@ -35,20 +34,21 @@ export const PAQUETES: Readonly<Record<string, PaqueteLocalizacion>> = {
     [PAQUETE_GT_2026_1.codigo]: PAQUETE_GT_2026_1,
 }
 
-/** Instalador por país: la versión más reciente de su paquete. */
-export const INSTALADORES: Readonly<Record<string, InstaladorLocalizacion>> = {
-    GT: {
-        pais: 'GT',
-        codigo: PAQUETE_GT_2026_1.codigo,
-        instalar: (trx, empresaId, opciones) => instalarPaquete(trx, PAQUETE_GT_2026_1, empresaId, opciones),
-    },
+/** Versión más reciente del paquete de cada país (la que instala el núcleo al crear la empresa). */
+export const ULTIMO_PAQUETE: Readonly<Record<string, PaqueteLocalizacion>> = {
+    GT: PAQUETE_GT_2026_1,
 }
 
-/** Instalador del país; 422 `pais_no_soportado` si no hay paquete. */
-export function instaladorDePais(pais: string): InstaladorLocalizacion {
-    const instalador = INSTALADORES[pais.toUpperCase()]
-    if (!instalador) throw new PaisNoSoportado(pais)
-    return instalador
+/** Países con paquete, en el orden del selector. */
+export function paisesConPaquete(): string[] {
+    return Object.keys(ULTIMO_PAQUETE)
+}
+
+/** Paquete más reciente del país; 422 `pais_no_soportado` si no hay. */
+export function paqueteDePais(pais: string): PaqueteLocalizacion {
+    const paquete = ULTIMO_PAQUETE[pais.toUpperCase()]
+    if (!paquete) throw new PaisNoSoportado(pais)
+    return paquete
 }
 
 /** sha256 del contenido del paquete (cuentas, parámetros, frases y tipos de DTE). */

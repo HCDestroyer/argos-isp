@@ -24,6 +24,38 @@ export interface SalidaIniciarSesion {
 }
 
 /**
+ * Emite el token de sesión de un usuario ya verificado: `cookie` (panel, vencimiento deslizante y
+ * tope de 72 h) o `bearer`. La usan el login y el autologin por ticket (`auth.sso_canjear`), así
+ * una sesión abierta desde otro sistema tiene exactamente los mismos límites.
+ */
+export async function emitirSesion(
+    usuario: Usuario,
+    modo: 'bearer' | 'cookie',
+    canal: string,
+): Promise<SalidaIniciarSesion> {
+    if (modo === 'cookie') {
+        const cfg = configSesionPanel()
+        const token = await Usuario.accessTokens.create(usuario, ['*'], {
+            name: NOMBRE_TOKEN_PANEL,
+            expiresIn: Math.floor(cfg.inactividadMs / 1000),
+        })
+        return {
+            token: token.value!.release(),
+            expiraEn: token.expiresAt ?? null,
+            expiraMaxEn: topeDeSesion(token.createdAt, cfg),
+            usuario: await construirMe(usuario),
+        }
+    }
+    const token = await Usuario.accessTokens.create(usuario, ['*'], { name: `login ${canal}` })
+    return {
+        token: token.value!.release(),
+        expiraEn: token.expiresAt ?? null,
+        expiraMaxEn: token.expiresAt ?? null,
+        usuario: await construirMe(usuario),
+    }
+}
+
+/**
  * Login: verifica credenciales y emite un token opaco de sesión. La ruta lo entrega como Bearer
  * (`POST /auth/login`) o en la cookie `HttpOnly` del panel (`POST /auth/sesion`).
  * La contraseña nunca llega a la auditoría (se enmascara como `***`). Un login correcto queda
@@ -44,25 +76,6 @@ export default class IniciarSesion extends DomainAction<EntradaIniciarSesion, Sa
         t.fijarEntidad('usuario', usuario.id)
         // la petición llega anónima: el login queda auditado con el usuario que entró
         t.identificarActor({ tipo: 'usuario', id: usuario.id })
-        if (input.modo === 'cookie') {
-            const cfg = configSesionPanel()
-            const token = await Usuario.accessTokens.create(usuario, ['*'], {
-                name: NOMBRE_TOKEN_PANEL,
-                expiresIn: Math.floor(cfg.inactividadMs / 1000),
-            })
-            return {
-                token: token.value!.release(),
-                expiraEn: token.expiresAt ?? null,
-                expiraMaxEn: topeDeSesion(token.createdAt, cfg),
-                usuario: await construirMe(usuario),
-            }
-        }
-        const token = await Usuario.accessTokens.create(usuario, ['*'], { name: `login ${t.ctx.canal}` })
-        return {
-            token: token.value!.release(),
-            expiraEn: token.expiresAt ?? null,
-            expiraMaxEn: token.expiresAt ?? null,
-            usuario: await construirMe(usuario),
-        }
+        return emitirSesion(usuario, input.modo ?? 'bearer', t.ctx.canal)
     }
 }

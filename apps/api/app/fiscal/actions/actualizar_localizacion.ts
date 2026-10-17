@@ -5,7 +5,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { hoyFiscal } from '#fiscal/comun'
 import { invalidarParametros } from '#fiscal/cache_parametros'
-import { instalacionVigente, instaladorDePais, instalarPaquete, PAQUETES } from '#fiscal/instalador'
+import { instalacionVigente, instalarPaquete, paqueteDePais, PAQUETES } from '#fiscal/instalador'
 import { verLocalizacionEmpresa, type LocalizacionEmpresa } from '#fiscal/consultas'
 import type { ResumenInstalacion } from '#fiscal/localizacion'
 
@@ -18,16 +18,18 @@ import type { ResumenInstalacion } from '#fiscal/localizacion'
  * Emite `fiscal.localizacion_instalada` si cambió la versión de la empresa y
  * `fiscal.parametros_cambiados` si se agregaron valores (invalida la caché).
  *
- * A1 llama al instalador desde `empresas.cambiar_pais` en su misma transacción:
- * `new ActualizarLocalizacion().execute({ empresa_id, pais }, t.ctx, { trx: t.trx })`.
+ * El núcleo la llama en la transacción de `empresas.crear` y `empresas.cambiar_pais` por su punto de
+ * extensión (`#core/localizacion`; lo registra `#fiscal/instalador_localizacion`) con `desde_nucleo`.
  */
 
 export interface EntradaActualizarLocalizacion {
     empresa_id: number
     /** versión a instalar; por defecto la más reciente del país */
     codigo?: string | null
-    /** país de la empresa (A1, `core.empresas.pais`); por defecto el de su instalación o GT */
+    /** país a instalar; por defecto `core.empresas.pais` */
     pais?: string | null
+    /** la llama el núcleo: el acceso a la empresa ya lo autorizó su acción */
+    desde_nucleo?: boolean
 }
 
 export interface SalidaActualizarLocalizacion extends LocalizacionEmpresa {
@@ -52,21 +54,26 @@ export default class ActualizarLocalizacion extends DomainAction<
         t: Transaccion,
     ): Promise<SalidaActualizarLocalizacion> {
         await exigirEmpresaActiva(t.trx, input.empresa_id, 'id')
-        exigirAccesoEmpresa(t.ctx, input.empresa_id)
+        // desde el núcleo (empresas.crear / cambiar_pais) la acción que la llama ya autorizó
+        if (!input.desde_nucleo) exigirAccesoEmpresa(t.ctx, input.empresa_id)
         t.fijarEmpresa(input.empresa_id)
         t.fijarEntidad('empresa', input.empresa_id)
 
         const vigente = await instalacionVigente(t.trx, input.empresa_id)
-        const pais = (input.pais ?? vigente?.pais ?? 'GT').toUpperCase()
-        const instalador = instaladorDePais(pais)
-        const codigo = input.codigo ?? instalador.codigo
+        const empresa = (await t.trx
+            .from('core.empresas')
+            .where('id', input.empresa_id)
+            .select('pais')
+            .firstOrFail()) as { pais: string }
+        const pais = (input.pais ?? empresa.pais).trim().toUpperCase()
+        const codigo = input.codigo ?? paqueteDePais(pais).codigo
         const paquete = PAQUETES[codigo]
         if (!paquete || paquete.pais !== pais) {
             throw new ValidacionFallida([
                 { field: 'codigo', message: `No hay un paquete ${codigo} para ${pais}`, rule: 'exists' },
             ])
         }
-        if (vigente && vigente.localizacion_codigo !== codigo) {
+        if (vigente && vigente.pais === pais && vigente.localizacion_codigo !== codigo) {
             const anterior = PAQUETES[vigente.localizacion_codigo]
             if (anterior && compararVersion(paquete.version, anterior.version) < 0) {
                 throw new ValidacionFallida([

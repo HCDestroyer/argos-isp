@@ -45,6 +45,9 @@
       "name": "fiscal"
     },
     {
+      "name": "integraciones"
+    },
+    {
       "name": "interno"
     },
     {
@@ -239,6 +242,145 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SesionPanel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/sso/canjear": {
+      "post": {
+        "operationId": "authSsoCanjear",
+        "summary": "Canjear un ticket de autologin (panel, /sso/entrar#<ticket>)",
+        "description": "Un uso, 60 s, ligado al conector que lo pidió (410 `ticket_invalido` si venció, se usó o el conector ya no está conectado). Con vinculación: cookie del panel como `POST /auth/sesion` (permisos, alcance y límites del usuario local) y `ruta` del destino. Sin vinculación: `vinculacion_requerida` y un token de vinculación para `POST /auth/sso/vincular`. Nunca vincula por correo. Mismo control de `Origin` y límite por IP que el login.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ticket": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "ticket"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión abierta o vinculación requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeSso"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/auth/sso/vincular": {
+      "post": {
+        "operationId": "authSsoVincular",
+        "summary": "Iniciar sesión y vincular la cuenta del otro sistema (autologin)",
+        "description": "Login normal (mismas credenciales, límite de intentos y cookie que `POST /auth/sesion`) con el token de `vinculacion_requerida` (10 min, un uso; 410 `vinculacion_invalida`). Si entra, guarda la vinculación y devuelve la `ruta` del destino.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token_vinculacion": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "token_vinculacion",
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión abierta y cuenta vinculada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeSso"
                 }
               }
             }
@@ -1303,7 +1445,7 @@
             "name": "q",
             "in": "query",
             "required": false,
-            "description": "Busca por nombre, NIT/CUI, teléfono, user_ppp o IP",
+            "description": "Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP",
             "schema": {
               "type": "string",
               "maxLength": 100
@@ -1358,6 +1500,15 @@
             "in": "query",
             "required": false,
             "description": "true: con alguna factura vencida; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "nit_cui_invalido",
+            "in": "query",
+            "required": false,
+            "description": "true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal)",
             "schema": {
               "type": "boolean"
             }
@@ -1491,13 +1642,23 @@
                       "empresa"
                     ]
                   },
+                  "tipo_documento_fiscal": {
+                    "type": "string",
+                    "enum": [
+                      "nit",
+                      "cui",
+                      "pasaporte",
+                      "cf"
+                    ],
+                    "description": "Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)"
+                  },
                   "nit_cui": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "pattern": "^(CF|\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT (con dígito verificador), CUI de 13 dígitos o CF"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios"
                   },
                   "nombre_fiscal": {
                     "type": [
@@ -1512,6 +1673,19 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "pais_fiscal": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte"
+                  },
+                  "agente_retencion_iva": {
+                    "description": "El cliente es agente de retención de IVA (retiene al pagar)",
+                    "type": "boolean"
+                  },
+                  "sector_publico": {
+                    "description": "Entidad del sector público (reglas propias de retención)",
+                    "type": "boolean"
                   },
                   "email": {
                     "type": [
@@ -1585,6 +1759,14 @@
                       "telegram",
                       "whatsapp"
                     ]
+                  },
+                  "codigo_externo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 50,
+                    "description": "Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`"
                   }
                 },
                 "required": [
@@ -1766,13 +1948,23 @@
                       "empresa"
                     ]
                   },
+                  "tipo_documento_fiscal": {
+                    "type": "string",
+                    "enum": [
+                      "nit",
+                      "cui",
+                      "pasaporte",
+                      "cf"
+                    ],
+                    "description": "Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)"
+                  },
                   "nit_cui": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "pattern": "^(CF|\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT (con dígito verificador), CUI de 13 dígitos o CF"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios"
                   },
                   "nombre_fiscal": {
                     "type": [
@@ -1787,6 +1979,19 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "pais_fiscal": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte"
+                  },
+                  "agente_retencion_iva": {
+                    "description": "El cliente es agente de retención de IVA (retiene al pagar)",
+                    "type": "boolean"
+                  },
+                  "sector_publico": {
+                    "description": "Entidad del sector público (reglas propias de retención)",
+                    "type": "boolean"
                   },
                   "email": {
                     "type": [
@@ -1860,6 +2065,14 @@
                       "telegram",
                       "whatsapp"
                     ]
+                  },
+                  "codigo_externo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 50,
+                    "description": "Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`"
                   },
                   "version": {
                     "type": "integer",
@@ -5093,6 +5306,11 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "pais": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País de la localización fiscal (por defecto GT; hoy solo GT, ver GET /empresas/paises). 422 `pais_no_soportado` sin paquete"
+                  },
                   "direccion_fiscal": {
                     "type": [
                       "string",
@@ -5190,7 +5408,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Régimen de ISR para las frases de FEL"
+                    "description": "Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)"
                   },
                   "codigo_establecimiento": {
                     "type": [
@@ -5199,7 +5417,7 @@
                     ],
                     "minimum": 1,
                     "maximum": 999999,
-                    "description": "Código de establecimiento en la SAT (FEL)"
+                    "description": "Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)"
                   }
                 },
                 "required": [
@@ -5493,7 +5711,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Régimen de ISR para las frases de FEL"
+                    "description": "Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)"
                   },
                   "codigo_establecimiento": {
                     "type": [
@@ -5502,7 +5720,7 @@
                     ],
                     "minimum": 1,
                     "maximum": 999999,
-                    "description": "Código de establecimiento en la SAT (FEL)"
+                    "description": "Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)"
                   }
                 },
                 "required": [
@@ -5576,6 +5794,137 @@
           }
         },
         "x-permiso": "empresas.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/{id}/cambiar-pais": {
+      "post": {
+        "operationId": "empresasCambiarPais",
+        "summary": "Cambiar el país de la localización fiscal de la empresa",
+        "description": "Instala la localización del país nuevo en la misma transacción. 422 `pais_no_soportado` sin paquete; 409 `empresa_con_documentos` si ya tiene facturas, notas, pagos, asientos, egresos o documentos fiscales; 409 si `version` cambió. Mismo país: 200 sin cambios.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pais": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País nuevo (ISO 3166-1 alfa-2); ver GET /empresas/paises"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída de la empresa; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "pais",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa con su país",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.cambiar_pais; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.cambiar_pais",
         "x-implementado": true
       }
     },
@@ -5876,6 +6225,61 @@
           }
         },
         "x-permiso": "empresas.cambiar_logo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/paises": {
+      "get": {
+        "operationId": "empresasPaises",
+        "summary": "Países con localización fiscal (selector de país)",
+        "description": "Los que se pueden elegir al crear una empresa o en `cambiar-pais`. Hoy solo GT. Contrato: `.claude/integration/contratos/localizacion-fiscal.md`.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Países",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaisLocalizacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.ver",
         "x-implementado": true
       }
     },
@@ -8523,6 +8927,447 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/horus/resolver": {
+      "post": {
+        "operationId": "integracionesHorusResolver",
+        "summary": "Resolver un lote de IPs a servicio, cliente y empresa (Horus)",
+        "description": "De 1 a 500 IPv4 o IPv6 en el cuerpo (nunca en la URL), en una sola consulta. Misma regla que `GET /ip/:ip` (prefijo más largo; la sesión activa sobre la asignación). Una IP de nadie o de un servicio fuera del alcance del token (router, zona, empresas) responde `{ ip, error: \"no_encontrada\" }`. Cada llamada queda en la bitácora (`ip.resolver`) con los servicios y clientes devueltos.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ips": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "ipv4"
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "description": "IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden"
+                  }
+                },
+                "required": [
+                  "ips"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Un resultado por IP, en orden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolucionIpsHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ip.resolver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/sso/tickets": {
+      "post": {
+        "operationId": "integracionesHorusSsoTicket",
+        "summary": "Pedir un ticket de autologin para un usuario de Horus (servidor a servidor)",
+        "description": "Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje abre la sesión del usuario local vinculado, o pide su login.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usuario": {
+                    "type": "object",
+                    "properties": {
+                      "id_externo": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Id del usuario en Horus; con el conector forma la vinculación"
+                      },
+                      "correo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 254,
+                        "description": "Solo informativo: nunca se vincula por correo"
+                      },
+                      "nombre": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "cliente",
+                          "servicio",
+                          "router"
+                        ]
+                      },
+                      "id_externo": {
+                        "type": "string",
+                        "pattern": "^[1-9]\\d{0,17}$",
+                        "description": "Id del recurso en ArgosIsp (cliente, servicio o router)"
+                      }
+                    },
+                    "required": [
+                      "tipo",
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "usuario",
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ticket emitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketSsoEmitido"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sso.emitir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/tokens": {
+      "get": {
+        "operationId": "integracionesHorusTokens",
+        "summary": "Tokens de la integración Horus (sin su valor)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tokens, los más nuevos primero",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TokenApi"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "integracionesHorusGenerarToken",
+        "summary": "Generar el token atk_ de Horus (se muestra una sola vez)",
+        "description": "Crea, la primera vez, el usuario técnico \"Horus\" y su rol `integracion_horus`. El token solo lleva `ip.resolver`, `clientes.ver` y `servicios.ver`, y opcionalmente routers o zonas. No revoca los anteriores.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "routers": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Restringe el token a servicios de estos routers"
+                  },
+                  "zonas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Restringe el token a clientes de estas zonas"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token generado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenHorusCreado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.generar_token",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/tokens/{id}/revocar": {
+      "post": {
+        "operationId": "integracionesHorusRevocarToken",
+        "summary": "Revocar un token de la integración Horus",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token revocado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenApi"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso integraciones.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "integraciones.revocar_token",
+        "x-implementado": true
+      }
+    },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
@@ -10209,6 +11054,120 @@
           },
           "401": {
             "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/me/vinculaciones": {
+      "get": {
+        "operationId": "meVinculaciones",
+        "summary": "Mis vinculaciones de autologin con otros sistemas",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vinculaciones vigentes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VinculacionExterna"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/me/vinculaciones/{id}/quitar": {
+      "post": {
+        "operationId": "meVinculacionesQuitar",
+        "summary": "Quitar una de mis vinculaciones de autologin",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vinculación revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VinculacionExterna"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19393,11 +20352,20 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "compras.anular",
+                        "compras.pagar",
+                        "compras.registrar",
+                        "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.calcular",
+                        "declaraciones.pagar",
+                        "declaraciones.presentar",
+                        "declaraciones.revisar",
+                        "declaraciones.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "egresos.anular",
@@ -19406,6 +20374,7 @@
                         "empresa.editar",
                         "empresa.ver",
                         "empresas.cambiar_logo",
+                        "empresas.cambiar_pais",
                         "empresas.crear",
                         "empresas.desactivar",
                         "empresas.editar",
@@ -19414,19 +20383,35 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "fel.anular",
+                        "fel.certificar",
+                        "fel.configurar",
+                        "fel.contingencia",
+                        "fel.ver",
                         "fiscal.cambiar_regimen",
                         "fiscal.configurar",
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
+                        "integraciones.generar_token",
+                        "integraciones.revocar_token",
+                        "integraciones.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.bloquear",
+                        "libro.bloquear_duro",
+                        "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
+                        "libro.desbloquear",
+                        "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "libros.emitir",
+                        "libros.habilitar",
+                        "libros.ver",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -19445,6 +20430,8 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "proveedores.editar",
+                        "proveedores.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.ver",
@@ -19470,6 +20457,7 @@
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sso.emitir",
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
@@ -19477,6 +20465,7 @@
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
+                        "vinculaciones.revocar",
                         "zonas.crear",
                         "zonas.editar",
                         "zonas.ver"
@@ -19602,11 +20591,20 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "compras.anular",
+                        "compras.pagar",
+                        "compras.registrar",
+                        "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.calcular",
+                        "declaraciones.pagar",
+                        "declaraciones.presentar",
+                        "declaraciones.revisar",
+                        "declaraciones.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "egresos.anular",
@@ -19615,6 +20613,7 @@
                         "empresa.editar",
                         "empresa.ver",
                         "empresas.cambiar_logo",
+                        "empresas.cambiar_pais",
                         "empresas.crear",
                         "empresas.desactivar",
                         "empresas.editar",
@@ -19623,19 +20622,35 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "fel.anular",
+                        "fel.certificar",
+                        "fel.configurar",
+                        "fel.contingencia",
+                        "fel.ver",
                         "fiscal.cambiar_regimen",
                         "fiscal.configurar",
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
+                        "integraciones.generar_token",
+                        "integraciones.revocar_token",
+                        "integraciones.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.bloquear",
+                        "libro.bloquear_duro",
+                        "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
+                        "libro.desbloquear",
+                        "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "libros.emitir",
+                        "libros.habilitar",
+                        "libros.ver",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -19654,6 +20669,8 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "proveedores.editar",
+                        "proveedores.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.ver",
@@ -19679,6 +20696,7 @@
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sso.emitir",
                         "tokens.crear",
                         "tokens.revocar",
                         "tokens.ver",
@@ -19686,6 +20704,7 @@
                         "usuarios.crear",
                         "usuarios.editar",
                         "usuarios.ver",
+                        "vinculaciones.revocar",
                         "zonas.crear",
                         "zonas.editar",
                         "zonas.ver"
@@ -24102,11 +25121,20 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "compras.anular",
+                            "compras.pagar",
+                            "compras.registrar",
+                            "compras.ver",
                             "comprobantes.aprobar",
                             "comprobantes.rechazar",
                             "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
+                            "declaraciones.calcular",
+                            "declaraciones.pagar",
+                            "declaraciones.presentar",
+                            "declaraciones.revisar",
+                            "declaraciones.ver",
                             "documentos.editar",
                             "documentos.ver",
                             "egresos.anular",
@@ -24115,6 +25143,7 @@
                             "empresa.editar",
                             "empresa.ver",
                             "empresas.cambiar_logo",
+                            "empresas.cambiar_pais",
                             "empresas.crear",
                             "empresas.desactivar",
                             "empresas.editar",
@@ -24123,19 +25152,35 @@
                             "facturas.generar",
                             "facturas.nota_credito",
                             "facturas.ver",
+                            "fel.anular",
+                            "fel.certificar",
+                            "fel.configurar",
+                            "fel.contingencia",
+                            "fel.ver",
                             "fiscal.cambiar_regimen",
                             "fiscal.configurar",
                             "fiscal.editar_parametros",
                             "fiscal.instalar",
                             "fiscal.ver",
+                            "integraciones.generar_token",
+                            "integraciones.revocar_token",
+                            "integraciones.ver",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "libro.bloquear",
+                            "libro.bloquear_duro",
+                            "libro.cerrar_ejercicio",
                             "libro.cerrar_periodo",
+                            "libro.desbloquear",
+                            "libro.reabrir_ejercicio",
                             "libro.reabrir_periodo",
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
+                            "libros.emitir",
+                            "libros.habilitar",
+                            "libros.ver",
                             "notificaciones.configurar",
                             "notificaciones.editar",
                             "notificaciones.probar",
@@ -24154,6 +25199,8 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "proveedores.editar",
+                            "proveedores.ver",
                             "red.ver",
                             "redes.crear",
                             "redes.ver",
@@ -24179,6 +25226,7 @@
                             "servicios.ver_credenciales",
                             "sesiones.desconectar",
                             "sesiones.ver",
+                            "sso.emitir",
                             "tokens.crear",
                             "tokens.revocar",
                             "tokens.ver",
@@ -24186,6 +25234,7 @@
                             "usuarios.crear",
                             "usuarios.editar",
                             "usuarios.ver",
+                            "vinculaciones.revocar",
                             "zonas.crear",
                             "zonas.editar",
                             "zonas.ver"
@@ -24944,6 +25993,92 @@
           }
         },
         "x-permiso": "usuarios.asignar_empresas",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/vinculaciones/revocar": {
+      "post": {
+        "operationId": "vinculacionesRevocar",
+        "summary": "Revocar vinculaciones de autologin (todas, de un usuario o de un conector)",
+        "tags": [
+          "acl"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usuario_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo las de este usuario; sin él, todas"
+                  },
+                  "conector": {
+                    "type": "string",
+                    "enum": [
+                      "horus"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuántas se revocaron",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocacionVinculaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso vinculaciones.revocar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "vinculaciones.revocar",
         "x-implementado": true
       }
     },
@@ -26375,6 +27510,92 @@
           }
         }
       },
+      "CanjeSso": {
+        "type": "object",
+        "required": [
+          "resultado",
+          "ruta",
+          "conector",
+          "sesion",
+          "vinculacion"
+        ],
+        "properties": {
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "sesion",
+              "vinculacion_requerida"
+            ],
+            "description": "`sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`"
+          },
+          "ruta": {
+            "type": "string",
+            "description": "Ruta local del panel del destino, p. ej. `/servicios/812`"
+          },
+          "conector": {
+            "type": "string",
+            "description": "Sistema que pidió el autologin (`horus`)"
+          },
+          "sesion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SesionPanel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo con `resultado: sesion`"
+          },
+          "vinculacion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "token",
+              "expira_en",
+              "usuario_externo"
+            ],
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Token de vinculación: 10 min, un solo uso"
+              },
+              "expira_en": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "usuario_externo": {
+                "type": "object",
+                "required": [
+                  "id_externo",
+                  "correo",
+                  "nombre"
+                ],
+                "properties": {
+                  "id_externo": {
+                    "type": "string"
+                  },
+                  "correo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "description": "Solo con `resultado: vinculacion_requerida`"
+          }
+        }
+      },
       "CategoriaEgreso": {
         "type": "object",
         "required": [
@@ -26577,6 +27798,18 @@
             "type": "integer",
             "minimum": 1
           },
+          "codigo": {
+            "type": "string",
+            "pattern": "^C-\\d{6,}$",
+            "description": "Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+          },
+          "codigo_externo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Código en el sistema anterior (importador); no reemplaza a `codigo`"
+          },
           "nombre": {
             "type": "string"
           },
@@ -26587,11 +27820,26 @@
               "empresa"
             ]
           },
+          "tipo_documento_fiscal": {
+            "type": "string",
+            "enum": [
+              "nit",
+              "cui",
+              "pasaporte",
+              "cf"
+            ],
+            "description": "Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)"
+          },
           "nit_cui": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf"
+          },
+          "nit_cui_invalido": {
+            "type": "boolean",
+            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo"
           },
           "nombre_fiscal": {
             "type": [
@@ -26604,6 +27852,19 @@
               "string",
               "null"
             ]
+          },
+          "pais_fiscal": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "País del receptor (ISO 3166-1 alfa-2)"
+          },
+          "agente_retencion_iva": {
+            "type": "boolean",
+            "description": "Agente de retención de IVA"
+          },
+          "sector_publico": {
+            "type": "boolean",
+            "description": "Entidad del sector público"
           },
           "email": {
             "type": [
@@ -28437,6 +29698,11 @@
             ],
             "description": "`#RRGGBB`; solo PDF y correo"
           },
+          "pais": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+          },
           "regimen_isr": {
             "type": [
               "string",
@@ -28446,13 +29712,15 @@
               "sujeto_pagos_trimestrales",
               "retencion_definitiva",
               "pequeno_contribuyente"
-            ]
+            ],
+            "description": "Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen"
           },
           "codigo_establecimiento": {
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "description": "Solo lectura (localización fiscal): establecimiento por defecto en la SAT"
           },
           "logo_url": {
             "type": [
@@ -30115,6 +31383,142 @@
           }
         }
       },
+      "IpNoEncontradaHorus": {
+        "type": "object",
+        "required": [
+          "ip",
+          "error"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "enum": [
+              "no_encontrada"
+            ]
+          }
+        }
+      },
+      "IpResueltaHorus": {
+        "type": "object",
+        "required": [
+          "ip",
+          "servicio_id",
+          "cliente_id",
+          "prefijo",
+          "cliente",
+          "servicio",
+          "empresa",
+          "desde"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "La IP tal como se pidió"
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "prefijo": {
+            "type": "string",
+            "description": "Asignación o sesión que contiene la IP (prefijo más largo)"
+          },
+          "cliente": {
+            "type": "object",
+            "required": [
+              "nombre",
+              "codigo",
+              "tipo"
+            ],
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "codigo": {
+                "type": "string",
+                "description": "Código estable del cliente (`C-000455`)"
+              },
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "persona",
+                  "empresa"
+                ]
+              }
+            }
+          },
+          "servicio": {
+            "type": "object",
+            "required": [
+              "user_ppp",
+              "plan",
+              "estado",
+              "router_id"
+            ],
+            "properties": {
+              "user_ppp": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plan": {
+                "type": "string",
+                "description": "Nombre del plan"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "activo",
+                  "limitado",
+                  "suspendido",
+                  "retirado"
+                ]
+              },
+              "router_id": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "empresa": {
+            "type": "object",
+            "required": [
+              "id",
+              "nombre",
+              "nit"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "nombre": {
+                "type": "string",
+                "description": "Nombre comercial de la empresa (NIT) del servicio"
+              },
+              "nit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la sesión o asignación vigente que contiene la IP"
+          }
+        }
+      },
       "Ipv6Bloque": {
         "type": "object",
         "required": [
@@ -31011,6 +32415,23 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PaisLocalizacion": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "ISO 3166-1 alfa-2"
+          },
+          "nombre": {
+            "type": "string"
           }
         }
       },
@@ -35482,6 +36903,28 @@
           }
         }
       },
+      "ResolucionIpsHorus": {
+        "type": "object",
+        "required": [
+          "resultados"
+        ],
+        "properties": {
+          "resultados": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IpResueltaHorus"
+                },
+                {
+                  "$ref": "#/components/schemas/IpNoEncontradaHorus"
+                }
+              ]
+            },
+            "description": "Uno por IP pedida, en el mismo orden"
+          }
+        }
+      },
       "ResultadoCorte": {
         "type": "object",
         "required": [
@@ -36155,6 +37598,18 @@
             "items": {
               "$ref": "#/components/schemas/ServicioSinSesion"
             }
+          }
+        }
+      },
+      "RevocacionVinculaciones": {
+        "type": "object",
+        "required": [
+          "revocadas"
+        ],
+        "properties": {
+          "revocadas": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -37112,6 +38567,23 @@
           }
         }
       },
+      "TicketSsoEmitido": {
+        "type": "object",
+        "required": [
+          "url",
+          "expira_en"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "`https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso"
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "TokenApi": {
         "type": "object",
         "required": [
@@ -37172,6 +38644,28 @@
           },
           "datos": {
             "$ref": "#/components/schemas/TokenApi"
+          }
+        }
+      },
+      "TokenHorusCreado": {
+        "type": "object",
+        "required": [
+          "token",
+          "datos",
+          "usuario_id"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Valor `atk_…`; se muestra una sola vez"
+          },
+          "datos": {
+            "$ref": "#/components/schemas/TokenApi"
+          },
+          "usuario_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Usuario técnico Horus"
           }
         }
       },
@@ -37491,6 +38985,59 @@
           },
           "descripcion": {
             "type": "string"
+          }
+        }
+      },
+      "VinculacionExterna": {
+        "type": "object",
+        "required": [
+          "id",
+          "conector",
+          "id_externo",
+          "usuario_id",
+          "correo_externo",
+          "nombre_externo",
+          "revocada_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "conector": {
+            "type": "string"
+          },
+          "id_externo": {
+            "type": "string",
+            "description": "Usuario en el otro sistema"
+          },
+          "usuario_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "correo_externo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nombre_externo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revocada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

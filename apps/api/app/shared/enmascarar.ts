@@ -3,13 +3,13 @@ import { nombreCampo } from '#shared/nombres_campo'
 /**
  * Enmascarado de datos sensibles para auditoría (`audit.acciones.entrada`, `audit.cambios`).
  * Contraseñas PPPoE, credenciales de routers (también la CA `api_ca`), secretos RADIUS, hashes y
- * tokens se guardan como `***`.
+ * tokens (también los tickets de autologin) se guardan como `***`.
  */
 export const MASCARA = '***'
 
 // Termina en fin, `_` o dígito: `token`, `api_token`, `token2`, `radius_secret_v2`.
 const SENSIBLE =
-    /(^|_)(pass_ppp|password|passwd|contrasena|secret|secreto|token|tokens|hash|api_key|api_ca|llave_[a-z_]+)($|_|[0-9])/
+    /(^|_)(pass_ppp|password|passwd|contrasena|secret|secreto|token|tokens|ticket|hash|api_key|api_ca|llave_[a-z_]+)($|_|[0-9])/
 
 /** Si `campo` (snake_case o camelCase) es sensible y se audita como `***`. */
 export function esCampoSensible(campo: string): boolean {

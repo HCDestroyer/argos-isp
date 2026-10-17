@@ -4,12 +4,16 @@ import { CUENTAS, PLAN_CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_AGREGADAS_GT, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT } from '#fiscal/l10n/gt/parametros'
 import { IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
-import { instaladorDePais, instalarPaquete } from '#fiscal/instalador'
+import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
 import { PAQUETE_GT_2026_1 } from '#fiscal/l10n/gt/index'
 import { parametro } from '#fiscal/parametros'
 import { hoyFiscal } from '#fiscal/comun'
 import { crearEmpresaFila } from '#tests/core/fabricas'
-import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { registrarInstaladorLocalizacion } from '#core/localizacion'
+import { verificadorNit } from '#core/nit_cui'
+import { instaladorFiscal, tieneDocumentosFiscales } from '#fiscal/instalador_localizacion'
+import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import { conteos, empresaInstalada, esquemas, eventos, exigirCampos } from '#tests/fiscal/ayudas_fiscal'
 
 /**
@@ -17,6 +21,7 @@ import { conteos, empresaInstalada, esquemas, eventos, exigirCampos } from '#tes
  * base (`CUENTAS.*`) y deja en la empresa lo que ya tenía (régimen y establecimiento).
  */
 test.group('Localización fiscal · instalación', (group) => {
+    group.setup(() => registrarInstaladorLocalizacion(instaladorFiscal))
     group.each.teardown(() => soloEmpresaPrincipal())
 
     test('la migración instaló gt-2026.1 en la empresa 1 sin tocar el plan base', async ({ assert }) => {
@@ -113,7 +118,7 @@ test.group('Localización fiscal · instalación', (group) => {
         exigirCampos(assert, todos.ResultadoInstalacionFiscal!, cuerpo, 'ResultadoInstalacionFiscal')
     })
 
-    test('empresa nueva: sin localización responde 422; al instalar toma su régimen y establecimiento', async ({
+    test('empresa sin localización (fila creada fuera de empresas.crear) responde 422; al instalarla toma su régimen y establecimiento', async ({
         client,
         assert,
     }) => {
@@ -209,7 +214,7 @@ test.group('Localización fiscal · instalación', (group) => {
             422,
         )
         assert.equal(r.body().errors[0].field, 'codigo')
-        assert.throws(() => instaladorDePais('MX'), /No hay paquete/)
+        assert.throws(() => paqueteDePais('MX'), /No hay paquete/)
         const contabilidad = await usuarioConRoles(['contabilidad'])
         await estado(
             client
@@ -243,5 +248,52 @@ test.group('Localización fiscal · instalación', (group) => {
         const antes = await parametro(1, 'regimen', hoyFiscal())
         await empresaInstalada({ regimen_isr: 'pequeno_contribuyente' })
         assert.deepEqual(await parametro(1, 'regimen', hoyFiscal()), antes)
+    })
+
+    test('POST /empresas: la empresa nace con la localización instalada y el núcleo lee sus datos fiscales', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const cuerpoNit = String(Math.floor(1_000_000 + Math.random() * 8_999_999))
+        const creada = await estado(
+            client.post('/api/v1/empresas').bearerToken(token).json({
+                nit: `${cuerpoNit}${verificadorNit(cuerpoNit)}`,
+                razon_social: 'Fiscal de Prueba, S.A.',
+                nombre_comercial: 'Fiscal de Prueba',
+                regimen_isr: 'retencion_definitiva',
+                codigo_establecimiento: 4,
+            }),
+            201,
+        )
+        const empresaId = creada.body().id as number
+        const vista = await estado(
+            client.get(`/api/v1/fiscal/empresas/${empresaId}/localizacion`).bearerToken(token),
+            200,
+        )
+        assert.include(vista.body(), {
+            instalada: true,
+            codigo: 'gt-2026.1',
+            actualizacion_disponible: false,
+        })
+        const regimen = await parametro(empresaId, 'regimen', hoyFiscal())
+        assert.include(regimen, { valor: 'opcional_simplificado', nivel: 'instalacion' })
+        const [evento] = await eventos('fiscal.localizacion_instalada', 'empresa_id', empresaId)
+        assert.deepEqual(evento, { empresa_id: empresaId, pais: 'GT', codigo: 'gt-2026.1', de_codigo: null })
+        const auditoria = await db
+            .from('audit.acciones')
+            .where({ accion: 'fiscal.instalar', entidad_id: empresaId })
+        assert.lengthOf(auditoria, 1)
+
+        // regimen_isr y codigo_establecimiento de la empresa salen de fiscal
+        await new CambiarRegimen().execute(
+            { regimen: 'pequeno_contribuyente', vigente_desde: '2020-01-01', empresa_id: empresaId },
+            contextoPrueba(),
+        )
+        const ficha = await estado(client.get(`/api/v1/empresas/${empresaId}`).bearerToken(token), 200)
+        assert.include(ficha.body(), { regimen_isr: 'pequeno_contribuyente', codigo_establecimiento: 4 })
+        // sin documentos fiscales la empresa puede cambiar de país (hoy solo hay GT)
+        assert.isFalse(await tieneDocumentosFiscales(empresaId, db.connection()))
+        assert.deepEqual(instaladorFiscal.paises(), ['GT'])
     })
 })

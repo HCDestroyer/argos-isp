@@ -1,7 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
-import { INSTALADORES } from '#fiscal/instalador'
+import { ULTIMO_PAQUETE } from '#fiscal/instalador'
 
 /**
  * Consultas de solo lectura de la localización (`GET /fiscal/localizaciones`,
@@ -37,7 +37,7 @@ export async function listarLocalizaciones(
     return filas.map((f) => ({
         ...f,
         pais: f.pais.trim(),
-        mas_reciente: INSTALADORES[f.pais.trim()]?.codigo === f.codigo,
+        mas_reciente: ULTIMO_PAQUETE[f.pais.trim()]?.codigo === f.codigo,
     }))
 }
 
@@ -68,8 +68,15 @@ export async function verLocalizacionEmpresa(
     empresaId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<LocalizacionEmpresa> {
-    const empresa = await cliente.from('core.empresas').where('id', empresaId).select('id').first()
+    const empresa = (await cliente
+        .from('core.empresas')
+        .where('id', empresaId)
+        .select('id', 'pais')
+        .first()) as {
+        pais: string
+    } | null
     if (!empresa) throw new NoEncontrado(`La empresa ${empresaId} no existe`)
+    const paisEmpresa = empresa.pais.trim()
     const filas = (await cliente
         .from('fiscal.instalaciones as i')
         .join('fiscal.localizaciones as l', 'l.codigo', 'i.localizacion_codigo')
@@ -91,7 +98,8 @@ export async function verLocalizacionEmpresa(
     >
     const vigente = filas[0]
     const pais = vigente?.pais.trim() ?? null
-    const disponible = pais ? (INSTALADORES[pais]?.codigo ?? null) : (INSTALADORES.GT?.codigo ?? null)
+    // la versión disponible es la del país actual de la empresa (core.empresas.pais)
+    const disponible = ULTIMO_PAQUETE[paisEmpresa]?.codigo ?? null
     return {
         empresa_id: empresaId,
         instalada: Boolean(vigente),

@@ -9,18 +9,26 @@ import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosD
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
 /**
- * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, nombre fiscal, NIT/CUI,
+ * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, código (`C-000455`) o código
+ * externo (exactos), nombre fiscal, NIT/CUI,
  * teléfono o móvil, correo, user_ppp de alguno de sus servicios o una IP (IPv4 vigente o IPv6
  * dentro de un prefijo vigente).
  */
 
 export const COLUMNAS_CLIENTE = [
     'id',
+    'codigo',
+    'codigo_externo',
     'nombre',
     'tipo',
+    'tipo_documento_fiscal',
     'nit_cui',
+    'nit_cui_invalido',
     'nombre_fiscal',
     'direccion_fiscal',
+    'pais_fiscal',
+    'agente_retencion_iva',
+    'sector_publico',
     'email',
     'telefono',
     'movil',
@@ -65,6 +73,8 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     con_promesa_activa?: boolean
     /** dependientes de este responsable de pago */
     responsable_pago_id?: number
+    /** documento fiscal marcado inválido por la migración (true) o no (false) */
+    nit_cui_invalido?: boolean
 }
 
 /** Cómo se filtra `core.clientes as c` por alcance. */
@@ -118,6 +128,8 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string)
     const nit = texto.replace(/[\s-]/g, '').toUpperCase()
     consulta.where((w) => {
         w.whereILike('c.nombre', patron)
+            .orWhere('c.codigo', texto.toUpperCase())
+            .orWhereRaw('lower(c.codigo_externo) = ?', [texto.toLowerCase()])
             .orWhereILike('c.nombre_fiscal', patron)
             .orWhereILike('c.email', patron)
             .orWhere('c.nit_cui', nit)
@@ -191,6 +203,7 @@ export async function buscarClientes(
     const consulta = db.from('core.clientes as c').select(columnasVista(db.connection()))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
     if (filtros.responsable_pago_id) consulta.where('c.responsable_pago_id', filtros.responsable_pago_id)
+    if (filtros.nit_cui_invalido !== undefined) consulta.where('c.nit_cui_invalido', filtros.nit_cui_invalido)
     if (filtros.q) aplicarBusqueda(consulta, filtros.q)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)

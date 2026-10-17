@@ -1,6 +1,6 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 import { DateTime } from 'luxon'
-import { INSTALADORES } from '#fiscal/instalador'
+import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
 import { CUENTAS_PAQUETE_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
@@ -30,11 +30,12 @@ export default class extends BaseSchema {
         // gt-2026.1 en cada empresa existente (contrato §11.2)
         this.defer(async (cliente) => {
             const hoy = DateTime.now().setZone('America/Guatemala').toISODate()!
-            const empresas = (await cliente.from('core.empresas').orderBy('id').select('id')) as Array<{
-                id: number
-            }>
+            const empresas = (await cliente
+                .from('core.empresas')
+                .orderBy('id')
+                .select('id', 'pais')) as Array<{ id: number; pais: string }>
             for (const empresa of empresas) {
-                await INSTALADORES.GT!.instalar(cliente as never, Number(empresa.id), {
+                await instalarPaquete(cliente, paqueteDePais(empresa.pais.trim()), Number(empresa.id), {
                     instaladaPor: null,
                     hoy,
                 })
