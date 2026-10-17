@@ -23,6 +23,7 @@ import { rutasEgresos } from './egresos/rutas'
 import { rutasEmpresas } from './empresas/rutas'
 import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
+import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
 import { empresaActivaDe, empresaNoPermitida, sinSesion, usuariosPorToken } from './comun'
 import { rutasPlanes } from './planes/rutas'
@@ -375,6 +376,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasSesiones,
     ...rutasFacturacion,
     ...rutasLibro,
+    ...rutasEstadosFinancieros,
     ...rutasCajas,
     ...rutasComprobantes,
     ...rutasSimulador,

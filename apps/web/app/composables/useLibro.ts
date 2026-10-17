@@ -10,6 +10,8 @@ export type FiltrosDiario = Omit<NonNullable<paths['/api/v1/libro/diario']['get'
 export type FiltrosMayor = Omit<paths['/api/v1/libro/mayor']['get']['parameters']['query'], 'cursor'>
 export type CierrePeriodo = Schema<'CierrePeriodo'>
 export type BancoLibro = Schema<'BancoLibro'>
+export type BalanceSaldos = Schema<'BalanceSaldos'>
+export type EstadoResultados = Schema<'EstadoResultados'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
 export function useLibro() {
@@ -94,6 +96,18 @@ export function useLibro() {
      * `GET /libro/bancos` (`egresos.ver`): cuentas bancarias contables de `ledger.bancos`; su `id`
      * es el `banco_id` de un egreso con método `banco`. El número viene enmascarado.
      */
+    /** Balance de saldos al `hasta` (por defecto hoy), por empresa y total del grupo (A3). */
+    function balance(hasta?: string): Promise<Resultado<BalanceSaldos>> {
+        return resolver(api.GET('/api/v1/libro/balance', { params: { query: hasta ? { hasta } : {} } }))
+    }
+
+    /** Estado de resultados del rango (por defecto el mes de `hasta`), por empresa y total (A3). */
+    function estadoResultados(desde?: string, hasta?: string): Promise<Resultado<EstadoResultados>> {
+        return resolver(api.GET('/api/v1/libro/estado-resultados', {
+            params: { query: { ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) } },
+        }))
+    }
+
     function bancos(): Promise<Resultado<BancoLibro[]>> {
         return resolver(api.GET('/api/v1/libro/bancos'))
     }
@@ -114,5 +128,5 @@ export function useLibro() {
         }))
     }
 
-    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir }
+    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
 }
