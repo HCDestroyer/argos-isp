@@ -16,27 +16,27 @@ Cliente PPPoE → MikroTik → FreeRADIUS (UDP 1812/1813) → aaa (HTTP, 0,8 s) 
 
 ## Qué pasa cuando `aaa` no responde
 
-| Quién | Qué ve | Por qué |
-| --- | --- | --- |
-| Cliente ya conectado | Nada: sigue navegando | El MikroTik no corta sesiones activas porque RADIUS no responda. Los Interim-Update (cada 5 min) se pierden; el consumo de ese rato no queda en `network.sesiones` |
-| Cliente que se reconecta (corte de luz, reinicio del router del cliente) | Sin internet. Su router muestra "error de autenticación" o se queda "conectando" | FreeRADIUS responde Reject (o no responde) y el MikroTik niega la sesión |
-| Cliente suspendido que paga en ese rato | Sigue en corte hasta que `aaa` vuelve | La reactivación viaja por evento a `coa` (CoA a la sesión viva) y sí llega; pero si se reconecta, entra con lo que diga RADIUS cuando vuelva |
-| Panel, caja, portal | Normal | No dependen de `aaa` |
-| Corte automático y CoA | Siguen funcionando | `coa` habla con el MikroTik directo (puerto 3799), no pasa por `aaa` |
+| Quién                                                                    | Qué ve                                                                           | Por qué                                                                                                                                                            |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cliente ya conectado                                                     | Nada: sigue navegando                                                            | El MikroTik no corta sesiones activas porque RADIUS no responda. Los Interim-Update (cada 5 min) se pierden; el consumo de ese rato no queda en `network.sesiones` |
+| Cliente que se reconecta (corte de luz, reinicio del router del cliente) | Sin internet. Su router muestra "error de autenticación" o se queda "conectando" | FreeRADIUS responde Reject (o no responde) y el MikroTik niega la sesión                                                                                           |
+| Cliente suspendido que paga en ese rato                                  | Sigue en corte hasta que `aaa` vuelve                                            | La reactivación viaja por evento a `coa` (CoA a la sesión viva) y sí llega; pero si se reconecta, entra con lo que diga RADIUS cuando vuelva                       |
+| Panel, caja, portal                                                      | Normal                                                                           | No dependen de `aaa`                                                                                                                                               |
+| Corte automático y CoA                                                   | Siguen funcionando                                                               | `coa` habla con el MikroTik directo (puerto 3799), no pasa por `aaa`                                                                                               |
 
 Con **modo degradado** (A2): si lo caído es Redis y la API, pero el proceso `aaa` vive, los clientes que se reconectan **sí entran** con su último perfil conocido (un suspendido sigue suspendido). Lo grave es cuando el proceso `aaa` o FreeRADIUS no responden.
 
 ## Cómo nos enteramos
 
-| Aviso | Llega por | Cuándo |
-| --- | --- | --- |
-| **"ALERTA · RADIUS (aaa) caído · Nodo …"** | Telegram del equipo (notify) | El vigía (`aaa-vigia`) no recibe `/health` de un nodo durante 60 s (`AAA_CAIDO_TRAS_MS`). Una alerta por caída; al volver, "RESUELTO · RADIUS (aaa) recuperado" con la duración |
-| **`ServicioSinMetricas`** (job `aaa`) | Telegram (Alertmanager) | Prometheus no puede leer `aaa:3100/metrics` durante 2 min |
-| **`AaaSinRedis`** | Telegram (Alertmanager) | `aaa` sin Redis 1 min: autoriza por la API (más lento, sigue funcionando) |
-| **`AaaDegradado`** (crítica) | Telegram (Alertmanager) | `aaa` sin Redis **ni** API 1 min: autoriza con el último perfil conocido |
-| **`AaaEspejoViejo`** | Telegram (Alertmanager) | El espejo del último perfil conocido tiene más de 30 min: si mañana cae Redis y la API, el modo degradado tendría datos viejos |
-| **`AaaLatenciaAlta`** | Telegram (Alertmanager) | p95 de autorización > 100 ms durante 10 min |
-| Llamadas de clientes "no tengo internet" que acaban de reiniciar su router | Soporte | Síntoma típico: los conectados no notan nada |
+| Aviso                                                                      | Llega por                    | Cuándo                                                                                                                                                                          |
+| -------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **"ALERTA · RADIUS (aaa) caído · Nodo …"**                                 | Telegram del equipo (notify) | El vigía (`aaa-vigia`) no recibe `/health` de un nodo durante 60 s (`AAA_CAIDO_TRAS_MS`). Una alerta por caída; al volver, "RESUELTO · RADIUS (aaa) recuperado" con la duración |
+| **`ServicioSinMetricas`** (job `aaa`)                                      | Telegram (Alertmanager)      | Prometheus no puede leer `aaa:3100/metrics` durante 2 min                                                                                                                       |
+| **`AaaSinRedis`**                                                          | Telegram (Alertmanager)      | `aaa` sin Redis 1 min: autoriza por la API (más lento, sigue funcionando)                                                                                                       |
+| **`AaaDegradado`** (crítica)                                               | Telegram (Alertmanager)      | `aaa` sin Redis **ni** API 1 min: autoriza con el último perfil conocido                                                                                                        |
+| **`AaaEspejoViejo`**                                                       | Telegram (Alertmanager)      | El espejo del último perfil conocido tiene más de 30 min: si mañana cae Redis y la API, el modo degradado tendría datos viejos                                                  |
+| **`AaaLatenciaAlta`**                                                      | Telegram (Alertmanager)      | p95 de autorización > 100 ms durante 10 min                                                                                                                                     |
+| Llamadas de clientes "no tengo internet" que acaban de reiniciar su router | Soporte                      | Síntoma típico: los conectados no notan nada                                                                                                                                    |
 
 El vigía usa `/health`, que sigue en 200 en modo degradado: en ese caso avisa `AaaDegradado`, no "aaa caído".
 
@@ -69,9 +69,19 @@ Con **dos nodos** (`radiusAddr2` en el MikroTik): si un nodo cae, el MikroTik us
 
 **Pendiente de laboratorio.** Con `/ppp aaa use-radius=yes`, RouterOS busca primero en `/ppp secret` y solo después pregunta a RADIUS. Cargar los clientes como secrets locales los deja entrar sin `aaa`, **pero sin los controles de ArgosIsp**: no hay corte por mora, ni IPs/prefijos asignados por el sistema, ni accounting. Por eso es temporal y se quita en cuanto `aaa` vuelve.
 
-1. Exportar los secrets del router afectado (`user_ppp`, clave y perfil). El script de exportación por router está **pendiente** (pedido a A2/A1: comando que lea `core.servicios` del router y genere un `.rsc` con `/ppp secret add ... comment=argosisp-emergencia`). Mientras no exista, no hacer este paso a mano con miles de clientes: priorizar levantar `aaa`.
-2. Importar el `.rsc` en el MikroTik (`/import file=argos-emergencia.rsc`).
-3. Al volver `aaa`: `/ppp secret remove [find comment=argosisp-emergencia]` y desconectar esas sesiones por grupos para que vuelvan a autenticar por RADIUS.
+1. Exportar los secrets del router afectado (necesita la API y Postgres, no `aaa`):
+
+    ```sh
+    dc run --rm --no-deps -v /root/emergencia:/salida api node ace.js emergencia:secrets-ppp <router_id> --salida=/salida/argosisp-emergencia.rsc
+    # o, desde un checkout con el .env de producción: pnpm emergencia:secrets-ppp <router_id> --salida=/root/emergencia/argosisp-emergencia.rsc
+    ```
+
+    Deja un `.rsc` (permisos 0600) con un `/ppp secret` por servicio PPPoE del router: activos y limitados con un perfil `argosisp-emergencia-plan-<id>[-limitado]` que lleva su velocidad, suspendidos con el perfil `suspendido` (siguen en corte), retirados fuera. En pantalla solo sale el resumen (cuántos, perfiles y omitidos); **las contraseñas van solo en el archivo**. Queda auditado (`routers.exportar_secrets_emergencia`). Detalle en `apps/api/app/operacion/README.md`.
+
+2. Copiar el archivo al MikroTik (`scp` o Winbox → Files) e importarlo: `/import file-name=argosisp-emergencia.rsc`. Borrar el archivo del servidor y del router al terminar.
+3. Al volver `aaa`: `/ppp secret remove [find comment="argosisp-emergencia"]`, `/ppp profile remove [find comment="argosisp-emergencia"]` y desconectar esas sesiones por grupos para que vuelvan a autenticar por RADIUS.
+
+Limitaciones mientras duran los secrets: sin corte ni reactivación automáticos (un pago no reactiva hasta volver a RADIUS), sin accounting, y el /56 delegado fijo cambia por uno del pool del perfil.
 
 ### 4. Avisar
 
@@ -89,12 +99,13 @@ Con **dos nodos** (`radiusAddr2` en el MikroTik): si un nodo cae, el MikroTik us
 
 ## Probado y pendiente
 
-| Qué | Estado |
-| --- | --- |
-| Alerta "aaa caído" a Telegram desde el vigía | Probado en pruebas de integración (`tests/notify/alertas.spec.ts`) |
-| Alertas de Prometheus a Telegram en < 1 min | Probado (`infra/monitoring/probar-alertas.sh`: 32 s) |
-| FreeRADIUS rechaza si `aaa` no responde (0,8 s) | Configuración validada (`radiusd -XC` en CI); prueba con `radclient` en `tests/network/freeradius.spec.ts` |
-| El MikroTik mantiene las sesiones activas sin RADIUS | **Pendiente de laboratorio** |
-| Failover a la segunda entrada `/radius` con dos nodos | **Pendiente de laboratorio** |
-| Secrets locales de emergencia (export, import, retiro) | **Pendiente de laboratorio** y del script de exportación |
-| Tiempo de reintento de los CPE tras la caída | **Pendiente de laboratorio** |
+| Qué                                                                                 | Estado                                                                                                     |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Alerta "aaa caído" a Telegram desde el vigía                                        | Probado en pruebas de integración (`tests/notify/alertas.spec.ts`)                                         |
+| Alertas de Prometheus a Telegram en < 1 min                                         | Probado (`infra/monitoring/probar-alertas.sh`: 32 s)                                                       |
+| FreeRADIUS rechaza si `aaa` no responde (0,8 s)                                     | Configuración validada (`radiusd -XC` en CI); prueba con `radclient` en `tests/network/freeradius.spec.ts` |
+| El MikroTik mantiene las sesiones activas sin RADIUS                                | **Pendiente de laboratorio**                                                                               |
+| Failover a la segunda entrada `/radius` con dos nodos                               | **Pendiente de laboratorio**                                                                               |
+| Exportación de secrets de emergencia (`emergencia:secrets-ppp`)                     | Probado en pruebas de integración (`tests/operacion/secrets_emergencia.spec.ts`)                           |
+| Secrets locales de emergencia en el router (import, prioridad sobre RADIUS, retiro) | **Pendiente de laboratorio**                                                                               |
+| Tiempo de reintento de los CPE tras la caída                                        | **Pendiente de laboratorio**                                                                               |

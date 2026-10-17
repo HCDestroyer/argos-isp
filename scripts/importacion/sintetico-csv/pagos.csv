@@ -1,0 +1,4 @@
+﻿id,cliente_id,factura_id,monto,fecha,metodo
+9001,1,5002,150.00,2026-08-05 09:12:00,Efectivo
+9002,2,5003,250.00,2026-09-08 15:40:00,Transferencia
+9003,5,5004,100.00,2026-09-09 11:00:00,Efectivo

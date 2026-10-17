@@ -3,12 +3,12 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { leerDumpMysql, ErrorDumpSql } from '#importacion/mysql_dump'
-import { leerDumpMikrowisp } from '#importacion/mikrowisp_sql'
-import { normalizarMac } from '#importacion/fuente'
-import { importarMikrowisp } from '#importacion/importador'
+import { leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
+import { normalizarMac } from '#importacion/canonico'
+import { importar, metodoPago } from '#importacion/importador'
 import type { ReporteImportacion } from '#importacion/reporte'
 import { lineasDiferencias, reporteCsv, reporteMarkdown } from '#importacion/reporte_salidas'
-import type { CargaFinanciera, EntradaPagoHistorico } from '#importacion/carga_financiera'
+import type { CargaFinanciera } from '#importacion/carga_financiera'
 import { cargaFinancieraA3 } from '#importacion/carga_financiera'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
 
@@ -167,11 +167,17 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         const plantillaId = await crearPlantillaFila()
         const antes = await contar()
         const fuente = await leerDumpMikrowisp(FIXTURE)
-        const r1 = await importarMikrowisp(fuente, { dryRun: true, plantillaId, directorio: 'fixture' })
-        const r2 = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+        const r1 = await importar(fuente, {
+            sistema: 'mikrowisp',
             dryRun: true,
             plantillaId,
-            directorio: 'fixture',
+            fuente: 'fixture',
+        })
+        const r2 = await importar(await leerDumpMikrowisp(FIXTURE), {
+            sistema: 'mikrowisp',
+            dryRun: true,
+            plantillaId,
+            fuente: 'fixture',
         })
         assert.deepEqual(await contar(), antes)
 
@@ -194,63 +200,76 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             clientes: { origen: 10, creados: 10, existentes: 0, omitidos: 0 },
             // 12 filas válidas: 107 sin plan, 111 IP repetida y 112 retirado no entran
             servicios: { origen: 12, creados: 9, existentes: 0, omitidos: 3 },
-            // 5002 pagada, 5005 (servicio sin plan) y 5007 (cliente con dos servicios) al saldo
-            facturas: { origen: 9, creados: 6, existentes: 0, omitidos: 3 },
-            // 4: −50; 5: 130 − 150 = −20; 7: 150; 9: 150
+            // Modo B (clientes 1, 2, 5 y 6 tienen pagos): 5002 pagada entra por su total porque la
+            // cubre el pago 9001; 5005 (servicio sin plan) y 5007 (cliente con dos servicios) al saldo
+            facturas: { origen: 9, creados: 7, existentes: 0, omitidos: 2 },
+            // 4: −50; 5: 130 − 150 = −20 (su pago fue a la factura del 6); 7: 150; 9: 150
             saldos: { origen: 4, creados: 4, existentes: 0, omitidos: 0 },
-            pagos: { origen: 3, creados: 0, existentes: 0, omitidos: 3 },
+            pagos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
         })
 
         const d = r1.diferencias
-        assert.deepEqual(d.clientes_nit_duplicado, [{ nit: '76543218', clientes_mw: ['2', '3'] }])
+        assert.deepEqual(d.clientes_nit_duplicado, [{ nit: '76543218', clientes_origen: ['2', '3'] }])
         assert.deepEqual(d.servicios_sin_plan, [
-            { servicio_mw: '107', cliente_mw: '7', etiqueta: 'mw.ernesto' },
+            { servicio_origen: '107', cliente_origen: '7', etiqueta: 'mw.ernesto' },
         ])
         assert.deepEqual(d.routers_sin_credenciales, [
-            { router_mw: '2', nombre: 'Torre Sur', faltan: ['api_usuario', 'api_password', 'radius_secret'] },
+            {
+                router_origen: '2',
+                nombre: 'Torre Sur',
+                faltan: ['api_usuario', 'api_password', 'radius_secret'],
+            },
         ])
         assert.deepEqual(d.pagos_cruzados, [
-            { pago_mw: '9003', pagador_mw: '5', factura_mw: '5004', dueno_mw: '6', monto: '100.00' },
+            {
+                pago_origen: '9003',
+                pagador_origen: '5',
+                factura_origen: '5004',
+                dueno_origen: '6',
+                monto: '100.00',
+            },
         ])
         assert.deepEqual(d.ips_duplicadas, [
-            { ip: '198.18.10.10', servicios_mw: ['101', '111'], importado_mw: '101' },
+            { ip: '198.18.10.10', servicios_origen: ['101', '111'], importado_origen: '101' },
         ])
         assert.sameMembers(
-            d.ips_nuevas.map((x) => x.servicio_mw),
+            d.ips_nuevas.map((x) => x.servicio_origen),
             ['103', '109'],
         )
         assert.deepEqual(
-            d.facturas_a_saldo.map((x) => x.factura_mw),
+            d.facturas_a_saldo.map((x) => x.factura_origen),
             ['5005', '5007'],
         )
         assert.deepEqual(
-            d.nit_invalidos.map((x) => x.cliente_mw),
+            d.nit_invalidos.map((x) => x.cliente_origen),
             ['9'],
         )
         assert.deepEqual(d.saldos_distintos, [])
-        assert.isTrue(r1.pendiente.some((p) => p.startsWith('Pagos históricos: 3 pagos')))
+        assert.isFalse(r1.pendiente.some((p) => p.startsWith('Pagos históricos')))
+        assert.deepEqual(d.pagos_sin_factura, [])
+        assert.deepEqual(d.pagos_no_importados, [])
 
         // Reporte legible: una línea por diferencia, con su causa, por entidad
         const lineas = lineasDiferencias(r1)
         assert.isTrue(lineas.every((x) => x.causa && x.detalle && x.accion))
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['servicio', '111', 'ip_duplicada'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['cliente', '3', 'nit_duplicado'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['pago', '9003', 'pago_cruzado'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['router', '2', 'router_sin_credenciales'],
         )
         const csv = reporteCsv(r1)
-        assert.isTrue(csv.startsWith('﻿entidad,id_mw,tipo,gravedad,detalle,causa,accion\r\n'))
+        assert.isTrue(csv.startsWith('﻿entidad,id_origen,tipo,gravedad,detalle,causa,accion\r\n'))
         assert.equal(csv.trimEnd().split('\r\n').length, lineas.length + 1)
         const md = reporteMarkdown(r1)
         assert.include(md, '- **Cuadra**')
@@ -264,7 +283,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         const plantillaId = await crearPlantillaFila()
         const trx = await db.transaction()
         try {
-            const primera = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const primera = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -314,7 +334,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
                 .first()) as { n: string }
             assert.isAbove(Number(auditadas.n), 20)
 
-            const segunda = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const segunda = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -327,8 +348,9 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
                 routers: { origen: 2, creados: 0, existentes: 2, omitidos: 0 },
                 clientes: { origen: 10, creados: 0, existentes: 10, omitidos: 0 },
                 servicios: { origen: 12, creados: 0, existentes: 9, omitidos: 3 },
-                facturas: { origen: 9, creados: 0, existentes: 6, omitidos: 3 },
+                facturas: { origen: 9, creados: 0, existentes: 7, omitidos: 2 },
                 saldos: { origen: 4, creados: 0, existentes: 4, omitidos: 0 },
+                pagos: { origen: 3, creados: 0, existentes: 3, omitidos: 0 },
             })
             assert.deepEqual(segunda.errores, [])
             assert.isTrue(segunda.saldos.cuadra)
@@ -343,42 +365,135 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         }
     })
 
-    test('pagos históricos por el puerto de A3 cuando exista la acción (idempotente por clave)', async ({
+    test('pagos históricos (modo B): facturas por su total, pago con facturas: [id], saldos cuadran', async ({
         assert,
     }) => {
         const plantillaId = await crearPlantillaFila()
-        const registrados = new Map<string, EntradaPagoHistorico>()
-        const carga: CargaFinanciera = {
-            ...cargaFinancieraA3,
-            registrarPagoHistorico: async (entrada) => {
-                registrados.set(entrada.clave_externa, entrada)
-            },
-            existePagoHistorico: async (clave) => registrados.has(clave),
-        }
         const trx = await db.transaction()
         try {
-            const r = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const r = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
-                carga,
             })
-            assert.deepEqual(r.resumen.pagos, { origen: 3, creados: 3, existentes: 0, omitidos: 0 })
-            assert.isFalse(r.pendiente.some((p) => p.startsWith('Pagos históricos')))
-            const cruzado = registrados.get('mikrowisp:pago:9003')!
-            assert.equal(cruzado.monto, '100.00')
-            assert.equal(cruzado.factura_clave_externa, 'mikrowisp:factura:5004')
-            assert.isTrue(r.saldos.cuadra) // el pago histórico no mueve saldos
+            assert.deepEqual(r.errores, [])
+            assert.isTrue(r.saldos.cuadra)
+            assert.equal(r.saldos.suma_importada, '1830.00')
 
-            const r2 = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const factura = async (id: string) =>
+                (await trx
+                    .from('billing.facturas')
+                    .where('clave_externa', `mikrowisp:factura:${id}`)
+                    .select('id', 'cliente_id', 'total', 'estado')
+                    .first()) as { id: number; cliente_id: number; total: string; estado: string }
+            // 5002 estaba pagada: entra por su total y el pago 9001 la salda
+            const f5002 = await factura('5002')
+            assert.deepInclude(f5002, { total: '150.00', estado: 'pagada' })
+            // 5003 (600, abono 250, venció el 2026-09-10): entra por 600 y sigue vencida por 350
+            const f5003 = await factura('5003')
+            assert.deepInclude(f5003, { total: '600.00', estado: 'vencida' })
+
+            const pagos = (await trx
+                .from('billing.pagos as p')
+                .where('p.clave_externa', 'like', 'mikrowisp:pago:%')
+                .select(
+                    'p.id',
+                    'p.clave_externa',
+                    'p.cliente_id',
+                    'p.monto',
+                    'p.metodo',
+                    'p.historico',
+                    'p.origen',
+                    db.raw(`to_char(p.created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD') AS fecha`),
+                )
+                .orderBy('p.clave_externa')) as Array<Record<string, unknown>>
+            assert.deepEqual(
+                pagos.map((p) => [p.clave_externa, p.monto, p.metodo, p.historico, p.fecha]),
+                [
+                    ['mikrowisp:pago:9001', '150.00', 'caja', true, '2026-08-05'],
+                    ['mikrowisp:pago:9002', '250.00', 'transferencia', true, '2026-09-08'],
+                    ['mikrowisp:pago:9003', '100.00', 'caja', true, '2026-09-09'],
+                ],
+            )
+            // El pago cruzado (cliente 5 → factura 5004 del cliente 6) se aplica a esa factura
+            const f5004 = await factura('5004')
+            const aplicaciones = (await trx
+                .from('billing.pagos_aplicaciones')
+                .where('pago_id', pagos[2]!.id as number)
+                .select('factura_id', 'monto')) as Array<{ factura_id: number; monto: string }>
+            assert.deepEqual(
+                aplicaciones.map((a) => [a.factura_id, a.monto]),
+                [[f5004.id, '100.00']],
+            )
+            assert.notEqual(pagos[2]!.cliente_id, f5004.cliente_id)
+            // Origen neutral de A3: el sistema de la corrida, con el mismo formato de id de siempre
+            assert.deepEqual([...new Set(pagos.map((p) => p.origen))], ['mikrowisp'])
+
+            // Segunda corrida: nada nuevo, sigue cuadrando
+            const r2 = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
-                carga,
             })
             assert.deepEqual(r2.resumen.pagos, { origen: 3, creados: 0, existentes: 3, omitidos: 0 })
+            assert.isTrue(r2.saldos.cuadra)
         } finally {
             await trx.rollback()
         }
+    })
+
+    test('sin acción de pago histórico: modo A (facturas por lo pendiente) y también cuadra', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const carga: CargaFinanciera = { ...cargaFinancieraA3, registrarPagoHistorico: null }
+        const r = await importar(await leerDumpMikrowisp(FIXTURE), {
+            sistema: 'mikrowisp',
+            dryRun: true,
+            plantillaId,
+            carga,
+        })
+        assert.deepInclude(r.resumen, {
+            facturas: { origen: 9, creados: 6, existentes: 0, omitidos: 3 },
+            pagos: { origen: 3, creados: 0, existentes: 0, omitidos: 3 },
+        })
+        assert.isTrue(r.saldos.cuadra)
+        assert.isTrue(r.pendiente.some((p) => p.startsWith('Pagos históricos: 3 pagos')))
+    })
+
+    test('pagos que no cuadran con sus facturas: el saldo inicial compensa y lo reporta', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const fuente = await leerDumpMikrowisp(FIXTURE)
+        // 9001 sin fecha (no se importa) y 9002 a una factura que no entra (5005 no tiene servicio)
+        fuente.pagos.find((p) => p.id === '9001')!.fecha = null
+        fuente.pagos.find((p) => p.id === '9002')!.factura_id = '5005'
+        const r = await importar(fuente, { sistema: 'mikrowisp', dryRun: true, plantillaId })
+        assert.deepEqual(r.errores, [])
+        assert.deepEqual(
+            r.diferencias.pagos_no_importados.map((x) => x.pago_origen),
+            ['9001'],
+        )
+        assert.deepEqual(
+            r.diferencias.pagos_sin_factura.map((x) => [x.pago_origen, x.factura_origen]),
+            [['9002', '5005']],
+        )
+        assert.isTrue(r.saldos.cuadra)
+        assert.deepInclude(
+            lineasDiferencias(r).map((x) => [x.entidad, x.id_origen, x.tipo]),
+            ['pago', '9002', 'pago_sin_factura'],
+        )
+    })
+
+    test('forma de pago del origen a los métodos de ArgosIsp', ({ assert }) => {
+        assert.equal(metodoPago('Efectivo'), 'caja')
+        assert.equal(metodoPago('Depósito BI'), 'deposito')
+        assert.equal(metodoPago('Transferencia'), 'transferencia')
+        assert.equal(metodoPago('Tarjeta de crédito'), 'debito')
+        assert.equal(metodoPago('PayPal'), 'pasarela')
+        assert.equal(metodoPago(null), 'caja')
     })
 })

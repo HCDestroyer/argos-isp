@@ -148,7 +148,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: docker compose config
-        run: docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
+        run: |
+          docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
+          docker compose -f infra/docker-compose.yml -f infra/docker-compose.portal-https.yml --env-file infra/.env.example config --quiet
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
@@ -167,6 +169,10 @@ jobs:
 
       - name: Proxy pasa el cuerpo crudo del webhook de la pasarela
         run: infra/proxy/probar-webhook.sh
+
+      # Node del runner (sin setup-node): solo corre un servidor de eco
+      - name: Proxy del portal (/corte por HTTP, /entrar y /cuenta por HTTPS con HSTS)
+        run: infra/proxy/probar-portal.sh
 
   # Ensayo de restauración (A6): respaldo de un compose con datos de demo → compose limpio →
   # restaurar.sh → migrate + API → login, clientes y estado de cuenta (infra/backups/ensayo.sh).
