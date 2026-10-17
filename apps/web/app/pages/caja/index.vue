@@ -330,6 +330,7 @@ onMounted(cargar)
                             <UButton
                                 v-if="puede('cajas.cerrar')"
                                 label="Cerrar turno"
+                                class="glow-brand"
                                 icon="i-lucide-lock"
                                 @click="cierreAbierto = true"
                             />
@@ -404,6 +405,7 @@ onMounted(cargar)
                             <UButton
                                 v-if="puede('cajas.abrir')"
                                 label="Abrir turno"
+                                class="glow-brand"
                                 icon="i-lucide-lock-open"
                                 @click="aperturaAbierta = true"
                             />

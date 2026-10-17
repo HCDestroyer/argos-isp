@@ -128,7 +128,10 @@ onMounted(cargar)
                                     class="flex flex-col gap-1.5 rounded-md p-2 hover:bg-elevated/60"
                                     :data-prueba="`servicios-${item.estado}`"
                                 >
-                                    <span class="text-2xl font-semibold tabular-nums text-highlighted">{{ item.cantidad.toLocaleString('es-GT') }}</span>
+                                    <NumeroVivo
+                                        :valor="item.cantidad.toLocaleString('es-GT')"
+                                        class="text-2xl font-semibold tracking-[-0.02em] text-highlighted"
+                                    />
                                     <UBadge
                                         :label="item.etiqueta"
                                         :color="ESTADOS_SERVICIO[item.estado].color"

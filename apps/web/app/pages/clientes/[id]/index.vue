@@ -218,6 +218,7 @@ onMounted(cargar)
                         :to="`/servicios/nuevo?cliente=${cliente.id}`"
                         icon="i-lucide-plus"
                         label="Nuevo servicio"
+                        class="glow-brand"
                     />
                     <UButton
                         v-if="puede('clientes.editar')"

@@ -142,6 +142,7 @@ onMounted(async () => {
                 to="/clientes/nuevo"
                 icon="i-lucide-user-plus"
                 label="Nuevo cliente"
+                class="glow-brand"
                 :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo cliente"
             />

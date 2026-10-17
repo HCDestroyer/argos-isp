@@ -36,8 +36,18 @@ Los tokens de la marca son `--argos-marca-fondo` (`primary-700`) y `--argos-marc
 - **Acción primaria con halo:** clase `glow-brand` en una sola acción por vista (solo se ve en
   oscuro; hover 26 px). A diferencia de la skill, el halo **no** va en todos los botones primarios
   sólidos (`app.config`): el panel tiene varios por vista (p. ej. "Nuevo cliente" y "Guardar").
+  Hoy la llevan: "Entrar" (login), "Nuevo cliente" (clientes), "Nuevo servicio" (servicios y ficha
+  del cliente), "Crear cliente"/"Guardar cambios", "Crear servicio", "Registrar pago" (cobro) y
+  "Abrir turno"/"Cerrar turno" (caja). Una pantalla nueva elige una sola.
 - **Punto en vivo:** `EstadoSesionBadge` en la ficha del servicio (sesión releída cada 30 s; cada
   lectura lanza el anillo).
+- **Números que ruedan:** `NumeroVivo` en los KPIs del dashboard (`IndicadorTablero`) y en los
+  servicios por estado: cada dígito rueda 0,7 s solo cuando el dato cambia y el valor destella
+  (en oscuro). El dígito real queda como texto.
+- Las tres preferencias del sistema vienen de la skill: `prefers-reduced-motion` (sin aura en
+  movimiento, sin anillos ni destellos, números sin rodar), `prefers-reduced-transparency` (vidrio
+  y tarjetas sólidos, sin aura; el panel extiende la regla al vidrio fuerte de modales y menús) y
+  `prefers-contrast: more` (texto atenuado más fuerte, bordes marcados, sin halos).
 
 ## Estados: color + icono + texto
 
