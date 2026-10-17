@@ -205,11 +205,15 @@ export async function entregarPendientes(
 ): Promise<ResultadoEntrega> {
     const resultado: ResultadoEntrega = { enviados: 0, reintentar: 0, fallidos: 0, descartados: 0 }
     const ahora = opciones.ahora ?? new Date()
+    // `proximo_intento_en` lo fija Postgres (`now()`, microsegundos). Compararlo con un `Date` de
+    // Node (milisegundos, truncado) deja fuera un envío recién registrado en el mismo milisegundo
+    // (`…52.743061 <= …52.743` es falso): sin `ahora` explícito se compara con el reloj de la base.
+    const hasta = opciones.ahora ? opciones.ahora : db.raw('clock_timestamp()')
     const candidatos = (await db
         .from('integraciones.horus_envios')
         .where('estado', 'pendiente')
         .if(opciones.soloId !== undefined, (q) => q.where('id', opciones.soloId!))
-        .if(opciones.soloId === undefined, (q) => q.where('proximo_intento_en', '<=', ahora))
+        .if(opciones.soloId === undefined, (q) => q.where('proximo_intento_en', '<=', hasta))
         .orderBy('proximo_intento_en')
         .orderBy('id')
         .limit(opciones.limite ?? 50)

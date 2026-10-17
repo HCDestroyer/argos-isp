@@ -126,21 +126,19 @@ const seguridad360 = abierto({
 const meta360 = abierto({
     at: { ...instante, description: 'Instante del dato en Horus' },
     omitted: {
-        description:
-            'Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa ' +
-            '`{ security: "permission" }` o lista `[{ block, reason }]`',
-        anyOf: [
-            { type: 'object', additionalProperties: { type: 'string', examples: MOTIVOS_OMITIDO } },
-            lista(
-                abierto(
-                    {
-                        block: { ...texto, description: '`consumption`, `health`, `security`' },
-                        reason: { ...texto, description: MOTIVOS_OMITIDO.map((m) => `\`${m}\``).join(', ') },
+        ...lista(
+            abierto(
+                {
+                    block: enumerado(['consumption', 'health', 'security']),
+                    reason: {
+                        ...texto,
+                        description: MOTIVOS_OMITIDO.map((m) => `\`${m}\``).join(', '),
                     },
-                    ['block'],
-                ),
+                },
+                ['block', 'reason'],
             ),
-        ],
+        ),
+        description: 'Bloques que Horus no devolvió y por qué (lista vacía si no omitió nada)',
     },
 })
 

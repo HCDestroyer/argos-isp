@@ -5,7 +5,7 @@ import EditarCliente from '#core/actions/editar_cliente'
 import { ColaFalsa, crearCliente, crearServicio, eventoOutbox } from '#tests/notify/ayudas_notify'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { ConsumidorHorus } from '#integraciones/horus/consumidor'
-import { INTENTOS_MAXIMOS, entregarPendientes, idWebhook } from '#integraciones/horus/envios'
+import { INTENTOS_MAXIMOS, entregarPendientes, idWebhook, registrarEnvio } from '#integraciones/horus/envios'
 import { cabecerasFirmadas, firmar, verificarFirma } from '#integraciones/horus/firma'
 import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import { fijarChatEquipo } from '#notify/alertas'
@@ -221,6 +221,36 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
                 evento: 'cliente.actualizado',
                 payload: { cliente_id: clienteId, campos: ['nombre'] },
             })
+        } finally {
+            await horus.detener()
+        }
+    })
+
+    test('un envío recién registrado sale en la entrega inmediata (reloj de la base, no el de Node)', async ({
+        assert,
+    }) => {
+        // Regresión: `proximo_intento_en = now()` (µs) contra `new Date()` (ms truncado) dejaba fuera
+        // ~1 % de los envíos registrados en el mismo milisegundo de la entrega.
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            horus.responder('/receptor', () => ({ status: 200 }))
+            await fijarConector({
+                url_base: horus.url,
+                webhook_salida_url: `${horus.url}/receptor`,
+                webhook_salida_secreto: SECRETO_SALIDA,
+            })
+            let omitidos = 0
+            for (let i = 0; i < 200; i++) {
+                await registrarEnvio({
+                    id: `reloj-${i}`,
+                    evento: 'cliente.actualizado',
+                    payload: { cliente_id: 1, campos: ['nombre'] },
+                })
+                const r = await entregarPendientes()
+                if (r.enviados !== 1) omitidos++
+            }
+            assert.equal(omitidos, 0)
+            assert.lengthOf(horus.de('/receptor'), 200)
         } finally {
             await horus.detener()
         }

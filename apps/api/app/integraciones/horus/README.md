@@ -68,7 +68,7 @@ servidor y el navegador lo conserva), la página del panel que explica que se pe
 
 Con Horus en pausa, `detail` (502 de `abrir`) y `error` (lecturas) dicen la hora en
 `America/Guatemala` ("se reintenta después de las 17/10/2026 14:33 (hora de Guatemala)") y el
-instante va aparte en `reintentar_en` (ISO UTC): extensión del problem+json de `horus_error` y
+instante va aparte en `reintentar_en` (ISO UTC): extensión del problem+json de `horus_error` (declarada en el schema común `Problem`) y
 campo de `Horus360Servicio`, `ConsumoHorus` y `SeguridadHorus` (null sin pausa).
 
 ### `Horus360Servicio.datos`
@@ -76,8 +76,8 @@ campo de `Horus360Servicio`, `ConsumoHorus` y `SeguridadHorus` (null sin pausa).
 La respuesta de §3.1 tal cual. El esquema declara `security` (`state`, `open_findings`,
 `findings[]` con `id`, `kind`, `severity`, `opened_at`, `summary`) y `meta` (`at`, `omitted`), todo
 opcional y abierto a campos nuevos; el resto (`customer`, `external`, `consumption`, `health`)
-llega sin tipar. `meta.omitted` se acepta como mapa `{ bloque: motivo }` o lista
-`[{ block, reason }]` porque el contrato no fija la forma.
+llega sin tipar. `meta.omitted` es siempre una lista `[{ block, reason }]` (vacía si no se omitió
+nada; `block`: `consumption`, `health` o `security`), como fija el contrato.
 
 ## Eventos
 
