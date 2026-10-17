@@ -4939,14 +4939,12 @@ export interface components {
                      * @description Instante del dato en Horus
                      */
                     at?: string;
-                    /** @description Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa `{ security: "permission" }` o lista `[{ block, reason }]` */
-                    omitted?: {
-                        [key: string]: string;
-                    } | ({
-                        /** @description `consumption`, `health`, `security` */
-                        block: string;
+                    /** @description Bloques que Horus no devolvió y por qué (lista vacía si no omitió nada) */
+                    omitted?: ({
+                        /** @enum {string} */
+                        block: "consumption" | "health" | "security";
                         /** @description `permission`, `unavailable`, `not_requested`, `not_configured` */
-                        reason?: string;
+                        reason: string;
                     } & {
                         [key: string]: unknown;
                     })[];
@@ -5684,6 +5682,11 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
+            /**
+             * Format: date-time
+             * @description Extensión: cuándo se reintenta (UTC) si el servicio externo está en pausa por la espera exponencial (p. ej. `horus_error`). `detail` lo dice en hora de Guatemala
+             */
+            reintentar_en?: string;
             errors?: {
                 field: string;
                 message: string;

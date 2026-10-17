@@ -30682,41 +30682,30 @@
                     "description": "Instante del dato en Horus"
                   },
                   "omitted": {
-                    "description": "Bloques que Horus no devolvió y por qué. El contrato no fija la forma: mapa `{ security: \"permission\" }` o lista `[{ block, reason }]`",
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "block",
+                        "reason"
+                      ],
+                      "properties": {
+                        "block": {
                           "type": "string",
-                          "examples": [
-                            "permission",
-                            "unavailable",
-                            "not_requested",
-                            "not_configured"
+                          "enum": [
+                            "consumption",
+                            "health",
+                            "security"
                           ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "description": "`permission`, `unavailable`, `not_requested`, `not_configured`"
                         }
                       },
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "required": [
-                            "block"
-                          ],
-                          "properties": {
-                            "block": {
-                              "type": "string",
-                              "description": "`consumption`, `health`, `security`"
-                            },
-                            "reason": {
-                              "type": "string",
-                              "description": "`permission`, `unavailable`, `not_requested`, `not_configured`"
-                            }
-                          },
-                          "additionalProperties": true
-                        }
-                      }
-                    ]
+                      "additionalProperties": true
+                    },
+                    "description": "Bloques que Horus no devolvió y por qué (lista vacía si no omitió nada)"
                   }
                 },
                 "additionalProperties": true
@@ -33458,6 +33447,11 @@
           },
           "detail": {
             "type": "string"
+          },
+          "reintentar_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Extensión: cuándo se reintenta (UTC) si el servicio externo está en pausa por la espera exponencial (p. ej. `horus_error`). `detail` lo dice en hora de Guatemala"
           },
           "errors": {
             "type": "array",
