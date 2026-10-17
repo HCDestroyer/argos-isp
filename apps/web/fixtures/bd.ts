@@ -11,6 +11,7 @@ import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
+import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
 import { promesas } from './promesas/datos'
@@ -87,7 +88,7 @@ interface BaseFixtures {
 }
 
 function inicial(): BaseFixtures {
-    return structuredClone({
+    const datos: BaseFixtures = structuredClone({
         clientes,
         servicios,
         zonas,
@@ -125,6 +126,8 @@ function inicial(): BaseFixtures {
         migracionesAaa: {},
         notasCredito: [],
     })
+    sembrarNotasCredito(datos)
+    return datos
 }
 
 export const bd: BaseFixtures = inicial()

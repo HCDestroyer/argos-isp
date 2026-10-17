@@ -3,10 +3,8 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Factura = Schema<'Factura'>
 export type FacturaDetalle = Schema<'FacturaDetalle'>
 export type FacturaLinea = Schema<'FacturaLinea'>
-export type NotaCredito = Schema<'NotaCredito'>
 export type NotaCreditoEmitida = Schema<'NotaCreditoEmitida'>
 export type DatosNotaCredito = paths['/api/v1/facturas/{id}/notas-credito']['post']['requestBody']['content']['application/json']
-export type FiltrosNotasCredito = Omit<NonNullable<paths['/api/v1/notas-credito']['get']['parameters']['query']>, 'cursor'>
 export type FiltrosFacturas = Omit<NonNullable<paths['/api/v1/facturas']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_FACTURAS = 25
@@ -47,14 +45,5 @@ export function useFacturas() {
         }))
     }
 
-    /** `GET /notas-credito` (`facturas.ver`) por cliente, factura o fecha contable. */
-    function notasCredito(filtros: FiltrosNotasCredito = {}, cursor?: string): Promise<Resultado<Pagina<NotaCredito>>> {
-        const query: FiltrosNotasCredito & { cursor?: string } = { limit: 25, ...filtros }
-        if (cursor) {
-            query.cursor = cursor
-        }
-        return resolver(api.GET('/api/v1/notas-credito', { params: { query } }))
-    }
-
-    return { listar, ver, anular, notaCredito, notasCredito }
+    return { listar, ver, anular, notaCredito }
 }

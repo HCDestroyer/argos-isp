@@ -114,7 +114,7 @@ describe('reverso de asiento y nota de crédito', () => {
         const sinSaldo = await useFacturas().notaCredito(vencida.id, { monto: '1.00', motivo: 'Otra' }, nuevaClaveIdempotencia())
         expect(!sinSaldo.ok && sinSaldo.problema.type).toBe('urn:argosisp:problema:factura_sin_saldo')
 
-        const lista = await useFacturas().notasCredito({ factura_id: vencida.id })
+        const lista = await useNotasCredito().listar({ factura_id: vencida.id })
         expect(lista.ok && lista.data.data.map(n => n.monto)).toEqual([saldo.minus(10).toFixed(2), '10.00'])
         const cuenta = await useClientes().estadoCuenta(vencida.cliente_id)
         expect(cuenta.ok && cuenta.data.movimientos.filter(m => m.tipo === 'nota_credito')).toHaveLength(2)
