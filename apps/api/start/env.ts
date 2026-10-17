@@ -155,6 +155,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_SESION_MAX_S: Env.schema.number.optional(),
     /** `Secure` de la cookie del portal: `auto` (HTTPS detectado) o `siempre` (`app/portal/acceso/sesion.ts`). */
     PORTAL_COOKIE_SEGURA: Env.schema.enum.optional(['auto', 'siempre'] as const),
+    /** URL pública del portal para el retorno de la pasarela (`app/portal/pagos_en_linea.ts`). */
+    PORTAL_URL_PUBLICA: Env.schema.string.optional(),
 
     /*
     |----------------------------------------------------------

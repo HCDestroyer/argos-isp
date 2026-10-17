@@ -3466,11 +3466,10 @@
           "200": {
             "description": "PDF",
             "content": {
-              "application/json": {
+              "application/pdf": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                  "format": "binary"
                 }
               }
             }
@@ -3758,11 +3757,10 @@
           "200": {
             "description": "PDF",
             "content": {
-              "application/json": {
+              "application/pdf": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                  "format": "binary"
                 }
               }
             }
@@ -10573,6 +10571,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "parameters": [
           {
             "name": "cursor",
@@ -10625,6 +10628,16 @@
               }
             }
           },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -10651,7 +10664,7 @@
       "post": {
         "operationId": "portalSubirComprobante",
         "summary": "El cliente sube el comprobante de un depósito, transferencia, ACH o remesa",
-        "description": "**`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -10671,7 +10684,7 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
@@ -10726,6 +10739,11 @@
                     "type": "integer",
                     "minimum": 1,
                     "description": "Solo con la sesión del portal; sin él se identifica por la IP de origen"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido"
                   }
                 },
                 "required": [
@@ -10733,7 +10751,8 @@
                   "cuenta_bancaria_id",
                   "referencia",
                   "monto",
-                  "fecha_deposito"
+                  "fecha_deposito",
+                  "archivo"
                 ],
                 "additionalProperties": false
               }
@@ -10792,6 +10811,11 @@
         "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.editar_contacto` (canal portal) sobre `clientes.editar`: diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.",
         "tags": [
           "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
         ],
         "requestBody": {
           "required": true,
@@ -10857,6 +10881,16 @@
               }
             }
           },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflicto de versión",
             "content": {
@@ -10899,6 +10933,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Cuenta del cliente",
@@ -10906,6 +10945,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalCuenta"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -10998,6 +11047,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "parameters": [
           {
             "name": "cursor",
@@ -11050,6 +11104,16 @@
               }
             }
           },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -11082,6 +11146,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
@@ -11100,6 +11169,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalFacturaDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -11136,6 +11215,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
@@ -11151,11 +11235,20 @@
           "200": {
             "description": "PDF",
             "content": {
-              "application/json": {
+              "application/pdf": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` (el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)"
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -11191,6 +11284,11 @@
         "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
         "tags": [
           "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
         ],
         "parameters": [
           {
@@ -11240,6 +11338,16 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -11326,7 +11434,7 @@
       "post": {
         "operationId": "portalIniciarPago",
         "summary": "Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor",
-        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a `/corte?pago=<id>`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
         "tags": [
           "portal"
         ],
@@ -11425,6 +11533,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "parameters": [
           {
             "name": "cursor",
@@ -11477,6 +11590,16 @@
               }
             }
           },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -11503,7 +11626,7 @@
       "post": {
         "operationId": "portalSolicitarPromesa",
         "summary": "El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` y actor sistema: la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -11696,9 +11819,24 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "responses": {
           "204": {
             "description": "Sesión cerrada"
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "429": {
             "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
@@ -11722,6 +11860,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Estado de Telegram",
@@ -11729,6 +11872,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -11755,6 +11908,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Estado de Telegram",
@@ -11762,6 +11920,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalTelegram"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -11788,6 +11956,11 @@
         "tags": [
           "portal"
         ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "Enlace al bot",
@@ -11795,6 +11968,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalVinculoTelegram"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

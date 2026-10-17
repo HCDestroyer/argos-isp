@@ -2,7 +2,9 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type ComprobantePortal = Schema<'PortalComprobante'>
 export type BancoPortal = Schema<'PortalBanco'>
-export type CamposComprobante = paths['/api/v1/portal/comprobantes']['post']['requestBody']['content']['application/json']
+type CuerpoComprobante = paths['/api/v1/portal/comprobantes']['post']['requestBody']['content']['multipart/form-data']
+/** Campos de texto del formulario (el OpenAPI declara además el archivo `archivo`). */
+export type CamposComprobante = Omit<CuerpoComprobante, 'archivo'>
 
 /** Comprobantes de depósito del cliente de la sesión (lista de `/cuenta`, con estado y motivo). */
 export function useComprobantes() {
@@ -17,8 +19,9 @@ export function useComprobantes() {
  * es de A3 (`RegistrarComprobante`, canal `portal`); el portal solo arma el formulario.
  *
  * Sin `servicio_id` el cliente se identifica por la IP de origen (`/corte`); con `servicio_id`,
- * por la sesión del portal (`/cuenta`). El OpenAPI declara los campos como JSON (el generador aún
- * no conoce multipart): el tipo sale de ahí y `bodySerializer` arma el `FormData` con el archivo.
+ * por la sesión del portal (`/cuenta`). El OpenAPI declara el cuerpo `multipart/form-data` con el
+ * archivo `archivo` (`format: binary`, que openapi-typescript tipa como `string`): en el cuerpo va
+ * su nombre y `bodySerializer` arma el `FormData` con el `File` real.
  */
 export function useSubirComprobante() {
     const api = useApi()
@@ -31,11 +34,11 @@ export function useSubirComprobante() {
     function subir(campos: CamposComprobante, archivo: File, clave: string): Promise<Resultado<ComprobantePortal>> {
         return resolver(api.POST('/api/v1/portal/comprobantes', {
             params: { header: { 'Idempotency-Key': clave } },
-            body: campos,
+            body: { ...campos, archivo: archivo.name },
             bodySerializer: (cuerpo) => {
                 const formulario = new FormData()
                 for (const [nombre, valor] of Object.entries(cuerpo)) {
-                    if (valor !== undefined && valor !== null) {
+                    if (nombre !== 'archivo' && valor !== undefined && valor !== null) {
                         formulario.append(nombre, String(valor))
                     }
                 }

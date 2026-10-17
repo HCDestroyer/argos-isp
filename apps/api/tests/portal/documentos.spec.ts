@@ -3,9 +3,14 @@ import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
 import db from '@adonisjs/lucid/services/db'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { EnviadorFalso, cookieDeSesion, crearServicio, nitAleatorio } from '#tests/portal/ayudas_portal'
+import {
+    EnviadorFalso,
+    cookieDeSesion,
+    crearServicio,
+    nitAleatorio,
+    usarEnviadorCodigo,
+} from '#tests/portal/ayudas_portal'
 import { textoDePdf } from '#tests/portal/ayudas_pdf'
-import { usarEnviadorCodigo } from '#portal/acceso/envio_codigo'
 import { htmlAPdf } from '#portal/documentos/html_a_pdf'
 import { PLANTILLA_AVISO_COBRO } from '#portal/documentos/plantilla_base'
 import { renderizarHtml } from '#portal/documentos/render'

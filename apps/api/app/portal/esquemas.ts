@@ -365,15 +365,6 @@ export const EmpresaPublica = definirEsquema(
 |--------------------------------------------------------------------------
 */
 
-/** Respuesta binaria: el cuerpo es el PDF (`Content-Type: application/pdf`). */
-export const ArchivoPdf = {
-    type: 'string',
-    format: 'binary',
-    description:
-        'PDF. La respuesta real es `Content-Type: application/pdf` con `Content-Disposition: inline; filename=…` ' +
-        '(el generador de OpenAPI aún declara application/json; ver .claude/integration/a5.md)',
-}
-
 export const VariableDocumento = definirEsquema(
     'VariableDocumento',
     objeto({ nombre: texto, descripcion: texto }),

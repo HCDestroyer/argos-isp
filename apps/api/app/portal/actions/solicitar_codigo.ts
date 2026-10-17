@@ -7,8 +7,20 @@ import { normalizarNitCui } from '#core/nit_cui'
 import { resolverIp } from '#network/consultas/ip'
 import { DemasiadasPeticiones } from '#portal/limite_peticiones'
 import { configAcceso, describirDestino, generarCodigo, hashCodigo } from '#portal/acceso/codigos'
-import { enviadorCodigo, type CanalCodigo, type EnviadorCodigo } from '#portal/acceso/envio_codigo'
 import { leerEmpresa } from '#portal/empresa'
+import { canalDisponible } from '#notify/canales/registro'
+import EnviarMensajeDirecto from '#notify/actions/enviar_mensaje_directo'
+
+/** Canales por los que puede ir el código: los destinos que `core.clientes` guarda. */
+export type CanalCodigo = 'correo' | 'telegram'
+
+/** `notify.envios.evento` y `evento_origen` de `notificacion.enviada` del código de acceso. */
+export const MOTIVO_CODIGO_ACCESO = 'portal.codigo_acceso'
+
+/** Canales de notify configurados en este entorno (`SMTP_HOST`, `TELEGRAM_BOT_TOKEN`). */
+export function canalesDisponibles(): CanalCodigo[] {
+    return (['correo', 'telegram'] as const).filter((canal) => canalDisponible(canal))
+}
 
 export interface EntradaSolicitarCodigo {
     /** IP de origen ya resuelta */
@@ -45,13 +57,15 @@ interface ClienteDestino {
  *   solicitud que no corresponde a nadie simplemente nunca verifica. Por IP sí se informa el
  *   destino enmascarado o que no hay destino, porque `/corte` ya identifica al cliente.
  * - Máximo `PORTAL_CODIGO_MAX_HORA` códigos por cliente por hora (además del límite por IP de la ruta).
+ * - El envío es `EnviarMensajeDirecto` de notify (A6): un canal, el destino registrado, en el
+ *   momento y con el código como `secreto` (ni `notify.envios` ni la auditoría lo guardan). Corre en
+ *   **su propia transacción**: si el canal falla, la fila `fallido` de `notify.envios` queda aunque
+ *   esta acción se revierta (503 y el código no queda). Por eso el cliente se bloquea con
+ *   `FOR NO KEY UPDATE` (serializa las solicitudes del cliente sin bloquear la clave foránea de
+ *   `notify.envios`, que sí bloquearía un `FOR UPDATE`).
  */
 export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitarCodigo, SolicitudCodigo> {
     readonly nombre = 'portal.solicitar_codigo'
-
-    constructor(private readonly enviador: EnviadorCodigo = enviadorCodigo()) {
-        super()
-    }
 
     protected async handle(input: EntradaSolicitarCodigo, t: Transaccion): Promise<SolicitudCodigo> {
         const config = configAcceso()
@@ -72,12 +86,12 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
         }
         t.fijarEntidad('cliente', clienteId)
 
-        const cliente = (await t.trx
-            .from('core.clientes')
-            .where('id', clienteId)
-            .forUpdate()
-            .select('id', 'email', 'telegram_chat_id', 'canal_preferido')
-            .first()) as ClienteDestino
+        const filas = await t.trx.rawQuery(
+            `SELECT id, email, telegram_chat_id, canal_preferido FROM core.clientes
+              WHERE id = ? FOR NO KEY UPDATE`,
+            [clienteId],
+        )
+        const cliente = (filas.rows as ClienteDestino[])[0]!
 
         const recientes = (await t.trx
             .from('core.portal_codigos')
@@ -91,7 +105,7 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
             throw new DemasiadasPeticiones(Math.max(1, Math.ceil(libera.diffNow('seconds').seconds)))
         }
 
-        const destino = elegirDestino(cliente, this.enviador.disponibles())
+        const destino = elegirDestino(cliente, canalesDisponibles())
         if (!destino) {
             if (!porIp) return ciega
             throw new ReglaNegocio(
@@ -122,18 +136,31 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
             })
 
         const minutos = Math.round(config.codigoVigenciaS / 60)
-        const { nombre: empresa } = await leerEmpresa(t.trx)
+        // El nombre va como texto de la plantilla Mustache: sin llaves.
+        const datosEmpresa = await leerEmpresa(t.trx)
+        const empresa = datosEmpresa.nombre.replace(/[{}]/g, '')
+        let envio
         try {
-            await this.enviador.enviar({
-                canal: destino.canal,
-                destino: destino.destino,
-                asunto: `Tu código de acceso: ${codigo}`,
-                cuerpo:
-                    `Tu código para entrar al portal de ${empresa} es ${codigo}.\n` +
-                    `Vence en ${minutos} minutos. Si no lo pediste, ignora este mensaje: nadie puede entrar sin él.`,
-            })
+            // Sin `{ trx }`: su fila en notify.envios (también la `fallido`) no depende de esta acción.
+            envio = await new EnviarMensajeDirecto().execute(
+                {
+                    cliente_id: clienteId,
+                    canal: destino.canal,
+                    destino: destino.destino,
+                    motivo: MOTIVO_CODIGO_ACCESO,
+                    asunto: 'Tu código de acceso: {{secreto}}',
+                    cuerpo:
+                        `Tu código para entrar al portal de ${empresa} es {{secreto}}.\n` +
+                        `Vence en ${minutos} minutos. Si no lo pediste, ignora este mensaje: nadie puede entrar sin él.`,
+                    secreto: codigo,
+                },
+                t.ctx,
+            )
         } catch (error) {
             throw new EnvioCodigoFallido(destino.canal, error)
+        }
+        if (envio.estado !== 'enviado') {
+            throw new EnvioCodigoFallido(destino.canal, new Error(envio.error ?? 'envío fallido'))
         }
 
         return { ...ciega, destino: porIp ? destinoMascarado : null }

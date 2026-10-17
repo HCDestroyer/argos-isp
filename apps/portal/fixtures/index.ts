@@ -99,7 +99,7 @@ function escenarioComprobante(): EscenarioComprobante {
  * Pago en línea en fixtures: `fijarPagoFixture` en pruebas o `?pago_fixture=pagado|fallido|expirado|pendiente|sin_pasarela`
  * en la URL (solo desarrollo). Por defecto `pagado`: el cobro responde `pendiente` en la primera
  * consulta y `pagado` desde la segunda, y entonces `/portal/estado` responde `activo` (el webhook
- * reactivó). `url_pago` de los fixtures vuelve a `/corte?pago=<id>` (no hay pasarela).
+ * reactivó). `url_pago` de los fixtures vuelve a `/corte?pago=<id>&estado=…` (no hay pasarela).
  */
 type EscenarioPago = 'pagado' | 'fallido' | 'expirado' | 'pendiente' | 'sin_pasarela'
 const ESCENARIOS_PAGO: readonly EscenarioPago[] = ['pagado', 'fallido', 'expirado', 'pendiente', 'sin_pasarela']
@@ -128,6 +128,12 @@ function escenarioPago(): EscenarioPago {
     }
     const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('pago_fixture')
     return ESCENARIOS_PAGO.find(e => e === pedido) ?? 'pagado'
+}
+
+/** `url_pago` del cobro creado: vuelve a `/corte` como lo haría el proveedor (con `estado` si pagó o rechazó). */
+function urlRetornoFixture(escenario: EscenarioPago): string {
+    const estado = escenario === 'pagado' || escenario === 'fallido' ? `&estado=${escenario}` : ''
+    return `/corte?pago=${PAGO_EN_LINEA_ID_FIXTURE}${estado}&pago_fixture=${escenario}`
 }
 
 /** Sesión del portal simulada. */
@@ -359,7 +365,8 @@ const rutasBase: RutasFixture = {
         pagos.consultas = 0
         return {
             status: 201,
-            cuerpo: pagoEnLineaFixture({ url_pago: `/corte?pago=${PAGO_EN_LINEA_ID_FIXTURE}&pago_fixture=${escenarioPago()}` }),
+            // Simula la ida y vuelta: el "proveedor" devuelve a /corte con el estado, como url_retorno.
+            cuerpo: pagoEnLineaFixture({ url_pago: urlRetornoFixture(escenarioPago()) }),
         }
     },
     'GET /api/v1/portal/pagos/en-linea/:id': ({ params }) => {

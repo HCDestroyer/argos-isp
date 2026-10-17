@@ -5,6 +5,8 @@ import { contextoPrueba, estado, unico } from '#tests/ayudas'
 import { crearRouterFila } from '#tests/core/fabricas'
 import { escenario, estadoServicio, generar } from '#tests/billing/ayudas_billing'
 import { sesionDirecta } from '#tests/portal/ayudas_portal'
+import env from '#start/env'
+import { urlRetornoPortal } from '#portal/pagos_en_linea'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
@@ -14,7 +16,12 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  * el retorno (`GET /portal/pagos/en-linea/:id` + `GET /portal/estado`) tras el webhook.
  */
 
-const VARIABLES = ['PORTAL_PROXIES_CONFIABLES', 'PORTAL_LIMITE_PETICIONES', 'PORTAL_REDIS_PREFIJO'] as const
+const VARIABLES = [
+    'PORTAL_PROXIES_CONFIABLES',
+    'PORTAL_LIMITE_PETICIONES',
+    'PORTAL_REDIS_PREFIJO',
+    'PORTAL_URL_PUBLICA',
+] as const
 
 const hoy = () => DateTime.now().setZone('America/Guatemala').startOf('day')
 const dia = (dias: number) => hoy().plus({ days: dias }).toISODate()!
@@ -173,6 +180,96 @@ test.group('Portal: pago en línea', (group) => {
         assert.isNotNull(despues.body().pagado_en)
         const vivo = await estado(client.get('/api/v1/portal/estado').header('X-Forwarded-For', s.ip), 200)
         assert.equal(vivo.body().estado, 'activo')
+    })
+
+    test('url_retorno: la pasarela devuelve a <PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=pagado|fallido', async ({
+        client,
+        assert,
+    }) => {
+        assert.equal(
+            urlRetornoPortal({ PORTAL_URL_PUBLICA: 'https://portal.isp.gt/' }),
+            'https://portal.isp.gt/corte?pago={cobro_id}',
+        )
+        assert.equal(
+            urlRetornoPortal({ NOTIFY_PORTAL_URL: 'http://10.0.0.5:3001' }),
+            'http://10.0.0.5:3001/corte?pago={cobro_id}',
+        )
+        assert.isNull(urlRetornoPortal({}))
+        assert.isNull(urlRetornoPortal({ PORTAL_URL_PUBLICA: 'no es una url' }))
+
+        const previo = env.get('PASARELA_RETORNO_ORIGENES')
+        env.set('PASARELA_RETORNO_ORIGENES', 'http://portal.prueba.local')
+        process.env.PORTAL_URL_PUBLICA = 'http://portal.prueba.local'
+        try {
+            const iniciar = async (ip: string) => {
+                const respuesta = await estado(
+                    client
+                        .post('/api/v1/portal/pagos/iniciar')
+                        .header('X-Forwarded-For', ip)
+                        .header('Idempotency-Key', unico('clave'))
+                        .json({}),
+                    201,
+                )
+                const id = respuesta.body().id as number
+                const fila = await db.from('billing.pasarela_cobros').where('id', id).firstOrFail()
+                assert.equal(fila.url_retorno, `http://portal.prueba.local/corte?pago=${id}`)
+                return { id, idProveedor: String(respuesta.body().url_pago).split('/').at(-1) }
+            }
+
+            // pagado: 303 al portal con estado=pagado y el webhook ya reactivó el servicio
+            const s = await cortado()
+            const pagado = await iniciar(s.ip)
+            const pagar = await client
+                .post(`/api/v1/pasarela/falsa/${pagado.idProveedor}/formulario`)
+                .form({ estado: 'pagado' })
+                .redirects(0)
+            pagar.assertStatus(303)
+            assert.equal(
+                pagar.header('location'),
+                `http://portal.prueba.local/corte?pago=${pagado.id}&estado=pagado`,
+            )
+            const retorno = await estado(
+                client.get(`/api/v1/portal/pagos/en-linea/${pagado.id}`).header('X-Forwarded-For', s.ip),
+                200,
+            )
+            assert.equal(retorno.body().estado, 'pagado')
+            assert.equal(await estadoServicio(s.servicioId), 'activo')
+
+            // rechazada: estado=fallido y el servicio sigue cortado
+            const otro = await cortado()
+            const fallido = await iniciar(otro.ip)
+            const rechazar = await client
+                .post(`/api/v1/pasarela/falsa/${fallido.idProveedor}/formulario`)
+                .form({ estado: 'fallido' })
+                .redirects(0)
+            rechazar.assertStatus(303)
+            assert.equal(
+                rechazar.header('location'),
+                `http://portal.prueba.local/corte?pago=${fallido.id}&estado=fallido`,
+            )
+            assert.equal(await estadoServicio(otro.servicioId), 'suspendido')
+
+            // PORTAL_URL_PUBLICA fuera de los orígenes permitidos: 503 para el cliente y ningún cobro
+            process.env.PORTAL_URL_PUBLICA = 'http://portal-mal-configurado.local'
+            const tercero = await cortado()
+            const malo = await estado(
+                client
+                    .post('/api/v1/portal/pagos/iniciar')
+                    .header('X-Forwarded-For', tercero.ip)
+                    .header('Idempotency-Key', unico('clave'))
+                    .json({}),
+                503,
+            )
+            assert.equal(malo.body().type, 'urn:argosisp:problema:pasarela_no_configurada')
+            assert.notInclude(JSON.stringify(malo.body()), 'PASARELA_RETORNO_ORIGENES')
+            const cobros = await db
+                .from('billing.pasarela_cobros')
+                .where('cliente_id', tercero.clienteId)
+                .count('* as n')
+            assert.equal(Number(cobros[0].n), 0)
+        } finally {
+            env.set('PASARELA_RETORNO_ORIGENES', previo ?? '')
+        }
     })
 
     test('idempotencia: la misma Idempotency-Key devuelve el mismo cobro y no crea otro', async ({

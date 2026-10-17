@@ -35,15 +35,23 @@ Reglas:
   a los anteriores. El intento se cuenta con un `UPDATE` atómico antes de comparar y fuera de la
   transacción de la acción, así un intento fallido queda contado aunque la acción se revierta. En la
   auditoría el código viaja como `secreto` (`***`).
-- **Envío.** Puerto `acceso/envio_codigo.ts` (`EnviadorCodigo`); por defecto usa la interfaz `Canal`
-  de notify (`SMTP_*`, `TELEGRAM_BOT_TOKEN`). No usa `ProgramarNotificacion` porque guardaría el texto
-  con el código en `notify.envios`. Si el canal falla: 503 `envio_codigo_fallido` y el código no queda.
+- **Envío.** `EnviarMensajeDirecto` de notify (A6, `notificaciones.enviar_directo`, motivo
+  `portal.codigo_acceso`): un canal configurado (`SMTP_*`, `TELEGRAM_BOT_TOKEN`), el destino registrado
+  y el código como `secreto` (`{{secreto}}` en asunto y cuerpo; ni `notify.envios` ni la auditoría lo
+  guardan). Emite `notificacion.enviada`. Corre en su propia transacción: si el canal falla, la fila
+  `fallido` de `notify.envios` queda, el portal responde 503 `envio_codigo_fallido` y el código no queda.
+  Las pruebas registran canales falsos en `#notify/canales/registro` (`EnviadorFalso` de `tests/portal/ayudas_portal.ts`).
 - **Sesión.** `core.portal_sesiones`: token `pcs_…` (solo su SHA-256) en la cookie `argos_portal`
   (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/portal`, `Secure` con HTTPS o `PORTAL_COOKIE_SEGURA=siempre`). Inactividad
   `PORTAL_SESION_INACTIVIDAD_S` (1800), máximo `PORTAL_SESION_MAX_S` (14400). Alcance: un cliente;
   todas las lecturas filtran por el `clienteId` de la sesión (`acceso/sesion.ts`).
-- **Actor.** No hay tipo de actor "cliente" todavía: las acciones del portal se auditan con actor
-  `sistema`, canal `portal` y entidad `cliente` (pedido al líder BE en `a5.md`).
+- **Actor.** Canal `portal` siempre. Con la sesión, actor `cliente` (`ctx.contextoCliente`, id de
+  `core.clientes`): `portal.cerrar_sesion`, `portal.editar_contacto`, `portal.desvincular_telegram`,
+  `notificaciones.telegram_codigo` y `promesas.crear` con `servicio_id`; `portal.verificar_codigo`
+  se audita como `cliente` al acertar (`t.identificarActor`, como `auth.login`). Por IP (sin sesión)
+  y al pedir el código, actor `sistema`: la IP no autentica a nadie. `comprobantes.registrar` y
+  `pasarela.crear_cobro` siguen como `sistema` aun con la sesión porque A3 guarda `actor.id` en
+  `registrado_por` / `creado_por` (`core.usuarios`); pasan a `cliente` cuando usen `usuarioDelActor`.
 
 ### PDF del aviso de cobro y plantillas de documentos (tarea 8)
 
@@ -124,7 +132,7 @@ largas siguen en otra página.
 | Endpoint | Identifica | Qué hace |
 | --- | --- | --- |
 | `GET /api/v1/portal/promesas/condiciones` | IP o sesión (`?servicio_id=`) | `PortalCondicionesPromesa`: si se puede pedir ahora (y por qué no), fecha mínima y máxima, plazo máximo del canal portal, monto máximo (deuda) y sugerido (vencido), abono inicial (porcentaje, requerido, abonado, faltante), deuda máxima (máximo, vencida, faltante), `pago_previo` (lo que debe pagar antes de prometer) y si requiere aprobación. Cupo del periodo agotado: no disponible |
-| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` y actor sistema. Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
+| `POST /api/v1/portal/promesas` | IP o sesión (`servicio_id` en el cuerpo) | `vence_el` (YYYY-MM-DD de Guatemala, vence a las 23:59:59) y `monto`. Llama `CrearPromesaPago` de A3 (`promesas.crear`) con canal `portal` (actor `cliente` con la sesión, `sistema` por IP). Responde `PortalPromesaSolicitada`: `resultado` (`aprobada`, `rechazada`, `pendiente_aprobacion`), `motivo` en palabras del cliente y `servicio_estado` |
 
 - **Sin lógica de promesas en el portal.** La decisión, la auditoría (`promesas.crear`, canal `portal`), el
   evento `promesa.creada` y la reactivación son de `CrearPromesaPago`. `promesas.ts` solo identifica el
@@ -160,8 +168,14 @@ largas siguen en otra página.
 - La respuesta no lleva `cliente_id`, nombre, ruta del archivo ni quién lo revisó.
 - `Idempotency-Key` (la huella son los campos, no el archivo) y límite por IP propio (`comprobantes`,
   `bancos`).
-- El OpenAPI declara el cuerpo como JSON con los campos (el generador aún no conoce multipart; pedido
-  en `.claude/integration/a5.md`); la descripción del endpoint dice que es `multipart/form-data`.
+- El OpenAPI declara el cuerpo `multipart/form-data` (`multipart` en `DefinicionRuta`): los campos del
+  validador más `archivo` (`format: binary`, obligatorio).
+
+**OpenAPI del portal.** Las rutas que solo funcionan con la sesión (`/cuenta`, facturas, PDF, pagos,
+promesas y comprobantes de la sesión, contacto, Telegram, salir) son `seguridad: 'portal'`: el OpenAPI
+declara la cookie `argos_portal` y su 401; el handler la exige igual (`exigirSesionPortal`). Las de
+"IP o sesión" (promesas, comprobante, pago en línea) y las de IP siguen `publico`. Los PDF se declaran
+`application/pdf` (`respuesta.contenido`). Prueba: `tests/portal/openapi_portal.spec.ts`.
 
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
@@ -176,7 +190,7 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 | --- | --- | --- |
 | `GET /api/v1/portal/telegram` (sesión) | `acceso/telegram.ts` (`estadoTelegram`, lectura) | `PortalTelegram`: vinculado, bot disponible (`TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_NOMBRE`) y su usuario |
 | `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | 201 `{ codigo, enlace, bot, vence_en }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
-| `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1; si el canal preferido era Telegram pasa a correo (`clientes.editar`). Idempotente |
+| `POST /api/v1/portal/telegram/desvincular` (sesión) | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`) | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
 
 ### Pago en línea desde el portal (semana 2)
 
@@ -189,6 +203,11 @@ reactivación son de A3; el portal solo identifica al pagador, elige las factura
 | `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP) | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3) | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente |
 
 `GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
+
+**Retorno.** El cobro lleva `url_retorno = <PORTAL_URL_PUBLICA>/corte?pago={cobro_id}` (`urlRetornoPortal`;
+vacía = `NOTIFY_PORTAL_URL`, sin ninguna no se manda). El proveedor devuelve al cliente con `&estado=pagado`
+o `&estado=fallido`; `/corte` lo muestra mientras el cobro siga `pendiente` y luego manda la API. El
+origen debe estar en `PASARELA_RETORNO_ORIGENES` (A3); si no, 503 `pasarela_no_configurada` y error en el log.
 
 ### Auditoría una vez por ventana
 
