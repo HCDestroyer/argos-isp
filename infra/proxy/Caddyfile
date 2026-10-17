@@ -6,6 +6,16 @@
 # Let's Encrypt no exige correo; para recibir avisos de vencimiento agrega `email tu@correo` en un
 # bloque global { } al inicio de este archivo.
 
+{
+	# Limpieza del almacenamiento de certificados (24h es el valor por defecto de Caddy). Las pruebas
+	# (prueba/docker-compose.yml) la apagan con `off`: al arrancar sobre un almacenamiento vacío la
+	# limpieza corre a la vez que la emisión con la CA interna y puede borrar la carpeta del
+	# certificado que se está guardando (certmagic v0.23, maintain.go); Caddy reintenta 60 s después
+	# y mientras tanto el TLS de ese dominio responde "alert internal error". Con Let's Encrypt la
+	# emisión tarda segundos y no coincide.
+	storage_clean_interval {$PROXY_LIMPIEZA_ALMACEN:24h}
+}
+
 {$PROXY_DOMINIO_API:api.localhost} {
 	# Webhook de la pasarela (A3, a3.md): la firma HMAC va sobre el cuerpo CRUDO. Aquí el cuerpo
 	# pasa byte a byte: sin `encode` (solo comprime respuestas, pero se deja fuera por claridad), sin
