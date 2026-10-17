@@ -33,6 +33,12 @@ async function ponerLogo(empresaId: number, contenido: Uint8Array): Promise<stri
     return logo.etag
 }
 
+/** Cuerpo de una respuesta 200. */
+async function leer(peticion: Parameters<typeof estado>[0]) {
+    const respuesta = await estado(peticion, 200)
+    return respuesta.body()
+}
+
 interface Marca {
     id: number
     nombre_comercial: string
@@ -100,9 +106,7 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
         const sur = await db.from('core.empresas').where('id', e.sur).firstOrFail()
 
         for (const ip of ['198.51.108.31', '2001:db8:5b1:4::9']) {
-            const quien = (
-                await estado(client.get('/api/v1/portal/quien-soy').header('X-Forwarded-For', ip), 200)
-            ).body()
+            const quien = await leer(client.get('/api/v1/portal/quien-soy').header('X-Forwarded-For', ip))
             assert.equal(quien.estado, 'suspendido', ip)
             assert.containsSubset(quien.empresa, {
                 id: e.sur,
@@ -115,20 +119,15 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
             assert.match(quien.empresa.logo_url, new RegExp(`^/api/v1/portal/empresas/${e.sur}/logo\\?v=`))
 
             // Datos de pago y contacto de /corte: de la misma empresa, sin parámetros.
-            const empresa = (
-                await estado(client.get('/api/v1/portal/empresa').header('X-Forwarded-For', ip), 200)
-            ).body()
+            const empresa = await leer(client.get('/api/v1/portal/empresa').header('X-Forwarded-For', ip))
             assert.equal(empresa.id, e.sur)
             assert.equal(empresa.nombre, sur.nombre_comercial)
             assert.equal(empresa.whatsapp, '5000-2000')
         }
 
-        const norte = (
-            await estado(
-                client.get('/api/v1/portal/quien-soy').header('X-Forwarded-For', '198.51.108.30'),
-                200,
-            )
-        ).body()
+        const norte = await leer(
+            client.get('/api/v1/portal/quien-soy').header('X-Forwarded-For', '198.51.108.30'),
+        )
         assert.equal(norte.empresa.id, e.norte)
         assert.notEqual(norte.empresa.nombre_comercial, sur.nombre_comercial)
     })
@@ -140,9 +139,7 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
         const e = await escenario()
         const { cookie } = await sesionDirecta(e.clienteId)
 
-        const cuenta = (
-            await estado(client.get('/api/v1/portal/cuenta').header('Cookie', cookie), 200)
-        ).body()
+        const cuenta = await leer(client.get('/api/v1/portal/cuenta').header('Cookie', cookie))
         const porServicio = Object.fromEntries(
             cuenta.servicios.map((s: { id: number; empresa: Marca }) => [s.id, s.empresa.id]),
         )
@@ -159,33 +156,23 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
             `/api/v1/portal/empresas/${e.norte}/logo?v=${e.etagNorte.slice(0, 16)}`,
         )
 
-        const facturas = (
-            await estado(client.get('/api/v1/portal/facturas').header('Cookie', cookie), 200)
-        ).body()
+        const facturas = await leer(client.get('/api/v1/portal/facturas').header('Cookie', cookie))
         assert.isAbove(facturas.data.length, 0)
         for (const factura of facturas.data as Array<{ servicio_id: number; empresa: Marca }>) {
             assert.equal(factura.servicio_id, e.s1.servicioId)
             assert.equal(factura.empresa.id, e.sur)
         }
-        const detalle = (
-            await estado(
-                client.get(`/api/v1/portal/facturas/${facturas.data[0].id}`).header('Cookie', cookie),
-                200,
-            )
-        ).body()
+        const detalle = await leer(
+            client.get(`/api/v1/portal/facturas/${facturas.data[0].id}`).header('Cookie', cookie),
+        )
         assert.equal(detalle.empresa.id, e.sur)
 
         // Encabezado y manifiesto: la principal del cliente; una sección por empresa con `empresa_id`.
-        const principal = (
-            await estado(client.get('/api/v1/portal/empresa?de=cliente').header('Cookie', cookie), 200)
-        ).body()
+        const principal = await leer(client.get('/api/v1/portal/empresa?de=cliente').header('Cookie', cookie))
         assert.equal(principal.id, e.norte)
-        const deSur = (
-            await estado(
-                client.get(`/api/v1/portal/empresa?empresa_id=${e.sur}`).header('Cookie', cookie),
-                200,
-            )
-        ).body()
+        const deSur = await leer(
+            client.get(`/api/v1/portal/empresa?empresa_id=${e.sur}`).header('Cookie', cookie),
+        )
         assert.equal(deSur.id, e.sur)
         assert.equal(deSur.direccion, '2a avenida 3-20 zona 2, Escuintla')
     })
@@ -207,10 +194,10 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
     test('cuentas de depósito: nunca las de otra empresa', async ({ client, assert }) => {
         const e = await escenario()
         const cuenta = await cuentaBancariaPrueba()
-        const ids = async (url: string) =>
-            ((await estado(client.get(url), 200)).body().cuentas_deposito as Array<{ id: number }>).map(
-                (c) => c.id,
-            )
+        const ids = async (url: string) => {
+            const empresa = await leer(client.get(url))
+            return (empresa.cuentas_deposito as Array<{ id: number }>).map((c) => c.id)
+        }
         // Las cuentas aún no llevan empresa (A3): son de la principal, no de Norte ni de Sur.
         assert.include(await ids('/api/v1/portal/empresa?empresa_id=1'), cuenta.id)
         assert.notInclude(await ids(`/api/v1/portal/empresa?empresa_id=${e.norte}`), cuenta.id)
@@ -269,7 +256,7 @@ test.group('Portal: marca de la empresa de cada servicio', (group) => {
             .from('billing.facturas')
             .where('servicio_id', deNorte.servicioId)
             .firstOrFail()
-        const pdfNorte = (await avisoCobroPdf(Number(facturaNorte.id), { comprimir: false })).pdf
+        const { pdf: pdfNorte } = await avisoCobroPdf(Number(facturaNorte.id), { comprimir: false })
         assert.include(pdfNorte.toString('latin1'), '/Subtype /Image')
         assert.include(textoDePdf(pdfNorte), 'Huehuetenango')
     })

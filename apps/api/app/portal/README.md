@@ -78,6 +78,7 @@ Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemal
 
 | Variable                                                                                                                                                                                        | Ejemplo                                                                          |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `{{empresa.razon_social}}`, `{{#empresa.logo}}…{{/empresa.logo}}` (sección: hay logo) | Empresa de la factura (multiempresa) |
 | `{{empresa.nombre}}`, `{{empresa.nit}}`, `{{empresa.direccion}}`, `{{empresa.telefono}}`, `{{empresa.whatsapp}}`, `{{empresa.correo}}`, `{{empresa.horario}}`, `{{empresa.instrucciones_pago}}` | Configuración de empresa (tarea 9)                                               |
 | `{{cliente.nombre}}`                                                                                                                                                                            | Nombre fiscal o, si no hay, el nombre                                            |
 | `{{cliente.nit}}`                                                                                                                                                                               | NIT/CUI o `CF`                                                                   |
@@ -96,6 +97,12 @@ Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemal
 | `{{generado}}`                                                                                                                                                                                  | Fecha y hora de generación                                                       |
 
 Una variable vacía se oculta con su sección: `{{#empresa.nit}}NIT {{empresa.nit}}{{/empresa.nit}}`.
+
+Logo: `{{#empresa.logo}}<img src="empresa:logo" height="48">{{/empresa.logo}}` como bloque propio (no
+dentro de una tabla), `height` en pt (12 a 120), `width` opcional, `class="centro"` o `"derecha"`.
+El renderizador solo dibuja imágenes que recibe en `imagenes` (el logo de la empresa del documento:
+PNG con pdfkit, SVG con `svg-to-pdfkit`); un `src` cualquiera se ignora, nunca se descarga nada.
+Una plantilla guardada antes de multiempresa no trae el logo: se agrega desde el editor del panel.
 Mustache escapa el HTML de cada dato; `{{{ }}}` y `{{& }}` se rechazan (422) para que un dato del
 cliente nunca agregue marcas.
 
@@ -127,6 +134,35 @@ largas siguen en otra página.
 - **Las cuentas en USD no se muestran** (decisión de la tarea 9): los avisos y los pagos son en
   quetzales y un depósito a una cuenta en dólares lo convierte el banco a su tipo de cambio, así que lo
   acreditado no cuadra con la deuda. Ocultarlas es más claro en el teléfono que marcarlas.
+
+### Multiempresa: la marca de la empresa de cada servicio
+
+Contrato: `.claude/integration/contratos/multiempresa.md` § Marca. Código: `marca.ts`.
+
+| Dónde | Qué empresa |
+| --- | --- |
+| `GET /portal/quien-soy` (`/corte`) | `empresa`: la del servicio de esa IP (null sin identificar) |
+| `GET /portal/cuenta` | `empresa` en cada servicio; `empresa_principal` = la que tiene más servicios sin retirar (a igualdad, la del servicio más antiguo); sin servicios, la 1 |
+| `POST /portal/verificar` | `empresa_principal` en la sesión |
+| `GET /portal/facturas`, `/portal/facturas/:id` | `empresa` de cada factura: `SQL_EMPRESA_FACTURA` (hoy la del servicio; sin servicio, la 1) |
+| `GET /portal/empresa` | `?empresa_id=` (404 si no existe), `?de=cliente` (principal de la sesión, 401 sin ella) o, sin parámetros, la de la IP → la principal de la sesión → la 1. Agrega `id` y `logo_url` |
+| `GET /portal/empresas/:id/logo` | El logo (PNG o SVG saneado) por el walled garden, con `ETag` y caché larga (`logo_url` lleva `?v=`) |
+| Aviso de cobro (PDF) | Logo, razón social, NIT y dirección fiscal de la empresa de la factura |
+
+`PortalMarcaEmpresa` = `id`, `nombre_comercial`, `logo_url`, `nit`, `direccion_fiscal`, `telefono`, `whatsapp`
+(datos públicos de la empresa, los del aviso de cobro: pueden salir por la IP). La empresa 1 sin
+guardar (`version = 0`) da los valores por defecto del entorno.
+
+**Puntos de cambio pendientes de A3** (anotados en `.claude/integration/a5.md`):
+
+- `SQL_EMPRESA_FACTURA` (`marca.ts`): pasar a `coalesce(f.empresa_id, s.empresa_id, 1)` cuando exista
+  `billing.facturas.empresa_id`. La usan la lista, el detalle y el PDF.
+- Cuentas de depósito (`cuentas_deposito.ts`): mientras las cuentas no tengan empresa, son de la
+  principal (se muestran para la 1 o con una sola empresa activa; para otra, lista vacía y el
+  portal ofrece su contacto). Si `listarCuentasDeposito` devuelve `empresa_id`, se filtra por ella
+  sin más cambios.
+- La pasarela es una sola: `pago_en_linea` es igual para todas las empresas; cada cobro lleva
+  facturas de un servicio, es decir, de una empresa.
 
 ### Promesa de pago desde el portal (tarea 4)
 
