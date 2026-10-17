@@ -310,6 +310,15 @@ services:
   sesiones-worker:
     <<: *proceso-fondo
     command: [node, ace.js, sesiones:worker]
+    # También corre el cron de sesiones colgadas (A2, cola sesiones-cron, lock en Postgres):
+    # colgada = sin accounting en SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS.
+    environment:
+      <<: *api-env
+      # El mismo Acct-Interim-Interval que entrega aaa (misma variable de infra/.env para los dos).
+      AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
+      SESIONES_COLGADAS_INTERVALOS: ${SESIONES_COLGADAS_INTERVALOS:-3}
+      # 0 apaga el cron
+      SESIONES_COLGADAS_CADA_MS: ${SESIONES_COLGADAS_CADA_MS:-300000}
     healthcheck:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js sesiones:worker'"]
@@ -462,6 +471,8 @@ services:
       AAA_SUSPENDIDO_GRUPO: ${AAA_SUSPENDIDO_GRUPO:-suspendido}
       AAA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      # Acct-Interim-Interval que entrega aaa. El mismo valor va a sesiones-worker (sesiones colgadas).
+      AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
       # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
     # Último perfil conocido del modo degradado (A2: AAA_DEGRADADO_RUTA de la imagen,

@@ -145,3 +145,24 @@ tests:
               severidad: aviso
             exp_annotations:
               summary: 'aaa (aaa:3100): el último perfil conocido no se actualiza hace más de 30 min; el modo degradado tendría datos viejos'
+
+  - interval: 1m
+    input_series:
+      # NAS silencioso desde el minuto 0; otro que se recupera a los 20 min
+      - series: 'argosisp_sesiones_nas_silencioso{job="api",nas_ip="10.0.0.1"}'
+        values: '1x60'
+      - series: 'argosisp_sesiones_nas_silencioso{job="api",nas_ip="10.0.0.2"}'
+        values: '1x20 0x40'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: NasSinAccounting
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: NasSinAccounting
+        exp_alerts:
+          - exp_labels:
+              alertname: NasSinAccounting
+              nas_ip: 10.0.0.1
+              severidad: aviso
+            exp_annotations:
+              summary: 'NAS 10.0.0.1: sesiones abiertas sin accounting hace más de 30 min (no se cierran solas; revisar /radius y accounting del router)'
