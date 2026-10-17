@@ -81,10 +81,12 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Configuración',
         icono: 'i-lucide-settings',
         secciones: [
+            { id: 'empresas', etiqueta: 'Empresas', descripcion: 'Empresas (NIT) con su logo y datos fiscales, y la empresa sugerida por zona y router.', icono: 'i-lucide-building-2', ruta: '/configuracion/empresas', permiso: 'empresas.ver' },
             { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
             { id: 'plantillas', etiqueta: 'Plantillas', descripcion: 'Ciclos de facturación, corte, mora y reglas de promesas.', icono: 'i-lucide-file-cog', ruta: '/plantillas', permiso: 'plantillas.ver' },
             { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },
-            { id: 'empresa', etiqueta: 'Empresa', descripcion: 'Contacto, horario e instrucciones de pago del aviso y el portal.', icono: 'i-lucide-building-2', ruta: '/configuracion/empresa', permiso: 'empresa.ver' },
+            { id: 'empresa', etiqueta: 'Contacto y pagos', descripcion: 'Contacto, horario e instrucciones de pago del aviso y el portal (empresa principal).', icono: 'i-lucide-contact', ruta: '/configuracion/empresa', permiso: 'empresa.ver' },
+            { id: 'notificaciones', etiqueta: 'Notificaciones', descripcion: 'Correo y Telegram: servidor, bot, interruptores por canal y por aviso, global y por empresa.', icono: 'i-lucide-bell-ring', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver' },
             { id: 'aviso-cobro', etiqueta: 'Plantilla del aviso', descripcion: 'HTML con variables del PDF del aviso de cobro.', icono: 'i-lucide-file-code-2', ruta: '/configuracion/aviso-cobro', permiso: 'documentos.ver' },
         ],
     },

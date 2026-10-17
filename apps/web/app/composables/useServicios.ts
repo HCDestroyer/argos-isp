@@ -92,5 +92,16 @@ export function useServicios() {
         return resolver(api.PUT('/api/v1/servicios/{id}', { params: { path: { id } }, body: cambios }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones }
+    /**
+     * `POST /servicios/:id/cambiar-empresa` (`servicios.cambiar_empresa`): pasa el servicio a otra
+     * empresa (NIT). 422 `servicio_con_saldo` si tiene saldo pendiente, 403 `empresa_no_permitida`.
+     */
+    function cambiarEmpresa(id: number, datos: { empresa_id: number, version: number, motivo: string }, claveIdempotencia: string): Promise<Resultado<Servicio>> {
+        return resolver(api.POST('/api/v1/servicios/{id}/cambiar-empresa', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa }
 }

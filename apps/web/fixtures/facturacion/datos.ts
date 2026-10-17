@@ -32,7 +32,9 @@ function pagadoDe(servicio: Servicio, periodo: string, total: Decimal): Decimal 
     if (servicio.estado === 'limitado') {
         return periodo === PERIODOS[0] ? total : new Decimal(0)
     }
-    if (periodo === PERIODOS[1] && servicio.id % 3 === 0) {
+    // Multiempresa: las sucursales de Fibra del Sur deben octubre, para que un cliente tenga
+    // avisos pendientes de dos empresas (cobro repartido, ficha agrupada).
+    if (periodo === PERIODOS[1] && (servicio.id % 3 === 0 || servicio.empresa_id === 2)) {
         return new Decimal(0)
     }
     return total

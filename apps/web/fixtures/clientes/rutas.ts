@@ -7,6 +7,7 @@ import {
     conPermiso,
     cuerpoObjeto,
     datosInvalidos,
+    empresasDeLista,
     idDe,
     noEncontrado,
     normalizar,
@@ -175,7 +176,13 @@ export const rutasClientes: RutasFixture = {
         const q = solicitud.query.get('q') ?? ''
         const zona = numeroQuery(solicitud, 'zona_id')
         const responsable = numeroQuery(solicitud, 'responsable_pago_id')
+        // Multiempresa (A1): clientes con algún servicio en la empresa, o sin servicios.
+        const empresas = empresasDeLista(solicitud)
         const filas = bd.clientes
+            .filter((cliente) => {
+                const suyos = bd.servicios.filter(s => s.cliente_id === cliente.id)
+                return empresas === null || !suyos.length || suyos.some(s => empresas.includes(s.empresa_id))
+            })
             .filter(cliente => zona === undefined || cliente.zona_id === zona)
             .filter(cliente => responsable === undefined || cliente.responsable_pago_id === responsable)
             .filter(cliente => coincide(cliente, q))

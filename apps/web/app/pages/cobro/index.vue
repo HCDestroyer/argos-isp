@@ -70,6 +70,13 @@ const facturasPantalla = computed(() => [
 /** Servicios de todos los clientes en pantalla (pagador y grupos). */
 const serviciosPantalla = computed(() => [...servicios.value, ...grupos.value.flatMap(g => g.servicios)])
 
+/**
+ * Multiempresa: las facturas marcadas de varias empresas se cobran con un pago por empresa (cada
+ * NIT recibe lo suyo, en su caja). Se muestra el reparto antes de registrar.
+ */
+const { conSelector: variasEmpresas, nombre: nombreEmpresa, empresaId: empresaActiva } = useEmpresaActiva()
+const reparto = computed(() => (variasEmpresas.value ? repartoPorEmpresa(facturasPantalla.value, marcadas.value, serviciosPantalla.value) : []))
+
 // Cajas (método "caja"). Elegir caja es opcional: sin `caja_id`, la API usa la caja principal.
 const CAJA_PRINCIPAL = 'principal'
 const cajas = shallowRef<Caja[]>([])
@@ -816,6 +823,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                                         · {{ marcadasDeTerceros.cuantas }} de otros clientes ({{ formatearQuetzales(marcadasDeTerceros.total) }})
                                     </template>
                                 </p>
+                                <div
+                                    v-if="reparto.length > 1 && !pago"
+                                    class="surface-card flex flex-col gap-2 p-3"
+                                    role="group"
+                                    aria-label="Reparto del cobro por empresa"
+                                    data-prueba="reparto-empresas"
+                                >
+                                    <p class="flex items-center gap-1.5 text-sm font-medium text-highlighted">
+                                        <UIcon
+                                            name="i-lucide-split"
+                                            class="size-4"
+                                        />
+                                        Un pago por empresa
+                                    </p>
+                                    <p class="text-xs text-muted">
+                                        Las facturas son de {{ reparto.length }} empresas: se registra un pago para cada NIT, cada uno en la caja de esa empresa.
+                                    </p>
+                                    <ul class="flex flex-col divide-y divide-default">
+                                        <li
+                                            v-for="parte in reparto"
+                                            :key="parte.empresaId ?? 'ninguna'"
+                                            class="flex items-center justify-between gap-3 py-1.5 text-sm"
+                                            :data-empresa="parte.empresaId ?? 'ninguna'"
+                                        >
+                                            <span class="flex min-w-0 items-center gap-1.5">
+                                                <UIcon
+                                                    name="i-lucide-building-2"
+                                                    class="size-4 shrink-0 text-muted"
+                                                />
+                                                <span class="truncate">{{ parte.empresaId !== null ? nombreEmpresa(parte.empresaId) : empresaActiva !== null ? 'Otras empresas' : 'Empresa sin identificar' }}</span>
+                                                <span class="shrink-0 text-xs text-muted">· {{ parte.facturas.length }} {{ parte.facturas.length === 1 ? 'aviso' : 'avisos' }}</span>
+                                            </span>
+                                            <span class="font-medium tabular-nums text-highlighted">{{ formatearQuetzales(parte.total) }}</span>
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
                         </template>
                     </section>

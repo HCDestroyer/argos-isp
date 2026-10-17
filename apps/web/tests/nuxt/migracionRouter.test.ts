@@ -27,7 +27,7 @@ describe('migración de router con la API de A2', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('hora de Guatemala, esquema de marcar y textos de los eventos de red', () => {

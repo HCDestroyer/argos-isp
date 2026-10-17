@@ -19,6 +19,15 @@ const PANTALLAS = [
     ['reportes', '/reportes'],
     ['reporte de cartera', '/reportes/cartera-vencida'],
     ['migración de router', '/routers/migracion?router=1'],
+    // Multiempresa (dos empresas en los fixtures).
+    ['empresas', '/configuracion/empresas'],
+    ['sugerencias por zona y router', '/configuracion/empresas?tab=sugerencias'],
+    ['usuarios', '/usuarios'],
+    ['notificaciones', '/configuracion/notificaciones'],
+    ['notificaciones de una empresa', '/configuracion/notificaciones?empresa=2'],
+    ['servicio de otra empresa', '/servicios/4'],
+    ['cliente con dos empresas', '/clientes/3?tab=cuenta'],
+    ['cobro con dos empresas', '/cobro?cliente=3'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
@@ -55,7 +64,7 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            test.setTimeout(180_000)
+            test.setTimeout(300_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 await page.goto(ruta)

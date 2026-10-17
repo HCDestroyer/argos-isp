@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 
-/** Pestaña "Servicios" de la ficha del cliente. Recibe los servicios ya cargados por la página. */
+/**
+ * Pestaña "Servicios" de la ficha del cliente. Recibe los servicios ya cargados por la página.
+ * Con varias empresas (multiempresa) se agrupan por la empresa de cada servicio.
+ */
 const props = withDefaults(defineProps<{
     servicios: Servicio[]
     cargando?: boolean
@@ -10,6 +13,11 @@ const props = withDefaults(defineProps<{
 })
 
 const { puede, enlace } = usePermisos()
+const { conSelector: porEmpresa } = useEmpresaActiva()
+
+const grupos = computed(() => (porEmpresa.value
+    ? agruparPorEmpresa(props.servicios, servicio => servicio.empresa_id)
+    : [{ empresaId: null, filas: props.servicios }]))
 
 /** Solo para el precio del plan; los nombres vienen en cada `Servicio`. */
 const planes = ref(new Map<number, Plan>())
@@ -39,95 +47,109 @@ onMounted(async () => {
 </script>
 
 <template>
-    <UTable
-        :data="props.servicios"
-        :columns="columnas"
-        :loading="cargando"
-    >
-        <template #user_ppp-cell="{ row }">
-            <div class="flex min-w-36 flex-col">
-                <ULink
-                    :to="enlace(`/servicios/${row.original.id}`)"
-                    class="font-mono text-sm font-medium text-highlighted hover:text-primary"
-                >
-                    {{ etiquetaServicio(row.original) }}
-                </ULink>
-                <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
-                <span
-                    v-if="row.original.ipv4"
-                    class="font-mono text-xs text-muted sm:hidden"
-                >{{ row.original.ipv4 }}</span>
-                <EstadoServicioBadge
-                    :estado="row.original.estado"
-                    size="sm"
-                    class="mt-1 self-start sm:hidden"
-                />
-                <SuspensionManualBadge
-                    :servicio="row.original"
-                    size="sm"
-                    con-motivo
-                    class="mt-1 sm:hidden"
-                />
-            </div>
-        </template>
-
-        <template #plan_id-cell="{ row }">
-            <div class="flex flex-col">
-                <span class="text-sm">{{ nombrePlan(row.original) }}</span>
-                <span class="text-xs text-muted">
-                    {{ formatearQuetzales(precio(row.original)) }}
-                    <template v-if="row.original.costo_override"> · precio especial</template>
-                </span>
-            </div>
-        </template>
-
-        <template #ipv4-cell="{ row }">
-            <div class="flex flex-col font-mono text-xs">
-                <span class="text-sm">{{ row.original.ipv4 ?? 'Sin IPv4' }}</span>
-                <span
-                    v-if="row.original.prefijo_delegado_v6"
-                    class="text-muted"
-                >{{ row.original.prefijo_delegado_v6 }}</span>
-                <span
-                    v-else
-                    class="text-muted"
-                >IPv6: {{ row.original.ipv6_modo === 'ninguno' ? 'no' : row.original.ipv6_modo }}</span>
-            </div>
-        </template>
-
-        <template #estado-cell="{ row }">
-            <div class="flex flex-wrap items-center gap-1">
-                <EstadoServicioBadge
-                    :estado="row.original.estado"
-                    size="sm"
-                />
-                <UBadge
-                    v-if="row.original.promesa_activa"
-                    :label="PROMESA_ACTIVA.etiqueta"
-                    :icon="PROMESA_ACTIVA.icono"
-                    :color="PROMESA_ACTIVA.color"
-                    variant="outline"
-                    size="sm"
-                />
-                <SuspensionManualBadge
-                    :servicio="row.original"
-                    size="sm"
-                    con-motivo
-                />
-            </div>
-        </template>
-
-        <template #fecha_instalacion-cell="{ row }">
-            <span class="text-sm text-muted">{{ formatearFecha(row.original.fecha_instalacion) }}</span>
-        </template>
-
-        <template #empty>
-            <UEmpty
-                icon="i-lucide-wifi-off"
-                title="Sin servicios"
-                description="Este cliente todavía no tiene servicios de internet."
-                variant="naked"
+    <div class="flex flex-col gap-6">
+        <section
+            v-for="grupo in grupos"
+            :key="grupo.empresaId ?? 'todas'"
+            class="flex flex-col gap-2"
+            :data-prueba="porEmpresa ? `servicios-empresa-${grupo.empresaId}` : undefined"
+        >
+            <EncabezadoEmpresa
+                v-if="porEmpresa"
+                :empresa-id="grupo.empresaId"
+                :detalle="grupo.filas.length === 1 ? '1 servicio' : `${grupo.filas.length} servicios`"
             />
-        </template>
-    </UTable>
+            <UTable
+                :data="grupo.filas"
+                :columns="columnas"
+                :loading="cargando"
+            >
+                <template #user_ppp-cell="{ row }">
+                    <div class="flex min-w-36 flex-col">
+                        <ULink
+                            :to="enlace(`/servicios/${row.original.id}`)"
+                            class="font-mono text-sm font-medium text-highlighted hover:text-primary"
+                        >
+                            {{ etiquetaServicio(row.original) }}
+                        </ULink>
+                        <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
+                        <span
+                            v-if="row.original.ipv4"
+                            class="font-mono text-xs text-muted sm:hidden"
+                        >{{ row.original.ipv4 }}</span>
+                        <EstadoServicioBadge
+                            :estado="row.original.estado"
+                            size="sm"
+                            class="mt-1 self-start sm:hidden"
+                        />
+                        <SuspensionManualBadge
+                            :servicio="row.original"
+                            size="sm"
+                            con-motivo
+                            class="mt-1 sm:hidden"
+                        />
+                    </div>
+                </template>
+
+                <template #plan_id-cell="{ row }">
+                    <div class="flex flex-col">
+                        <span class="text-sm">{{ nombrePlan(row.original) }}</span>
+                        <span class="text-xs text-muted">
+                            {{ formatearQuetzales(precio(row.original)) }}
+                            <template v-if="row.original.costo_override"> · precio especial</template>
+                        </span>
+                    </div>
+                </template>
+
+                <template #ipv4-cell="{ row }">
+                    <div class="flex flex-col font-mono text-xs">
+                        <span class="text-sm">{{ row.original.ipv4 ?? 'Sin IPv4' }}</span>
+                        <span
+                            v-if="row.original.prefijo_delegado_v6"
+                            class="text-muted"
+                        >{{ row.original.prefijo_delegado_v6 }}</span>
+                        <span
+                            v-else
+                            class="text-muted"
+                        >IPv6: {{ row.original.ipv6_modo === 'ninguno' ? 'no' : row.original.ipv6_modo }}</span>
+                    </div>
+                </template>
+
+                <template #estado-cell="{ row }">
+                    <div class="flex flex-wrap items-center gap-1">
+                        <EstadoServicioBadge
+                            :estado="row.original.estado"
+                            size="sm"
+                        />
+                        <UBadge
+                            v-if="row.original.promesa_activa"
+                            :label="PROMESA_ACTIVA.etiqueta"
+                            :icon="PROMESA_ACTIVA.icono"
+                            :color="PROMESA_ACTIVA.color"
+                            variant="outline"
+                            size="sm"
+                        />
+                        <SuspensionManualBadge
+                            :servicio="row.original"
+                            size="sm"
+                            con-motivo
+                        />
+                    </div>
+                </template>
+
+                <template #fecha_instalacion-cell="{ row }">
+                    <span class="text-sm text-muted">{{ formatearFecha(row.original.fecha_instalacion) }}</span>
+                </template>
+
+                <template #empty>
+                    <UEmpty
+                        icon="i-lucide-wifi-off"
+                        title="Sin servicios"
+                        description="Este cliente todavía no tiene servicios de internet."
+                        variant="naked"
+                    />
+                </template>
+            </UTable>
+        </section>
+    </div>
 </template>

@@ -43,7 +43,7 @@ describe('reverso de asiento y nota de crédito', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('API: solo se revierte un asiento sin documento, una vez; los demás dicen qué anular', async () => {

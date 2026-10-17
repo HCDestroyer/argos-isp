@@ -26,6 +26,12 @@ export function problema(status: number, title: string, detail?: string, errors?
     return { status, cuerpo }
 }
 
+/** Problem con `type` propio, como `tipoProblema(codigo)` de la API (`urn:argosisp:problema:<codigo>`). */
+export function problemaTipado(status: number, codigo: string, title: string, detail?: string, errors?: Problem['errors']): RespuestaFixture {
+    const respuesta = problema(status, title, detail, errors)
+    return { ...respuesta, cuerpo: { ...(respuesta.cuerpo as Problem), type: `urn:argosisp:problema:${codigo}` } }
+}
+
 export const sinSesion = (): RespuestaFixture => problema(401, 'Sin sesión', 'El token no es válido o expiró.')
 
 /** Exige sesión y el permiso de la acción, como el middleware de ACL de la API. */
@@ -136,4 +142,46 @@ export const versionCambiada = (): RespuestaFixture => problema(409, 'Conflicto 
 
 export function datosInvalidos(errors: NonNullable<Problem['errors']>): RespuestaFixture {
     return problema(422, 'Datos inválidos', 'Revisa los campos marcados.', errors)
+}
+
+/**
+ * Empresa activa de la petición, como el middleware `empresa` de A1: `X-Empresa-Id` o, sin
+ * cabecera, la única empresa del usuario (con varias, ninguna).
+ */
+export function empresaActivaDe(solicitud: SolicitudFixture): number | null {
+    const cabecera = Number(solicitud.headers.get('X-Empresa-Id'))
+    if (Number.isInteger(cabecera) && cabecera > 0) {
+        return cabecera
+    }
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    const suyas = usuario?.empresas ?? []
+    return !usuario?.alcance_global && suyas.length === 1 ? suyas[0]?.id ?? null : null
+}
+
+/** 403 `empresa_no_permitida` si la cabecera pide una empresa fuera del alcance del usuario. */
+export function empresaNoPermitida(solicitud: SolicitudFixture): RespuestaFixture | null {
+    const pedida = Number(solicitud.headers.get('X-Empresa-Id'))
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    if (!usuario || !Number.isInteger(pedida) || pedida <= 0) {
+        return null
+    }
+    const existe = bd.empresas.some(e => e.id === pedida && e.activa)
+    const permitida = existe && (usuario.alcance_global || (usuario.empresas ?? []).some(e => e.id === pedida))
+    return permitida ? null : problemaTipado(403, 'empresa_no_permitida', 'Empresa no permitida', `No tienes acceso a la empresa ${pedida}`)
+}
+
+/**
+ * Empresas por las que filtra una lista (`empresasDeLaLista` de A1): la activa; sin activa, las del
+ * alcance del usuario (`null` = todas con alcance global); `?empresas=todas` → `null` (consolidado).
+ */
+export function empresasDeLista(solicitud: SolicitudFixture): number[] | null {
+    if (solicitud.query.get('empresas') === 'todas') {
+        return null
+    }
+    const activa = empresaActivaDe(solicitud)
+    if (activa) {
+        return [activa]
+    }
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    return !usuario || usuario.alcance_global ? null : (usuario.empresas ?? []).map(e => e.id)
 }

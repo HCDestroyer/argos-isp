@@ -128,6 +128,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'ComprobanteArchivo.vue': { permisos: ['comprobantes.ver'], desde: ['pages/comprobantes/[id].vue'] },
     'CuentaBancariaFormulario.vue': { permisos: ['cuentas_bancarias.editar'], desde: ['pages/configuracion/cuentas-bancarias.vue'] },
     'EgresoRegistrarModal.vue': { permisos: ['egresos.registrar'], desde: ['pages/egresos/index.vue'] },
+    'EmpresaLogoModal.vue': { permisos: ['empresas.cambiar_logo'], desde: ['pages/configuracion/empresas.vue'] },
     'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
@@ -137,8 +138,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
     'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },
     'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },
+    'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
     'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {
