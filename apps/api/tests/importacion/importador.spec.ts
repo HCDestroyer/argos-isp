@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { leerCsv, ErrorCsv } from '#importacion/csv'
-import { leerDirectorio } from '#importacion/fuente'
-import { importarMikrowisp } from '#importacion/importador'
+import { leerDirectorio } from '#importacion/origenes/csv'
+import { importar } from '#importacion/importador'
 import { formatearReporte } from '#importacion/reporte'
 import type { EntidadExterna, IdsExternos } from '#importacion/ids_externos'
 import { descifrar } from '#shared/cifrado'
@@ -165,7 +165,7 @@ test.group('importacion · Mikrowisp', () => {
         const wisp = await hayTipoConexion()
         const antes = await contar()
         const fuente = await leerDirectorio(EJEMPLO)
-        const r = await importarMikrowisp(fuente, { dryRun: true, directorio: EJEMPLO, plantillaId })
+        const r = await importar(fuente, { sistema: 'mikrowisp', dryRun: true, fuente: EJEMPLO, plantillaId })
 
         assert.equal(r.modo, 'en_seco')
         assert.deepEqual(r.errores, [])
@@ -199,34 +199,34 @@ test.group('importacion · Mikrowisp', () => {
             cuadra: false,
         })
         assert.sameDeepMembers(r.diferencias.saldos_distintos, [
-            { cliente_mw: '106', nombre: null, origen: '75.00', importado: '0.00', diferencia: '-75.00' },
-            { cliente_mw: '999', nombre: null, origen: '99.00', importado: '0.00', diferencia: '-99.00' },
+            { cliente_origen: '106', nombre: null, origen: '75.00', importado: '0.00', diferencia: '-75.00' },
+            { cliente_origen: '999', nombre: null, origen: '99.00', importado: '0.00', diferencia: '-99.00' },
         ])
         assert.deepEqual(r.diferencias.facturas_a_saldo, [
             {
-                factura_mw: '5004',
-                cliente_mw: '103',
+                factura_origen: '5004',
+                cliente_origen: '103',
                 pendiente: '150.00',
                 motivo: 'el servicio 1003 no se importó',
             },
         ])
         assert.deepInclude(r.diferencias.referencias_faltantes, {
             entidad: 'factura',
-            id_mw: '5006',
+            id_origen: '5006',
             falta: 'cliente',
-            id_falta_mw: '999',
+            id_falta_origen: '999',
         })
         assert.deepInclude(r.diferencias.referencias_faltantes, {
             entidad: 'saldo',
-            id_mw: '106',
+            id_origen: '106',
             falta: 'cliente',
-            id_falta_mw: '106',
+            id_falta_origen: '106',
         })
         if (wisp) {
             assert.deepEqual(r.diferencias.tipos_conexion_pendientes, [])
         } else {
             assert.deepEqual(
-                r.diferencias.tipos_conexion_pendientes.map((x) => [x.servicio_mw, x.tipo_conexion]),
+                r.diferencias.tipos_conexion_pendientes.map((x) => [x.servicio_origen, x.tipo_conexion]),
                 [
                     ['1012', 'ip_estatica'],
                     ['1013', 'dhcp_fija'],
@@ -237,46 +237,48 @@ test.group('importacion · Mikrowisp', () => {
 
         const d = r.diferencias
         assert.deepEqual(d.ips_duplicadas, [
-            { ip: '198.19.10.11', servicios_mw: ['1002', '1003'], importado_mw: '1002' },
+            { ip: '198.19.10.11', servicios_origen: ['1002', '1003'], importado_origen: '1002' },
         ])
-        assert.deepEqual(d.ips_fuera_de_red, [{ servicio_mw: '1004', ip: '198.19.99.5', router_mw: '2' }])
+        assert.deepEqual(d.ips_fuera_de_red, [
+            { servicio_origen: '1004', ip: '198.19.99.5', router_origen: '2' },
+        ])
         assert.include(
-            d.ips_nuevas.map((x) => x.servicio_mw),
+            d.ips_nuevas.map((x) => x.servicio_origen),
             '1005',
         )
-        assert.match(d.ips_nuevas.find((x) => x.servicio_mw === '1005')!.ip!, /^198\.19\.20\.\d+$/)
+        assert.match(d.ips_nuevas.find((x) => x.servicio_origen === '1005')!.ip!, /^198\.19\.20\.\d+$/)
         assert.sameDeepMembers(
-            d.planes_sin_equivalente.map((p) => [p.plan_mw, p.servicios]),
+            d.planes_sin_equivalente.map((p) => [p.plan_origen, p.servicios]),
             [
                 ['3', 1],
                 ['9', 1],
             ],
         )
         assert.deepEqual(
-            d.clientes_sin_nit.map((c) => c.cliente_mw),
+            d.clientes_sin_nit.map((c) => c.cliente_origen),
             ['103'],
         )
         assert.deepEqual(
-            d.nit_invalidos.map((c) => [c.cliente_mw, c.nit]),
+            d.nit_invalidos.map((c) => [c.cliente_origen, c.nit]),
             [['104', '12345678-0']],
         )
         assert.deepEqual(
-            d.user_ppp_duplicados.map((u) => u.servicios_mw),
+            d.user_ppp_duplicados.map((u) => u.servicios_origen),
             [['1001', '1009']],
         )
         assert.deepEqual(
-            d.servicios_suspendidos_origen.map((s) => s.servicio_mw),
+            d.servicios_suspendidos_origen.map((s) => s.servicio_origen),
             ['1002'],
         )
         assert.deepEqual(
-            d.servicios_retirados_origen.map((s) => s.servicio_mw),
+            d.servicios_retirados_origen.map((s) => s.servicio_origen),
             ['1008'],
         )
         assert.deepInclude(d.referencias_faltantes, {
             entidad: 'servicio',
-            id_mw: '1010',
+            id_origen: '1010',
             falta: 'cliente',
-            id_falta_mw: '999',
+            id_falta_origen: '999',
         })
         assert.isNotEmpty(r.pendiente)
 
@@ -301,7 +303,7 @@ test.group('importacion · Mikrowisp', () => {
             saldos: fuente.saldos.filter((x) => x.cliente_id !== '106'),
             facturas: fuente.facturas.filter((f) => f.cliente_id !== '999'),
         }
-        const r = await importarMikrowisp(limpia, { dryRun: true, plantillaId })
+        const r = await importar(limpia, { sistema: 'mikrowisp', dryRun: true, plantillaId })
         assert.deepEqual(r.saldos, {
             clientes: 4,
             suma_origen: '1700.50',
@@ -319,7 +321,7 @@ test.group('importacion · Mikrowisp', () => {
         const trx = await db.transaction()
         try {
             const fuente = await leerDirectorio(EJEMPLO)
-            const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            const primera = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
             assert.equal(primera.modo, 'real')
             assert.deepEqual(primera.errores, [])
             assert.equal(primera.resumen.servicios.creados, wisp ? 6 : 3)
@@ -393,7 +395,7 @@ test.group('importacion · Mikrowisp', () => {
             assert.equal(saldoAna.monto, '50.00')
             assert.equal(primera.saldos.suma_importada, '1700.50')
 
-            const segunda = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            const segunda = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
             for (const [entidad, c] of Object.entries(segunda.resumen)) {
                 assert.equal(c.creados, 0, `${entidad} no debe crear nada la segunda vez`)
             }
@@ -426,7 +428,8 @@ test.group('importacion · Mikrowisp', () => {
         const trx = await db.transaction()
         try {
             const fuente = await leerDirectorio(EJEMPLO)
-            const primera = await importarMikrowisp(fuente, {
+            const primera = await importar(fuente, {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -444,7 +447,8 @@ test.group('importacion · Mikrowisp', () => {
                     x.id === '1' ? { ...x, nombre: 'MW Centro (renombrado)', nas_ip: '198.51.100.99' } : x,
                 ),
             }
-            const segunda = await importarMikrowisp(cambiada, {
+            const segunda = await importar(cambiada, {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -479,7 +483,7 @@ test.group('importacion · Mikrowisp', () => {
                 return Object.fromEntries(filas.map((v) => [v.entidad_tipo, v.n])) as Record<string, number>
             }
             const antes = await contarVinculos()
-            const primera = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            const primera = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
             assert.equal(primera.ids_externos, 'tabla')
             assert.deepEqual(primera.errores, [])
             const despues = await contarVinculos()
@@ -495,7 +499,12 @@ test.group('importacion · Mikrowisp', () => {
                     x.id === '1' ? { ...x, nombre: 'MW Centro (renombrado)', nas_ip: '198.51.100.99' } : x,
                 ),
             }
-            const segunda = await importarMikrowisp(cambiada, { dryRun: false, trx, plantillaId })
+            const segunda = await importar(cambiada, {
+                sistema: 'mikrowisp',
+                dryRun: false,
+                trx,
+                plantillaId,
+            })
             assert.deepEqual(segunda.resumen.routers, { origen: 2, creados: 0, existentes: 2, omitidos: 0 })
             assert.deepEqual(segunda.errores, [])
         } finally {
@@ -511,7 +520,7 @@ test.group('importacion · Mikrowisp', () => {
         const trx = await db.transaction()
         try {
             const fuente = await leerDirectorio(EJEMPLO)
-            const r = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            const r = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
             assert.deepEqual(r.errores, [])
             const porIp = async (valor: string) =>
                 (await trx
@@ -541,7 +550,7 @@ test.group('importacion · Mikrowisp', () => {
                 .whereRaw(`mac = 'AA:BB:CC:00:10:14'::macaddr`)
                 .first()) as Record<string, unknown>
             assert.equal(dhcp.tipo_conexion, 'dhcp_fija')
-            const otra = await importarMikrowisp(fuente, { dryRun: false, trx, plantillaId })
+            const otra = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
             assert.equal(otra.resumen.servicios.creados, 0)
         } finally {
             await trx.rollback()
@@ -552,7 +561,8 @@ test.group('importacion · Mikrowisp', () => {
         assert,
     }) => {
         const fuente = await leerDirectorio(EJEMPLO)
-        const r = await importarMikrowisp(fuente, {
+        const r = await importar(fuente, {
+            sistema: 'mikrowisp',
             dryRun: true,
             soloPlanesExistentes: true,
             plantillaId: null,
@@ -560,7 +570,7 @@ test.group('importacion · Mikrowisp', () => {
         assert.equal(r.resumen.planes.creados, 0)
         assert.equal(r.resumen.servicios.creados, 0)
         assert.sameMembers(
-            r.diferencias.planes_sin_equivalente.map((p) => p.plan_mw),
+            r.diferencias.planes_sin_equivalente.map((p) => p.plan_origen),
             ['1', '2', '3', '9'],
         )
     })

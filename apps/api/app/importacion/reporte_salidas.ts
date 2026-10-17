@@ -13,8 +13,8 @@ export type Gravedad = 'error' | 'omitido' | 'aviso' | 'info'
 export interface LineaDiferencia {
     /** router, red, plan, cliente, servicio, factura, pago, saldo */
     entidad: string
-    /** id en Mikrowisp (o la referencia que corresponda) */
-    id_mw: string
+    /** id en el sistema de origen (o la referencia que corresponda) */
+    id_origen: string
     /** código estable de la diferencia (`ips_duplicadas`, `formato`, `error_accion`, ...) */
     tipo: string
     gravedad: Gravedad
@@ -30,13 +30,13 @@ const ORDEN_ENTIDADES = ['router', 'red', 'plan', 'zona', 'cliente', 'servicio',
 
 const ENTIDAD_DE_ARCHIVO: Array<[RegExp, string]> = [
     [/routers/, 'router'],
-    [/redes/, 'red'],
-    [/planes|perfiles/, 'plan'],
-    [/saldo/, 'saldo'],
-    [/clientes|usuarios/, 'cliente'],
-    [/servicios/, 'servicio'],
-    [/facturas/, 'factura'],
-    [/pagos|operaciones/, 'pago'],
+    [/redes|networks/, 'red'],
+    [/planes|perfiles|plans/, 'plan'],
+    [/saldo|balance/, 'saldo'],
+    [/servicios|services/, 'servicio'],
+    [/clientes|usuarios|clients/, 'cliente'],
+    [/facturas|bills/, 'factura'],
+    [/pagos|operaciones|payments/, 'pago'],
 ]
 
 export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
@@ -47,11 +47,11 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.routers_sin_credenciales) {
         add({
             entidad: 'router',
-            id_mw: x.router_mw,
+            id_origen: x.router_origen,
             tipo: 'router_sin_credenciales',
             gravedad: 'aviso',
             detalle: `${x.nombre}: se importa sin ${x.faltan.join(', ')}`,
-            causa: 'Mikrowisp no tiene esos datos del router',
+            causa: 'El origen no tiene esos datos del router',
             accion: x.faltan.includes('radius_secret')
                 ? 'Cargar usuario, clave de la API y secreto RADIUS en el panel antes de migrar el router'
                 : 'Cargar usuario y clave de la API REST en el panel (sin ellos no hay reconciliación ni colas)',
@@ -60,7 +60,7 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.planes_sin_equivalente) {
         add({
             entidad: 'plan',
-            id_mw: x.plan_mw,
+            id_origen: x.plan_origen,
             tipo: 'plan_sin_equivalente',
             gravedad: 'omitido',
             detalle: `${x.nombre ?? '(sin nombre)'}: ${x.servicios} servicios quedan fuera`,
@@ -69,22 +69,22 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
         })
     }
     for (const x of d.clientes_nit_duplicado) {
-        for (const id of x.clientes_mw.slice(1)) {
+        for (const id of x.clientes_origen.slice(1)) {
             add({
                 entidad: 'cliente',
-                id_mw: id,
+                id_origen: id,
                 tipo: 'nit_duplicado',
                 gravedad: 'aviso',
-                detalle: `NIT ${x.nit} también lo tiene el cliente ${x.clientes_mw[0]}; se importan los dos`,
+                detalle: `NIT ${x.nit} también lo tiene el cliente ${x.clientes_origen[0]}; se importan los dos`,
                 causa: 'El mismo NIT está en varios clientes del origen',
-                accion: 'Si es la misma persona, unir los clientes en Mikrowisp; si no, corregir el NIT',
+                accion: 'Si es la misma persona, unir los clientes en el origen; si no, corregir el NIT',
             })
         }
     }
     for (const x of d.clientes_sin_nit) {
         add({
             entidad: 'cliente',
-            id_mw: x.cliente_mw,
+            id_origen: x.cliente_origen,
             tipo: 'sin_nit',
             gravedad: 'info',
             detalle: `${x.nombre}: se importa sin NIT (factura a Consumidor Final)`,
@@ -95,10 +95,10 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.nit_invalidos) {
         add({
             entidad: 'cliente',
-            id_mw: x.cliente_mw,
+            id_origen: x.cliente_origen,
             tipo: 'nit_invalido',
             gravedad: 'aviso',
-            detalle: `${x.nombre}: "${x.nit}" se importa sin NIT (queda en campos_personalizados.mikrowisp_nit)`,
+            detalle: `${x.nombre}: "${x.nit}" se importa sin NIT (queda en campos_personalizados.${r.origen}_nit)`,
             causa: x.motivo,
             accion: 'Corregir el NIT en el origen',
         })
@@ -106,23 +106,23 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.servicios_sin_plan) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'servicio_sin_plan',
             gravedad: 'omitido',
-            detalle: `${x.etiqueta} (cliente ${x.cliente_mw}) no se importa; sus facturas van al saldo inicial del cliente`,
+            detalle: `${x.etiqueta} (cliente ${x.cliente_origen}) no se importa; sus facturas van al saldo inicial del cliente`,
             causa: 'El servicio no tiene plan en el origen',
-            accion: 'Asignarle un plan en Mikrowisp',
+            accion: 'Asignarle un plan en el origen',
         })
     }
     for (const x of d.ips_duplicadas) {
-        for (const id of x.servicios_mw.filter((s) => s !== x.importado_mw)) {
+        for (const id of x.servicios_origen.filter((s) => s !== x.importado_origen)) {
             add({
                 entidad: 'servicio',
-                id_mw: id,
+                id_origen: id,
                 tipo: 'ip_duplicada',
                 gravedad: 'omitido',
-                detalle: `IP ${x.ip}: se importó el servicio ${x.importado_mw ?? 'ninguno'}; este no`,
-                causa: `La IP ${x.ip} está en los servicios ${x.servicios_mw.join(', ')} del origen`,
+                detalle: `IP ${x.ip}: se importó el servicio ${x.importado_origen ?? 'ninguno'}; este no`,
+                causa: `La IP ${x.ip} está en los servicios ${x.servicios_origen.join(', ')} del origen`,
                 accion: 'Dejar la IP en un solo servicio (o vaciarla para que ArgosIsp asigne otra)',
             })
         }
@@ -130,18 +130,18 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.ips_fuera_de_red) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'ip_fuera_de_red',
             gravedad: 'omitido',
             detalle: `IP ${x.ip} no se importa`,
-            causa: `La IP no cae en ninguna red del router ${x.router_mw}`,
+            causa: `La IP no cae en ninguna red del router ${x.router_origen}`,
             accion: 'Agregar la red del router (redes) o corregir la IP',
         })
     }
     for (const x of d.ips_en_uso) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'ip_en_uso',
             gravedad: 'omitido',
             detalle: `IP ${x.ip} no se importa`,
@@ -152,7 +152,7 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.ips_nuevas) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'ip_nueva',
             gravedad: 'info',
             detalle: `ArgosIsp asigna ${x.ip ?? 'una IP del pool del router'}`,
@@ -161,10 +161,10 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
         })
     }
     for (const x of d.user_ppp_duplicados) {
-        for (const id of x.servicios_mw.slice(x.motivo.startsWith('repetido') ? 1 : 0)) {
+        for (const id of x.servicios_origen.slice(x.motivo.startsWith('repetido') ? 1 : 0)) {
             add({
                 entidad: 'servicio',
-                id_mw: id,
+                id_origen: id,
                 tipo: 'user_ppp_duplicado',
                 gravedad: 'omitido',
                 detalle: `${x.user_ppp} no se importa`,
@@ -176,29 +176,29 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.servicios_suspendidos_origen) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'suspendido_origen',
             gravedad: 'info',
             detalle: `${x.user_ppp} se importa activo`,
-            causa: 'Suspendido en Mikrowisp; el corte lo decide la evaluación con las facturas importadas',
+            causa: 'Suspendido en el origen; el corte lo decide la evaluación con las facturas importadas',
             accion: 'Nada',
         })
     }
     for (const x of d.servicios_retirados_origen) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'retirado_origen',
             gravedad: 'info',
             detalle: `${x.user_ppp} no se importa`,
-            causa: 'Retirado en Mikrowisp',
+            causa: 'Retirado en el origen',
             accion: 'Nada',
         })
     }
     for (const x of d.tipos_conexion_pendientes) {
         add({
             entidad: 'servicio',
-            id_mw: x.servicio_mw,
+            id_origen: x.servicio_origen,
             tipo: 'tipo_conexion_pendiente',
             gravedad: 'omitido',
             detalle: `${x.tipo_conexion} no se importa`,
@@ -209,21 +209,21 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.referencias_faltantes) {
         add({
             entidad: x.entidad,
-            id_mw: x.id_mw,
+            id_origen: x.id_origen,
             tipo: 'referencia_faltante',
             gravedad: 'omitido',
-            detalle: `No se importa: falta ${x.falta} ${x.id_falta_mw}`,
-            causa: `El ${x.falta} ${x.id_falta_mw} no está en el origen o no se pudo importar`,
-            accion: `Revisar el ${x.falta} ${x.id_falta_mw} en el origen (o su línea en este reporte)`,
+            detalle: `No se importa: falta ${x.falta} ${x.id_falta_origen}`,
+            causa: `El ${x.falta} ${x.id_falta_origen} no está en el origen o no se pudo importar`,
+            accion: `Revisar el ${x.falta} ${x.id_falta_origen} en el origen (o su línea en este reporte)`,
         })
     }
     for (const x of d.facturas_a_saldo) {
         add({
             entidad: 'factura',
-            id_mw: x.factura_mw,
+            id_origen: x.factura_origen,
             tipo: 'factura_a_saldo',
             gravedad: 'aviso',
-            detalle: `Q ${x.pendiente} del cliente ${x.cliente_mw} entran en su saldo inicial (no como factura)`,
+            detalle: `Q ${x.pendiente} del cliente ${x.cliente_origen} entran en su saldo inicial (no como factura)`,
             causa: x.motivo,
             accion: 'Nada (el saldo cuadra); para tenerla como factura, indicar su servicio en el origen',
         })
@@ -231,10 +231,10 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.pagos_cruzados) {
         add({
             entidad: 'pago',
-            id_mw: x.pago_mw,
+            id_origen: x.pago_origen,
             tipo: 'pago_cruzado',
             gravedad: 'info',
-            detalle: `El cliente ${x.pagador_mw} pagó Q ${x.monto} de la factura ${x.factura_mw} del cliente ${x.dueno_mw}`,
+            detalle: `El cliente ${x.pagador_origen} pagó Q ${x.monto} de la factura ${x.factura_origen} del cliente ${x.dueno_origen}`,
             causa: 'Pago de un cliente a la factura de otro en el origen; el pendiente de la factura ya lo descuenta',
             accion: 'Nada (confirmar que no fue un error de digitación)',
         })
@@ -242,7 +242,7 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of d.saldos_distintos) {
         add({
             entidad: 'saldo',
-            id_mw: x.cliente_mw,
+            id_origen: x.cliente_origen,
             tipo: 'saldo_distinto',
             gravedad: 'error',
             detalle:
@@ -252,10 +252,11 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
         })
     }
     for (const x of r.formato) {
-        const entidad = ENTIDAD_DE_ARCHIVO.find(([re]) => re.test(x.archivo))?.[1] ?? x.archivo
+        const tabla = x.archivo.split(':').at(-1) ?? x.archivo
+        const entidad = ENTIDAD_DE_ARCHIVO.find(([re]) => re.test(tabla))?.[1] ?? x.archivo
         add({
             entidad,
-            id_mw: x.id ?? `${x.archivo}:${x.linea}`,
+            id_origen: x.id ?? `${x.archivo}:${x.linea}`,
             tipo: x.aviso ? 'formato_campo' : 'formato_fila',
             gravedad: x.aviso ? 'aviso' : 'omitido',
             detalle: x.aviso
@@ -268,7 +269,7 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
     for (const x of r.errores) {
         add({
             entidad: x.entidad,
-            id_mw: x.id_mw,
+            id_origen: x.id_origen,
             tipo: 'error_accion',
             gravedad: 'error',
             detalle: `La acción ${x.accion} lo rechazó`,
@@ -289,7 +290,7 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
 
 const COLUMNAS: Array<keyof LineaDiferencia> = [
     'entidad',
-    'id_mw',
+    'id_origen',
     'tipo',
     'gravedad',
     'detalle',
@@ -311,9 +312,11 @@ export function reporteCsv(r: ReporteImportacion): string {
 export function reporteMarkdown(r: ReporteImportacion): string {
     const md = (v: string) => v.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
     const s: string[] = []
-    s.push(`# Importación desde Mikrowisp · ${r.modo === 'en_seco' ? 'en seco (no se guardó nada)' : 'real'}`)
+    s.push(
+        `# Importación desde ${r.origen} · ${r.modo === 'en_seco' ? 'en seco (no se guardó nada)' : 'real'}`,
+    )
     s.push('')
-    if (r.directorio) s.push(`Origen: \`${r.directorio}\``, '')
+    if (r.fuente) s.push(`Fuente: \`${r.fuente}\``, '')
     s.push('## Resumen', '')
     s.push('| Entidad | Origen | Creados | Existentes | Omitidos |', '| --- | ---: | ---: | ---: | ---: |')
     for (const [nombre, c] of Object.entries(r.resumen)) {
@@ -338,12 +341,12 @@ export function reporteMarkdown(r: ReporteImportacion): string {
     for (const [entidad, grupo] of porEntidad) {
         s.push('', `### ${entidad} (${grupo.length})`, '')
         s.push(
-            '| Id Mikrowisp | Diferencia | Gravedad | Detalle | Causa | Qué hacer |',
+            '| Id en el origen | Diferencia | Gravedad | Detalle | Causa | Qué hacer |',
             '| --- | --- | --- | --- | --- | --- |',
         )
         for (const x of grupo) {
             s.push(
-                `| ${md(x.id_mw)} | ${x.tipo} | ${x.gravedad} | ${md(x.detalle)} | ${md(x.causa)} | ${md(x.accion)} |`,
+                `| ${md(x.id_origen)} | ${x.tipo} | ${x.gravedad} | ${md(x.detalle)} | ${md(x.causa)} | ${md(x.accion)} |`,
             )
         }
     }

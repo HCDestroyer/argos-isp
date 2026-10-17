@@ -1,0 +1,12 @@
+﻿id,nombre,tipo,nit,nombre_fiscal,direccion_fiscal,email,telefono,movil,direccion,coordenadas,zona
+1,Ana López,,1234567-9,,,ana.lopez@example.com,2222-0001,5555-0001,"4a. calle 5-10, zona 1",,MW Centro
+2,"Comercial El Sol, S.A.",,7654321-8,,,pagos@elsol.example.com,2222-0002,,"Km. 14.5, ""Bodega 3""",,MW Centro
+3,Comercial El Sol (bodega),,76543218,,,,,,"Km. 14.5, 'La Ceiba'",,MW Centro
+4,Bruno Pérez,,,,,,,5555-0004,Aldea El Rosario,,MW Aldea El Rosario
+5,Carla Méndez,,CF,,,carla@example.com,,5555-0005,Aldea El Rosario,,MW Aldea El Rosario
+6,Elena Méndez,,3141592-K,,,,,5555-0006,Aldea El Rosario,,MW Aldea El Rosario
+7,Ernesto Juárez,,2718281-9,,,ernesto@example,,,"Barrio El Centro
+Casa amarilla",,MW Centro
+8,Finca Las Flores,,1122334-0,,,finca@example.com,,,Finca Las Flores,,
+9,Gabriel Ruiz,,123,,,,,5555-0009,Colonia Las Brisas,,MW Centro
+10,Hilda Castillo,,,,,,,,,,MW Centro

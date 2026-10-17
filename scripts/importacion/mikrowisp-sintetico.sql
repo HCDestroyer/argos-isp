@@ -4,10 +4,10 @@
 -- ------------------------------------------------------
 --
 -- FIXTURE SINTÉTICO de ArgosIsp (no son datos reales). Sigue el esquema supuesto de Mikrowisp
--- descrito en apps/api/app/importacion/mikrowisp_sql.ts (ESQUEMA). Cuando llegue el volcado real
+-- descrito en apps/api/app/importacion/origenes/mikrowisp.ts (ESQUEMA). Cuando llegue el volcado real
 -- del ISP se ajusta ese archivo y este fixture.
 --
--- Casos difíciles que cubre (ver la prueba tests/importacion/mikrowisp_sql.spec.ts):
+-- Casos difíciles que cubre (ver la prueba tests/importacion/mikrowisp.spec.ts):
 --   * clientes duplicados por NIT: 2 y 3 (mismo NIT con y sin guion)
 --   * servicio sin plan: 107 (idperfil = 0) y su factura 5005 va al saldo inicial
 --   * router con credenciales vacías: 2 (sin usuario, clave ni secreto RADIUS)

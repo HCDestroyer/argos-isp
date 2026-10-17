@@ -21,7 +21,8 @@
     "migrate": "node ace migration:run",
     "seed": "node ace db:seed",
     "openapi:generate": "node ace openapi:generate",
-    "importar": "node ace importar:mikrowisp"
+    "importar": "node ace importar",
+    "importar:plantillas": "node ace importar:plantillas"
   },
   "imports": {
     "#shared/*": "./app/shared/*.js",

@@ -1,0 +1,3 @@
+﻿id,nombre,host,nas_ip,api_usuario,api_password,radius_secret
+1,Torre Norte,198.18.0.1,198.18.0.11,argos,clave-lab-norte,secreto-lab-norte
+2,Torre Sur,198.18.0.2,198.18.0.2,,,

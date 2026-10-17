@@ -1,7 +1,7 @@
-import type { ProblemaFila } from '#importacion/fuente'
+import type { ProblemaFila } from '#importacion/canonico'
 
 /**
- * Reporte de una corrida del importador. Todo id de `*_mw` es el id de Mikrowisp; los ids de
+ * Reporte de una corrida del importador. Todo id de `*_origen` es el id del sistema de origen; los ids de
  * ArgosIsp van sin sufijo. Se imprime como texto (`formatearReporte`) y se guarda como JSON.
  */
 
@@ -21,7 +21,10 @@ export interface ReporteImportacion {
     request_id: string
     inicio: string
     fin: string
-    directorio: string | null
+    /** sistema de origen (`mikrowisp`, `smartisp`, `csv` o el `--sistema` del CSV) */
+    origen: string
+    /** archivo o directorio leído */
+    fuente: string | null
     resumen: {
         routers: ConteoEntidad
         redes: ConteoEntidad
@@ -53,48 +56,58 @@ export interface ReporteImportacion {
     }
     diferencias: {
         /** router sin usuario/clave de la API o sin secreto RADIUS: se importa igual */
-        routers_sin_credenciales: Array<{ router_mw: string; nombre: string; faltan: string[] }>
+        routers_sin_credenciales: Array<{ router_origen: string; nombre: string; faltan: string[] }>
         /** mismo NIT en varios clientes del origen: se importan todos */
-        clientes_nit_duplicado: Array<{ nit: string; clientes_mw: string[] }>
+        clientes_nit_duplicado: Array<{ nit: string; clientes_origen: string[] }>
         /** servicio sin plan en el origen: no se importa (sus facturas van al saldo inicial) */
-        servicios_sin_plan: Array<{ servicio_mw: string; cliente_mw: string; etiqueta: string }>
+        servicios_sin_plan: Array<{ servicio_origen: string; cliente_origen: string; etiqueta: string }>
         /** pago de un cliente a la factura de otro (informativo: el pendiente ya lo descuenta) */
         pagos_cruzados: Array<{
-            pago_mw: string
-            pagador_mw: string
-            factura_mw: string
-            dueno_mw: string
+            pago_origen: string
+            pagador_origen: string
+            factura_origen: string
+            dueno_origen: string
             monto: string
         }>
         /** misma IP en varios servicios del origen: se importa el primero (por orden del archivo) */
-        ips_duplicadas: Array<{ ip: string; servicios_mw: string[]; importado_mw: string | null }>
+        ips_duplicadas: Array<{ ip: string; servicios_origen: string[]; importado_origen: string | null }>
         /** la IP no cae en ninguna red del router: el servicio no se importa */
-        ips_fuera_de_red: Array<{ servicio_mw: string; ip: string; router_mw: string }>
+        ips_fuera_de_red: Array<{ servicio_origen: string; ip: string; router_origen: string }>
         /** la IP ya la tiene otro servicio de ArgosIsp */
-        ips_en_uso: Array<{ servicio_mw: string; ip: string; servicio_id: number }>
+        ips_en_uso: Array<{ servicio_origen: string; ip: string; servicio_id: number }>
         /** servicio sin IP en el origen: ArgosIsp le asignó una */
-        ips_nuevas: Array<{ servicio_mw: string; ip: string | null }>
+        ips_nuevas: Array<{ servicio_origen: string; ip: string | null }>
         planes_sin_equivalente: Array<{
-            plan_mw: string
+            plan_origen: string
             nombre: string | null
             motivo: string
             servicios: number
         }>
-        clientes_sin_nit: Array<{ cliente_mw: string; nombre: string }>
-        nit_invalidos: Array<{ cliente_mw: string; nombre: string; nit: string; motivo: string }>
-        user_ppp_duplicados: Array<{ user_ppp: string; servicios_mw: string[]; motivo: string }>
-        /** estado en Mikrowisp distinto de activo: se aplicará con las facturas (A3) */
-        servicios_suspendidos_origen: Array<{ servicio_mw: string; user_ppp: string }>
-        servicios_retirados_origen: Array<{ servicio_mw: string; user_ppp: string }>
+        clientes_sin_nit: Array<{ cliente_origen: string; nombre: string }>
+        nit_invalidos: Array<{ cliente_origen: string; nombre: string; nit: string; motivo: string }>
+        user_ppp_duplicados: Array<{ user_ppp: string; servicios_origen: string[]; motivo: string }>
+        /** estado en el origen distinto de activo: se aplicará con las facturas (A3) */
+        servicios_suspendidos_origen: Array<{ servicio_origen: string; user_ppp: string }>
+        servicios_retirados_origen: Array<{ servicio_origen: string; user_ppp: string }>
         /** referencias rotas: cliente, router o plan que no está o no se pudo importar */
-        referencias_faltantes: Array<{ entidad: string; id_mw: string; falta: string; id_falta_mw: string }>
+        referencias_faltantes: Array<{
+            entidad: string
+            id_origen: string
+            falta: string
+            id_falta_origen: string
+        }>
         /** servicio sin PPPoE (ip_estatica, dhcp_fija) que ArgosIsp aún no admite: no se importa */
-        tipos_conexion_pendientes: Array<{ servicio_mw: string; tipo_conexion: string; motivo: string }>
+        tipos_conexion_pendientes: Array<{ servicio_origen: string; tipo_conexion: string; motivo: string }>
         /** factura sin servicio en ArgosIsp: su monto entra en el saldo inicial del cliente */
-        facturas_a_saldo: Array<{ factura_mw: string; cliente_mw: string; pendiente: string; motivo: string }>
+        facturas_a_saldo: Array<{
+            factura_origen: string
+            cliente_origen: string
+            pendiente: string
+            motivo: string
+        }>
         /** cliente cuyo saldo en ArgosIsp no es el del origen */
         saldos_distintos: Array<{
-            cliente_mw: string
+            cliente_origen: string
             nombre: string | null
             origen: string
             importado: string
@@ -104,7 +117,7 @@ export interface ReporteImportacion {
     /** filas con formato inválido (omitidas) o campos descartados (avisos) */
     formato: ProblemaFila[]
     /** errores que devolvieron las acciones de dominio */
-    errores: Array<{ entidad: string; id_mw: string; accion: string; mensaje: string }>
+    errores: Array<{ entidad: string; id_origen: string; accion: string; mensaje: string }>
     /** lo que falta del origen y queda para otra tarea */
     pendiente: string[]
 }
@@ -116,9 +129,9 @@ export function conteoVacio(origen = 0): ConteoEntidad {
 export function formatearReporte(r: ReporteImportacion): string {
     const lineas: string[] = []
     const titulo = r.modo === 'en_seco' ? 'EN SECO (nada se guardó)' : 'REAL'
-    lineas.push(`Importación desde Mikrowisp · ${titulo}`)
+    lineas.push(`Importación desde ${r.origen} · ${titulo}`)
     lineas.push(`request_id ${r.request_id} · ${r.inicio} → ${r.fin}`)
-    if (r.directorio) lineas.push(`origen ${r.directorio}`)
+    if (r.fuente) lineas.push(`fuente ${r.fuente}`)
     lineas.push('')
     lineas.push('Entidad            origen  creados  existentes  omitidos')
     for (const [nombre, c] of Object.entries(r.resumen)) {
@@ -146,93 +159,98 @@ export function formatearReporte(r: ReporteImportacion): string {
     seccion(
         'Routers sin credenciales (se importan; cargarlas en el panel)',
         d.routers_sin_credenciales.map(
-            (x) => `router ${x.router_mw} ${x.nombre}: falta ${x.faltan.join(', ')}`,
+            (x) => `router ${x.router_origen} ${x.nombre}: falta ${x.faltan.join(', ')}`,
         ),
     )
     seccion(
         'Clientes con el mismo NIT (se importan todos)',
-        d.clientes_nit_duplicado.map((x) => `NIT ${x.nit}: clientes ${x.clientes_mw.join(', ')}`),
+        d.clientes_nit_duplicado.map((x) => `NIT ${x.nit}: clientes ${x.clientes_origen.join(', ')}`),
     )
     seccion(
         'Servicios sin plan (no se importan; sus facturas van al saldo inicial)',
         d.servicios_sin_plan.map(
-            (x) => `servicio ${x.servicio_mw} (${x.etiqueta}) · cliente ${x.cliente_mw}`,
+            (x) => `servicio ${x.servicio_origen} (${x.etiqueta}) · cliente ${x.cliente_origen}`,
         ),
     )
     seccion(
         'Pagos a facturas de otro cliente (informativo)',
         d.pagos_cruzados.map(
             (x) =>
-                `pago ${x.pago_mw}: cliente ${x.pagador_mw} pagó Q ${x.monto} de la factura ${x.factura_mw} del cliente ${x.dueno_mw}`,
+                `pago ${x.pago_origen}: cliente ${x.pagador_origen} pagó Q ${x.monto} de la factura ${x.factura_origen} del cliente ${x.dueno_origen}`,
         ),
     )
     seccion(
         'IPs duplicadas en el origen',
         d.ips_duplicadas.map(
             (x) =>
-                `${x.ip}: servicios ${x.servicios_mw.join(', ')}; se importa ${x.importado_mw ?? 'ninguno'}`,
+                `${x.ip}: servicios ${x.servicios_origen.join(', ')}; se importa ${x.importado_origen ?? 'ninguno'}`,
         ),
     )
     seccion(
         'IPs fuera de las redes del router',
-        d.ips_fuera_de_red.map((x) => `servicio ${x.servicio_mw}: ${x.ip} (router ${x.router_mw})`),
+        d.ips_fuera_de_red.map((x) => `servicio ${x.servicio_origen}: ${x.ip} (router ${x.router_origen})`),
     )
     seccion(
         'IPs en uso por otro servicio de ArgosIsp',
-        d.ips_en_uso.map((x) => `servicio ${x.servicio_mw}: ${x.ip} (servicio ${x.servicio_id})`),
+        d.ips_en_uso.map((x) => `servicio ${x.servicio_origen}: ${x.ip} (servicio ${x.servicio_id})`),
     )
     seccion(
         'Servicios sin IP en el origen (IP nueva)',
-        d.ips_nuevas.map((x) => `servicio ${x.servicio_mw}: ${x.ip ?? 'del pool del router'}`),
+        d.ips_nuevas.map((x) => `servicio ${x.servicio_origen}: ${x.ip ?? 'del pool del router'}`),
     )
     seccion(
         'Planes sin equivalente',
         d.planes_sin_equivalente.map(
             (x) =>
-                `plan ${x.plan_mw}${x.nombre ? ` ${x.nombre}` : ''}: ${x.motivo} (${x.servicios} servicios)`,
+                `plan ${x.plan_origen}${x.nombre ? ` ${x.nombre}` : ''}: ${x.motivo} (${x.servicios} servicios)`,
         ),
     )
     seccion(
         'Clientes sin NIT (se importan sin NIT)',
-        d.clientes_sin_nit.map((x) => `cliente ${x.cliente_mw}: ${x.nombre}`),
+        d.clientes_sin_nit.map((x) => `cliente ${x.cliente_origen}: ${x.nombre}`),
     )
     seccion(
-        'NIT inválidos (se importan sin NIT; el original queda en campos_personalizados.mikrowisp_nit)',
-        d.nit_invalidos.map((x) => `cliente ${x.cliente_mw}: ${x.nombre} · "${x.nit}" · ${x.motivo}`),
+        `NIT inválidos (se importan sin NIT; el original queda en campos_personalizados.${r.origen}_nit)`,
+        d.nit_invalidos.map((x) => `cliente ${x.cliente_origen}: ${x.nombre} · "${x.nit}" · ${x.motivo}`),
     )
     seccion(
         'user_ppp duplicados',
         d.user_ppp_duplicados.map(
-            (x) => `${x.user_ppp}: servicios ${x.servicios_mw.join(', ')} · ${x.motivo}`,
+            (x) => `${x.user_ppp}: servicios ${x.servicios_origen.join(', ')} · ${x.motivo}`,
         ),
     )
     seccion(
-        'Suspendidos en Mikrowisp (se importan activos; el corte se aplica con las facturas)',
-        d.servicios_suspendidos_origen.map((x) => `servicio ${x.servicio_mw}: ${x.user_ppp}`),
+        'Suspendidos en el origen (se importan activos; el corte se aplica con las facturas)',
+        d.servicios_suspendidos_origen.map((x) => `servicio ${x.servicio_origen}: ${x.user_ppp}`),
     )
     seccion(
-        'Retirados en Mikrowisp (no se importan)',
-        d.servicios_retirados_origen.map((x) => `servicio ${x.servicio_mw}: ${x.user_ppp}`),
+        'Retirados en el origen (no se importan)',
+        d.servicios_retirados_origen.map((x) => `servicio ${x.servicio_origen}: ${x.user_ppp}`),
     )
     seccion(
         'Referencias faltantes',
-        d.referencias_faltantes.map((x) => `${x.entidad} ${x.id_mw}: falta ${x.falta} ${x.id_falta_mw}`),
+        d.referencias_faltantes.map(
+            (x) => `${x.entidad} ${x.id_origen}: falta ${x.falta} ${x.id_falta_origen}`,
+        ),
     )
     seccion(
         'Servicios sin PPPoE pendientes (no se importan)',
-        d.tipos_conexion_pendientes.map((x) => `servicio ${x.servicio_mw} (${x.tipo_conexion}): ${x.motivo}`),
+        d.tipos_conexion_pendientes.map(
+            (x) => `servicio ${x.servicio_origen} (${x.tipo_conexion}): ${x.motivo}`,
+        ),
     )
     seccion(
         'Facturas sin servicio en ArgosIsp (su monto va al saldo inicial del cliente)',
         d.facturas_a_saldo.map(
-            (x) => `factura ${x.factura_mw} · cliente ${x.cliente_mw} · Q ${x.pendiente}: ${x.motivo}`,
+            (x) =>
+                `factura ${x.factura_origen} · cliente ${x.cliente_origen} · Q ${x.pendiente}: ${x.motivo}`,
         ),
     )
     seccion(
         'Saldos distintos al origen',
         d.saldos_distintos.map(
             (x) =>
-                `cliente ${x.cliente_mw}${x.nombre ? ` ${x.nombre}` : ''}: origen Q ${x.origen} · ArgosIsp Q ${x.importado} · diferencia Q ${x.diferencia}`,
+                `cliente ${x.cliente_origen}${x.nombre ? ` ${x.nombre}` : ''}: origen Q ${x.origen} · ArgosIsp Q ${x.importado} · diferencia Q ${x.diferencia}`,
         ),
     )
     seccion(
@@ -244,7 +262,7 @@ export function formatearReporte(r: ReporteImportacion): string {
     )
     seccion(
         'Errores de las acciones',
-        r.errores.map((x) => `${x.entidad} ${x.id_mw} · ${x.accion}: ${x.mensaje}`),
+        r.errores.map((x) => `${x.entidad} ${x.id_origen} · ${x.accion}: ${x.mensaje}`),
     )
     seccion('Pendiente', r.pendiente)
     return lineas.join('\n')

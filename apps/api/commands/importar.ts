@@ -1,38 +1,49 @@
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { BaseCommand, args, flags } from '@adonisjs/core/ace'
+import { BaseCommand, flags } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 
 /**
- * `pnpm importar --dry-run <origen>` (desde la raíz) o `node ace importar:mikrowisp`:
- * importa desde Mikrowisp. `<origen>` es un volcado SQL de su base (`.sql`, ver
- * `app/importacion/mikrowisp_sql.ts`) o un directorio con un CSV por entidad (ver
- * `app/importacion/README.md`). En seco no guarda nada y produce el reporte de diferencias
- * (texto en pantalla; con `--salida`, también Markdown, CSV y JSON). Lógica en `app/importacion`.
+ * `pnpm importar --origen=<mikrowisp|smartisp|csv> --fuente=<ruta> [--dry-run]` (desde la raíz) o
+ * `node ace importar ...`: importa desde otro sistema. El adaptador del origen
+ * (`app/importacion/origenes/`) traduce la fuente al formato canónico y el núcleo
+ * (`app/importacion/importador.ts`) crea todo por las acciones de dominio. En seco no guarda nada
+ * y produce el reporte de diferencias (texto en pantalla; con `--salida`, también Markdown, CSV y
+ * JSON). Detalle en `app/importacion/README.md` y `docs/runbooks/importacion.md`.
  */
-export default class ImportarMikrowisp extends BaseCommand {
-    static commandName = 'importar:mikrowisp'
+export default class Importar extends BaseCommand {
+    static commandName = 'importar'
     static description =
-        'Importa clientes, routers, planes, servicios, facturas pendientes y saldos desde un export de Mikrowisp'
+        'Importa clientes, routers, planes, servicios, facturas, saldos y pagos desde Mikrowisp, SmartISP o CSV'
 
     static options: CommandOptions = {
         startApp: true,
     }
 
-    @args.string({
+    @flags.string({
         description:
-            'Volcado SQL de la base de Mikrowisp (.sql) o directorio con routers.csv, planes.csv, clientes.csv y servicios.csv (y opcionales redes.csv, facturas.csv, saldos.csv y pagos.csv)',
+            'Sistema de origen: mikrowisp (volcado .sql), smartisp (volcado .sql) o csv (directorio con un CSV por entidad)',
+        required: true,
     })
-    declare directorio: string
+    declare origen: string
+
+    @flags.string({ description: 'Archivo (.sql) o directorio (csv) a importar', required: true })
+    declare fuente: string
+
+    @flags.string({
+        description:
+            'Solo con --origen=csv: nombre del sistema que exportó los CSV (clave de idempotencia; por defecto csv). Ej.: --sistema=wisphub',
+    })
+    declare sistema?: string
+
+    @flags.boolean({ description: 'En seco: todo en una transacción que se revierte', default: false })
+    declare dryRun: boolean
 
     @flags.string({
         description:
             'Directorio donde guardar reporte.md, diferencias.csv y reporte.json (se crea si no existe)',
     })
     declare salida?: string
-
-    @flags.boolean({ description: 'En seco: todo en una transacción que se revierte', default: false })
-    declare dryRun: boolean
 
     @flags.string({ description: 'Guardar el reporte completo en JSON en este archivo' })
     declare reporte?: string
@@ -52,12 +63,21 @@ export default class ImportarMikrowisp extends BaseCommand {
     declare plantilla?: number
 
     async run() {
-        const { leerDirectorio } = await import('#importacion/fuente')
-        const { leerDumpMikrowisp } = await import('#importacion/mikrowisp_sql')
+        const { esOrigen, leerOrigen, ORIGENES } = await import('#importacion/origenes/index')
         const { reporteCsv, reporteMarkdown } = await import('#importacion/reporte_salidas')
-        const { importarMikrowisp } = await import('#importacion/importador')
+        const { importar } = await import('#importacion/importador')
         const { formatearReporte } = await import('#importacion/reporte')
 
+        if (!esOrigen(this.origen)) {
+            this.logger.error(`--origen debe ser ${ORIGENES.join(', ')}`)
+            this.exitCode = 1
+            return
+        }
+        if (this.sistema && this.origen !== 'csv') {
+            this.logger.error('--sistema solo aplica a --origen=csv (los demás orígenes usan su nombre)')
+            this.exitCode = 1
+            return
+        }
         if (this.ipv6 !== 'ninguno' && this.ipv6 !== 'plan') {
             this.logger.error('--ipv6 debe ser ninguno o plan')
             this.exitCode = 1
@@ -65,17 +85,23 @@ export default class ImportarMikrowisp extends BaseCommand {
         }
         // pnpm corre el script en apps/api: las rutas relativas son respecto de donde se llamó.
         const base = process.env.INIT_CWD ?? process.cwd()
-        const directorio = resolve(base, this.directorio)
+        const ruta = resolve(base, this.fuente)
 
-        const info = await stat(directorio)
-        const esDirectorio = info.isDirectory()
-        const fuente = esDirectorio ? await leerDirectorio(directorio) : await leerDumpMikrowisp(directorio)
-        const reporte = await importarMikrowisp(fuente, {
+        let fuente
+        try {
+            fuente = await leerOrigen(this.origen, ruta)
+        } catch (error) {
+            this.logger.error((error as Error).message)
+            this.exitCode = 1
+            return
+        }
+        const reporte = await importar(fuente, {
+            sistema: this.sistema ?? this.origen,
             dryRun: this.dryRun,
             ipv6: this.ipv6,
             soloPlanesExistentes: this.soloPlanesExistentes,
             plantillaId: this.plantilla,
-            directorio,
+            fuente: ruta,
         })
         this.logger.log(formatearReporte(reporte))
         if (this.reporte) {

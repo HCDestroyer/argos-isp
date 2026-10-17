@@ -3,9 +3,9 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { leerDumpMysql, ErrorDumpSql } from '#importacion/mysql_dump'
-import { leerDumpMikrowisp } from '#importacion/mikrowisp_sql'
-import { normalizarMac } from '#importacion/fuente'
-import { importarMikrowisp } from '#importacion/importador'
+import { leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
+import { normalizarMac } from '#importacion/canonico'
+import { importar } from '#importacion/importador'
 import type { ReporteImportacion } from '#importacion/reporte'
 import { lineasDiferencias, reporteCsv, reporteMarkdown } from '#importacion/reporte_salidas'
 import type { CargaFinanciera, EntradaPagoHistorico } from '#importacion/carga_financiera'
@@ -167,11 +167,17 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         const plantillaId = await crearPlantillaFila()
         const antes = await contar()
         const fuente = await leerDumpMikrowisp(FIXTURE)
-        const r1 = await importarMikrowisp(fuente, { dryRun: true, plantillaId, directorio: 'fixture' })
-        const r2 = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+        const r1 = await importar(fuente, {
+            sistema: 'mikrowisp',
             dryRun: true,
             plantillaId,
-            directorio: 'fixture',
+            fuente: 'fixture',
+        })
+        const r2 = await importar(await leerDumpMikrowisp(FIXTURE), {
+            sistema: 'mikrowisp',
+            dryRun: true,
+            plantillaId,
+            fuente: 'fixture',
         })
         assert.deepEqual(await contar(), antes)
 
@@ -202,29 +208,39 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         })
 
         const d = r1.diferencias
-        assert.deepEqual(d.clientes_nit_duplicado, [{ nit: '76543218', clientes_mw: ['2', '3'] }])
+        assert.deepEqual(d.clientes_nit_duplicado, [{ nit: '76543218', clientes_origen: ['2', '3'] }])
         assert.deepEqual(d.servicios_sin_plan, [
-            { servicio_mw: '107', cliente_mw: '7', etiqueta: 'mw.ernesto' },
+            { servicio_origen: '107', cliente_origen: '7', etiqueta: 'mw.ernesto' },
         ])
         assert.deepEqual(d.routers_sin_credenciales, [
-            { router_mw: '2', nombre: 'Torre Sur', faltan: ['api_usuario', 'api_password', 'radius_secret'] },
+            {
+                router_origen: '2',
+                nombre: 'Torre Sur',
+                faltan: ['api_usuario', 'api_password', 'radius_secret'],
+            },
         ])
         assert.deepEqual(d.pagos_cruzados, [
-            { pago_mw: '9003', pagador_mw: '5', factura_mw: '5004', dueno_mw: '6', monto: '100.00' },
+            {
+                pago_origen: '9003',
+                pagador_origen: '5',
+                factura_origen: '5004',
+                dueno_origen: '6',
+                monto: '100.00',
+            },
         ])
         assert.deepEqual(d.ips_duplicadas, [
-            { ip: '198.18.10.10', servicios_mw: ['101', '111'], importado_mw: '101' },
+            { ip: '198.18.10.10', servicios_origen: ['101', '111'], importado_origen: '101' },
         ])
         assert.sameMembers(
-            d.ips_nuevas.map((x) => x.servicio_mw),
+            d.ips_nuevas.map((x) => x.servicio_origen),
             ['103', '109'],
         )
         assert.deepEqual(
-            d.facturas_a_saldo.map((x) => x.factura_mw),
+            d.facturas_a_saldo.map((x) => x.factura_origen),
             ['5005', '5007'],
         )
         assert.deepEqual(
-            d.nit_invalidos.map((x) => x.cliente_mw),
+            d.nit_invalidos.map((x) => x.cliente_origen),
             ['9'],
         )
         assert.deepEqual(d.saldos_distintos, [])
@@ -234,23 +250,23 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         const lineas = lineasDiferencias(r1)
         assert.isTrue(lineas.every((x) => x.causa && x.detalle && x.accion))
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['servicio', '111', 'ip_duplicada'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['cliente', '3', 'nit_duplicado'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['pago', '9003', 'pago_cruzado'],
         )
         assert.deepInclude(
-            lineas.map((x) => [x.entidad, x.id_mw, x.tipo]),
+            lineas.map((x) => [x.entidad, x.id_origen, x.tipo]),
             ['router', '2', 'router_sin_credenciales'],
         )
         const csv = reporteCsv(r1)
-        assert.isTrue(csv.startsWith('﻿entidad,id_mw,tipo,gravedad,detalle,causa,accion\r\n'))
+        assert.isTrue(csv.startsWith('﻿entidad,id_origen,tipo,gravedad,detalle,causa,accion\r\n'))
         assert.equal(csv.trimEnd().split('\r\n').length, lineas.length + 1)
         const md = reporteMarkdown(r1)
         assert.include(md, '- **Cuadra**')
@@ -264,7 +280,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         const plantillaId = await crearPlantillaFila()
         const trx = await db.transaction()
         try {
-            const primera = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const primera = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -314,7 +331,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
                 .first()) as { n: string }
             assert.isAbove(Number(auditadas.n), 20)
 
-            const segunda = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const segunda = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -357,7 +375,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
         }
         const trx = await db.transaction()
         try {
-            const r = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const r = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,
@@ -370,7 +389,8 @@ test.group('importacion · Mikrowisp desde volcado SQL', () => {
             assert.equal(cruzado.factura_clave_externa, 'mikrowisp:factura:5004')
             assert.isTrue(r.saldos.cuadra) // el pago histórico no mueve saldos
 
-            const r2 = await importarMikrowisp(await leerDumpMikrowisp(FIXTURE), {
+            const r2 = await importar(await leerDumpMikrowisp(FIXTURE), {
+                sistema: 'mikrowisp',
                 dryRun: false,
                 trx,
                 plantillaId,

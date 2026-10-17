@@ -19,20 +19,23 @@ import ImplementarPlan from '#network/actions/implementar_plan'
 import type {
     ClienteOrigen,
     FacturaOrigen,
-    FuenteMikrowisp,
+    FuenteCanonica,
     PlanOrigen,
     ServicioOrigen,
     TipoConexionOrigen,
-} from '#importacion/fuente'
+} from '#importacion/canonico'
 import { conteoVacio, type ReporteImportacion } from '#importacion/reporte'
 import { idsExternosDe, type EntidadExterna, type IdsExternos } from '#importacion/ids_externos'
 import { cargaFinancieraA3, type CargaFinanciera } from '#importacion/carga_financiera'
 
 /**
- * Importador desde Mikrowisp. Crea routers, redes IPv4, planes (con su implementación en cada
- * router), zonas, clientes y servicios **por las acciones de dominio de A1** (auditoría y outbox
- * incluidos), nunca con INSERT directo. Las lecturas para decidir (¿ya existe?, ¿la IP está
- * libre?) sí van directo a la base, dentro de la misma transacción.
+ * Núcleo del importador, igual para todos los orígenes (Mikrowisp, SmartISP, CSV): recibe la
+ * fuente ya en formato canónico (`canonico.ts`, la traducen los adaptadores de `origenes/`) y el
+ * nombre del sistema de origen (`sistema`), que forma la clave de idempotencia de todo lo que
+ * crea. Crea routers, redes IPv4, planes (con su implementación en cada router), zonas, clientes
+ * y servicios **por las acciones de dominio de A1** (auditoría y outbox incluidos), nunca con
+ * INSERT directo. Las lecturas para decidir (¿ya existe?, ¿la IP está libre?) sí van directo a la
+ * base, dentro de la misma transacción.
  *
  * - Todo corre en UNA transacción. En seco (`dryRun`) se revierte al final: el reporte dice lo
  *   que pasaría y la base queda igual. Real: se confirma al final.
@@ -40,25 +43,31 @@ import { cargaFinancieraA3, type CargaFinanciera } from '#importacion/carga_fina
  *   `errores` y se sigue. La auditoría del error (`audit.acciones`, resultado `error`) la escribe
  *   `DomainAction` en una transacción aparte, así que queda aun en seco.
  * - Idempotente: primero por `core.ids_externos` (si A1 ya la agregó, `ids_externos.ts`); si no,
- *   clientes por `campos_personalizados.mikrowisp_id`; routers por `nas_ip` (o `nombre`); planes
+ *   clientes por `campos_personalizados.<sistema>_id`; routers por `nas_ip` (o `nombre`); planes
  *   por `nombre` (o `equivale_a`); redes por `cidr` en el mismo router; implementaciones por
  *   (plan, router); servicios PPPoE por `user_ppp`, sin PPPoE por IP (o MAC) del mismo cliente;
- *   facturas y saldos por su `clave_externa` (`mikrowisp:factura:<id>`, `mikrowisp:saldo:<id>`).
+ *   facturas y saldos por su `clave_externa` (`<sistema>:factura:<id>`, `<sistema>:saldo:<id>`).
  *   Correrlo dos veces no duplica nada: la segunda corrida reporta todo como `existentes`.
  * - Facturas pendientes y saldos por las acciones de A3 (`ImportarFacturaPendiente`,
- *   `RegistrarSaldoInicial`): el saldo inicial de cada cliente es su saldo en Mikrowisp menos lo
+ *   `RegistrarSaldoInicial`): el saldo inicial de cada cliente es su saldo en el origen menos lo
  *   que entra como factura, así que la suma en ArgosIsp debe ser la del origen; el reporte lo
  *   compara cliente por cliente.
  */
 
 export interface OpcionesImportacion {
+    /**
+     * Nombre del sistema de origen (`mikrowisp`, `smartisp`, `csv` o el `--sistema` de un CSV):
+     * `core.ids_externos.sistema`, prefijo de las claves externas y del request_id. Mismo origen y
+     * mismo id = misma entidad; otro origen = otra entidad.
+     */
+    sistema: string
     dryRun: boolean
     /** `ninguno` (por defecto): los servicios entran solo con IPv4. `plan`: modo IPv6 por defecto del plan */
     ipv6?: 'ninguno' | 'plan'
     /** no crear planes: los que no existan en ArgosIsp (por nombre o `equivale_a`) quedan sin equivalente */
     soloPlanesExistentes?: boolean
-    /** directorio de origen, solo para el reporte */
-    directorio?: string | null
+    /** archivo o directorio de origen, solo para el reporte */
+    fuente?: string | null
     /**
      * Plantilla de facturación de los servicios nuevos. Sin ella, la plantilla por defecto
      * (`plantillaPorDefecto` de A1: la única que haya); si hay varias, los servicios entran sin
@@ -74,7 +83,7 @@ export interface OpcionesImportacion {
 }
 
 export const PENDIENTE = [
-    'Estado de los servicios suspendidos en Mikrowisp: se aplica con las facturas importadas en la siguiente evaluación (evaluarEstadoServicio de A3).',
+    'Estado de los servicios suspendidos en el origen: se aplica con las facturas importadas en la siguiente evaluación (evaluarEstadoServicio de A3).',
 ]
 
 /** Servicios sin PPPoE: necesitan `core.servicios.tipo_conexion` (modelo de A1, semana 2). */
@@ -86,11 +95,16 @@ async function admiteTipoConexion(trx: TransactionClientContract): Promise<boole
     return r.rows[0]?.n === 1
 }
 
-export async function importarMikrowisp(
-    fuente: FuenteMikrowisp,
+export async function importar(
+    fuente: FuenteCanonica,
     opciones: OpcionesImportacion,
 ): Promise<ReporteImportacion> {
-    const requestId = `importacion-mikrowisp-${randomUUID()}`
+    if (!SISTEMA_VALIDO.test(opciones.sistema)) {
+        throw new Error(
+            `Sistema de origen "${opciones.sistema}" inválido: minúsculas, dígitos y _ (hasta 40)`,
+        )
+    }
+    const requestId = `importacion-${opciones.sistema}-${randomUUID()}`
     const ctx: ContextoAccion = { actor: { tipo: 'sistema', id: null }, canal: 'consola', requestId }
     const inicio = new Date().toISOString()
 
@@ -98,7 +112,7 @@ export async function importarMikrowisp(
     const trx = opciones.trx ? await opciones.trx.transaction() : await db.transaction()
     let reporte: ReporteImportacion
     try {
-        const ids = opciones.idsExternos ?? (await idsExternosDe(trx))
+        const ids = opciones.idsExternos ?? (await idsExternosDe(trx, opciones.sistema))
         const importador = new Importador(fuente, opciones, ctx, trx, ids, await admiteTipoConexion(trx))
         await importador.ejecutar()
         reporte = importador.reporte
@@ -117,34 +131,40 @@ export async function importarMikrowisp(
     return reporte
 }
 
+/** Igual que la restricción de `core.ids_externos.sistema`. */
+const SISTEMA_VALIDO = /^[a-z0-9_]{1,40}$/
+
 class Importador {
     readonly reporte: ReporteImportacion
+    /** sistema de origen: prefijo de las claves externas */
+    readonly sistema: string
     readonly #routers = new Map<string, number>()
     readonly #planes = new Map<string, number>()
     readonly #clientes = new Map<string, number>()
     readonly #zonas = new Map<string, number>()
-    /** servicio_mw → servicio de ArgosIsp (creado o ya importado) */
+    /** servicio_origen → servicio de ArgosIsp (creado o ya importado) */
     readonly #servicios = new Map<string, number>()
     /** plantilla de los servicios nuevos (resuelta una vez) */
     #plantilla: number | null = null
-    /** planes del origen que no se pueden usar: plan_mw → motivo */
+    /** planes del origen que no se pueden usar: plan_origen → motivo */
     readonly #planesSinEquivalente = new Map<string, { nombre: string | null; motivo: string }>()
     readonly #carga: CargaFinanciera
     /** índices del origen (evitan recorrer las listas en cada fila) */
-    readonly #servicioMw: Map<string, ServicioOrigen>
+    readonly #servicioOrigen: Map<string, ServicioOrigen>
     readonly #facturasPorCliente: Map<string, FacturaOrigen[]>
     readonly #serviciosPorCliente: Map<string, ServicioOrigen[]>
 
     constructor(
-        private readonly fuente: FuenteMikrowisp,
+        private readonly fuente: FuenteCanonica,
         private readonly opciones: OpcionesImportacion,
         private readonly ctx: ContextoAccion,
         private readonly trx: TransactionClientContract,
         private readonly ids: IdsExternos,
         private readonly tipoConexion: boolean,
     ) {
+        this.sistema = opciones.sistema
         this.#carga = opciones.carga ?? cargaFinancieraA3
-        this.#servicioMw = new Map(fuente.servicios.map((s) => [s.id, s]))
+        this.#servicioOrigen = new Map(fuente.servicios.map((s) => [s.id, s]))
         this.#facturasPorCliente = agrupar(fuente.facturas, (f) => f.cliente_id)
         this.#serviciosPorCliente = agrupar(fuente.servicios, (s) => s.cliente_id)
         const zonas = new Set(fuente.clientes.map((c) => c.zona).filter(Boolean))
@@ -153,7 +173,8 @@ class Importador {
             request_id: ctx.requestId,
             inicio: '',
             fin: '',
-            directorio: opciones.directorio ?? null,
+            origen: opciones.sistema,
+            fuente: opciones.fuente ?? null,
             resumen: {
                 routers: conteoVacio(fuente.routers.length),
                 redes: conteoVacio(fuente.redes.length),
@@ -225,21 +246,21 @@ class Importador {
     }
 
     /**
-     * Agrega `externo: { sistema: 'mikrowisp', id }` a la entrada de la acción de alta (A1 guarda
+     * Agrega `externo: { sistema, id }` a la entrada de la acción de alta (A1 guarda
      * el vínculo en `core.ids_externos` en la misma transacción) cuando la tabla existe.
      */
-    #conExterno<T extends object>(entidad: EntidadExterna, idMw: string, entrada: T): T {
-        const externo = this.ids.externo(entidad, idMw)
+    #conExterno<T extends object>(entidad: EntidadExterna, idOrigen: string, entrada: T): T {
+        const externo = this.ids.externo(entidad, idOrigen)
         return externo ? ({ ...entrada, externo } as T) : entrada
     }
 
     /** Busca primero en ids externos; si no, `natural`. */
     async #existente(
         entidad: EntidadExterna,
-        idMw: string,
+        idOrigen: string,
         natural: () => Promise<number | null>,
     ): Promise<number | null> {
-        return (await this.ids.buscar(entidad, idMw)) ?? (await natural())
+        return (await this.ids.buscar(entidad, idOrigen)) ?? (await natural())
     }
 
     async #resolverPlantilla() {
@@ -259,7 +280,7 @@ class Importador {
             this.#plantilla = null
             this.reporte.errores.push({
                 entidad: 'plantilla',
-                id_mw: '-',
+                id_origen: '-',
                 accion: 'servicios.crear',
                 mensaje:
                     'Hay varias plantillas de facturación: los servicios nuevos entran sin plantilla y sus facturas no se importan. Indica --plantilla=<id>',
@@ -268,11 +289,21 @@ class Importador {
     }
 
     /** Corre una acción en savepoint; si falla, anota el error y devuelve null. */
-    async #accion<T>(entidad: string, idMw: string, nombre: string, fn: () => Promise<T>): Promise<T | null> {
+    async #accion<T>(
+        entidad: string,
+        idOrigen: string,
+        nombre: string,
+        fn: () => Promise<T>,
+    ): Promise<T | null> {
         try {
             return await fn()
         } catch (error) {
-            this.reporte.errores.push({ entidad, id_mw: idMw, accion: nombre, mensaje: mensajeDe(error) })
+            this.reporte.errores.push({
+                entidad,
+                id_origen: idOrigen,
+                accion: nombre,
+                mensaje: mensajeDe(error),
+            })
             return null
         }
     }
@@ -283,7 +314,7 @@ class Importador {
             const faltan = (['api_usuario', 'api_password', 'radius_secret'] as const).filter((c) => !r[c])
             if (faltan.length > 0) {
                 this.reporte.diferencias.routers_sin_credenciales.push({
-                    router_mw: r.id,
+                    router_origen: r.id,
                     nombre: r.nombre,
                     faltan: [...faltan],
                 })
@@ -327,10 +358,10 @@ class Importador {
     async redes() {
         const conteo = this.reporte.resumen.redes
         for (const red of this.fuente.redes) {
-            const idMw = `${red.router_id}:${red.cidr}`
+            const idOrigen = `${red.router_id}:${red.cidr}`
             const routerId = this.#routers.get(red.router_id)
             if (!routerId) {
-                this.#faltante('red', idMw, 'router', red.router_id)
+                this.#faltante('red', idOrigen, 'router', red.router_id)
                 conteo.omitidos++
                 continue
             }
@@ -343,7 +374,7 @@ class Importador {
                 conteo.existentes++
                 continue
             }
-            const creada = await this.#accion('red', idMw, 'redes.crear', () =>
+            const creada = await this.#accion('red', idOrigen, 'redes.crear', () =>
                 new CrearRedIpv4().execute(
                     { router_id: routerId, cidr: red.cidr, gateway: red.gateway, tipo: red.tipo },
                     this.ctx,
@@ -405,13 +436,13 @@ class Importador {
                 this.#planesSinEquivalente.set(s.plan_id, { nombre: null, motivo: 'no está en planes.csv' })
             }
         }
-        for (const [planMw, { nombre, motivo }] of this.#planesSinEquivalente) {
+        for (const [planOrigen, { nombre, motivo }] of this.#planesSinEquivalente) {
             this.reporte.diferencias.planes_sin_equivalente.push({
-                plan_mw: planMw,
+                plan_origen: planOrigen,
                 nombre,
                 motivo,
                 servicios: this.fuente.servicios.filter(
-                    (s) => s.plan_id === planMw && s.estado !== 'retirado',
+                    (s) => s.plan_id === planOrigen && s.estado !== 'retirado',
                 ).length,
             })
         }
@@ -452,29 +483,29 @@ class Importador {
             .filter((x): x is { c: ClienteOrigen; nit: string } => !!x.nit && x.nit !== 'CF')
         for (const [nit, grupo] of agrupar(conNit, (x) => x.nit)) {
             if (grupo.length < 2) continue
-            d.clientes_nit_duplicado.push({ nit, clientes_mw: grupo.map((x) => x.c.id) })
+            d.clientes_nit_duplicado.push({ nit, clientes_origen: grupo.map((x) => x.c.id) })
         }
         for (const c of this.fuente.clientes) {
             const existente = await this.#existente('cliente', c.id, async () => {
                 const fila = (await this.trx
                     .from('core.clientes')
-                    .whereRaw(`campos_personalizados->>'mikrowisp_id' = ?`, [c.id])
+                    .whereRaw(`campos_personalizados->>? = ?`, [`${this.sistema}_id`, c.id])
                     .select('id')
                     .first()) as { id: number } | null
                 return fila ? Number(fila.id) : null
             })
 
             const { nit, motivo } = revisarNit(c)
-            if (!c.nit) d.clientes_sin_nit.push({ cliente_mw: c.id, nombre: c.nombre })
-            if (motivo) d.nit_invalidos.push({ cliente_mw: c.id, nombre: c.nombre, nit: c.nit!, motivo })
+            if (!c.nit) d.clientes_sin_nit.push({ cliente_origen: c.id, nombre: c.nombre })
+            if (motivo) d.nit_invalidos.push({ cliente_origen: c.id, nombre: c.nombre, nit: c.nit!, motivo })
 
             if (existente) {
                 this.#clientes.set(c.id, existente)
                 conteo.existentes++
                 continue
             }
-            const campos: Record<string, unknown> = { mikrowisp_id: c.id }
-            if (motivo) campos.mikrowisp_nit = c.nit
+            const campos: Record<string, unknown> = { [`${this.sistema}_id`]: c.id }
+            if (motivo) campos[`${this.sistema}_nit`] = c.nit
             const creado = await this.#accion('cliente', c.id, 'clientes.crear', () =>
                 new CrearCliente().execute(
                     this.#conExterno('cliente', c.id, {
@@ -509,10 +540,10 @@ class Importador {
         const vigentes = this.fuente.servicios.filter((s) => s.estado !== 'retirado')
         for (const s of this.fuente.servicios) {
             if (s.estado === 'retirado') {
-                d.servicios_retirados_origen.push({ servicio_mw: s.id, user_ppp: etiqueta(s) })
+                d.servicios_retirados_origen.push({ servicio_origen: s.id, user_ppp: etiqueta(s) })
             }
             if (s.estado === 'suspendido') {
-                d.servicios_suspendidos_origen.push({ servicio_mw: s.id, user_ppp: etiqueta(s) })
+                d.servicios_suspendidos_origen.push({ servicio_origen: s.id, user_ppp: etiqueta(s) })
             }
         }
 
@@ -523,14 +554,14 @@ class Importador {
             (s) => s.ip!,
         )) {
             if (grupo.length < 2) continue
-            d.ips_duplicadas.push({ ip, servicios_mw: grupo.map((s) => s.id), importado_mw: null })
+            d.ips_duplicadas.push({ ip, servicios_origen: grupo.map((s) => s.id), importado_origen: null })
         }
         const conPpp = vigentes.filter((s) => s.user_ppp)
         for (const [userPpp, grupo] of agrupar(conPpp, (s) => s.user_ppp!.toLowerCase())) {
             if (grupo.length < 2) continue
             d.user_ppp_duplicados.push({
                 user_ppp: userPpp,
-                servicios_mw: grupo.map((s) => s.id),
+                servicios_origen: grupo.map((s) => s.id),
                 motivo: `repetido en el origen; se importa ${grupo[0]!.id}`,
             })
             for (const s of grupo.slice(1)) omitir.add(s.id)
@@ -545,8 +576,8 @@ class Importador {
             }
             if (s.plan_id === null) {
                 d.servicios_sin_plan.push({
-                    servicio_mw: s.id,
-                    cliente_mw: s.cliente_id,
+                    servicio_origen: s.id,
+                    cliente_origen: s.cliente_id,
                     etiqueta: etiqueta(s),
                 })
                 conteo.omitidos++
@@ -566,7 +597,7 @@ class Importador {
             }
             if (s.tipo_conexion !== 'pppoe' && !this.tipoConexion) {
                 d.tipos_conexion_pendientes.push({
-                    servicio_mw: s.id,
+                    servicio_origen: s.id,
                     tipo_conexion: s.tipo_conexion,
                     motivo: 'ArgosIsp aún no tiene tipo_conexion (modelo de A1); se importa cuando llegue',
                 })
@@ -590,7 +621,7 @@ class Importador {
                 } else {
                     d.user_ppp_duplicados.push({
                         user_ppp: etiqueta(s),
-                        servicios_mw: [s.id],
+                        servicios_origen: [s.id],
                         motivo: `ya existe en ArgosIsp (servicio ${existente.id}) con otro cliente`,
                     })
                     conteo.omitidos++
@@ -643,11 +674,11 @@ class Importador {
             this.#servicios.set(s.id, creado.id)
             await this.ids.registrar('servicio', s.id, creado.id)
             if (s.ip) ipTomada.set(s.ip, s.id)
-            else d.ips_nuevas.push({ servicio_mw: s.id, ip: creado.ipv4 })
+            else d.ips_nuevas.push({ servicio_origen: s.id, ip: creado.ipv4 })
         }
 
         for (const dup of d.ips_duplicadas) {
-            dup.importado_mw = dup.servicios_mw.find((id) => ipTomada.get(dup.ip) === id) ?? null
+            dup.importado_origen = dup.servicios_origen.find((id) => ipTomada.get(dup.ip) === id) ?? null
         }
     }
 
@@ -700,7 +731,7 @@ class Importador {
                 conteo.omitidos++
                 continue
             }
-            const clave = claveFactura(f)
+            const clave = this.#claveFactura(f.id)
             const ya = await this.trx
                 .from('billing.facturas')
                 .where('clave_externa', clave)
@@ -733,8 +764,8 @@ class Importador {
     #servicioDeFactura(f: FacturaOrigen): number | null {
         const aSaldo = (motivo: string) => {
             this.reporte.diferencias.facturas_a_saldo.push({
-                factura_mw: f.id,
-                cliente_mw: f.cliente_id,
+                factura_origen: f.id,
+                cliente_origen: f.cliente_id,
                 pendiente: f.pendiente,
                 motivo,
             })
@@ -745,7 +776,7 @@ class Importador {
             return null
         }
         if (f.servicio_id) {
-            const servicio = this.#servicioMw.get(f.servicio_id)
+            const servicio = this.#servicioOrigen.get(f.servicio_id)
             if (!servicio || servicio.cliente_id !== f.cliente_id) {
                 return aSaldo(`el servicio ${f.servicio_id} no es del cliente en el origen`)
             }
@@ -776,17 +807,17 @@ class Importador {
                 this.#faltante('saldo', fila.cliente_id, 'cliente', fila.cliente_id)
             }
         }
-        for (const [clienteMw, origen] of this.#saldosOrigen()) {
-            const clienteId = this.#clientes.get(clienteMw)
+        for (const [clienteOrigen, origen] of this.#saldosOrigen()) {
+            const clienteId = this.#clientes.get(clienteOrigen)
             if (!clienteId) continue // ya está en referencias faltantes o no se pudo importar el cliente
-            const comoFactura = (this.#facturasPorCliente.get(clienteMw) ?? [])
+            const comoFactura = (this.#facturasPorCliente.get(clienteOrigen) ?? [])
                 .filter((f) => new Decimal(f.pendiente).gt(0))
                 .filter((f) => this.#servicioDeFacturaSinAnotar(f) !== null)
                 .reduce((suma, f) => suma.plus(f.pendiente), new Decimal(0))
             const monto = origen.minus(comoFactura)
             if (monto.isZero()) continue
             conteo.origen++
-            const clave = `mikrowisp:saldo:${clienteMw}`
+            const clave = `${this.sistema}:saldo:${clienteOrigen}`
             const ya = await this.trx
                 .from('billing.saldos_iniciales')
                 .where('clave_externa', clave)
@@ -796,13 +827,13 @@ class Importador {
                 conteo.existentes++
                 continue
             }
-            const hecho = await this.#accion('saldo', clienteMw, 'facturas.registrar_saldo_inicial', () =>
+            const hecho = await this.#accion('saldo', clienteOrigen, 'facturas.registrar_saldo_inicial', () =>
                 this.#carga.registrarSaldoInicial(
                     {
                         clave_externa: clave,
                         cliente_id: clienteId,
                         monto: monto.toFixed(2),
-                        descripcion: 'Saldo inicial importado de Mikrowisp',
+                        descripcion: `Saldo inicial importado de ${this.sistema}`,
                     },
                     this.ctx,
                     this.trx,
@@ -827,10 +858,10 @@ class Importador {
             const dueno = p.factura_id ? duenos.get(p.factura_id) : undefined
             if (p.factura_id && dueno && dueno !== p.cliente_id) {
                 this.reporte.diferencias.pagos_cruzados.push({
-                    pago_mw: p.id,
-                    pagador_mw: p.cliente_id,
-                    factura_mw: p.factura_id,
-                    dueno_mw: dueno,
+                    pago_origen: p.id,
+                    pagador_origen: p.cliente_id,
+                    factura_origen: p.factura_id,
+                    dueno_origen: dueno,
                     monto: p.monto,
                 })
             }
@@ -852,7 +883,7 @@ class Importador {
                 conteo.omitidos++
                 continue
             }
-            const clave = `mikrowisp:pago:${p.id}`
+            const clave = `${this.sistema}:pago:${p.id}`
             if (await this.#carga.existePagoHistorico?.(clave, this.trx)) {
                 conteo.existentes++
                 continue
@@ -865,7 +896,9 @@ class Importador {
                         monto: p.monto,
                         fecha: p.fecha,
                         metodo: p.metodo,
-                        factura_clave_externa: p.factura_id ? `mikrowisp:factura:${p.factura_id}` : null,
+                        factura_clave_externa: p.factura_id
+                            ? `${this.sistema}:factura:${p.factura_id}`
+                            : null,
                     },
                     this.ctx,
                     this.trx,
@@ -887,7 +920,7 @@ class Importador {
         return id
     }
 
-    /** cliente_mw → saldo en el origen (saldos.csv o suma de facturas pendientes). */
+    /** cliente_origen → saldo en el origen (saldos.csv o suma de facturas pendientes). */
     #saldosOrigen(): Map<string, Decimal> {
         const saldos = new Map<string, Decimal>()
         for (const f of this.fuente.facturas) {
@@ -903,8 +936,8 @@ class Importador {
         let sumaOrigen = new Decimal(0)
         let sumaImportada = new Decimal(0)
         const saldos = this.#saldosOrigen()
-        for (const [clienteMw, origen] of saldos) {
-            const clienteId = this.#clientes.get(clienteMw)
+        for (const [clienteOrigen, origen] of saldos) {
+            const clienteId = this.#clientes.get(clienteOrigen)
             let importado = new Decimal(0)
             if (clienteId) {
                 const cxc = await saldoCliente(clienteId, this.trx)
@@ -914,8 +947,8 @@ class Importador {
             sumaImportada = sumaImportada.plus(importado)
             if (!importado.equals(origen)) {
                 this.reporte.diferencias.saldos_distintos.push({
-                    cliente_mw: clienteMw,
-                    nombre: this.fuente.clientes.find((c) => c.id === clienteMw)?.nombre ?? null,
+                    cliente_origen: clienteOrigen,
+                    nombre: this.fuente.clientes.find((c) => c.id === clienteOrigen)?.nombre ?? null,
                     origen: origen.toFixed(2),
                     importado: importado.toFixed(2),
                     diferencia: importado.minus(origen).toFixed(2),
@@ -949,7 +982,7 @@ class Importador {
             .first()) as { servicio_id: number } | null
         if (enUso) {
             this.reporte.diferencias.ips_en_uso.push({
-                servicio_mw: s.id,
+                servicio_origen: s.id,
                 ip,
                 servicio_id: Number(enUso.servicio_id),
             })
@@ -961,7 +994,11 @@ class Importador {
             .whereRaw('cidr >>= ?::inet', [ip])
             .first()
         if (!red) {
-            this.reporte.diferencias.ips_fuera_de_red.push({ servicio_mw: s.id, ip, router_mw: s.router_id })
+            this.reporte.diferencias.ips_fuera_de_red.push({
+                servicio_origen: s.id,
+                ip,
+                router_origen: s.router_id,
+            })
             return false
         }
         return true
@@ -1013,12 +1050,17 @@ class Importador {
         return true
     }
 
-    #faltante(entidad: string, idMw: string, falta: string, idFalta: string) {
+    /** `<sistema>:factura:<id>`: clave externa de la factura (idempotencia de A3). */
+    #claveFactura(idOrigen: string): string {
+        return `${this.sistema}:factura:${idOrigen}`
+    }
+
+    #faltante(entidad: string, idOrigen: string, falta: string, idFalta: string) {
         this.reporte.diferencias.referencias_faltantes.push({
             entidad,
-            id_mw: idMw,
+            id_origen: idOrigen,
             falta,
-            id_falta_mw: idFalta,
+            id_falta_origen: idFalta,
         })
     }
 }
@@ -1031,10 +1073,6 @@ class Importador {
 type EntradaServicioImportado = EntradaCrearServicio & {
     tipo_conexion?: TipoConexionOrigen
     amarre_ip_mac?: boolean
-}
-
-function claveFactura(f: FacturaOrigen): string {
-    return `mikrowisp:factura:${f.id}`
 }
 
 /** user_ppp, o el tipo y la IP/MAC para un servicio sin PPPoE (solo para el reporte). */
@@ -1050,7 +1088,7 @@ function entradaPlan(p: PlanOrigen) {
         subida_kbps: p.subida_kbps,
         bajada_limitada_kbps: p.bajada_limitada_kbps,
         subida_limitada_kbps: p.subida_limitada_kbps,
-        // Mikrowisp no maneja IPv6: el plan queda dual stack para activarlo después.
+        // Los orígenes no traen IPv6: el plan queda dual stack para activarlo después.
         dual_stack: 'ambos' as const,
         // Disponible solo en los routers donde se implementa (los de sus servicios).
         global: false,
