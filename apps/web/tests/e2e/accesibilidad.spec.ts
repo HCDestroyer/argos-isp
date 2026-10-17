@@ -48,7 +48,9 @@ for (const tema of ['light', 'dark'] as const) {
 
         test('login sin violaciones de axe', async ({ page }) => {
             await page.goto('/login')
-            await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible()
+            // Puede ser la primera página que pide el servidor recién levantado (Vite compila y
+            // recarga): se espera sin el plazo corto de expect.
+            await page.getByRole('button', { name: 'Entrar' }).waitFor()
             await revisar(page, 'login')
         })
 
@@ -57,7 +59,7 @@ for (const tema of ['light', 'dark'] as const) {
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 await page.goto(ruta)
-                await expect(page.locator('main, [id^="dashboard-panel"]').first()).toBeVisible()
+                await page.locator('main, [id^="dashboard-panel"]').first().waitFor()
                 await page.waitForLoadState('networkidle')
                 await page.waitForTimeout(400)
                 await revisar(page, nombre)
