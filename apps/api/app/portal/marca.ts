@@ -144,6 +144,7 @@ export async function empresaDelServicio(
  * Empresa de una factura, como expresión SQL sobre `billing.facturas as f`: la que la emitió
  * (`billing.facturas.empresa_id`, NOT NULL desde la multiempresa de A3). Manda sobre la del
  * servicio: un servicio puede cambiar de empresa sin saldo y sus facturas viejas siguen siendo de
- * la anterior.
+ * la anterior. La expresión va sobre `billing.facturas as f` unida (left join) con
+ * `core.servicios as s`; el respaldo a la del servicio y a la 1 solo cubre filas sin empresa.
  */
-export const SQL_EMPRESA_FACTURA = 'f.empresa_id'
+export const SQL_EMPRESA_FACTURA = 'coalesce(f.empresa_id, s.empresa_id, 1)'
