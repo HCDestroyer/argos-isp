@@ -100,5 +100,8 @@ const items = computed<NavigationMenuItem[][]>(() => {
         </UDashboardSidebar>
 
         <slot />
+
+        <AvisoTopeSesion />
+        <SesionBloqueo />
     </UDashboardGroup>
 </template>

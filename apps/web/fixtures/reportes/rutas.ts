@@ -50,7 +50,18 @@ interface Definicion<F> {
     filtrar?: (fila: F, query: URLSearchParams) => boolean
     extra?: (filas: F[]) => Record<string, Valor>
     porDefecto?: Record<string, string>
+    /** `origen=sistema|importado`: la fila con solo esa parte (o `null` si queda vacía). */
+    porOrigen?: (fila: F, origen: Origen) => F | null
 }
+
+type Origen = 'sistema' | 'importado'
+
+function leerOrigen(query: URLSearchParams): Origen | null {
+    const valor = query.get('origen')
+    return valor === 'sistema' || valor === 'importado' ? valor : null
+}
+
+const dec = (valor: Decimal.Value) => new Decimal(valor)
 
 function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
     return conPermiso('reportes.ver', (solicitud: SolicitudFixture): RespuestaFixture => {
@@ -60,10 +71,19 @@ function ruta<F extends Record<string, Valor>>(definicion: Definicion<F>) {
         const errores = [['desde', desde], ['hasta', hasta], ['corte', query.get('corte')]]
             .filter(([, v]) => v && !FECHA.test(v))
             .map(([field]) => ({ field: field ?? '', message: 'Fecha inválida (AAAA-MM-DD)', rule: 'regex' }))
+        const origenPedido = query.get('origen')
+        if (origenPedido && !leerOrigen(query)) {
+            errores.push({ field: 'origen', message: 'El origen debe ser sistema o importado', rule: 'enum' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
-        const filas = definicion.filas.filter((fila) => {
+        const origen = leerOrigen(query)
+        const porOrigen = definicion.porOrigen
+        const base = origen && porOrigen
+            ? definicion.filas.map(fila => porOrigen(fila, origen)).filter((fila): fila is F => fila !== null)
+            : definicion.filas
+        const filas = base.filter((fila) => {
             const fecha = definicion.fecha?.(fila)
             if (fecha && desde && fecha < desde.slice(0, fecha.length)) {
                 return false
@@ -116,6 +136,25 @@ export const rutasReportes: RutasFixture = {
         titulo: 'Facturado vs cobrado',
         ...facturadoCobrado,
         fecha: f => f.periodo,
+        // Como A3: `origen` filtra por factura (`clave_externa`); aquí, la parte importada de cada mes.
+        porOrigen: (f, origen) => {
+            const facturado = origen === 'importado' ? dec(f.facturado_importado ?? 0) : dec(f.facturado).minus(f.facturado_importado ?? 0)
+            const cobrado = origen === 'importado' ? dec(f.cobrado_importado ?? 0) : dec(f.cobrado).minus(f.cobrado_importado ?? 0)
+            if (facturado.isZero()) {
+                return null
+            }
+            const acreditado = origen === 'importado' ? dec(0) : dec(f.acreditado ?? 0)
+            return {
+                ...f,
+                facturado: facturado.toFixed(2),
+                cobrado: cobrado.toFixed(2),
+                acreditado: acreditado.toFixed(2),
+                pendiente: facturado.minus(cobrado).minus(acreditado).toFixed(2),
+                cobranza_pct: porcentaje(cobrado, facturado),
+                facturado_importado: origen === 'importado' ? facturado.toFixed(2) : '0.00',
+                cobrado_importado: origen === 'importado' ? cobrado.toFixed(2) : '0.00',
+            }
+        },
         extra: filas => ({ cobranza_pct: porcentaje(filas.reduce((s, f) => s.plus(f.cobrado), new Decimal(0)), filas.reduce((s, f) => s.plus(f.facturado), new Decimal(0))) }),
         porDefecto: ULTIMOS_12,
     }),
@@ -124,6 +163,24 @@ export const rutasReportes: RutasFixture = {
         titulo: 'Ingresos por periodo y método',
         ...ingresos,
         fecha: f => f.periodo,
+        porOrigen: (f, origen) => {
+            const pagos = origen === 'importado' ? (f.pagos_importados ?? 0) : f.pagos - (f.pagos_importados ?? 0)
+            if (pagos === 0) {
+                return null
+            }
+            const monto = origen === 'importado' ? dec(f.monto_importado ?? 0) : dec(f.monto).minus(f.monto_importado ?? 0)
+            // Los pagos importados no tienen comisión.
+            const comision = origen === 'importado' ? dec(0) : dec(f.comision)
+            return {
+                ...f,
+                pagos,
+                monto: monto.toFixed(2),
+                comision: comision.toFixed(2),
+                neto: monto.minus(comision).toFixed(2),
+                pagos_importados: origen === 'importado' ? pagos : 0,
+                monto_importado: origen === 'importado' ? monto.toFixed(2) : '0.00',
+            }
+        },
         filtrar: (f, q) => igual(q, 'metodo', f.metodo),
         porDefecto: { ...ULTIMOS_12, agrupar: 'mes' },
     }),

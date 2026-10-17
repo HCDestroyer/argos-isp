@@ -29,11 +29,14 @@ export const facturadoCobrado: { columnas: Columna[], filas: Schema<'ReporteFact
     columnas: [
         c('periodo', 'Periodo', 'texto'), c('facturas', 'Facturas', 'entero'), c('facturado', 'Facturado', 'dinero'),
         c('cobrado', 'Cobrado', 'dinero'), c('pendiente', 'Pendiente', 'dinero'), c('cobranza_pct', '% cobrado', 'porcentaje'),
+        c('acreditado', 'Notas de crédito', 'dinero'), c('facturado_importado', 'Facturado importado', 'dinero'), c('cobrado_importado', 'Cobrado importado', 'dinero'),
     ],
+    // `pendiente = facturado − cobrado − acreditado`; `cobrado` ya no incluye notas de crédito (A3, semana 3).
+    // Agosto trae facturas importadas de Mikrowisp (en su mes de origen).
     filas: [
-        { periodo: '2026-08', facturas: 412, facturado: '93880.00', cobrado: '90204.10', pendiente: '3675.90', cobranza_pct: 96.08 },
-        { periodo: '2026-09', facturas: 431, facturado: '96120.00', cobrado: '91980.65', pendiente: '4139.35', cobranza_pct: 95.69 },
-        { periodo: '2026-10', facturas: 438, facturado: '98450.00', cobrado: '61230.75', pendiente: '37219.25', cobranza_pct: 62.19 },
+        { periodo: '2026-08', facturas: 412, facturado: '93880.00', cobrado: '90029.10', pendiente: '3675.90', cobranza_pct: 95.90, acreditado: '175.00', facturado_importado: '12400.00', cobrado_importado: '12100.00' },
+        { periodo: '2026-09', facturas: 431, facturado: '96120.00', cobrado: '91980.65', pendiente: '4139.35', cobranza_pct: 95.69, acreditado: '0.00', facturado_importado: '0.00', cobrado_importado: '0.00' },
+        { periodo: '2026-10', facturas: 438, facturado: '98450.00', cobrado: '61055.75', pendiente: '37219.25', cobranza_pct: 62.02, acreditado: '175.00', facturado_importado: '0.00', cobrado_importado: '0.00' },
     ],
 }
 
@@ -41,12 +44,14 @@ export const ingresos: { columnas: Columna[], filas: Schema<'ReporteIngresos'>['
     columnas: [
         c('periodo', 'Periodo', 'texto'), c('metodo', 'Método', 'texto'), c('pagos', 'Pagos', 'entero'),
         c('monto', 'Monto', 'dinero'), c('comision', 'Comisión', 'dinero'), c('neto', 'Neto', 'dinero'),
+        c('pagos_importados', 'Pagos importados', 'entero'), c('monto_importado', 'Monto importado', 'dinero'),
     ],
+    // Septiembre trae pagos históricos importados de Mikrowisp (en su mes de origen, sin comisión).
     filas: [
-        { periodo: '2026-09', metodo: 'caja', pagos: 301, monto: '58410.25', comision: '0.00', neto: '58410.25' },
-        { periodo: '2026-09', metodo: 'pasarela', pagos: 88, monto: '19870.40', comision: '596.11', neto: '19274.29' },
-        { periodo: '2026-10', metodo: 'caja', pagos: 205, monto: '40110.00', comision: '0.00', neto: '40110.00' },
-        { periodo: '2026-10', metodo: 'transferencia', pagos: 61, monto: '13320.75', comision: '0.00', neto: '13320.75' },
+        { periodo: '2026-09', metodo: 'caja', pagos: 301, monto: '58410.25', comision: '0.00', neto: '58410.25', pagos_importados: 40, monto_importado: '7000.00' },
+        { periodo: '2026-09', metodo: 'pasarela', pagos: 88, monto: '19870.40', comision: '596.11', neto: '19274.29', pagos_importados: 0, monto_importado: '0.00' },
+        { periodo: '2026-10', metodo: 'caja', pagos: 205, monto: '40110.00', comision: '0.00', neto: '40110.00', pagos_importados: 0, monto_importado: '0.00' },
+        { periodo: '2026-10', metodo: 'transferencia', pagos: 61, monto: '13320.75', comision: '0.00', neto: '13320.75', pagos_importados: 0, monto_importado: '0.00' },
     ],
 }
 
@@ -79,11 +84,13 @@ export const iva: { columnas: Columna[], filas: Schema<'ReporteIva'>['filas'] } 
     columnas: [
         c('periodo', 'Periodo', 'texto'), c('facturas', 'Facturas emitidas', 'entero'), c('base', 'Base gravable', 'dinero'),
         c('iva_facturado', 'IVA facturado', 'dinero'), c('facturas_anuladas', 'Facturas anuladas', 'entero'), c('base_anulada', 'Base anulada', 'dinero'),
-        c('iva_anulado', 'IVA anulado', 'dinero'), c('iva_neto', 'IVA débito neto', 'dinero'), c('iva_libro', 'Saldo del mes en 2.1.02', 'dinero'),
+        c('iva_anulado', 'IVA anulado', 'dinero'), c('notas_credito', 'Notas de crédito', 'entero'), c('base_acreditada', 'Base acreditada', 'dinero'),
+        c('iva_acreditado', 'IVA acreditado', 'dinero'), c('iva_neto', 'IVA débito neto', 'dinero'), c('iva_libro', 'Saldo del mes en 2.1.02', 'dinero'),
     ],
+    // `iva_neto = iva_facturado − iva_anulado − iva_acreditado` (igual a `iva_libro`).
     filas: [
-        { periodo: '2026-09', facturas: 431, base: '85821.43', iva_facturado: '10298.57', facturas_anuladas: 2, base_anulada: '312.50', iva_anulado: '37.50', iva_neto: '10261.07', iva_libro: '10261.07' },
-        { periodo: '2026-10', facturas: 438, base: '87901.79', iva_facturado: '10548.21', facturas_anuladas: 0, base_anulada: '0.00', iva_anulado: '0.00', iva_neto: '10548.21', iva_libro: '10548.21' },
+        { periodo: '2026-09', facturas: 431, base: '85821.43', iva_facturado: '10298.57', facturas_anuladas: 2, base_anulada: '312.50', iva_anulado: '37.50', notas_credito: 0, base_acreditada: '0.00', iva_acreditado: '0.00', iva_neto: '10261.07', iva_libro: '10261.07' },
+        { periodo: '2026-10', facturas: 438, base: '87901.79', iva_facturado: '10548.21', facturas_anuladas: 0, base_anulada: '0.00', iva_anulado: '0.00', notas_credito: 1, base_acreditada: '156.25', iva_acreditado: '18.75', iva_neto: '10529.46', iva_libro: '10529.46' },
     ],
 }
 

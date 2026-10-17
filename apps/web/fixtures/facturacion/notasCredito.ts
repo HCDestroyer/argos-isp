@@ -1,10 +1,9 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
-import { bd, siguienteId } from '../bd'
+import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
-import { CUENTA_CXC, CUENTA_INGRESOS, CUENTA_IVA, fechaGuatemala, movimiento } from '../libro/datos'
-import { dinero, estadoFactura } from './datos'
+import { aplicarNotaCredito } from './aplicarNotaCredito'
 
 type NotaCredito = Schema<'NotaCredito'>
 
@@ -56,50 +55,8 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
                 return datosInvalidos([{ field: 'monto', message: `El monto excede el saldo de la factura (Q${saldo.toFixed(2)})`, rule: 'monto' }])
             }
             const momento = ahora()
-            const iva = new Decimal(factura.total).isZero() ? new Decimal(0) : monto.times(factura.iva).div(factura.total).toDecimalPlaces(2)
-            const subtotal = monto.minus(iva)
-            const asientoId = siguienteId(bd.asientos)
             const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
-            const nota: NotaCredito = {
-                id: siguienteId(bd.notasCredito),
-                factura_id: factura.id,
-                cliente_id: factura.cliente_id,
-                cliente_nombre: bd.clientes.find(c => c.id === factura.cliente_id)?.nombre ?? '',
-                servicio_id: factura.servicio_id,
-                fecha: fechaGuatemala(momento),
-                subtotal: dinero(subtotal),
-                iva: dinero(iva),
-                monto: dinero(monto),
-                motivo,
-                asiento_id: asientoId,
-                created_by: usuario?.id ?? null,
-                created_by_nombre: usuario?.nombre ?? null,
-                created_at: momento,
-            }
-            bd.notasCredito.push(nota)
-            bd.asientos.push({
-                id: asientoId,
-                fecha: nota.fecha,
-                descripcion: `Nota de crédito ${nota.id} · factura ${factura.id} · ${motivo}`,
-                origen_tipo: 'nota_credito',
-                origen_id: nota.id,
-                reversa_de: null,
-                created_by: nota.created_by,
-                created_at: momento,
-                movimientos: [
-                    movimiento(CUENTA_INGRESOS, 'debe', nota.subtotal),
-                    movimiento(CUENTA_IVA, 'debe', nota.iva),
-                    movimiento(CUENTA_CXC, 'haber', nota.monto, factura.cliente_id),
-                ].filter(m => !new Decimal(m.debe).plus(m.haber).isZero()),
-            })
-            const pagado = new Decimal(factura.pagado).plus(monto)
-            Object.assign(factura, {
-                pagado: dinero(pagado),
-                acreditado: dinero(new Decimal(factura.acreditado ?? '0').plus(monto)),
-                estado: estadoFactura(pagado, new Decimal(factura.total), factura.vence_en.slice(0, 10)),
-                version: factura.version + 1,
-                updated_at: momento,
-            })
+            const nota = aplicarNotaCredito(bd, factura, monto, motivo, usuario, momento)
             const servicios = evaluar(factura.servicio_id === null ? [] : [factura.servicio_id])
             registrarAccion(solicitud, 'facturas.nota_credito', { tipo: 'factura', id: factura.id }, { monto: nota.monto, motivo })
             const emitida: Schema<'NotaCreditoEmitida'> = { ...nota, factura: detalle(factura), servicios }

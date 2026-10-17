@@ -133,7 +133,9 @@ export const rutasLibro: RutasFixture = {
             .flatMap(a => a.movimientos
                 .filter(m => m.cuenta_id === cuentaId && (clienteId === undefined || m.cliente_id === clienteId))
                 .map(m => ({ asiento: a, movimiento: m })))
-            .sort((x, y) => x.movimiento.id - y.movimiento.id)
+            // Como la API: por fecha contable y luego por asiento (un asiento con fecha anterior
+            // registrado después, como una nota de crédito sembrada, va en su fecha).
+            .sort((x, y) => x.asiento.fecha.localeCompare(y.asiento.fecha) || x.asiento.id - y.asiento.id || x.movimiento.id - y.movimiento.id)
         let saldoInicial = new Decimal(0)
         let acumulado = new Decimal(0)
         const enRango: LineaMayor[] = []

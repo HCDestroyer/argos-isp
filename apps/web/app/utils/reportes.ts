@@ -31,6 +31,7 @@ export type CanalPromesaReporte = NonNullable<QueryReporte<'promesas'>['canal']>
 export type TipoFacturaReporte = NonNullable<QueryReporte<'facturado-vs-cobrado'>['tipo']>
 export type AgruparCartera = NonNullable<QueryReporte<'cartera-vencida'>['agrupar']>
 export type AgruparIngresos = NonNullable<QueryReporte<'ingresos'>['agrupar']>
+export type OrigenReporte = NonNullable<QueryReporte<'ingresos'>['origen']>
 
 /** Estado de los filtros de la pantalla; cada reporte toma solo los que acepta. */
 export interface FiltrosReporte {
@@ -49,9 +50,10 @@ export interface FiltrosReporte {
     tipo?: TipoFacturaReporte
     agrupar_cartera?: AgruparCartera
     agrupar_ingresos?: AgruparIngresos
+    origen?: OrigenReporte
 }
 
-export type FiltroReporte = 'rango' | 'corte' | 'cliente' | 'zona' | 'router' | 'plan' | 'caja' | 'metodo_pago' | 'metodo_egreso' | 'categoria' | 'canal' | 'tipo' | 'agrupar_cartera' | 'agrupar_ingresos'
+export type FiltroReporte = 'rango' | 'corte' | 'cliente' | 'zona' | 'router' | 'plan' | 'caja' | 'metodo_pago' | 'metodo_egreso' | 'categoria' | 'canal' | 'tipo' | 'agrupar_cartera' | 'agrupar_ingresos' | 'origen'
 
 export interface PresentacionReporte {
     titulo: string
@@ -60,6 +62,8 @@ export interface PresentacionReporte {
     filtros: readonly FiltroReporte[]
     /** Qué pasa sin fechas: lo dice la API en cada reporte. */
     rangoPorDefecto?: string
+    /** Aviso sobre cómo leer el reporte (un cambio de significado de una columna, por ejemplo). */
+    nota?: { titulo: string, descripcion: string }
 }
 
 const DOCE_MESES = 'Sin fechas: los últimos 12 meses hasta hoy.'
@@ -74,17 +78,25 @@ export const REPORTES: Record<ClaveReporte, PresentacionReporte> = {
     },
     'facturado-vs-cobrado': {
         titulo: 'Facturado vs cobrado',
-        descripcion: 'Por mes: lo facturado, lo cobrado de esas facturas, lo pendiente y el % de cobranza.',
+        descripcion: 'Por mes: lo facturado, lo cobrado de esas facturas, lo acreditado con notas de crédito, lo pendiente y el % de cobranza.',
         icono: 'i-lucide-scale',
-        filtros: ['rango', 'tipo', 'cliente', 'zona', 'router', 'plan'],
+        filtros: ['rango', 'origen', 'tipo', 'cliente', 'zona', 'router', 'plan'],
         rangoPorDefecto: DOCE_MESES,
+        nota: {
+            titulo: '«Cobrado» ya no incluye las notas de crédito',
+            descripcion: 'Lo acreditado con notas de crédito va en su propia columna: Pendiente = Facturado − Cobrado − Notas de crédito. Las facturas importadas cuentan en el mes de su periodo de origen.',
+        },
     },
     'ingresos': {
         titulo: 'Ingresos',
         descripcion: 'Pagos recibidos por periodo y método, con comisión y neto.',
         icono: 'i-lucide-banknote',
-        filtros: ['rango', 'agrupar_ingresos', 'metodo_pago', 'cliente', 'zona'],
+        filtros: ['rango', 'origen', 'agrupar_ingresos', 'metodo_pago', 'cliente', 'zona'],
         rangoPorDefecto: DOCE_MESES,
+        nota: {
+            titulo: 'Incluye los pagos importados',
+            descripcion: 'Los pagos históricos de otro sistema cuentan en su mes de origen; «Pagos importados» y «Monto importado» separan esa parte. Usa «Origen» para ver solo una.',
+        },
     },
     'cobranza-diaria': {
         titulo: 'Cobranza diaria',
@@ -102,10 +114,14 @@ export const REPORTES: Record<ClaveReporte, PresentacionReporte> = {
     },
     'iva': {
         titulo: 'IVA',
-        descripcion: 'Base e IVA facturado y anulado por mes, contra el saldo de la cuenta de IVA del libro.',
+        descripcion: 'Base e IVA facturado, anulado y acreditado con notas de crédito por mes, contra el saldo de la cuenta de IVA del libro.',
         icono: 'i-lucide-percent',
         filtros: ['rango'],
         rangoPorDefecto: DOCE_MESES,
+        nota: {
+            titulo: 'IVA débito neto con notas de crédito',
+            descripcion: 'IVA débito neto = IVA facturado − IVA anulado − IVA acreditado (en el mes de cada nota). Debe coincidir con el saldo del mes en 2.1.02.',
+        },
     },
     'promesas': {
         titulo: 'Promesas de pago',
@@ -154,6 +170,11 @@ export const AGRUPAR_INGRESOS: Record<AgruparIngresos, string> = {
     dia: 'Por día',
 }
 
+export const ORIGENES_REPORTE: Record<OrigenReporte, string> = {
+    sistema: 'Registrado en ArgosIsp',
+    importado: 'Importado (histórico)',
+}
+
 export const TIPOS_FACTURA_REPORTE: Record<TipoFacturaReporte, string> = {
     servicio: 'Solo servicio',
     mora: 'Solo recargos por mora',
@@ -165,8 +186,8 @@ export const TIPOS_FACTURA_REPORTE: Record<TipoFacturaReporte, string> = {
  */
 export const CONSULTAS_REPORTE: { [C in ClaveReporte]: (f: FiltrosReporte) => QueryReporte<C> } = {
     'cartera-vencida': f => ({ corte: f.corte, agrupar: f.agrupar_cartera, cliente_id: f.cliente_id, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
-    'facturado-vs-cobrado': f => ({ desde: f.desde, hasta: f.hasta, tipo: f.tipo, cliente_id: f.cliente_id, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
-    'ingresos': f => ({ desde: f.desde, hasta: f.hasta, agrupar: f.agrupar_ingresos, metodo: f.metodo_pago, cliente_id: f.cliente_id, zona_id: f.zona_id }),
+    'facturado-vs-cobrado': f => ({ desde: f.desde, hasta: f.hasta, origen: f.origen, tipo: f.tipo, cliente_id: f.cliente_id, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
+    'ingresos': f => ({ desde: f.desde, hasta: f.hasta, origen: f.origen, agrupar: f.agrupar_ingresos, metodo: f.metodo_pago, cliente_id: f.cliente_id, zona_id: f.zona_id }),
     'cobranza-diaria': f => ({ desde: f.desde, hasta: f.hasta, metodo: f.metodo_pago, caja_id: f.caja_id }),
     'cierres-caja': f => ({ desde: f.desde, hasta: f.hasta, caja_id: f.caja_id }),
     'iva': f => ({ desde: f.desde, hasta: f.hasta }),
