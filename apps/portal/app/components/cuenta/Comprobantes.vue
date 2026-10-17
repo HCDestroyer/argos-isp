@@ -40,6 +40,8 @@ async function enviado(comprobante: ComprobantePortal) {
                 label="Subir comprobante"
                 icon="i-lucide-upload"
                 size="sm"
+                color="neutral"
+                variant="outline"
                 data-testid="cuenta-subir-comprobante"
                 @click="verSubir = true"
             />

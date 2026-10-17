@@ -9,6 +9,8 @@ export default defineNuxtConfig({
     app: {
         head: {
             htmlAttrs: { lang: 'es' },
+            // `viewport-fit=cover`: la barra inferior del cliente usa `env(safe-area-inset-*)` (iPhone).
+            viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
             title: 'Portal del cliente',
             meta: [
                 { name: 'description', content: 'Portal del cliente: estado del servicio y pagos' },

@@ -206,6 +206,31 @@
     }
 }
 
+/*
+ * Portal: cambio de sección de `/cuenta`, corto y sin rebote (resorte ~0,2 s, curva de la skill).
+ * Con movimiento reducido la regla global lo deja en 0,01 ms.
+ */
+.seccion-enter-active,
+.seccion-leave-active {
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.seccion-enter-from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+}
+
+.seccion-leave-to {
+    opacity: 0;
+}
+
+/* Portal: sin el destello gris de WebKit al tocar; el estado activo lo pinta Nuxt UI. */
+html {
+    -webkit-tap-highlight-color: transparent;
+}
+
 /* Luz de la acción primaria y del estado crítico. */
 .glow-brand {
     box-shadow: 0 0 18px var(--hf-glow-brand);

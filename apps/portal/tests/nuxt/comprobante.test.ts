@@ -231,11 +231,8 @@ describe('comprobantes en /corte y /cuenta', () => {
     it('/cuenta: lista con estado y el motivo del rechazo', async () => {
         fijarSesionFixture(true)
         clearNuxtData('portal:cuenta')
-        const wrapper = await montar(PaginaCuenta)
+        const wrapper = await montar(PaginaCuenta, { route: '/cuenta?seccion=pagar' })
         await esperar()
-        const pagos = wrapper.findAll('button').find(b => b.text().includes('Pagos'))!
-        await pagos.trigger('mousedown')
-        await pagos.trigger('click')
         await esperar()
         const tarjetas = wrapper.findAll('[data-testid="comprobante"]')
         expect(tarjetas).toHaveLength(3)
