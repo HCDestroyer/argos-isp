@@ -548,7 +548,12 @@ onMounted(cargar)
                         class="flex flex-wrap items-start justify-between gap-2 px-3 py-2"
                     >
                         <div class="flex min-w-0 flex-col">
-                            <span class="text-sm font-medium text-highlighted">Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}</span>
+                            <ULink
+                                :to="`/notas-credito/${nota.id}`"
+                                class="text-sm font-medium text-highlighted hover:text-primary"
+                            >
+                                Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}
+                            </ULink>
                             <span class="text-xs text-muted">{{ nota.motivo }}<template v-if="nota.created_by_nombre"> · {{ nota.created_by_nombre }}</template></span>
                         </div>
                         <div class="flex flex-col items-end">

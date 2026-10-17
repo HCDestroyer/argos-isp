@@ -56,6 +56,9 @@ export function rutaOrigen(asiento: Pick<AsientoLibro, 'origen_tipo' | 'origen_i
     if (asiento.origen_tipo === 'pago') {
         return `/pagos/${asiento.origen_id}`
     }
+    if (asiento.origen_tipo === 'nota_credito') {
+        return `/notas-credito/${asiento.origen_id}`
+    }
     return null
 }
 

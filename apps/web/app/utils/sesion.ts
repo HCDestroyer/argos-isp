@@ -33,3 +33,21 @@ export function formatearDuracion(inicio: string, fin: string | null = null, aho
     }
     return `${minutos} min`
 }
+
+/** Ventana del aviso antes del tope absoluto de la sesión del panel (`expira_max_en`). */
+export const AVISO_TOPE_SESION_MS = 15 * 60_000
+
+/**
+ * Milisegundos que faltan para el tope de la sesión si ya entró en la ventana del aviso (menos
+ * de 15 min y todavía no vence); `null` fuera de ella o sin tope (tokens de API).
+ */
+export function faltaParaTopeSesion(expiraMaxEn: string | null, ahora: Date = new Date()): number | null {
+    if (!expiraMaxEn) {
+        return null
+    }
+    const falta = new Date(expiraMaxEn).getTime() - ahora.getTime()
+    if (!Number.isFinite(falta) || falta <= 0 || falta > AVISO_TOPE_SESION_MS) {
+        return null
+    }
+    return falta
+}

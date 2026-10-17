@@ -60,6 +60,7 @@ function filtrosDeQuery(query: LocationQuery): FiltrosReporte {
         tipo: opcion(TIPOS_FACTURA_REPORTE, query.tipo),
         agrupar_cartera: opcion(AGRUPAR_CARTERA, query.agrupar_cartera),
         agrupar_ingresos: opcion(AGRUPAR_INGRESOS, query.agrupar_ingresos),
+        origen: opcion(ORIGENES_REPORTE, query.origen),
     }
 }
 
@@ -109,6 +110,9 @@ const agruparCartera = selectorEnum(AGRUPAR_CARTERA, () => filtros.agrupar_carte
 })
 const agruparIngresos = selectorEnum(AGRUPAR_INGRESOS, () => filtros.agrupar_ingresos, (v) => {
     filtros.agrupar_ingresos = v
+})
+const origen = selectorEnum(ORIGENES_REPORTE, () => filtros.origen, (v) => {
+    filtros.origen = v
 })
 const zona = selectorId('zona_id')
 const routerSel = selectorId('router_id')
@@ -183,6 +187,7 @@ function filtrosAplicables(): FiltrosReporte {
         ['tipo', ['tipo']],
         ['agrupar_cartera', ['agrupar_cartera']],
         ['agrupar_ingresos', ['agrupar_ingresos']],
+        ['origen', ['origen']],
     ]
     for (const [filtro, claves] of campos) {
         if (usa(filtro)) {
@@ -406,6 +411,18 @@ onMounted(async () => {
                     />
                 </UFormField>
                 <UFormField
+                    v-if="usa('origen')"
+                    label="Origen"
+                    size="sm"
+                >
+                    <USelect
+                        v-model="origen"
+                        :items="items(ORIGENES_REPORTE, 'Todos (sistema e importados)')"
+                        class="w-full"
+                        data-prueba="filtro-origen"
+                    />
+                </UFormField>
+                <UFormField
                     v-if="usa('agrupar_ingresos')"
                     label="Agrupar"
                     size="sm"
@@ -577,6 +594,16 @@ onMounted(async () => {
                     />
                 </div>
             </div>
+
+            <UAlert
+                v-if="presentacion.nota"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-info"
+                :title="presentacion.nota.titulo"
+                :description="presentacion.nota.descripcion"
+                data-prueba="nota-reporte"
+            />
 
             <ProblemaAlerta
                 v-if="problema"

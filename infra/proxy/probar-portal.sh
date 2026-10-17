@@ -34,6 +34,11 @@ http.createServer((q, r) => {
 EOF
 node "$TMP/eco.mjs" "$ECO" &
 PIDS+=($!)
+# El portal de eco debe responder antes de medir el proxy (si no, Caddy da 502)
+for _ in $(seq 1 30); do
+    curl -s -o /dev/null "http://127.0.0.1:$ECO/" && break
+    sleep 0.5
+done
 
 ENTORNO=(
     PORTAL_PROXY_HTTP_PUERTO=$HTTP
@@ -54,8 +59,10 @@ else
         -v "$DIR/Caddyfile.portal:/etc/caddy/Caddyfile:ro" caddy:2.10.0-alpine >/dev/null
 fi
 
+# Caddy listo: HTTP llega al eco (200) y HTTPS ya tiene su certificado interno
 for _ in $(seq 1 30); do
-    curl -s -o /dev/null "http://127.0.0.1:$HTTP/" && break
+    [[ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$HTTP/corte")" == 200 ]] &&
+        curl -sk -o /dev/null --resolve "$DOMINIO:$HTTPS:127.0.0.1" "https://$DOMINIO:$HTTPS/" && break
     sleep 1
 done
 

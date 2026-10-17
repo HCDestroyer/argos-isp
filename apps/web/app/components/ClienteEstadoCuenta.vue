@@ -13,13 +13,17 @@ type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
 const { puede } = usePermisos()
 
-/** Enlace al documento del movimiento (factura, mora o pago), si el usuario puede verlo. */
+/** Enlace al documento del movimiento (factura, mora, pago o nota de crédito), si el usuario puede verlo. */
 function enlaceMovimiento(movimiento: Movimiento): string | null {
     if ((movimiento.tipo === 'factura' || movimiento.tipo === 'mora') && puede('facturas.ver')) {
         return `/facturas/${movimiento.referencia_id}`
     }
     if (movimiento.tipo === 'pago' && puede('pagos.ver')) {
         return `/pagos/${movimiento.referencia_id}`
+    }
+    // `referencia_id` de una nota de crédito es la nota (A3, `a3.md`).
+    if (movimiento.tipo === 'nota_credito' && puede('facturas.ver')) {
+        return `/notas-credito/${movimiento.referencia_id}`
     }
     return null
 }
