@@ -44,6 +44,19 @@ export interface OpcionesVerificacion {
     clientes?: number[]
     /** omite las comparaciones con funciones del producto (más lentas): balance y saldos */
     sinFuncionesProducto?: boolean
+    /** también los invariantes de `HALLAZGOS_ABIERTOS` (los usa la prueba `.fails` de cada hallazgo) */
+    incluirHallazgosAbiertos?: boolean
+}
+
+/**
+ * Invariantes cuyo hallazgo está abierto: el producto los rompe en escenarios normales (también en
+ * las pruebas de A3), así que por defecto no se revisan y su prueba `.fails` en
+ * `hallazgos_fase3.spec.ts` los mantiene a la vista. Cuando A3 arregle el hallazgo, se quita de
+ * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
+ * `verificarLibro`.
+ */
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    '12.reclasificacion_distinta_del_iva_del_dte': 'H5',
 }
 
 type Fila = Record<string, unknown>
@@ -91,6 +104,8 @@ export async function verificarLibro(
     const C = (col: string) => en(col, opciones.clientes)
     const violaciones: Violacion[] = []
     const revisar = async (invariante: string, sql: string) => {
+        const abierto = Object.keys(HALLAZGOS_ABIERTOS).some((id) => invariante.startsWith(id))
+        if (abierto && !opciones.incluirHallazgosAbiertos) return
         const encontradas = await filas(sql)
         if (encontradas.length > 0) violaciones.push({ invariante, detalle: encontradas.slice(0, 20) })
     }
@@ -311,6 +326,17 @@ export async function verificarLibro(
                     ELSE 'emitida' END`,
     )
     await revisar(
+        '5.por_certificar_con_dinero_o_sin_dte (no está emitida: sin pagos, notas ni vencimiento, y con su DTE)',
+        `SELECT f.id, f.pagado::text, f.vencida_en IS NOT NULL AS vencida,
+                (SELECT count(*) FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id)::int AS dtes
+           FROM billing.facturas f
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado = 'por_certificar'
+            AND (f.pagado <> 0 OR f.vencida_en IS NOT NULL OR f.aviso_cobro
+                 OR EXISTS (SELECT 1 FROM billing.pagos_aplicaciones a WHERE a.factura_id = f.id)
+                 OR EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id)
+                 OR NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id))`,
+    )
+    await revisar(
         '5.factura_anulada_con_saldo_vivo (aplicaciones vigentes, notas o asiento sin reverso)',
         `SELECT f.id,
                 (SELECT coalesce(sum(a.monto), 0) FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
@@ -438,11 +464,12 @@ export async function verificarLibro(
     | 9 · Facturas, mora y notas de crédito: cada documento con el asiento que le toca
     */
     await revisar(
-        '9.asiento_de_factura_no_cuadra_con_la_factura (CxC = total, IVA débito o por certificar = iva, líneas)',
+        '9.asiento_de_factura_no_cuadra_con_la_factura (CxC = total; IVA = iva en 2.1.11 si es aviso de cobro, si no en 2.1.02; líneas)',
         `WITH mov AS (
              SELECT a.origen_id AS factura_id,
                     sum(CASE WHEN c.codigo = '${CXC}' THEN m.debe - m.haber ELSE 0 END) AS cxc,
-                    sum(CASE WHEN c.codigo IN ('${IVA}', '${IVA_TRANSICION}') THEN m.haber - m.debe ELSE 0 END) AS iva,
+                    sum(CASE WHEN c.codigo = '${IVA}' THEN m.haber - m.debe ELSE 0 END) AS iva,
+                    sum(CASE WHEN c.codigo = '${IVA_TRANSICION}' THEN m.haber - m.debe ELSE 0 END) AS iva_transicion,
                     bool_or(c.codigo = '${APERTURA}') AS importada
                FROM ledger.asientos a
                JOIN ledger.movimientos m ON m.asiento_id = a.id
@@ -452,7 +479,8 @@ export async function verificarLibro(
          ), lin AS (
              SELECT factura_id, sum(total) AS total, sum(iva) AS iva FROM billing.facturas_lineas GROUP BY 1
          )
-         SELECT f.id, f.tipo, f.total::text, f.subtotal::text, f.iva::text, mov.cxc::text, mov.iva::text AS iva_libro,
+         SELECT f.id, f.tipo, f.aviso_cobro, f.total::text, f.subtotal::text, f.iva::text, mov.cxc::text,
+                mov.iva::text AS iva_debito_libro, mov.iva_transicion::text AS iva_por_certificar_libro,
                 mov.importada, lin.total::text AS total_lineas, lin.iva::text AS iva_lineas
            FROM billing.facturas f
            JOIN mov ON mov.factura_id = f.id
@@ -460,7 +488,9 @@ export async function verificarLibro(
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
             AND (mov.cxc <> f.total
                  OR f.subtotal + f.iva <> f.total
-                 OR (NOT mov.importada AND mov.iva <> f.iva)
+                 -- estricto (auditor, fase 3): todo el IVA en UNA cuenta, la que corresponde al documento
+                 OR (NOT mov.importada AND f.aviso_cobro AND (mov.iva_transicion <> f.iva OR mov.iva <> 0))
+                 OR (NOT mov.importada AND NOT f.aviso_cobro AND (mov.iva <> f.iva OR mov.iva_transicion <> 0))
                  OR (lin.factura_id IS NOT NULL AND NOT mov.importada AND (lin.total <> f.total OR lin.iva <> f.iva)))`,
     )
     await revisar(
@@ -478,23 +508,48 @@ export async function verificarLibro(
                              WHERE a.origen_tipo = 'mora' AND a.origen_id = f.id AND c.codigo = '${IVA}'))`,
     )
     await revisar(
+        '9.mora_con_iva_mal_calculada (con mora_con_iva: IVA incluido al 12 % y desglosado)',
+        `SELECT f.id, f.total::text, f.subtotal::text, f.iva::text, f.aviso_cobro
+           FROM billing.facturas f
+          WHERE ${E('f.empresa_id')} AND f.tipo = 'mora'
+            AND coalesce((f.reglas_snapshot->>'mora_con_iva')::boolean, false)
+            AND (f.iva <> round(f.total * 12 / 112, 2) OR f.subtotal + f.iva <> f.total)`,
+    )
+    await revisar(
         '9.asiento_de_nota_credito_no_cuadra (CxC haber = monto, IVA debe = iva, subtotal + iva = monto)',
         `WITH mov AS (
-             SELECT a.origen_id AS nota_id,
+             SELECT a.origen_id AS nota_id, min(a.id) AS asiento_id,
                     sum(CASE WHEN c.codigo = '${CXC}' THEN m.haber - m.debe ELSE 0 END) AS cxc,
-                    sum(CASE WHEN c.codigo IN ('${IVA}', '${IVA_TRANSICION}') THEN m.debe - m.haber ELSE 0 END) AS iva,
+                    sum(CASE WHEN c.codigo = '${IVA}' THEN m.debe - m.haber ELSE 0 END) AS iva,
+                    sum(CASE WHEN c.codigo = '${IVA_TRANSICION}' THEN m.debe - m.haber ELSE 0 END) AS iva_transicion,
                     count(*) FILTER (WHERE a.reversa_de IS NULL) AS n
                FROM ledger.asientos a
                JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
               WHERE a.origen_tipo = 'nota_credito'
               GROUP BY 1
+         ), x AS (
+             -- estricto (auditor, fase 3; §10.1): la nota de un aviso cuyo IVA aún no se reclasificó (sin DTE
+             -- certificado al emitirla) debita 2.1.11; cualquier otra, 2.1.02. Nunca las dos.
+             SELECT n.*, mov.nota_id AS con_asiento, mov.cxc, mov.iva AS iva_debito_libro,
+                    mov.iva_transicion AS iva_por_certificar_libro,
+                    f.aviso_cobro AND NOT EXISTS (
+                        SELECT 1 FROM ledger.asientos r JOIN fiscal.dte d ON d.id = r.origen_id
+                         WHERE r.origen_tipo = 'reclasificacion' AND r.reversa_de IS NULL AND r.id < mov.asiento_id
+                           AND d.documento_id = f.id
+                           AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                    ) AS en_transicion
+               FROM billing.notas_credito n
+               JOIN billing.facturas f ON f.id = n.factura_id
+               LEFT JOIN mov ON mov.nota_id = n.id
+              WHERE ${E('n.empresa_id')} AND ${C('n.cliente_id')}
          )
-         SELECT n.id, n.factura_id, n.monto::text, n.subtotal::text, n.iva::text, mov.cxc::text, mov.iva::text AS iva_libro
-           FROM billing.notas_credito n LEFT JOIN mov ON mov.nota_id = n.id
-          WHERE ${E('n.empresa_id')} AND ${C('n.cliente_id')}
-            AND (mov.nota_id IS NULL OR mov.cxc <> n.monto OR mov.iva <> n.iva OR n.subtotal + n.iva <> n.monto
-                 OR n.monto <= 0)`,
+         SELECT id, factura_id, monto::text, subtotal::text, iva::text, cxc::text, en_transicion,
+                iva_debito_libro::text, iva_por_certificar_libro::text
+           FROM x
+          WHERE con_asiento IS NULL OR cxc <> monto OR subtotal + iva <> monto OR monto <= 0
+             OR (en_transicion AND (iva_por_certificar_libro <> iva OR iva_debito_libro <> 0))
+             OR (NOT en_transicion AND (iva_debito_libro <> iva OR iva_por_certificar_libro <> 0))`,
     )
     await revisar(
         '9.notas_credito_exceden_la_factura (Σ notas > total o Σ IVA de notas > IVA de la factura)',
@@ -685,6 +740,114 @@ export async function verificarLibro(
           WHERE d.estado <> 'rechazado' AND ${E('d.empresa_id')}
           GROUP BY 1, 2
          HAVING count(*) > 1 OR bool_or(d.estado = 'certificado' AND d.autorizacion IS NULL)`,
+    )
+
+    /*
+    | 12 · FEL, estrictos por documento (auditor de la fase 3). El check de arriba compara 2.1.11 por
+    | empresa; estos lo bajan a cada documento para que dos errores de signo contrario no se cancelen.
+    */
+    const DOC_DTE = `CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END`
+    await revisar(
+        '12.iva_por_certificar_del_documento (por aviso: 2.1.11 propio = iva − notas internas sin DTE certificado; 0 si certificado o anulado)',
+        `WITH x AS (
+             SELECT f.id, f.estado, f.iva,
+                    coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id), 0) AS iva_notas,
+                    EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id AND d.documento_tipo = ${DOC_DTE}
+                              AND d.estado IN ('certificado', 'anulacion_pendiente')) AS certificado,
+                    (SELECT coalesce(sum(m.haber - m.debe), 0)
+                       FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE c.codigo = '${IVA_TRANSICION}'
+                        AND ((a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id)
+                          OR (a.origen_tipo = 'nota_credito'
+                              AND a.origen_id IN (SELECT n.id FROM billing.notas_credito n WHERE n.factura_id = f.id))
+                          OR (a.origen_tipo = 'reclasificacion'
+                              AND a.origen_id IN (SELECT d.id FROM fiscal.dte d
+                                                   WHERE d.documento_id = f.id AND d.documento_tipo = ${DOC_DTE})))) AS libro
+               FROM billing.facturas f
+              WHERE f.aviso_cobro AND ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+         )
+         SELECT id, estado, certificado, iva::text, iva_notas::text, libro::text AS iva_por_certificar_libro
+           FROM x
+          WHERE libro <> CASE WHEN estado = 'anulada' OR certificado THEN 0 ELSE iva - iva_notas END`,
+    )
+    await revisar(
+        '12.movimiento_en_2.1.11_de_origen_inesperado (solo avisos, sus notas y su reclasificación)',
+        `SELECT a.id, a.origen_tipo, a.origen_id, m.debe::text, m.haber::text
+           FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+           JOIN ledger.cuentas c ON c.id = m.cuenta_id
+           LEFT JOIN billing.facturas f ON a.origen_tipo IN ('factura', 'mora') AND f.id = a.origen_id
+           LEFT JOIN billing.notas_credito n ON a.origen_tipo = 'nota_credito' AND n.id = a.origen_id
+           LEFT JOIN billing.facturas fn ON fn.id = n.factura_id
+          WHERE c.codigo = '${IVA_TRANSICION}' AND ${E('a.empresa_id')}
+            AND NOT (a.origen_tipo = 'reclasificacion'
+                     OR (a.origen_tipo IN ('factura', 'mora') AND f.aviso_cobro)
+                     OR (a.origen_tipo = 'nota_credito' AND fn.aviso_cobro))`,
+    )
+    await revisar(
+        '12.reclasificacion_mal_formada (2 movimientos: Debe 2.1.11 = Haber 2.1.02, de un DTE de aviso de la misma empresa)',
+        `WITH r AS (
+             SELECT a.id, a.empresa_id, a.origen_id,
+                    count(*) AS n,
+                    sum(CASE WHEN c.codigo = '${IVA_TRANSICION}' THEN m.debe ELSE 0 END) AS debe_transicion,
+                    sum(CASE WHEN c.codigo = '${IVA}' THEN m.haber ELSE 0 END) AS haber_debito,
+                    sum(m.debe) AS debe
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'reclasificacion' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+              GROUP BY a.id
+         )
+         SELECT r.id, r.origen_id AS dte_id, r.n::int, r.debe_transicion::text, r.haber_debito::text,
+                d.documento_tipo, f.aviso_cobro
+           FROM r LEFT JOIN fiscal.dte d ON d.id = r.origen_id
+           LEFT JOIN billing.facturas f ON f.id = d.documento_id AND d.documento_tipo IN ('factura', 'nota_debito')
+          WHERE r.n <> 2 OR r.debe_transicion <> r.debe OR r.haber_debito <> r.debe OR r.debe <= 0
+             OR f.id IS NULL OR NOT f.aviso_cobro OR f.empresa_id <> r.empresa_id
+             OR (SELECT count(*) FROM ledger.asientos o
+                  WHERE o.origen_tipo = 'reclasificacion' AND o.origen_id = r.origen_id AND o.reversa_de IS NULL) > 1`,
+    )
+    await revisar(
+        '12.reclasificacion_distinta_del_iva_del_dte (H5: libro de ventas = 2.1.02; el DTE certifica d.iva)',
+        `SELECT a.id, d.id AS dte_id, d.iva::text AS iva_dte,
+                (SELECT sum(m.debe) FROM ledger.movimientos m WHERE m.asiento_id = a.id)::text AS reclasificado
+           FROM ledger.asientos a JOIN fiscal.dte d ON d.id = a.origen_id
+          WHERE a.origen_tipo = 'reclasificacion' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+            AND (SELECT sum(m.debe) FROM ledger.movimientos m WHERE m.asiento_id = a.id) <> d.iva`,
+    )
+    await revisar(
+        '12.aviso_certificado_sin_reclasificacion (DTE certificado de un aviso con IVA pendiente sin su 2.1.11 / 2.1.02)',
+        `SELECT d.id AS dte_id, f.id AS factura_id, f.iva::text
+           FROM fiscal.dte d JOIN billing.facturas f ON f.id = d.documento_id
+          WHERE d.documento_tipo IN ('factura', 'nota_debito') AND d.estado IN ('certificado', 'anulacion_pendiente')
+            AND f.aviso_cobro AND ${E('f.empresa_id')}
+            AND f.iva - coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id), 0) > 0
+            AND NOT EXISTS (SELECT 1 FROM ledger.asientos a
+                             WHERE a.origen_tipo = 'reclasificacion' AND a.origen_id = d.id AND a.reversa_de IS NULL
+                               AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))`,
+    )
+    await revisar(
+        '12.dte_anulado_con_documento_vivo (el DTE solo se anula junto con su factura o mora)',
+        `SELECT d.id AS dte_id, d.documento_tipo, d.documento_id, f.estado
+           FROM fiscal.dte d JOIN billing.facturas f ON f.id = d.documento_id
+          WHERE d.documento_tipo IN ('factura', 'nota_debito') AND d.estado = 'anulado'
+            AND f.estado <> 'anulada' AND ${E('d.empresa_id')}`,
+    )
+    await revisar(
+        '12.dte_distinto_del_documento (total, IVA y empresa del DTE = los de su factura, mora o nota; NCRE solo sobre DTE certificado)',
+        `SELECT d.id AS dte_id, d.documento_tipo, d.documento_id, d.total::text, d.iva::text,
+                coalesce(f.total, n.monto)::text AS total_documento, coalesce(f.iva, n.iva)::text AS iva_documento
+           FROM fiscal.dte d
+           LEFT JOIN billing.facturas f ON d.documento_tipo IN ('factura', 'nota_debito') AND f.id = d.documento_id
+           LEFT JOIN billing.notas_credito n ON d.documento_tipo = 'nota_credito' AND n.id = d.documento_id
+          WHERE ${E('d.empresa_id')}
+            AND (coalesce(f.id, n.id) IS NULL
+                 OR d.empresa_id <> coalesce(f.empresa_id, n.empresa_id)
+                 OR d.total <> coalesce(f.total, n.monto) OR d.iva <> coalesce(f.iva, n.iva)
+                 OR (d.documento_tipo = 'factura' AND f.tipo <> 'servicio')
+                 OR (d.documento_tipo = 'nota_debito' AND (f.tipo <> 'mora' OR d.tipo_dte <> 'NDEB'))
+                 OR (d.documento_tipo = 'nota_credito' AND (d.tipo_dte <> 'NCRE' OR NOT EXISTS (
+                        SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo IN ('factura', 'nota_debito') AND o.documento_id = n.factura_id
+                           AND o.autorizacion IS NOT NULL AND o.autorizacion = d.referencia->>'autorizacion'))))`,
     )
 
     /*
@@ -924,7 +1087,7 @@ export interface FotoLibro {
 export async function fotoLibro(empresas: number[], desdeAuditoria = 0, desdeOutbox = 0): Promise<FotoLibro> {
     const asientos = await filas(
         `SELECT a.id, md5(concat_ws('|', a.empresa_id, a.fecha, a.descripcion, a.origen_tipo, a.origen_id, a.reversa_de,
-                       a.created_at, string_agg(concat_ws(':', m.id, m.cuenta_id, m.cliente_id, m.debe, m.haber), ',' ORDER BY m.id))) AS h
+                       a.created_at, string_agg(concat_ws(':', m.id, m.cuenta_id, m.cliente_id, m.debe, m.haber, m.impuesto_codigo, m.cuadricula), ',' ORDER BY m.id))) AS h
            FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
           WHERE ${en('a.empresa_id', empresas)}
           GROUP BY a.id`,

@@ -25,10 +25,13 @@ import {
  */
 
 async function cuentasGt() {
-    return (await db
-        .from('ledger.cuentas')
-        .orderBy('id')
-        .select('id', 'codigo', 'tipo', 'naturaleza', 'pais')) as Array<Record<string, unknown>>
+    return (
+        (await db
+            .from('ledger.cuentas')
+            .orderBy('id')
+            // todas las columnas: reinstalar no puede renombrar, mover ni reclasificar una cuenta existente
+            .select('*')) as Array<Record<string, unknown>>
+    )
 }
 
 test.group('Auditor contable · fase 2 (localización fiscal)', (group) => {
@@ -43,6 +46,7 @@ test.group('Auditor contable · fase 2 (localización fiscal)', (group) => {
         )
         const marcas = await marcasAuditoria()
         const antesLibro = await fotoLibro([e.B], marcas.acciones, marcas.outbox)
+        const deHoy = await cuentasGt()
         const primera = await new ActualizarLocalizacion().execute({ empresa_id: e.B }, e.ctx)
         const cuentas = await cuentasGt()
         const segunda = await new ActualizarLocalizacion().execute({ empresa_id: e.B }, e.ctx)
@@ -50,6 +54,11 @@ test.group('Auditor contable · fase 2 (localización fiscal)', (group) => {
         assert.isTrue(segunda.resumen.ya_instalada)
         assert.deepEqual(segunda.resumen.cuentas, [])
         assert.deepEqual(await cuentasGt(), cuentas)
+        // la primera instalación solo agrega: cada cuenta que ya existía sigue idéntica (todas sus columnas)
+        const despuesPorId = new Map(cuentas.map((c) => [Number(c.id), c]))
+        for (const cuenta of deHoy) {
+            assert.deepEqual(despuesPorId.get(Number(cuenta.id)), cuenta, String(cuenta.codigo))
+        }
 
         // los códigos de CUENTAS de hoy conservan id, tipo y naturaleza; las de patrimonio no tienen movimientos
         const porCodigo = new Map(cuentas.map((c) => [String(c.codigo), c]))

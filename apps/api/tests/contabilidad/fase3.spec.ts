@@ -11,7 +11,7 @@ import EditarParametro from '#fiscal/actions/editar_parametro'
 import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import { CERO, dec } from '#ledger/dinero'
 import { controlFelFalso } from '#fiscal/fel/falso'
-import { lineas, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { lineas, sacarDeLaColaFel, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import {
     IVA_DEBITO,
@@ -58,7 +58,10 @@ async function ivaDeAvisosSinDte(empresaId: number): Promise<string> {
 }
 
 test.group('Auditor contable · fase 3 (FEL)', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    group.each.teardown(async () => {
+        await sacarDeLaColaFel()
+        await soloEmpresaPrincipal()
+    })
 
     test('2.1.11 IVA por certificar = IVA de los avisos de cobro sin DTE · localización fiscal, fase 3 (FEL)', async ({
         assert,
@@ -251,6 +254,29 @@ test.group('Auditor contable · fase 3 (FEL)', (group) => {
             assert.equal(await dtesDe('nota_credito', n.id).then((r) => r[0]!.estado), 'certificado')
         }
         assert.deepEqual(await residuos(fe.id), [])
+        await afirmarLibro(assert, e.B)
+    })
+
+    test('ningún documento tiene dos DTE vigentes: pedir la certificación otra vez devuelve el mismo (auditor, fase 3)', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        const primera = await new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx)
+        const segunda = await new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx)
+        assert.equal(segunda.dte?.id, primera.dte?.id)
+        assert.isFalse(segunda.creado)
+        await cola(e)
+        const tercera = await new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx)
+        assert.equal(tercera.dte?.id, primera.dte?.id)
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '150.00', empresa_id: e.B },
+            e.ctx,
+        )
+        await cola(e)
+        assert.lengthOf(await dtesDe('factura', f.id), 1)
+        assert.equal(controlFelFalso.llamadas.certificar, 1)
         await afirmarLibro(assert, e.B)
     })
 })

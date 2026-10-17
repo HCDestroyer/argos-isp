@@ -233,3 +233,20 @@ export async function lineas(origenTipo: string, origenId: number, soloOriginal 
         .select('c.codigo', 'm.debe', 'm.haber')
     return filas.map((f) => [f.codigo as string, f.debe as string, f.haber as string] as const)
 }
+
+/**
+ * Saca de la cola `fel` lo que una prueba dejó a medias. La cola es global (todas las empresas): un
+ * DTE pendiente de una prueba anterior consumiría las respuestas guiadas del certificador falso en
+ * la siguiente. `fiscal.dte` y `fiscal.fel_configuracion` son mutables (estado de la certificación);
+ * no se toca el libro.
+ */
+export async function sacarDeLaColaFel() {
+    await db
+        .from('fiscal.dte')
+        .whereIn('estado', ['pendiente', 'error_temporal', 'anulacion_pendiente'])
+        .update({ proximo_intento: null })
+    await db
+        .from('fiscal.fel_configuracion')
+        .whereIn('empresa_id', db.from('fiscal.dte').where('estado', 'contingencia').select('empresa_id'))
+        .update({ contingencia_activa: true })
+}
