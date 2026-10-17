@@ -124,7 +124,7 @@ En desarrollo (`nuxt dev`) no se pone CSP: Vite necesita scripts propios.
 
 `docs/piloto/portal-cliente.md`: qué ve un cliente cortado, promesa, comprobante, Telegram y dudas
 frecuentes, con capturas a 390 px en `docs/piloto/img/` (build de producción con fixtures,
-Chromium, PNG de 128 colores; menos de 60 KB cada una).
+Chromium a 2×, PNG de 256 colores con tramado para que el aura no quede en bandas; menos de 150 KB cada una).
 
 Los modales dejan margen a la derecha del título (`modal.slots.wrapper` en `app.config.ts`): a 390 px
 la descripción pasaba por debajo del botón de cerrar.
@@ -201,11 +201,31 @@ cupo, historial o deuda se ofrece "Contactar a la oficina".
 
 - Controles de al menos 44 × 44 px: `min-h-11 min-w-11` en `UButton`, `min-h-11` en `UInput`, `USelect`
   y `USelectMenu`, casillas del código de 44 px (`app.config.ts`); el logo y el enlace del pie también.
-- Contraste 4.5:1 en claro y oscuro: en claro los colores semánticos usan el tono 700 (verde 800) y
-  `text-dimmed` el slate-500; en oscuro, los 400 (`assets/css/main.css`).
-- Foco visible: el anillo de Nuxt UI en controles y un `outline` del color primario en enlaces.
+- Contraste 4.5:1 en claro y oscuro: en claro los colores semánticos usan los tonos 700–800 y
+  `text-dimmed` el zinc-500; en oscuro, los 300–400 (`assets/css/main.css`).
+- Foco visible: `outline` de 2 px del color primario en todo `:focus-visible`.
+- Preferencias del sistema: menos movimiento (sin deriva del aura ni animaciones), menos transparencia
+  (vidrio y modales sólidos, sin aura) y más contraste (texto atenuado más fuerte, bordes marcados, sin halos).
 - Revisión automática con Playwright (tamaño de toque, nombre accesible, contraste de texto y foco con
   Tab) en `/corte`, `/entrar`, el paso del código y los modales de promesa, depósito y comprobante.
+
+## Identidad visual "vidrio y luz"
+
+La misma del panel (skill horus-identity, decisión del PM): un solo color de marca (teal), vidrio en la
+capa funcional sobre un aura de color, tarjetas casi sólidas para el contenido y luz solo en la acción
+primaria (una por vista, solo en oscuro). Nunca colores crudos de Tailwind: tokens semánticos.
+
+| Pieza | Dónde |
+| --- | --- |
+| Tokens por modo (AA), materiales (`chrome-material`, `surface-card`, `--hf-glass-strong`), aura, halos y las tres preferencias del sistema | `app/assets/css/main.css` |
+| Colores semánticos, halo del botón primario, `UCard`/`UPageCard` = tarjeta, `UModal`/`USelect`/`UPopover` = vidrio fuerte | `app/app.config.ts` |
+| Aura (primer hijo del layout) y barra superior de vidrio; en `/corte`, aura liviana `app-aura-lite` (degradado radial, sin `filter: blur` ni deriva) | `app/layouts/default.vue` |
+| Marca de ArgosIsp: cuadro teal 700, radio 7/32, trazo blanco (`marca`) o solo trazos en `currentColor` (`linea`, tamaños grandes) | `app/components/LogoArgos.vue` |
+| Favicon (misma figura; también con Host ajeno para el portal cautivo) | `public/favicon.svg` |
+| Estados con icono Lucide + texto + color (servicio, factura, pago, promesa, comprobante, pago en línea) | `app/utils/estadoServicio.ts`, `cuenta.ts`, `comprobante.ts`, `pago.ts` |
+
+Sin `backdrop-filter` (Android viejo) el vidrio pasa a sólido. El tema no agrega peticiones: el logo va
+en línea y no hay fuentes externas. El PDF del aviso de cobro no lleva logo (ver `.claude/integration/a5.md`).
 
 ## Datos de la empresa y contacto (configurables desde el panel)
 
