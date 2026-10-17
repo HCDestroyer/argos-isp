@@ -5,6 +5,14 @@ import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacio
 import { D, aTexto, dec } from '#ledger/dinero'
 import { saldoDelServicio, type EstadoServicio } from '#portal/consultas'
 import type { MetodoPago } from '#shared/eventos'
+import { EMPRESA_PRINCIPAL } from '#core/empresas'
+import {
+    SQL_EMPRESA_FACTURA,
+    empresaPrincipalDelCliente,
+    marcaDeEmpresa,
+    marcasDeEmpresas,
+    type MarcaEmpresa,
+} from '#portal/marca'
 
 /**
  * Lecturas del portal autenticado (sesión por código). TODAS reciben el `clienteId` de la sesión
@@ -13,6 +21,9 @@ import type { MetodoPago } from '#shared/eventos'
  *
  * Son de solo lectura y no se auditan (como las lecturas del panel); sí se auditan la entrada
  * con código (`portal.verificar_codigo`) y las ediciones.
+ *
+ * Multiempresa: cada servicio y cada factura llevan la marca de su empresa (`#portal/marca`), y la
+ * cuenta, la empresa principal del cliente.
  */
 
 /** Espejo del schema `PortalContacto`. */
@@ -34,12 +45,14 @@ export interface ServicioPortal {
     direccion: string | null
     promesa_activa: boolean
     monto_adeudado: string
+    empresa: MarcaEmpresa
 }
 
 export interface CuentaPortal {
     cliente: ContactoPortal
     servicios: ServicioPortal[]
     monto_adeudado: string
+    empresa_principal: MarcaEmpresa
 }
 
 export type DocumentoFactura = 'aviso_cobro' | 'factura'
@@ -62,6 +75,7 @@ export interface FacturaPortal {
     fel_uuid: string | null
     fel_serie: string | null
     fel_numero: string | null
+    empresa: MarcaEmpresa
 }
 
 export interface LineaFacturaPortal {
@@ -126,21 +140,33 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
         .leftJoin('network.planes as p', 'p.id', 's.plan_id')
         .where('s.cliente_id', clienteId)
         .orderBy('s.id', 'asc')
-        .select('s.id', 's.estado', 's.direccion', 'p.nombre as plan')
+        .select('s.id', 's.estado', 's.direccion', 's.empresa_id', 'p.nombre as plan')
         .select(
             db.raw(
                 `EXISTS (SELECT 1 FROM billing.promesas pr WHERE pr.servicio_id = s.id AND pr.estado = 'activa') AS promesa_activa`,
             ),
-        )) as Array<Omit<ServicioPortal, 'monto_adeudado'>>
+        )) as Array<Omit<ServicioPortal, 'monto_adeudado' | 'empresa'> & { empresa_id: number }>
 
+    const principal = await empresaPrincipalDelCliente(clienteId)
+    const marcas = await marcasDeEmpresas([principal, ...filas.map((f) => Number(f.empresa_id))])
     let total = new D(0)
     const servicios: ServicioPortal[] = []
-    for (const fila of filas) {
+    for (const { empresa_id: empresaId, ...fila } of filas) {
         const { adeudado } = await saldoDelServicio(db.connection(), Number(fila.id))
         total = total.plus(adeudado.toString())
-        servicios.push({ ...fila, id: Number(fila.id), monto_adeudado: adeudado.toFixed(2) })
+        servicios.push({
+            ...fila,
+            id: Number(fila.id),
+            monto_adeudado: adeudado.toFixed(2),
+            empresa: marcas.get(Number(empresaId)) ?? (await marcaDeEmpresa(Number(empresaId))),
+        })
     }
-    return { cliente, servicios, monto_adeudado: aTexto(total) }
+    return {
+        cliente,
+        servicios,
+        monto_adeudado: aTexto(total),
+        empresa_principal: marcas.get(principal) ?? (await marcaDeEmpresa(principal)),
+    }
 }
 
 function columnasFacturaPortal(cliente: QueryClientContract) {
@@ -159,10 +185,11 @@ function columnasFacturaPortal(cliente: QueryClientContract) {
         'f.fel_uuid',
         'f.fel_serie',
         'f.fel_numero',
+        cliente.raw(`${SQL_EMPRESA_FACTURA} as empresa_id`),
     ]
 }
 
-type FilaFactura = Omit<FacturaPortal, 'numero' | 'documento' | 'saldo'>
+type FilaFactura = Omit<FacturaPortal, 'numero' | 'documento' | 'saldo' | 'empresa'> & { empresa_id: number }
 
 /** Serie-número FEL cuando la factura está certificada; si no, el número interno del aviso. */
 export function numeroFactura(f: {
@@ -173,11 +200,15 @@ export function numeroFactura(f: {
     return f.fel_serie && f.fel_numero ? `${f.fel_serie}-${f.fel_numero}` : String(f.id)
 }
 
-function aFacturaPortal(fila: FilaFactura): FacturaPortal {
+function aFacturaPortal(
+    { empresa_id: empresaId, ...fila }: FilaFactura,
+    marcas: Map<number, MarcaEmpresa>,
+): FacturaPortal {
     const id = Number(fila.id)
     const saldo = fila.estado === 'anulada' ? new D(0) : dec(fila.total).minus(dec(fila.pagado))
     return {
         ...fila,
+        empresa: marcas.get(Number(empresaId))!,
         id,
         servicio_id: fila.servicio_id === null ? null : Number(fila.servicio_id),
         numero: numeroFactura({ ...fila, id }),
@@ -190,12 +221,15 @@ export async function facturasPortal(
     clienteId: number,
     opciones: OpcionesPaginacion,
 ): Promise<Pagina<FacturaPortal>> {
+    // con su servicio: la empresa de la factura sale de ahí (`SQL_EMPRESA_FACTURA`)
     const consulta = db
         .from('billing.facturas as f')
+        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
         .where('f.cliente_id', clienteId)
         .select(...columnasFacturaPortal(db.connection()))
     const pagina = await paginar<FilaFactura>(consulta, opciones, { columna: 'f.id' })
-    return { data: pagina.data.map(aFacturaPortal), nextCursor: pagina.nextCursor }
+    const marcas = await marcasConPrincipal(pagina.data.map((f) => Number(f.empresa_id)))
+    return { data: pagina.data.map((f) => aFacturaPortal(f, marcas)), nextCursor: pagina.nextCursor }
 }
 
 export async function facturaPortal(
@@ -205,6 +239,7 @@ export async function facturaPortal(
 ): Promise<FacturaPortalDetalle> {
     const fila = (await cliente
         .from('billing.facturas as f')
+        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
         .where('f.id', facturaId)
         .where('f.cliente_id', clienteId)
         .select(...columnasFacturaPortal(cliente))
@@ -221,7 +256,18 @@ export async function facturaPortal(
             'iva',
             'total',
         )) as LineaFacturaPortal[]
-    return { ...aFacturaPortal(fila), lineas }
+    const marcas = await marcasConPrincipal([Number(fila.empresa_id)], cliente)
+    return { ...aFacturaPortal(fila, marcas), lineas }
+}
+
+/** Marcas de las empresas pedidas; una que ya no existe cae en la principal (nunca sin marca). */
+async function marcasConPrincipal(
+    ids: number[],
+    cliente: QueryClientContract = db.connection(),
+): Promise<Map<number, MarcaEmpresa>> {
+    const marcas = await marcasDeEmpresas([EMPRESA_PRINCIPAL, ...ids], cliente)
+    for (const id of ids) if (!marcas.has(id)) marcas.set(id, marcas.get(EMPRESA_PRINCIPAL)!)
+    return marcas
 }
 
 export async function pagosPortal(

@@ -5,8 +5,11 @@
  */
 const props = withDefaults(defineProps<{
     servicioId?: number
+    /** Empresa del servicio: sus cuentas son las de destino. */
+    empresaId?: number
 }>(), {
     servicioId: undefined,
+    empresaId: undefined,
 })
 
 const emit = defineEmits<{
@@ -108,6 +111,7 @@ async function enviado(comprobante: ComprobantePortal) {
         <ComprobanteSubir
             v-model:open="verSubir"
             :servicio-id="props.servicioId"
+            :empresa-id="props.empresaId"
             @enviado="enviado"
         />
     </section>

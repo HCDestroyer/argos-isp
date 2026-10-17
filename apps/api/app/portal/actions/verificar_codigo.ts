@@ -5,6 +5,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Problema } from '#shared/errores'
 import { nombreParcial } from '#portal/consultas'
 import { codigoCoincide, configAcceso, generarToken, hashToken } from '#portal/acceso/codigos'
+import { empresaPrincipalDelCliente, marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
 
 export interface EntradaVerificarCodigo {
     solicitud: string
@@ -17,6 +18,8 @@ export interface EntradaVerificarCodigo {
 export interface SesionPortalVista {
     cliente: { nombre_parcial: string | null }
     expira_en: string
+    /** Empresa principal del cliente (marca y título del portal) */
+    empresa_principal: MarcaEmpresa
 }
 
 export interface ResultadoVerificacion {
@@ -122,6 +125,10 @@ export default class VerificarCodigoPortal extends DomainAction<
             sesion: {
                 cliente: { nombre_parcial: nombreParcial(cliente.nombre) },
                 expira_en: expira.toISO()!,
+                empresa_principal: await marcaDeEmpresa(
+                    await empresaPrincipalDelCliente(Number(intento.cliente_id), t.trx),
+                    t.trx,
+                ),
             },
         }
     }

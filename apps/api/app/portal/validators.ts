@@ -151,3 +151,22 @@ export const iniciarPagoValidator = vine.compile(
             .meta({ description: 'Facturas concretas del cliente (solo con la sesión del portal)' }),
     }),
 )
+
+/**
+ * `GET /portal/empresa` (multiempresa): de qué empresa son los datos. Sin parámetros, la del
+ * servicio de la IP de origen (`/corte`), si no la principal del cliente de la sesión, si no la
+ * principal de la instalación.
+ */
+export const empresaPortalValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Esta empresa (la de un servicio o una factura de `/cuenta`)' }),
+        de: vine
+            .enum(['cliente'] as const)
+            .optional()
+            .meta({
+                description: '`cliente`: la empresa principal del cliente de la sesión (401 sin sesión)',
+            }),
+    }),
+)

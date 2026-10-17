@@ -6,7 +6,8 @@ import type { Form, FormError, FormSubmitEvent, RadioGroupItem, SelectItem } fro
  * Subir el comprobante de un depósito, transferencia, ACH o remesa (tarea 5), en `/corte` (cliente
  * por IP) y en `/cuenta` (`servicioId` con la sesión del portal).
  *
- * Las cuentas de destino son las de `GET /portal/empresa` (las mismas de "Ver datos de depósito");
+ * Las cuentas de destino son las de `GET /portal/empresa` de la empresa del servicio (`empresaId` en
+ * `/cuenta`; en `/corte`, la de la IP), las mismas de "Ver datos de depósito": nunca de otra empresa;
  * el banco de origen, del catálogo `GET /portal/bancos`, solo en transferencia y ACH. El archivo
  * (foto o PDF, 5 MB) se elige de la galería o se toma con la cámara del teléfono, con vista previa.
  *
@@ -19,8 +20,11 @@ import type { Form, FormError, FormSubmitEvent, RadioGroupItem, SelectItem } fro
  */
 const props = withDefaults(defineProps<{
     servicioId?: number
+    /** Empresa del servicio (`/cuenta`); sin ella, la que decide la API (la de la IP en `/corte`). */
+    empresaId?: number
 }>(), {
     servicioId: undefined,
+    empresaId: undefined,
 })
 
 const emit = defineEmits<{
@@ -29,7 +33,7 @@ const emit = defineEmits<{
 
 const open = defineModel<boolean>('open', { default: false })
 
-const { empresa, problema: problemaEmpresa, cargando: cargandoEmpresa, recargar: recargarEmpresa } = useEmpresa()
+const { empresa, problema: problemaEmpresa, cargando: cargandoEmpresa, recargar: recargarEmpresa } = useEmpresa({ empresaId: () => props.empresaId })
 const { bancos: leerBancos, subir } = useSubirComprobante()
 
 const formulario = useTemplateRef<Form<DatosComprobante>>('formulario')

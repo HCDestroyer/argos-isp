@@ -25,7 +25,8 @@ export default defineNuxtConfig({
             link: [
                 { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
                 // PWA (sin service worker): `server/routes/manifest.webmanifest.get.ts` e `iconos/`.
-                { rel: 'manifest', href: '/manifest.webmanifest' },
+                // `key`: con sesión, `/cuenta` lo cambia a `?empresa=<principal>` (multiempresa).
+                { rel: 'manifest', href: '/manifest.webmanifest', key: 'manifest' },
                 { rel: 'apple-touch-icon', href: '/iconos/apple-touch-icon.png' },
             ],
         },

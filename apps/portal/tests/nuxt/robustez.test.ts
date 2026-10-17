@@ -41,7 +41,7 @@ async function esperar() {
 async function montarCorte(fixture?: string) {
     window.history.replaceState({}, '', fixture ? `/corte?fixture=${fixture}` : '/corte')
     clearNuxtData('portal:quien-soy')
-    clearNuxtData('portal:empresa')
+    clearNuxtData(clave => clave.startsWith('portal:empresa'))
     const wrapper = await mountSuspended(PaginaCorte)
     montados.push(wrapper)
     await esperar()
@@ -246,7 +246,7 @@ describe('estado en vivo cuando /portal/estado no responde', () => {
 describe('promesa, comprobante y pago con la API caída', () => {
     it('pagar en línea con 502: error claro, no sale a la pasarela y el botón sigue disponible', async () => {
         fijarFallaFixture('POST /api/v1/portal/pagos/iniciar', API_CAIDA_FIXTURE)
-        clearNuxtData('portal:empresa')
+        clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await mountSuspended(PagoEnLinea)
         montados.push(wrapper)
         await esperar()
