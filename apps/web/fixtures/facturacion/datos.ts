@@ -184,7 +184,7 @@ export const cajas: Schema<'Caja'>[] = [
     { id: 1, empresa_id: 1, nombre: 'Caja Central', cajero_id: 2, cuenta_id: 3, activa: true, turno_abierto_id: 41, version: 3, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
     { id: 2, empresa_id: 1, nombre: 'Caja Oficina', cajero_id: 1, cuenta_id: 4, activa: true, turno_abierto_id: 42, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
     { id: 3, empresa_id: 1, nombre: 'Caja Mixco', cajero_id: null, cuenta_id: 5, activa: true, turno_abierto_id: null, version: 1, created_at: '2026-09-01T15:00:00.000Z', updated_at: '2026-09-01T15:00:00.000Z' },
-    { id: CAJA_SUR_ID, empresa_id: 2, nombre: 'Caja Sur', cajero_id: 1, cuenta_id: 6, activa: true, turno_abierto_id: 43, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
+    { id: CAJA_SUR_ID, empresa_id: 2, nombre: 'Caja Sur', cajero_id: 1, cuenta_id: 19, activa: true, turno_abierto_id: 43, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
 ]
 
 type Turno = Schema<'CajaTurno'>

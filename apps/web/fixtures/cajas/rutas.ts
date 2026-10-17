@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, empresaActivaDe, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, usuariosPorToken } from '../comun'
 
 type Turno = Schema<'CajaTurno'>
 
@@ -30,6 +30,71 @@ export function esperadoDelTurno(turno: Turno): Decimal {
 
 /** Cajas y turnos (hoy 501 en la API: A3 los implementa el día 4). */
 export const rutasCajas: RutasFixture = {
+    /**
+     * Alta de caja como `CrearCaja` (A3): de `empresa_id` o de la activa (422 empresa_requerida,
+     * 403 empresa_no_permitida), nombre único por empresa (409 caja_duplicada) y su subcuenta
+     * 1.1.01.NN marcada con la empresa.
+     */
+    'POST /api/v1/cajas': conPermiso('cajas.crear', conIdempotencia((solicitud) => {
+        const cuerpo = cuerpoObjeto(solicitud)
+        const nombre = typeof cuerpo.nombre === 'string' ? cuerpo.nombre.trim() : ''
+        if (nombre.length < 2 || nombre.length > 80) {
+            return datosInvalidos([{ field: 'nombre', message: 'El nombre lleva de 2 a 80 caracteres', rule: nombre.length < 2 ? 'minLength' : 'maxLength' }])
+        }
+        const cajeroId = typeof cuerpo.cajero_id === 'number' ? cuerpo.cajero_id : null
+        if (cajeroId !== null && !bd.usuarios.some(u => u.id === cajeroId)) {
+            return datosInvalidos([{ field: 'cajero_id', message: `El usuario ${cajeroId} no existe`, rule: 'exists' }])
+        }
+        const empresaId = typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : empresaActivaDe(solicitud)
+        if (empresaId === null) {
+            return problemaTipado(422, 'empresa_requerida', 'Empresa requerida', 'Elige la empresa de la caja')
+        }
+        const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        if (!bd.empresas.some(e => e.id === empresaId && e.activa) || !(usuario?.alcance_global || (usuario?.empresas ?? []).some(e => e.id === empresaId))) {
+            return problemaTipado(403, 'empresa_no_permitida', 'Empresa no permitida', `No tienes acceso a la empresa ${empresaId}`)
+        }
+        const repetida = bd.cajas.find(c => c.empresa_id === empresaId && c.nombre === nombre)
+        if (repetida) {
+            return conflicto('caja_duplicada', 'Caja duplicada', `La empresa ${empresaId} ya tiene una caja "${nombre}" (${repetida.id})`)
+        }
+        const momento = ahora()
+        const hijas = bd.cuentas.filter(c => c.codigo.startsWith('1.1.01.'))
+        const siguiente = Math.max(0, ...hijas.map(c => Number(c.codigo.split('.').at(-1)))) + 1
+        const cuenta: Schema<'Cuenta'> = {
+            id: siguienteId(bd.cuentas),
+            codigo: `1.1.01.${String(siguiente).padStart(2, '0')}`,
+            nombre: `Caja · ${nombre}`,
+            tipo: 'activo',
+            padre_id: bd.cuentas.find(c => c.codigo === '1.1.01')?.id ?? null,
+            imputable: true,
+            auxiliar_cliente: false,
+            empresa_id: empresaId,
+            activa: true,
+            version: 1,
+            created_at: momento,
+            updated_at: momento,
+        }
+        bd.cuentas.push(cuenta)
+        const caja: Schema<'Caja'> = {
+            id: siguienteId(bd.cajas),
+            empresa_id: empresaId,
+            nombre,
+            cajero_id: cajeroId,
+            cajero_nombre: bd.usuarios.find(u => u.id === cajeroId)?.nombre ?? null,
+            cuenta_id: cuenta.id,
+            activa: true,
+            turno_abierto_id: null,
+            turno_abierto_por: null,
+            turno_abierto_por_nombre: null,
+            version: 1,
+            created_at: momento,
+            updated_at: momento,
+        }
+        bd.cajas.push(caja)
+        registrarAccion(solicitud, 'cajas.crear', { tipo: 'caja', id: caja.id }, { nombre, cajero_id: cajeroId, empresa_id: empresaId })
+        return { status: 201, cuerpo: caja }
+    })),
+
     'GET /api/v1/cajas/:id/turnos': conPermiso('cajas.ver', (solicitud) => {
         const caja = bd.cajas.find(c => c.id === idDe(solicitud))
         if (!caja) {

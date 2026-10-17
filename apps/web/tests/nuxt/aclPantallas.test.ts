@@ -122,6 +122,7 @@ function rutasDePaginas(): Map<string, string> {
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
+    'CajaCrearModal.vue': { permisos: ['cajas.crear'], desde: ['pages/caja/index.vue'] },
     'ClienteEstadoCuenta.vue': { permisos: ['clientes.estado_cuenta'], desde: ['pages/clientes/[id]/index.vue'] },
     'ClienteResponsablePago.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ComprobanteAprobarModal.vue': { permisos: ['comprobantes.aprobar'], desde: ['pages/comprobantes/[id].vue'] },

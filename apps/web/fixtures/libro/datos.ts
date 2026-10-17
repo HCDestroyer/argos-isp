@@ -8,6 +8,12 @@ type Movimiento = Schema<'Movimiento'>
 
 const CREADA = '2026-08-01T12:00:00.000Z'
 
+/**
+ * Subcuentas de una empresa (`ledger.cuentas.empresa_id`, A3): las de cajas y cuentas bancarias.
+ * El resto del catálogo es común (`null`).
+ */
+const EMPRESA_DE_CUENTA: Record<number, number> = { 3: 1, 4: 1, 5: 1, 16: 1, 17: 1, 18: 1, 19: 2 }
+
 function cuenta(id: number, codigo: string, nombre: string, tipo: Cuenta['tipo'], padre: number | null, imputable: boolean, auxiliar = false): Cuenta {
     return {
         id,
@@ -17,6 +23,7 @@ function cuenta(id: number, codigo: string, nombre: string, tipo: Cuenta['tipo']
         padre_id: padre,
         imputable,
         auxiliar_cliente: auxiliar,
+        empresa_id: EMPRESA_DE_CUENTA[id] ?? null,
         activa: true,
         version: 1,
         created_at: CREADA,
@@ -48,6 +55,8 @@ export const cuentas: Cuenta[] = [
     cuenta(16, '1.1.02.02', 'Banco Industrial · Monetaria (****3456)', 'activo', 1, true),
     cuenta(17, '1.1.02.03', 'Banco Industrial · Dólares (****7651)', 'activo', 1, true),
     cuenta(18, '1.1.02.04', 'Banco G&T Continental · Cuenta anterior (****5678)', 'activo', 1, true),
+    // Caja de Fibra del Sur (empresa 2).
+    cuenta(19, '1.1.01.04', 'Caja Sur', 'activo', 2, true),
 ]
 
 export const CUENTA_CXC = 7
@@ -56,7 +65,7 @@ export const CUENTA_INGRESOS = 12
 export const CUENTA_BANCO = 6
 
 /** Cuenta de cada caja (`Caja.cuenta_id`). */
-const CUENTA_DE_CAJA: Record<number, number> = { 1: 3, 2: 4, 3: 5 }
+const CUENTA_DE_CAJA: Record<number, number> = { 1: 3, 2: 4, 3: 5, 4: 19 }
 
 let siguienteMovimiento = 1
 

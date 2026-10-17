@@ -50,6 +50,7 @@
     "pagos.registrar",
     "pagos.anular",
     "cajas.ver",
+    "cajas.crear",
     "cajas.abrir",
     "cajas.cerrar",
     "cuentas_bancarias.ver",
