@@ -20,6 +20,7 @@ import { ReglasPromesa } from '#billing/esquemas'
 import { PlanEfectivo } from '#network/esquemas'
 import { TIPOS_ACTOR } from '#shared/contexto'
 import { REGIMENES_ISR } from '#core/empresas'
+import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -192,9 +193,30 @@ export const Cliente = definirEsquema(
             },
             nombre: texto,
             tipo: enumerado(['persona', 'empresa']),
-            nit_cui: nulable(texto),
+            tipo_documento_fiscal: {
+                ...enumerado(TIPOS_DOCUMENTO_FISCAL),
+                description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
+            },
+            nit_cui: {
+                ...nulable(texto),
+                description:
+                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
+            },
+            nit_cui_invalido: {
+                ...booleano,
+                description:
+                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
+                    'se apaga al corregirlo',
+            },
             nombre_fiscal: nulable(texto),
             direccion_fiscal: nulable(texto),
+            pais_fiscal: {
+                ...texto,
+                pattern: '^[A-Z]{2}$',
+                description: 'País del receptor (ISO 3166-1 alfa-2)',
+            },
+            agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
+            sector_publico: { ...booleano, description: 'Entidad del sector público' },
             email: nulable(texto),
             telefono: nulable(texto),
             movil: nulable(texto),
@@ -214,7 +236,16 @@ export const Cliente = definirEsquema(
             },
             ...auditable,
         },
-        ['codigo', 'codigo_externo'],
+        // Opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía
+        [
+            'codigo',
+            'codigo_externo',
+            'tipo_documento_fiscal',
+            'nit_cui_invalido',
+            'pais_fiscal',
+            'agente_retencion_iva',
+            'sector_publico',
+        ],
     ),
 )
 
@@ -613,38 +644,65 @@ export const AaaServicio = definirEsquema(
 
 export const EmpresaGrupo = definirEsquema(
     'EmpresaGrupo',
+    objeto(
+        {
+            id,
+            nit: nulable(texto),
+            razon_social: nulable(texto),
+            nombre_comercial: texto,
+            direccion_fiscal: nulable(texto),
+            municipio: nulable(texto),
+            departamento: nulable(texto),
+            telefono: nulable(texto),
+            telefono_alterno: nulable(texto),
+            whatsapp: nulable(texto),
+            correo: nulable(texto),
+            sitio_web: nulable(texto),
+            horario: nulable(texto),
+            instrucciones_pago: nulable(texto),
+            color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
+            pais: {
+                ...texto,
+                pattern: '^[A-Z]{2}$',
+                description:
+                    'País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
+            },
+            regimen_isr: {
+                ...nulable(enumerado(REGIMENES_ISR)),
+                description:
+                    'Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen',
+            },
+            codigo_establecimiento: {
+                ...nulable(entero),
+                description: 'Solo lectura (localización fiscal): establecimiento por defecto en la SAT',
+            },
+            logo_url: {
+                ...nulable(texto),
+                description:
+                    'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
+            },
+            logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
+            activa: booleano,
+            principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+            version: {
+                type: 'integer',
+                minimum: 0,
+                description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
+            },
+            created_at: instante,
+            updated_at: instante,
+        },
+        ['pais'],
+    ),
+)
+
+/** País con localización fiscal (`GET /empresas/paises`). */
+export const PaisLocalizacion = definirEsquema(
+    'PaisLocalizacion',
     objeto({
-        id,
-        nit: nulable(texto),
-        razon_social: nulable(texto),
-        nombre_comercial: texto,
-        direccion_fiscal: nulable(texto),
-        municipio: nulable(texto),
-        departamento: nulable(texto),
-        telefono: nulable(texto),
-        telefono_alterno: nulable(texto),
-        whatsapp: nulable(texto),
-        correo: nulable(texto),
-        sitio_web: nulable(texto),
-        horario: nulable(texto),
-        instrucciones_pago: nulable(texto),
-        color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
-        regimen_isr: nulable(enumerado(REGIMENES_ISR)),
-        codigo_establecimiento: nulable(entero),
-        logo_url: {
-            ...nulable(texto),
-            description: 'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
-        },
-        logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
-        activa: booleano,
-        principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
-        version: {
-            type: 'integer',
-            minimum: 0,
-            description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
-        },
-        created_at: instante,
-        updated_at: instante,
+        codigo: { ...texto, pattern: '^[A-Z]{2}$', description: 'ISO 3166-1 alfa-2' },
+        nombre: texto,
     }),
 )
 

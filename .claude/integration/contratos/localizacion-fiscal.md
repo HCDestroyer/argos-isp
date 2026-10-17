@@ -46,10 +46,10 @@ Todas las tablas llevan `empresa_id NOT NULL` (FK a `core.empresas`) salvo los c
 
 ### 3.1 Núcleo (A1)
 
-| Tabla           | Cambio                                                                                                                                                                                                                                                     |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §11)                                                               |
-| `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool). Van en `audit.cambios` |
+| Tabla           | Cambio                                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §11)                                                                                                                |
+| `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool) y la marca `nit_cui_invalido` (migración, §11.1). Van en `audit.cambios` |
 
 ### 3.2 Localización y parámetros (`fiscal`, A3)
 
@@ -429,7 +429,8 @@ Todos llevan el aviso **"Referencia; valídelo con su contador"**. Se pueden ocu
 
 | Método       | Ruta                                                                                                         | Permiso                                                                     |
 | ------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| POST         | `/empresas/:id/cambiar-pais` `{ pais }` (A1)                                                                 | `empresas.cambiar_pais`                                                     |
+| POST         | `/empresas/:id/cambiar-pais` `{ pais, version }` (A1)                                                        | `empresas.cambiar_pais`                                                     |
+| GET          | `/empresas/paises` (selector de país; A1)                                                                    | `empresas.ver`                                                              |
 | GET          | `/fiscal/localizaciones`, `/fiscal/empresas/:id/localizacion`                                                | `fiscal.ver`                                                                |
 | POST         | `/fiscal/empresas/:id/actualizar-localizacion` `{ codigo }`                                                  | `fiscal.instalar`                                                           |
 | GET          | `/fiscal/parametros?fecha=` (valores vigentes con su origen y fuente), `/fiscal/parametros/:clave/historial` | `fiscal.ver`                                                                |
@@ -498,34 +499,35 @@ Cambio de significado: en modo `obligatoria` con `certificar_al = emitir`, `fact
 
 ### 10.4 Errores (RFC 9457)
 
-| `type` (sufijo)                 | Estado | Cuándo                                                          |
-| ------------------------------- | ------ | --------------------------------------------------------------- |
-| `pais_no_soportado`             | 422    | País sin paquete                                                |
-| `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                   |
-| `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                |
-| `parametro_no_editable`         | 422    | Alcance `N`                                                     |
-| `parametro_fuera_de_rango`      | 422    | Fuera de `minimo`/`maximo`                                      |
-| `parametro_sin_confirmar`       | 422    | Falta un valor marcado contador                                 |
-| `vigencia_en_periodo_bloqueado` | 422    | `vigente_desde` bajo bloqueo                                    |
-| `regimen_fuera_de_plazo`        | 422    | Cambio de régimen que no empieza el 1-ene                       |
-| `fel_no_configurada`            | 422    | Certificar sin proveedor o credenciales                         |
-| `fel_proveedor_no_disponible`   | 503    | El certificador no responde (en la petición síncrona de prueba) |
-| `tipo_dte_no_permitido`         | 422    | DTE que no corresponde al régimen                               |
-| `receptor_requerido`            | 422    | CF desde el límite                                              |
-| `certificar_al_incompatible`    | 422    | `nunca` con FEL obligatoria                                     |
-| `dte_en_proceso`                | 409    | Acción sobre un DTE `enviando`                                  |
-| `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                |
-| `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                         |
-| `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                           |
-| `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                               |
-| `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                             |
-| `folios_agotados`               | 422    | Sin rango habilitado                                            |
-| `bloqueo_duro`                  | 409    | Reabrir o fechar bajo bloqueo duro                              |
-| `bloqueo_regresivo`             | 422    | Mover el bloqueo duro hacia atrás                               |
-| `ejercicio_incompleto`          | 422    | Meses abiertos, DTE pendientes o ISR anual sin revisar          |
-| `ejercicio_cerrado`             | 409    | Cerrar dos veces                                                |
-| `declaracion_desactualizada`    | 409    | El `datos_hash` cambió                                          |
-| `declaracion_presentada`        | 409    | Recalcular una presentada (se crea una sustitutiva)             |
+| `type` (sufijo)                 | Estado | Cuándo                                                                     |
+| ------------------------------- | ------ | -------------------------------------------------------------------------- |
+| `pais_no_soportado`             | 422    | País sin paquete                                                           |
+| `campo_solo_lectura`            | 422    | `PUT /empresas/:id` con otro `regimen_isr` o `codigo_establecimiento` (A1) |
+| `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                              |
+| `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                           |
+| `parametro_no_editable`         | 422    | Alcance `N`                                                                |
+| `parametro_fuera_de_rango`      | 422    | Fuera de `minimo`/`maximo`                                                 |
+| `parametro_sin_confirmar`       | 422    | Falta un valor marcado contador                                            |
+| `vigencia_en_periodo_bloqueado` | 422    | `vigente_desde` bajo bloqueo                                               |
+| `regimen_fuera_de_plazo`        | 422    | Cambio de régimen que no empieza el 1-ene                                  |
+| `fel_no_configurada`            | 422    | Certificar sin proveedor o credenciales                                    |
+| `fel_proveedor_no_disponible`   | 503    | El certificador no responde (en la petición síncrona de prueba)            |
+| `tipo_dte_no_permitido`         | 422    | DTE que no corresponde al régimen                                          |
+| `receptor_requerido`            | 422    | CF desde el límite                                                         |
+| `certificar_al_incompatible`    | 422    | `nunca` con FEL obligatoria                                                |
+| `dte_en_proceso`                | 409    | Acción sobre un DTE `enviando`                                             |
+| `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                           |
+| `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                                    |
+| `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                                      |
+| `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                                          |
+| `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                                        |
+| `folios_agotados`               | 422    | Sin rango habilitado                                                       |
+| `bloqueo_duro`                  | 409    | Reabrir o fechar bajo bloqueo duro                                         |
+| `bloqueo_regresivo`             | 422    | Mover el bloqueo duro hacia atrás                                          |
+| `ejercicio_incompleto`          | 422    | Meses abiertos, DTE pendientes o ISR anual sin revisar                     |
+| `ejercicio_cerrado`             | 409    | Cerrar dos veces                                                           |
+| `declaracion_desactualizada`    | 409    | El `datos_hash` cambió                                                     |
+| `declaracion_presentada`        | 409    | Recalcular una presentada (se crea una sustitutiva)                        |
 
 Todos con `errors[]` por campo cuando aplica.
 
