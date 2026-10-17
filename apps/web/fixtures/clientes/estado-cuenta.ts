@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import { bd } from '../bd'
-import { dinero } from '../facturacion/datos'
+import { clavesHistoricas, dinero } from '../facturacion/datos'
 
 type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
@@ -50,6 +50,18 @@ export function estadoCuentaDe(clienteId: number): Schema<'EstadoCuenta'> {
         }
         const avisos = aplicadas.map(a => a.factura_id).join(', ')
         const pagador = pago.cliente_id === clienteId ? null : bd.clientes.find(c => c.id === pago.cliente_id)
+        if (pago.historico) {
+            // Como `RegistrarPagoHistorico`: la descripción del asiento lleva el id del origen.
+            eventos.push({
+                fecha: pago.created_at.slice(0, 10),
+                tipo: 'pago',
+                referencia_id: pago.id,
+                descripcion: `Pago histórico ${pago.id} (${clavesHistoricas[pago.id] ?? `importado:pago:${pago.id}`}) · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''}${avisos ? ` · facturas ${avisos}` : ' · anticipo'}`,
+                cargo: '0.00',
+                abono: dinero(abono),
+            })
+            continue
+        }
         eventos.push({
             fecha: pago.created_at.slice(0, 10),
             tipo: 'pago',

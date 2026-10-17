@@ -66,6 +66,9 @@ function correo(nombre: string): string {
     return `${base}@correo.gt`
 }
 
+/** Cliente importado de Mikrowisp (con un pago histórico en `facturacion/datos.ts`). */
+export const CLIENTE_IMPORTADO = 8
+
 export const clientes: Cliente[] = semillas.map((semilla, indice) => {
     const id = indice + 1
     const creado = new Date(Date.UTC(2026, 8, 1 + indice, 16, 30)).toISOString()
@@ -82,7 +85,8 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         direccion: `Lote ${indice + 4}, sector ${String.fromCharCode(65 + (indice % 6))}`,
         coordenadas: indice % 4 === 0 ? `14.${6300 + indice * 7},-90.${5000 + indice * 11}` : null,
         zona_id: semilla.zona,
-        campos_personalizados: {},
+        // El cliente 8 vino del importador (A6): su id de Mikrowisp queda aquí.
+        campos_personalizados: id === CLIENTE_IMPORTADO ? { mikrowisp_id: '1042' } : {},
         canal_preferido: semilla.canal ?? 'correo',
         telegram_chat_id: semilla.canal === 'telegram' ? `70012${indice}` : null,
         // Como la API: siempre vienen; null si paga él mismo.

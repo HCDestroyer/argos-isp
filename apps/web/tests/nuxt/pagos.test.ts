@@ -20,7 +20,8 @@ describe('tarea 11 · pagos', () => {
         expect(delCliente.ok && delCliente.data.data.every(p => p.cliente_id === 1)).toBe(true)
 
         const deposito = await api.listar({ metodo: 'deposito' })
-        expect(deposito.ok && deposito.data.data).toHaveLength(0)
+        // El único depósito de los fixtures es el pago histórico importado del cliente 8.
+        expect(deposito.ok && deposito.data.data.map(p => [p.id, p.historico])).toEqual([[9001, true]])
 
         // Pagos del 5 de octubre (fixtures: 16:20 UTC = 10:20 en Guatemala).
         const delDia = await api.listar({ desde: inicioDiaGuatemala('2026-10-05'), hasta: finDiaGuatemala('2026-10-05') })

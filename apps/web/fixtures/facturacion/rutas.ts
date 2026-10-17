@@ -345,6 +345,7 @@ function registrarPago(solicitud: SolicitudFixture): Pago | Errores {
         estado: 'registrado',
         nota: textoOpcional(cuerpo.nota),
         registrado_por: usuario,
+        historico: false,
         aplicaciones: aplicar(clienteId, monto, indicadas),
         anulado_en: null,
         motivo_anulacion: null,

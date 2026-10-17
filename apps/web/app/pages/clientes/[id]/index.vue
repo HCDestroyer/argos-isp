@@ -59,7 +59,11 @@ const mapa = computed(() => {
     return coordenadas ? `https://www.google.com/maps?q=${encodeURIComponent(coordenadas)}` : null
 })
 
+/** Cliente importado (Mikrowisp): se muestra discreto junto al número, no como campo. */
+const origen = computed(() => (cliente.value ? origenCliente(cliente.value) : null))
+
 const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos_personalizados ?? {})
+    .filter(([clave]) => !CAMPOS_DE_IMPORTACION.has(clave))
     .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) })))
 
 /**
@@ -187,6 +191,17 @@ onMounted(cargar)
                         Cliente #{{ cliente.id }}<template v-if="zona">
                             · {{ zona }}
                         </template> · alta {{ formatearFecha(cliente.created_at) }}
+                    </p>
+                    <p
+                        v-if="origen"
+                        class="flex items-center gap-1.5 text-xs text-dimmed"
+                        data-prueba="cliente-importado"
+                    >
+                        <UIcon
+                            name="i-lucide-import"
+                            class="size-3.5 shrink-0"
+                        />
+                        Importado de {{ origen.sistema }} · id externo <span class="font-mono">{{ origen.idExterno }}</span>
                     </p>
                 </div>
 
