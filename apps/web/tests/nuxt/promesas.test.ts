@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import EvaluacionPromesa from '~/components/EvaluacionPromesa.vue'
 
@@ -11,11 +11,11 @@ function enDias(dias: number): string {
 describe('tarea 13 · promesas', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('crear: aprobada por plazo y el servicio suspendido se reactiva con promesa activa', async () => {
@@ -69,11 +69,11 @@ describe('tarea 13 · promesas', () => {
         }
         expect(leerEvaluacion(creada.data)).toMatchObject({ decision: 'pendiente', evaluacion: { regla: 'requiere_aprobacion' } })
 
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const sinPermiso = await usePromesas().aprobar(creada.data.id, null, nuevaClaveIdempotencia())
         expect(!sinPermiso.ok && sinPermiso.problema.status).toBe(403)
 
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         const aprobada = await usePromesas().aprobar(creada.data.id, 'Buen historial', nuevaClaveIdempotencia())
         expect(aprobada.ok && aprobada.data.estado).toBe('activa')
         expect(aprobada.ok && aprobada.data.aprobada_por).toBe(1)

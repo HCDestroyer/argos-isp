@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('tarea 11 · pagos', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('lista con filtros: cliente, método, estado y fechas de Guatemala en UTC', async () => {
@@ -60,7 +60,7 @@ describe('tarea 11 · pagos', () => {
     })
 
     it('anular exige pagos.anular: el cajero no puede', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await usePagos().anular(109 + 5000, 'Prueba de permisos', nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })

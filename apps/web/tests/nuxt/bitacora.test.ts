@@ -1,17 +1,17 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import BitacoraDetalle from '~/components/BitacoraDetalle.vue'
 import PaginaBitacora from '~/pages/bitacora/index.vue'
 
 describe('tarea 14 · bitácora', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('filtros por actor, canal, acción, entidad y fecha (días de Guatemala en UTC)', async () => {

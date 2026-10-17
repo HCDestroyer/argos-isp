@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { resumenDashboard } from '~~/fixtures/reportes/datos'
@@ -9,12 +9,12 @@ import PaginaInicio from '~/pages/index.vue'
 describe('semana 2 · dashboard', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 
@@ -70,7 +70,7 @@ describe('semana 2 · dashboard', () => {
     })
 
     it('sin reportes.ver no pide el resumen y solo muestra los accesos', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
         const vista = await mountSuspended(PaginaInicio, { route: '/' })
         await vi.waitFor(() => expect(vista.text()).toContain('Accesos'))

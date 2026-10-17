@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import RouterConexion from '~/components/RouterConexion.vue'
@@ -13,12 +13,12 @@ const PEM = '-----BEGIN CERTIFICATE-----\nMIIBfakeCAcertificado\n-----END CERTIF
 describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
         document.body.innerHTML = ''
     })
@@ -90,7 +90,7 @@ describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', ()
         })
 
         it('sin egresos.ver no se piden los bancos del libro', async () => {
-            useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+            sesionFixture('fixture-cajero')
             const bancos = await useLibro().bancos()
             expect(!bancos.ok && bancos.problema.status).toBe(403)
         })

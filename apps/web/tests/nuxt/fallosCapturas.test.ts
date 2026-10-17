@@ -5,7 +5,7 @@ import { UApp } from '#components'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
 import PaginaServicio from '~/pages/servicios/[id].vue'
@@ -34,11 +34,11 @@ const BASE: Accion = {
 describe('fallos de las capturas 06 y 07', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('captura 06: con el estado de cuenta en 501 solo se ve el aviso y "Reintentar"', async () => {
@@ -153,11 +153,11 @@ describe('fallos de las capturas 06 y 07', () => {
 describe('paginación por cursor', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     function botones(wrapper: VueWrapper) {

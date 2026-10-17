@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import PaginaCliente from '~/pages/clientes/[id]/index.vue'
@@ -9,12 +9,12 @@ import PaginaPago from '~/pages/pagos/[id].vue'
 describe('semana 3 (2.ª tanda) · tarea 4: datos de importación visibles', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 

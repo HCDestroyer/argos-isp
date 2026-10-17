@@ -29,7 +29,7 @@ Fallas simuladas en modo fixtures (para ver que una pantalla muestra el error y 
 | Pieza | Dónde |
 | --- | --- |
 | Cliente HTTP único (`createApiClient` de `@argosisp/contracts`) | `app/plugins/api.ts`, `useApi()` |
-| Sesión: token Bearer en la cookie `argos_token`, `login`, `logout`, `cargarMe` | `useAuth()` |
+| Sesión: cookie `HttpOnly` `argos_sesion` de la API + `csrf` en memoria (`contratos/sesion-panel.md`), `login`, `logout`, `cargarMe`; 401 y 403 `csrf_invalido` en `plugins/sesion.ts` | `useAuth()`, `useCsrf()` |
 | Permisos: `puede('servicios.suspender')`, `puedeAlguno`, `puedeTodos` | `usePermisos()` |
 | Middleware global: sin sesión → `/login`; `definePageMeta({ permiso })` → `/sin-permiso` | `app/middleware/` |
 | Menú lateral filtrado por permiso | `app/utils/navegacion.ts`, `app/layouts/default.vue` |

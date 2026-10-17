@@ -1,7 +1,7 @@
 import type { Problem, Schema, paths } from '@argosisp/contracts'
 
 export type Usuario = Schema<'Me'>
-export type CredencialesLogin = paths['/api/v1/auth/login']['post']['requestBody']['content']['application/json']
+export type CredencialesLogin = paths['/api/v1/auth/sesion']['post']['requestBody']['content']['application/json']
 
 export type ResultadoLogin = { ok: true, usuario: Usuario } | { ok: false, problema: Problem }
 
@@ -24,20 +24,47 @@ export function useUsuarioActual() {
     return useState<Usuario | null>('auth:usuario', () => null)
 }
 
+/**
+ * `csrf` de la sesión del panel, **solo en memoria** (`contratos/sesion-panel.md`): nunca en
+ * `localStorage` ni en una cookie. Tras recargar la página se recupera con `GET /me`.
+ */
+export function useCsrf() {
+    return useState<string | null>('auth:csrf', () => null)
+}
+
+/** Cuándo vence la sesión (`SesionPanel.expira_en`); no se renueva sola. */
+export function useExpiraSesion() {
+    return useState<string | null>('auth:expira', () => null)
+}
+
+/** Deja la sesión local vacía (sin tocar la API). */
+export function limpiarSesionLocal(): void {
+    useUsuarioActual().value = null
+    useCsrf().value = null
+    useExpiraSesion().value = null
+}
+
+/**
+ * Sesión del panel con la cookie `HttpOnly` `argos_sesion` que pone la API: el panel nunca ve ni
+ * guarda el token. `autenticado` = se leyó el usuario (login o `GET /me` con la cookie).
+ */
 export function useAuth() {
     const api = useApi()
-    const token = useNuxtApp().$tokenSesion
     const usuario = useUsuarioActual()
+    const csrf = useCsrf()
+    const expira = useExpiraSesion()
 
-    const autenticado = computed(() => Boolean(token.value))
+    const autenticado = computed(() => usuario.value !== null)
 
+    /** `POST /auth/sesion`: la API pone la cookie y devuelve el usuario y el `csrf`. */
     async function login(credenciales: CredencialesLogin): Promise<ResultadoLogin> {
         try {
-            const { data, error, response } = await api.POST('/api/v1/auth/login', { body: credenciales })
+            const { data, error, response } = await api.POST('/api/v1/auth/sesion', { body: credenciales })
             if (!data) {
                 return { ok: false, problema: comoProblema(error, response.status) }
             }
-            token.value = data.token
+            csrf.value = data.csrf
+            expira.value = data.expira_en
             usuario.value = data.usuario
             return { ok: true, usuario: data.usuario }
         }
@@ -46,45 +73,44 @@ export function useAuth() {
         }
     }
 
-    /** Carga `GET /api/v1/me`. Si el token ya no sirve, limpia la sesión y devuelve `null`. */
+    /**
+     * `GET /api/v1/me` con la cookie: el usuario y el `csrf` (así sobrevive a recargar la página).
+     * Con 401 (sin cookie, vencida o revocada) limpia la sesión local y devuelve `null`.
+     */
     async function cargarMe(): Promise<Usuario | null> {
-        if (!token.value) {
-            usuario.value = null
-            return null
-        }
         try {
             const { data, response } = await api.GET('/api/v1/me')
             if (data) {
                 usuario.value = data
+                if (data.csrf) {
+                    csrf.value = data.csrf
+                }
                 return data
             }
             if (response.status === 401) {
-                token.value = null
+                limpiarSesionLocal()
+                return null
             }
         }
         catch {
-            // Sin conexión: no se borra el token para reintentar después.
+            // Sin conexión: se intenta de nuevo en la siguiente navegación.
         }
         usuario.value = null
         return null
     }
 
     /**
-     * Revoca el token en la API (`POST /auth/logout`, queda `auth.logout` en la bitácora) y luego
-     * borra la cookie. Antes solo se borraba la cookie y el token seguía valiendo hasta 12 h.
-     * Sin conexión se sale igual: la cookie se borra y el token expira solo.
+     * `POST /auth/logout` con `X-CSRF-Token`: la API revoca el token y borra la cookie (queda
+     * `auth.logout` en la bitácora). Con la sesión ya vencida responde 401 y se sale igual.
      */
     async function logout(): Promise<void> {
-        if (token.value) {
-            try {
-                await api.POST('/api/v1/auth/logout')
-            }
-            catch {
-                // Sin conexión: se cierra la sesión local de todos modos.
-            }
+        try {
+            await api.POST('/api/v1/auth/logout')
         }
-        token.value = null
-        usuario.value = null
+        catch {
+            // Sin conexión: se cierra la sesión local de todos modos.
+        }
+        limpiarSesionLocal()
         await navigateTo('/login')
     }
 

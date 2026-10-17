@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
 import RouterVelocidad from '~/components/RouterVelocidad.vue'
@@ -45,12 +45,12 @@ async function abrirConfirmacion(router: Schema<'Router'>) {
 describe('semana 3 · vista previa del cambio de modo del router', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
         document.body.innerHTML = ''
     })
@@ -83,7 +83,7 @@ describe('semana 3 · vista previa del cambio de modo del router', () => {
     })
 
     it('sin routers.cambiar_control_velocidad la vista previa responde 403', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const vista = await useRouters().vistaPreviaControl(1, 'arbol_pcq')
         expect(!vista.ok && vista.problema.status).toBe(403)
     })

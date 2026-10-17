@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { bd } from '~~/fixtures/bd'
@@ -11,11 +11,11 @@ import PaginaCaja from '~/pages/caja/index.vue'
 describe('tarea 12 · caja', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('denominaciones y esperado provisional con decimal.js', () => {
@@ -70,7 +70,7 @@ describe('tarea 12 · caja', () => {
     })
 
     it('con egresos.ver el esperado provisional resta el egreso en efectivo y coincide con el cierre', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
         const egreso = await useEgresos().registrar({ categoria: 'otros', monto: '120.00', metodo: 'caja', caja_id: 1 }, nuevaClaveIdempotencia())
         expect(egreso.ok && egreso.data.turno_id).toBe(41)

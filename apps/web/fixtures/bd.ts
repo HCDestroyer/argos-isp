@@ -59,6 +59,11 @@ interface BaseFixtures {
     fallas: Record<string, number>
     /** Tokens revocados con `POST /auth/logout` (los fixtures siguen aceptando el login de nuevo). */
     sesionesCerradas: string[]
+    /**
+     * Cookie `argos_sesion` simulada (`HttpOnly`: el panel no la lee) y el `csrf` ligado a ella.
+     * `csrf: null` = sesión puesta por una prueba con `sesionFixture()`, sin comprobar CSRF.
+     */
+    sesion: { token: string | null, csrf: string | null }
 }
 
 function inicial(): BaseFixtures {
@@ -93,6 +98,7 @@ function inicial(): BaseFixtures {
         idempotencia: {},
         fallas: {},
         sesionesCerradas: [],
+        sesion: { token: null, csrf: null },
     })
 }
 
@@ -115,7 +121,10 @@ export function reiniciarFixtures(): void {
         clearTimeout(temporizador)
     }
     diferidos.clear()
+    // La cookie de sesión es del navegador, no de los datos: sobrevive al reinicio.
+    const sesion = bd.sesion
     Object.assign(bd, inicial())
+    bd.sesion = sesion
 }
 
 export function siguienteId(filas: readonly { id: number }[]): number {

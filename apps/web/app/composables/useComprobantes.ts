@@ -37,8 +37,8 @@ export function useComprobantes() {
     }
 
     /**
-     * `GET /comprobantes/:id/archivo`: la foto o el PDF con su `Content-Type`. Va con el token
-     * Bearer, así que se pide como `Blob` y la pantalla lo muestra con una URL de objeto.
+     * `GET /comprobantes/:id/archivo`: la foto o el PDF con su `Content-Type`. Va con la cookie de
+     * sesión de la API (otro origen), así que se pide como `Blob` y se muestra con una URL de objeto.
      */
     function archivo(id: number): Promise<Resultado<Blob>> {
         return resolver(api.GET('/api/v1/comprobantes/{id}/archivo', {

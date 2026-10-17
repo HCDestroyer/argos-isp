@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('filtros de clientes · URL y parámetros de la API', () => {
     it('lee la URL e ignora lo que no entiende', () => {
@@ -76,11 +76,11 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
 describe('filtros de clientes · contra los fixtures', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     async function ids(filtros: EstadoFiltrosClientes): Promise<number[]> {

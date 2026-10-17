@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
@@ -8,12 +8,12 @@ import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
 describe('configuración · cuentas bancarias', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 
@@ -47,7 +47,7 @@ describe('configuración · cuentas bancarias', () => {
         expect(vista.text()).toContain('Nueva cuenta')
         expect(vista.text()).toContain('Inactiva')
 
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
         const cajero = await mountSuspended(PaginaCuentas)
         await vi.waitFor(() => expect(cajero.findAll('[data-cuenta]').length).toBeGreaterThan(0))

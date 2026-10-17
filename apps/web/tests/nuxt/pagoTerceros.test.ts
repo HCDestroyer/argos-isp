@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import ClienteResponsablePago from '~/components/ClienteResponsablePago.vue'
 import ReciboPago from '~/components/ReciboPago.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
@@ -12,11 +12,11 @@ import PaginaCobro from '~/pages/cobro/index.vue'
 describe('pago de terceros y responsable de pago', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('separa "pagado por" de la descripción del movimiento', () => {

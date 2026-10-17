@@ -1,15 +1,15 @@
 import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('ficha del cliente · composables', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('useClientes.ver trae el cliente o un 404', async () => {
@@ -43,7 +43,7 @@ describe('ficha del cliente · composables', () => {
     })
 
     it('el estado de cuenta exige clientes.estado_cuenta', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         expect((await useClientes().estadoCuenta(12)).ok).toBe(true)
     })
 
@@ -65,7 +65,7 @@ describe('ficha del cliente · composables', () => {
     })
 
     it('la bitácora exige bitacora.ver (cajero)', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await useBitacora().acciones({ cliente_id: 1 })
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })

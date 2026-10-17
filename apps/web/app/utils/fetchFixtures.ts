@@ -17,8 +17,10 @@ export interface SolicitudFixture {
     headers: Headers
     /** Cuerpo JSON ya parseado, o `null` si no hay. */
     cuerpo: unknown
-    /** Token Bearer recibido, o `null`. */
+    /** Token de la sesión: el Bearer recibido o, sin él, el de la cookie de sesión simulada. */
     token: string | null
+    /** El token vino de la cookie de sesión (`credentials: 'include'`), no de `Authorization`. */
+    porCookie: boolean
 }
 
 export interface RespuestaFixture {
@@ -36,6 +38,11 @@ export type RutasFixture = Record<string, ManejadorFixture>
 export interface OpcionesFetchFixtures {
     /** Latencia simulada en milisegundos (0 en pruebas). */
     demoraMs?: number
+    /**
+     * Cookie `argos_sesion` simulada (la `HttpOnly` que pone la API): el navegador la manda con
+     * `credentials: 'include'` y el JavaScript del panel nunca la ve.
+     */
+    cookieSesion?: () => string | null
 }
 
 interface RutaCompilada {
@@ -117,6 +124,9 @@ export function crearFetchFixtures(rutas: RutasFixture, opciones: OpcionesFetchF
                 continue
             }
             const autorizacion = request.headers.get('Authorization')
+            const bearer = autorizacion?.startsWith('Bearer ') ? autorizacion.slice(7) : null
+            // Como la API: un Bearer explícito gana; si no, la cookie (si el navegador la manda).
+            const cookie = !bearer && request.credentials !== 'omit' ? (opciones.cookieSesion?.() ?? null) : null
             return responder(await ruta.manejador({
                 metodo,
                 ruta: url.pathname,
@@ -124,7 +134,8 @@ export function crearFetchFixtures(rutas: RutasFixture, opciones: OpcionesFetchF
                 query: url.searchParams,
                 headers: request.headers,
                 cuerpo: await leerCuerpo(request),
-                token: autorizacion?.startsWith('Bearer ') ? autorizacion.slice(7) : null,
+                token: bearer ?? cookie,
+                porCookie: cookie !== null,
             }))
         }
 
