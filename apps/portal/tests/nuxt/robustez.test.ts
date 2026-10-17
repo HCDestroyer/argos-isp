@@ -68,6 +68,7 @@ function montos(wrapper: Envoltorio): string[] {
 }
 
 afterEach(() => {
+    vi.useRealTimers()
     for (const wrapper of montados.splice(0)) {
         wrapper.unmount()
     }
@@ -195,13 +196,18 @@ describe('estado en vivo cuando /portal/estado no responde', () => {
         return estado
     }
 
+    /**
+     * Avanza el reloj FALSO de a 5 ms (dejando resolver cada consulta) hasta que se cumpla la
+     * condición. Determinista: la vigilancia mide sus 80 ms con el mismo reloj falso, así que la
+     * carga de la máquina no puede agotarla antes de que la prueba mire.
+     */
     async function esperarHasta(condicion: () => boolean) {
-        const fin = Date.now() + 2_000
-        while (!condicion()) {
-            if (Date.now() > fin) {
-                throw new Error('La condición no se cumplió a tiempo')
+        for (let paso = 0; !condicion(); paso += 1) {
+            if (paso > 400) {
+                throw new Error('La condición no se cumplió en 2 s de reloj falso')
             }
-            await new Promise(resolve => setTimeout(resolve, 5))
+            await vi.advanceTimersByTimeAsync(5)
+            await flushPromises()
         }
     }
 
@@ -209,6 +215,9 @@ describe('estado en vivo cuando /portal/estado no responde', () => {
         for (const falla of ['sin_conexion', API_CAIDA_FIXTURE] as const) {
             fijarFallaFixture('GET /api/v1/portal/estado', falla)
             const estado = await montarVigilancia()
+            // Reloj falso desde aquí (el montaje de Nuxt usa timers reales): el plazo de 80 ms y los
+            // ciclos de 10 ms solo avanzan cuando la prueba lo dice.
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
             estado.vigilar()
             await esperarHasta(() => estado.sinRespuesta.value)
             expect(estado.vigilando.value).toBe(true)
@@ -223,6 +232,7 @@ describe('estado en vivo cuando /portal/estado no responde', () => {
             await esperarHasta(() => !estado.vigilando.value)
             expect(estado.sinRespuesta.value).toBe(false)
             expect(estado.ultimo.value).not.toBeNull()
+            vi.useRealTimers()
         }
     })
 
