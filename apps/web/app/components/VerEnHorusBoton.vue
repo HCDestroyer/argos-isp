@@ -24,11 +24,30 @@ const toast = useToast()
 
 const abriendo = ref(false)
 
+/** Con Horus en pausa (`reintentar_en`), el botón vuelve solo cuando termina la pausa. */
+const ahora = ref(Date.now())
+let finPausa: ReturnType<typeof setTimeout> | undefined
+watch(horus.pausa, (hasta) => {
+    clearTimeout(finPausa)
+    ahora.value = Date.now()
+    const espera = hasta ? new Date(hasta).getTime() - ahora.value : 0
+    if (espera > 0) {
+        finPausa = setTimeout(() => {
+            ahora.value = Date.now()
+        }, espera + 500)
+    }
+}, { immediate: true })
+onBeforeUnmount(() => clearTimeout(finPausa))
+
 const explicacion = computed<string | null>(() => {
     if (!puede('horus.abrir')) {
         return EXPLICACION_HORUS.sinPermiso
     }
-    return horus.estado.value === 'apagado' ? EXPLICACION_HORUS.apagado : null
+    if (horus.estado.value === 'apagado') {
+        return EXPLICACION_HORUS.apagado
+    }
+    const pausa = textoPausaHorus(horus.pausa.value, ahora.value)
+    return pausa ? `${pausa}: no respondió y ArgosIsp espera antes de volver a llamarlo.` : null
 })
 
 onMounted(() => void horus.conocerEstado())
@@ -65,8 +84,9 @@ async function abrir() {
     }
     ventana?.close()
     const apagado = esHorusApagado(resultado.problema)
+    const pausa = textoPausaHorus(reintentarEnDe(resultado.problema))
     toast.add({
-        title: apagado ? 'La integración con Horus está apagada' : 'No se pudo abrir Horus',
+        title: apagado ? 'La integración con Horus está apagada' : (pausa ?? 'No se pudo abrir Horus'),
         description: apagado ? EXPLICACION_HORUS.apagado : (resultado.problema.detail ?? resultado.problema.title),
         color: 'error',
         icon: 'i-lucide-circle-alert',

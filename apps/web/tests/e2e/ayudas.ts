@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 /**
  * Piezas comunes de las pruebas de flujo. En modo fixtures los datos viven en memoria: después
@@ -43,6 +43,24 @@ export async function expandirGrupos(contenedor: Locator): Promise<void> {
 /** Va a una sección por el menú lateral. */
 export async function ir(page: Page, seccion: string, url: RegExp): Promise<void> {
     const contenedor = await menu(page)
-    await contenedor.getByRole('link', { name: seccion, exact: true }).click()
-    await expect(page).toHaveURL(url)
+    const enlace = contenedor.getByRole('link', { name: seccion, exact: true })
+    const antes = await enlace.boundingBox()
+    await enlace.click()
+    try {
+        await expect(page).toHaveURL(url)
+    }
+    catch (error) {
+        // Sin reintento: si el clic no navegó, la falla dice qué había en pantalla (menú del
+        // teléfono abierto o cerrado, grupos plegados, si el enlace se movió) para hallar la causa.
+        const diagnostico = {
+            url: page.url(),
+            dialogos: await page.getByRole('dialog').count(),
+            lateralVisible: await page.locator('#dashboard-sidebar-principal').isVisible(),
+            gruposPlegados: await contenedor.locator('[data-prueba="menu-principal"] button[aria-expanded="false"]').count().catch(() => -1),
+            enlaceAntes: antes,
+            enlaceDespues: await enlace.boundingBox({ timeout: 1000 }).catch(() => null),
+        }
+        await test.info().attach('diagnostico-ir', { body: JSON.stringify(diagnostico, null, 2), contentType: 'application/json' })
+        throw error
+    }
 }

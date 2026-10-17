@@ -115,6 +115,13 @@ function servicioDe(id: number): Schema<'Servicio'> | undefined {
 
 export const rutasHorus: RutasFixture = {
     'GET /api/v1/integraciones/horus': conPermiso('horus.ver', () => ({ status: 200, cuerpo: bd.horus.conector })),
+    /** Lo que necesita "Ver en Horus" (`horus.abrir`): encendido y con URL y código, y la pausa. */
+    'GET /api/v1/integraciones/horus/estado': conPermiso('horus.abrir', () => {
+        const conector = bd.horus.conector
+        const pausa = conector.salud.pausa_hasta && new Date(conector.salud.pausa_hasta).getTime() > Date.now() ? conector.salud.pausa_hasta : null
+        const estado: Schema<'EstadoConectorHorus'> = { activo: conector.activo && conector.url_base !== null && conector.token !== null, reintentar_en: pausa }
+        return { status: 200, cuerpo: estado }
+    }),
     'PUT /api/v1/integraciones/horus': conPermiso('horus.configurar', guardar),
 
     'POST /api/v1/integraciones/horus/probar': conPermiso('horus.probar', () => {
@@ -162,6 +169,13 @@ export const rutasHorus: RutasFixture = {
         if (!bd.horus.conector.activo) {
             return apagado()
         }
+        const pausa = bd.horus.conector.salud.pausa_hasta
+        if (pausa && new Date(pausa).getTime() > Date.now()) {
+            // Como `ErrorHorus` de A6: `horus_error` con la extensión `reintentar_en` (UTC).
+            const respuesta = problemaTipado(502, 'horus_error', 'Horus no respondió', 'Horus en pausa por fallos seguidos')
+            const cuerpo: Schema<'Problem'> = { ...(respuesta.cuerpo as Schema<'Problem'>), reintentar_en: pausa }
+            return { ...respuesta, cuerpo }
+        }
         const destino = cuerpoObjeto(solicitud).destino
         const tipo = typeof destino === 'object' && destino !== null && 'tipo' in destino ? String(destino.tipo) : ''
         const id = typeof destino === 'object' && destino !== null && 'id_externo' in destino ? String(destino.id_externo) : ''
@@ -181,7 +195,7 @@ export const rutasHorus: RutasFixture = {
             return noEncontrado('ese servicio')
         }
         if (!bd.horus.conector.activo) {
-            const apagada: Schema<'Horus360Servicio'> = { servicio_id: servicio.id, conector: 'apagado', stale: false, actualizado_en: null, error: null, consulta: null, ip: servicio.ipv4 ?? null, datos: null, eventos_recientes: [] }
+            const apagada: Schema<'Horus360Servicio'> = { servicio_id: servicio.id, conector: 'apagado', stale: false, actualizado_en: null, error: null, reintentar_en: null, consulta: null, ip: servicio.ipv4 ?? null, datos: null, eventos_recientes: [] }
             return { status: 200, cuerpo: apagada }
         }
         return { status: 200, cuerpo: consulta360(servicio.id, servicio.ipv4 ?? null) }
@@ -199,6 +213,7 @@ export const rutasHorus: RutasFixture = {
             stale: false,
             actualizado_en: activo ? ahora() : null,
             error: null,
+            reintentar_en: null,
             modo: activo ? 'lotes' : null,
             items: activo ? lista.map(seguridadDe) : [],
         }

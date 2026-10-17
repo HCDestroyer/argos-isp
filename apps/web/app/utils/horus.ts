@@ -1,5 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import { codigoProblema } from './cobro'
+import { formatearHora } from './formato'
 import type { PresentacionEstadoUi } from './estados'
 
 /**
@@ -9,6 +10,7 @@ import type { PresentacionEstadoUi } from './estados'
  */
 
 export type ConectorHorus = Schema<'ConectorHorus'>
+export type EstadoConectorHorus = Schema<'EstadoConectorHorus'>
 export type ConectorHorusGuardado = Schema<'ConectorHorusGuardado'>
 export type ResultadoPruebaHorus = Schema<'ResultadoPruebaHorus'>
 export type EnlaceConexionHorus = Schema<'EnlaceConexionHorus'>
@@ -79,25 +81,18 @@ export interface SeguridadLeida {
     hallazgos: HallazgoHorus[]
 }
 
-function esObjeto(valor: unknown): valor is Record<string, unknown> {
-    return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
-}
-
-const texto = (valor: unknown): string | null => (typeof valor === 'string' && valor !== '' ? valor : null)
-
 /** `security` de la consulta 360 (§3.1), o `null` si Horus no lo mandó. */
 export function leerSeguridad(datos: Horus360Servicio['datos']): SeguridadLeida | null {
     const seguridad = datos?.security
-    if (!esObjeto(seguridad)) {
+    if (!seguridad) {
         return null
     }
-    const lista = Array.isArray(seguridad.findings) ? seguridad.findings : []
-    const hallazgos = lista.filter(esObjeto).flatMap((h): HallazgoHorus[] => {
-        const id = typeof h.id === 'number' ? String(h.id) : texto(h.id)
-        return id ? [{ id, tipo: texto(h.kind) ?? 'desconocido', severidad: texto(h.severity), abierto_en: texto(h.opened_at), resumen: texto(h.summary) }] : []
-    })
-    const abiertos = typeof seguridad.open_findings === 'number' ? seguridad.open_findings : null
-    return { estado: estadoSeguridad(seguridad.state), hallazgos_abiertos: abiertos, hallazgos }
+    const hallazgos = (seguridad.findings ?? []).flatMap((h): HallazgoHorus[] => (
+        h.id === undefined || h.id === ''
+            ? []
+            : [{ id: String(h.id), tipo: h.kind ?? 'desconocido', severidad: h.severity ?? null, abierto_en: h.opened_at ?? null, resumen: h.summary ?? null }]
+    ))
+    return { estado: estadoSeguridad(seguridad.state), hallazgos_abiertos: seguridad.open_findings ?? null, hallazgos }
 }
 
 const MOTIVOS_OMITIDO: Record<string, string> = {
@@ -107,22 +102,24 @@ const MOTIVOS_OMITIDO: Record<string, string> = {
     not_configured: 'Horus no tiene la detección configurada',
 }
 
-/** Por qué Horus no devolvió `security` (`meta.omitted`), si lo dijo. */
+/** Por qué Horus no devolvió `security` (`meta.omitted`, lista `[{ block, reason }]`), si lo dijo. */
 export function motivoSinSeguridad(datos: Horus360Servicio['datos']): string | null {
-    const meta = datos?.meta
-    if (!esObjeto(meta)) {
+    const motivo = datos?.meta?.omitted?.find(o => o.block === 'security')?.reason
+    return motivo ? (MOTIVOS_OMITIDO[motivo] ?? motivo) : null
+}
+
+/** `reintentar_en` de un problem+json de Horus (`horus_error`, extensión RFC 9457 §3.2), o `null`. */
+export function reintentarEnDe(problema: Problem): string | null {
+    const valor: Schema<'Problem'>['reintentar_en'] = problema.reintentar_en
+    return valor && !Number.isNaN(Date.parse(valor)) ? valor : null
+}
+
+/** "Horus en pausa hasta las 14:33" si `reintentarEn` es futuro; `null` si no hay pausa. */
+export function textoPausaHorus(reintentarEn: string | null, ahora: number = Date.now()): string | null {
+    if (!reintentarEn || new Date(reintentarEn).getTime() <= ahora) {
         return null
     }
-    const omitidos = meta.omitted
-    let motivo: unknown = null
-    if (esObjeto(omitidos)) {
-        motivo = omitidos.security
-    }
-    else if (Array.isArray(omitidos)) {
-        const fila = omitidos.find(o => esObjeto(o) && o.block === 'security')
-        motivo = esObjeto(fila) ? fila.reason : null
-    }
-    return typeof motivo === 'string' ? (MOTIVOS_OMITIDO[motivo] ?? motivo) : null
+    return `Horus en pausa hasta las ${formatearHora(reintentarEn)}`
 }
 
 /** "hace 3 min", "hace 2 h", "hace 4 días" desde `iso` hasta `ahora`. */

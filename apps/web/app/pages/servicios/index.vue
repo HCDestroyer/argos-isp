@@ -368,6 +368,17 @@ onMounted(async () => {
                     :reintentar="seguridad.recargar"
                     :reintentando="seguridad.cargando.value"
                 />
+                <p
+                    v-else-if="seguridad.pausa.value"
+                    class="flex items-center gap-1.5 text-sm text-muted"
+                    data-prueba="seguridad-pausa"
+                >
+                    <UIcon
+                        name="i-lucide-timer"
+                        class="size-4"
+                    />
+                    Seguridad: {{ seguridad.pausa.value }}; se muestra el último dato conocido.
+                </p>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"

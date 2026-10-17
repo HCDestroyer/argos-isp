@@ -53,5 +53,8 @@ export function useSeguridadServicios(servicios: Ref<readonly { id: number }[]>)
         }
     }
 
-    return { visible, problema, cargando, recargar: cargar, de }
+    /** "Horus en pausa hasta las …" con la lista mostrando el último dato conocido. */
+    const pausa = computed(() => (visible.value ? textoPausaHorus(respuesta.value?.reintentar_en ?? null, ahora.value) : null))
+
+    return { visible, pausa, problema, cargando, recargar: cargar, de }
 }

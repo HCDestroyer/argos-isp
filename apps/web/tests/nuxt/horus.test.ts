@@ -50,12 +50,21 @@ describe('horus · utilidades', () => {
         expect(leerSeguridad({ customer: {} })).toBeNull()
         expect(leerSeguridad(null)).toBeNull()
         expect(leerSeguridad({ security: { state: 'raro' } })?.estado).toBe('desconocido')
-        expect(motivoSinSeguridad({ meta: { omitted: { security: 'permission' } } })).toContain('permiso de seguridad')
+        expect(motivoSinSeguridad({ meta: { omitted: [{ block: 'consumption', reason: 'not_requested' }, { block: 'security', reason: 'permission' }] } })).toContain('permiso de seguridad')
         // Cada estado lleva icono + texto + color.
         for (const presentacion of Object.values(ESTADOS_SEGURIDAD)) {
             expect(presentacion.etiqueta).not.toBe('')
             expect(presentacion.icono).toMatch(/^i-lucide-/)
         }
+    })
+
+    it('pausa de Horus: `reintentar_en` del problem+json y su texto en hora de Guatemala', () => {
+        const problema = { type: 'urn:argosisp:problema:horus_error', title: 'Horus no respondió', status: 502, reintentar_en: '2026-10-17T12:04:00.000Z' }
+        expect(reintentarEnDe(problema)).toBe('2026-10-17T12:04:00.000Z')
+        expect(reintentarEnDe({ type: 'about:blank', title: 'x', status: 500 })).toBeNull()
+        expect(textoPausaHorus('2026-10-17T12:04:00.000Z', ahora)).toBe('Horus en pausa hasta las 06:04')
+        expect(textoPausaHorus('2026-10-17T11:59:00.000Z', ahora)).toBeNull()
+        expect(textoPausaHorus(null, ahora)).toBeNull()
     })
 
     it('/sso/entrar: ticket del fragmento y solo rutas locales', () => {
@@ -76,6 +85,7 @@ describe('horus · pantallas', () => {
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
         useEstadoConectorHorus().value = null
+        usePausaHorus().value = null
         await flushPromises()
     })
 
@@ -160,8 +170,24 @@ describe('horus · pantallas', () => {
         await vi.waitFor(() => expect(cuerpo()).toContain(EXPLICACION_HORUS.sinPermiso))
     })
 
+    it('"Ver en Horus" se deshabilita antes del clic con `GET /integraciones/horus/estado` y con Horus en pausa', async () => {
+        bd.horus.conector = { ...bd.horus.conector, activo: true, url_base: 'https://horus.isp.gt', token: '***' }
+        const activo = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
+        await vi.waitFor(() => expect(useEstadoConectorHorus().value).toBe('activo'))
+        expect(activo.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeUndefined()
+
+        // Sin `horus.ver`: el estado sale igual del endpoint de `horus.abrir`.
+        useEstadoConectorHorus().value = null
+        bd.horus.conector = { ...bd.horus.conector, salud: { ...bd.horus.conector.salud, pausa_hasta: new Date(Date.now() + 5 * 60_000).toISOString() } }
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'horus.ver') }
+        const enPausa = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
+        await vi.waitFor(() => expect(enPausa.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined())
+        await enPausa.get('[data-prueba="por-que-horus"]').trigger('click')
+        await vi.waitFor(() => expect(cuerpo()).toMatch(/Horus en pausa hasta las \d\d:\d\d/))
+    })
+
     it('"Ver en Horus" abre la URL que da la API en otra pestaña (el navegador no pide el ticket)', async () => {
-        bd.horus.conector.activo = true
+        bd.horus.conector = { ...bd.horus.conector, activo: true, url_base: 'https://horus.isp.gt', token: '***' }
         const ventana = { opener: {}, location: { replace: vi.fn() }, close: vi.fn() }
         const abrir = vi.spyOn(window, 'open').mockReturnValue(ventana as unknown as Window)
         const vista = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'servicio', idExterno: 1 }))
@@ -186,6 +212,8 @@ describe('horus · pantallas', () => {
         await vi.waitFor(() => expect(dos.find('[data-prueba="seguridad-dato-viejo"]').exists()).toBe(true))
         expect(dos.get('[data-prueba="seguridad-dato-viejo"]').text()).toBe('Dato de hace 12 min')
         expect(dos.get('[data-prueba="horus-stale"]').text()).toContain('Horus respondió 503')
+        expect(dos.get('[data-prueba="horus-pausa"]').text()).toMatch(/Horus en pausa hasta las \d\d:\d\d/)
+        expect(uno.find('[data-prueba="horus-pausa"]').exists()).toBe(false)
 
         const tres = await mountSuspended(conApp(ServicioHorus, { servicioId: 3 }))
         await vi.waitFor(() => expect(tres.find('[data-prueba="horus-sin-datos"]').exists()).toBe(true))

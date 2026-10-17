@@ -66,7 +66,7 @@ const minutosAtras = (minutos: number): string => new Date(Date.now() - minutos 
  * identidad vigente en Horus (404 de Horus → `datos: null`).
  */
 export function consulta360(servicioId: number, ip: string | null): Schema<'Horus360Servicio'> {
-    const base = { servicio_id: servicioId, conector: 'activo' as const, consulta: 'external_service_id' as const, ip, eventos_recientes: [] }
+    const base = { servicio_id: servicioId, conector: 'activo' as const, consulta: 'external_service_id' as const, ip, eventos_recientes: [], reintentar_en: null }
     if (servicioId === 1) {
         return {
             ...base,
@@ -81,7 +81,7 @@ export function consulta360(servicioId: number, ip: string | null): Schema<'Horu
                     open_findings: 1,
                     findings: [{ id: 'f-9001', kind: 'outbound_scanning', severity: 'high', opened_at: minutosAtras(95), summary: 'Escaneo del puerto 23 hacia 1,200 destinos en 10 min' }],
                 },
-                meta: { at: minutosAtras(0), omitted: {} },
+                meta: { at: minutosAtras(0), omitted: [] },
             },
             eventos_recientes: [
                 { id: 1, evento: 'finding.opened', evento_interno: 'horus.hallazgo_abierto', ocurrido_en: minutosAtras(95), recibido_en: minutosAtras(95), resumen: 'Hallazgo abierto: escaneo saliente (alta)' },
@@ -94,9 +94,11 @@ export function consulta360(servicioId: number, ip: string | null): Schema<'Horu
             stale: true,
             actualizado_en: minutosAtras(12),
             error: 'Horus respondió 503: mantenimiento',
+            // En pausa por la espera exponencial (máx. 15 min), como `servicio360` de A6.
+            reintentar_en: new Date(Date.now() + 4 * 60_000).toISOString(),
             datos: {
                 security: { state: 'clean', open_findings: 0, findings: [] },
-                meta: { at: minutosAtras(12), omitted: {} },
+                meta: { at: minutosAtras(12), omitted: [] },
             },
         }
     }

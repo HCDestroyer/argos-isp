@@ -34,6 +34,7 @@ watch(() => props.servicioId, cargar)
 const seguridad = computed(() => (consulta.value ? leerSeguridad(consulta.value.datos) : null))
 const sinSeguridad = computed(() => (consulta.value ? motivoSinSeguridad(consulta.value.datos) : null))
 const marca = computed(() => (consulta.value ? marcaDatoViejo(consulta.value.stale, consulta.value.actualizado_en, ahora.value) : null))
+const pausa = computed(() => (consulta.value ? textoPausaHorus(consulta.value.reintentar_en, ahora.value) : null))
 const visible = computed(() => problema.value !== null || cargando.value || consulta.value?.conector === 'activo')
 
 defineExpose({ recargar: cargar })
@@ -81,6 +82,17 @@ defineExpose({ recargar: cargar })
             class="h-20 w-full"
         />
         <template v-else-if="consulta">
+            <p
+                v-if="pausa"
+                class="flex items-center gap-1.5 text-sm text-muted"
+                data-prueba="horus-pausa"
+            >
+                <UIcon
+                    name="i-lucide-timer"
+                    class="size-4"
+                />
+                {{ pausa }}: no respondió y se vuelve a consultar después.
+            </p>
             <UAlert
                 v-if="!consulta.datos"
                 color="error"

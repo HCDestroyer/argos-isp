@@ -14,6 +14,14 @@ export function useEstadoConectorHorus() {
 }
 
 /**
+ * Hasta cuándo está Horus en pausa por la espera exponencial (`reintentar_en`, UTC), según la
+ * última respuesta que lo dijo; `null` = sin pausa conocida.
+ */
+export function usePausaHorus() {
+    return useState<string | null>('horus:pausa', () => null)
+}
+
+/**
  * Integración con Horus Flow (A1 + A6, `contratos/horus.md` 1.2.0): conector, enlace de conexión
  * (§1.4), token `atk_` para Horus (§1.2), "Ver en Horus" (§1.5) y los datos de Horus por servicio
  * (§3.1, §3.5). El navegador nunca pide tickets ni ve secretos: solo la URL que devuelve la API y
@@ -22,6 +30,7 @@ export function useEstadoConectorHorus() {
 export function useHorus() {
     const api = useApi()
     const estado = useEstadoConectorHorus()
+    const pausa = usePausaHorus()
 
     function recordar<T extends { activo: boolean }>(resultado: Resultado<T>): Resultado<T> {
         if (resultado.ok) {
@@ -35,10 +44,23 @@ export function useHorus() {
         return recordar(await resolver(api.GET('/api/v1/integraciones/horus')))
     }
 
-    /** Lee el estado una vez por sesión del panel, solo si el usuario puede verlo. */
+    /**
+     * `GET /integraciones/horus/estado` (`horus.abrir`, sin `horus.ver`): si "Ver en Horus" puede
+     * funcionar (encendido, con URL y código) y la pausa de Horus. Sin secretos.
+     */
+    async function estadoParaAbrir(): Promise<Resultado<EstadoConectorHorus>> {
+        const resultado = await resolver(api.GET('/api/v1/integraciones/horus/estado'))
+        if (resultado.ok) {
+            estado.value = resultado.data.activo ? 'activo' : 'apagado'
+            pausa.value = resultado.data.reintentar_en
+        }
+        return resultado
+    }
+
+    /** Lee el estado una vez por sesión del panel, antes del primer clic en "Ver en Horus". */
     async function conocerEstado(): Promise<void> {
-        if (estado.value === null && usePermisos().puede('horus.ver')) {
-            await conector()
+        if (estado.value === null && usePermisos().puede('horus.abrir')) {
+            await estadoParaAbrir()
         }
     }
 
@@ -90,6 +112,9 @@ export function useHorus() {
         if (!resultado.ok && esHorusApagado(resultado.problema)) {
             estado.value = 'apagado'
         }
+        if (!resultado.ok) {
+            pausa.value = reintentarEnDe(resultado.problema)
+        }
         return resultado
     }
 
@@ -98,6 +123,7 @@ export function useHorus() {
         const resultado = await resolver(api.GET('/api/v1/servicios/{id}/horus', { params: { path: { id } } }))
         if (resultado.ok) {
             estado.value = resultado.data.conector
+            pausa.value = resultado.data.reintentar_en
         }
         return resultado
     }
@@ -107,5 +133,5 @@ export function useHorus() {
         return resolver(api.POST('/api/v1/integraciones/horus/seguridad', { body: { servicio_ids: servicioIds.slice(0, 500) } }))
     }
 
-    return { estado, conector, conocerEstado, guardar, probar, generarEnlace, conectarConEnlace, tokens, generarToken, revocarToken, abrir, servicio360, seguridad }
+    return { estado, pausa, conector, estadoParaAbrir, conocerEstado, guardar, probar, generarEnlace, conectarConEnlace, tokens, generarToken, revocarToken, abrir, servicio360, seguridad }
 }
