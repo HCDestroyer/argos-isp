@@ -4,6 +4,7 @@ import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
+import { claveImportacion } from '#billing/importacion'
 
 /**
  * `facturas.anular_saldo_inicial` = `anularSaldoInicial` (importador de A6, sin endpoint): deshace
@@ -20,14 +21,17 @@ import { bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/c
  */
 
 export interface EntradaAnularSaldoInicial {
-    /** id del saldo en ArgosIsp, o `id_externo` del origen */
+    /** id del saldo en ArgosIsp, o `id_externo` (+ `origen`) del sistema de origen */
     saldo_inicial_id?: number
+    /** con `id_externo`: el sistema de origen (sin él, el prefijo del id, como al registrar) */
+    origen?: string
     id_externo?: string
     motivo: string
 }
 
 export interface ResultadoAnularSaldoInicial {
     saldo_inicial_id: number
+    origen: string
     id_externo: string
     cliente_id: number
     monto: string
@@ -38,6 +42,7 @@ export interface ResultadoAnularSaldoInicial {
 
 interface FilaSaldo {
     id: number
+    origen: string
     clave_externa: string
     cliente_id: number
     monto: string
@@ -64,15 +69,16 @@ export default class AnularSaldoInicial extends DomainAction<
                 { field: 'id_externo', message: 'Indique saldo_inicial_id o id_externo', rule: 'required' },
             ])
         }
+        const clave = input.saldo_inicial_id ? null : claveImportacion(input)
         const buscar = () =>
             t.trx
                 .from('billing.saldos_iniciales')
                 .if(
                     input.saldo_inicial_id,
                     (q) => q.where('id', input.saldo_inicial_id!),
-                    (q) => q.where('clave_externa', input.id_externo!.trim()),
+                    (q) => q.where('origen', clave!.origen).where('clave_externa', clave!.id_externo),
                 )
-                .select('id', 'clave_externa', 'cliente_id', 'monto', 'factura_id', 'anulado_en')
+                .select('id', 'origen', 'clave_externa', 'cliente_id', 'monto', 'factura_id', 'anulado_en')
         const previo = (await buscar().first()) as FilaSaldo | null
         if (!previo) throw new NoEncontrado('El saldo inicial no existe')
         t.fijarEntidad('saldo_inicial', previo.id)
@@ -190,6 +196,7 @@ export default class AnularSaldoInicial extends DomainAction<
 
         return {
             saldo_inicial_id: saldo.id,
+            origen: saldo.origen,
             id_externo: saldo.clave_externa,
             cliente_id: saldo.cliente_id,
             monto: saldo.monto,

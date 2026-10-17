@@ -6,18 +6,19 @@ import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
-import { exigirPeriodoAbierto, idExterno } from '#billing/importacion'
+import { claveImportacion, exigirPeriodoAbierto, textoClave } from '#billing/importacion'
 
 /**
  * `facturas.registrar_saldo_inicial` = `registrarSaldoInicial` (importador de A6, sin endpoint):
  * asiento de apertura del saldo de un cliente traído de otro sistema.
  *
- * - Idempotente por `id_externo` (alias `clave_externa`): repetirlo con los mismos datos devuelve
- *   lo ya registrado (`creado: false`); con otro cliente o monto → 409 `clave_externa_conflicto`.
+ * - Idempotente por (`origen`, `id_externo`) (alias `clave_externa`): repetirlo con los mismos
+ *   datos devuelve lo ya registrado (`creado: false`); con otro cliente o monto → 409
+ *   `clave_externa_conflicto`. El mismo id en otro origen es otro saldo.
  * - Fecha en un periodo cerrado → 422 `periodo_cerrado` (antes de escribir nada). Se revierte
  *   con `AnularSaldoInicial` (asientos de reverso).
  * - `monto > 0` (el cliente debe): factura de apertura sin servicio (`clave_unica =
- *   apertura-<clave_externa>`, `vencida`, no cuenta para el corte) y asiento
+ *   apertura-<origen>:<id_externo>`, `vencida`, no cuenta para el corte) y asiento
  *   `CxC / 2.9.01 Saldos de apertura` (origen `factura`). Se cobra como cualquier factura.
  * - `monto < 0` (saldo a favor): asiento `2.9.01 / Anticipos` (origen `ajuste` = el saldo
  *   inicial) y se aplica a sus facturas pendientes como el excedente de un pago.
@@ -25,6 +26,8 @@ import { exigirPeriodoAbierto, idExterno } from '#billing/importacion'
  */
 
 export interface EntradaSaldoInicial {
+    /** sistema de origen (`mikrowisp`, `smartisp`, `csv`…); ver `claveImportacion` */
+    origen?: string
     /** id en el sistema de origen (contrato de importación) */
     id_externo?: string
     /** nombre anterior de `id_externo` (se acepta igual) */
@@ -50,7 +53,9 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
     readonly nombre = 'facturas.registrar_saldo_inicial'
 
     protected async handle(input: EntradaSaldoInicial, t: Transaccion): Promise<ResultadoSaldoInicial> {
-        const clave = idExterno(input)
+        const claveOrigen = claveImportacion(input)
+        const clave = claveOrigen.id_externo
+        const texto = textoClave(claveOrigen)
         const monto = dec(input.monto)
         const errores = []
         if (monto.isZero() || !tieneCentavosExactos(monto)) {
@@ -74,6 +79,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
 
         const existente = (await t.trx
             .from('billing.saldos_iniciales')
+            .where('origen', claveOrigen.origen)
             .where('clave_externa', clave)
             .select('id', 'cliente_id', 'monto', 'factura_id', 'anulado_en')
             .first()) as {
@@ -86,14 +92,14 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
         if (existente) {
             if (existente.anulado_en) {
                 throw new Conflicto(
-                    `El saldo inicial ${clave} se anuló; para volver a importarlo use otro id_externo`,
+                    `El saldo inicial ${texto} se anuló; para volver a importarlo use otro id_externo`,
                     'saldo_inicial_anulado',
                     'Saldo inicial anulado',
                 )
             }
             if (existente.cliente_id !== input.cliente_id || !dec(existente.monto).equals(monto)) {
                 throw new Conflicto(
-                    `La clave externa ${clave} ya se usó para el cliente ${existente.cliente_id} con Q${existente.monto}`,
+                    `El id_externo ${texto} ya se usó para el cliente ${existente.cliente_id} con Q${existente.monto}`,
                     'clave_externa_conflicto',
                     'Clave externa en uso',
                 )
@@ -107,9 +113,9 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
             }
         }
 
-        await exigirPeriodoAbierto(t.trx, fecha, `Saldo inicial ${clave}`)
+        await exigirPeriodoAbierto(t.trx, fecha, `Saldo inicial ${texto}`)
 
-        const descripcion = input.descripcion?.trim() || `Saldo inicial importado (${clave})`
+        const descripcion = input.descripcion?.trim() || `Saldo inicial importado (${texto})`
         let facturaId: number | null = null
         if (monto.gt(0)) {
             const [factura] = (await t.trx
@@ -120,7 +126,8 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                     servicio_id: null,
                     tipo: 'servicio',
                     periodo: fecha,
-                    clave_unica: `apertura-${clave}`,
+                    clave_unica: `apertura-${claveOrigen.origen}:${clave}`,
+                    origen: claveOrigen.origen,
                     clave_externa: `apertura-${clave}`,
                     vence_en: fecha,
                     vencida_en: t.trx.knexRawQuery('now()'),
@@ -128,7 +135,11 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                     subtotal: aTexto(monto),
                     iva: '0.00',
                     total: aTexto(monto),
-                    reglas_snapshot: JSON.stringify({ importada: true, saldo_inicial: clave }),
+                    reglas_snapshot: JSON.stringify({
+                        importada: true,
+                        origen: claveOrigen.origen,
+                        saldo_inicial: clave,
+                    }),
                 })
                 .returning('id')) as Array<{ id: number }>
             facturaId = factura!.id
@@ -152,6 +163,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
             .table('billing.saldos_iniciales')
             .insert({
                 cliente_id: input.cliente_id,
+                origen: claveOrigen.origen,
                 clave_externa: clave,
                 monto: aTexto(monto),
                 fecha,

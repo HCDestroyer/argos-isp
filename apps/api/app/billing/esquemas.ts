@@ -144,6 +144,12 @@ export const Factura = definirEsquema(
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
             anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
             motivo_anulacion: nulable(texto),
+            origen: {
+                ...nulable(texto),
+                description:
+                    'Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp',
+            },
+            id_externo: { ...nulable(texto), description: 'Id de la factura en su sistema de origen' },
             ...auditable,
         },
         [
@@ -154,6 +160,8 @@ export const Factura = definirEsquema(
             'motivo_anulacion',
             'cliente_nombre',
             'acreditado',
+            'origen',
+            'id_externo',
         ],
     ),
 )
@@ -304,10 +312,18 @@ export const Pago = definirEsquema(
                 description:
                     'Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos',
             },
+            origen: {
+                ...nulable(texto),
+                description:
+                    'Sistema de origen del pago histórico (mikrowisp, smartisp, csv…); null si es de ArgosIsp',
+            },
+            id_externo: { ...nulable(texto), description: 'Id del pago en su sistema de origen' },
             ...auditable,
         },
         [
             'historico',
+            'origen',
+            'id_externo',
             'cliente_nombre',
             'anulado_en',
             'motivo_anulacion',

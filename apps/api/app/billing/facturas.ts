@@ -103,6 +103,9 @@ export interface FacturaFila {
     fel_estado: string | null
     anulada_en?: Date | null
     motivo_anulacion?: string | null
+    /** factura importada: sistema de origen e id allí */
+    origen?: string | null
+    id_externo?: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -138,6 +141,8 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('fel_estado'),
         c('anulada_en'),
         c('motivo_anulacion'),
+        c('origen'),
+        cliente.raw(`${alias}.clave_externa as id_externo`),
         c('version'),
         c('created_at'),
         c('updated_at'),

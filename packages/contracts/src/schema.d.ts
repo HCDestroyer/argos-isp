@@ -3406,6 +3406,10 @@ export interface components {
              */
             anulada_en?: string | null;
             motivo_anulacion?: string | null;
+            /** @description Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp */
+            origen?: string | null;
+            /** @description Id de la factura en su sistema de origen */
+            id_externo?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -3590,6 +3594,10 @@ export interface components {
             cuenta_bancaria_nombre?: string | null;
             /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
             historico?: boolean;
+            /** @description Sistema de origen del pago histórico (mikrowisp, smartisp, csv…); null si es de ArgosIsp */
+            origen?: string | null;
+            /** @description Id del pago en su sistema de origen */
+            id_externo?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */

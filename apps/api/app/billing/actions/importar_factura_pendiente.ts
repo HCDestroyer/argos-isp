@@ -8,13 +8,15 @@ import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { claveFactura, sumarDias } from '#billing/periodos'
 import { lineaConIva, totalesDe, type EstadoFactura } from '#billing/facturas'
+import { claveImportacion, textoClave } from '#billing/importacion'
 
 /**
  * `facturas.importar_pendiente` = `importarFacturaPendiente` (importador de A6, sin endpoint):
  * una factura pendiente de un servicio traída de otro sistema, con su periodo y lo que se debe.
  *
- * - Idempotente por `clave_externa` (id en el origen): repetirla devuelve la misma factura
- *   (`creada: false`); con otro servicio, periodo o monto → 409 `clave_externa_conflicto`.
+ * - Idempotente por (`origen`, `id_externo`) (alias `clave_externa`): repetirla devuelve la misma
+ *   factura (`creada: false`); con otro servicio, periodo o monto → 409 `clave_externa_conflicto`.
+ *   El mismo id en otro origen es otra factura.
  * - Ocupa la `clave_unica = servicio_id-periodo`: `generarFacturas` ya no emite ese periodo. Si
  *   ArgosIsp ya facturó el periodo → 409 `periodo_facturado`.
  * - `total` es lo que el cliente debe de esa factura (IVA incluido, desglosado en la línea).
@@ -28,7 +30,12 @@ import { lineaConIva, totalesDe, type EstadoFactura } from '#billing/facturas'
  */
 
 export interface EntradaImportarFactura {
-    clave_externa: string
+    /** sistema de origen (`mikrowisp`, `smartisp`, `csv`…); ver `claveImportacion` */
+    origen?: string
+    /** id de la factura en el origen (único por origen) */
+    id_externo?: string
+    /** nombre anterior de `id_externo` (se acepta igual) */
+    clave_externa?: string
     servicio_id: number
     /** primer día del periodo (YYYY-MM-DD) */
     periodo: string
@@ -54,10 +61,10 @@ export default class ImportarFacturaPendiente extends DomainAction<
     readonly nombre = 'facturas.importar_pendiente'
 
     protected async handle(input: EntradaImportarFactura, t: Transaccion): Promise<ResultadoImportarFactura> {
-        const clave = input.clave_externa?.trim()
+        const claveOrigen = claveImportacion(input)
+        const clave = claveOrigen.id_externo
         const total = dec(input.total)
         const errores = []
-        if (!clave) errores.push({ field: 'clave_externa', message: 'Obligatoria', rule: 'required' })
         if (total.lte(0) || !tieneCentavosExactos(total)) {
             errores.push({
                 field: 'total',
@@ -77,6 +84,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
 
         const existente = (await t.trx
             .from('billing.facturas')
+            .where('origen', claveOrigen.origen)
             .where('clave_externa', clave)
             .select(
                 'id',
@@ -99,7 +107,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
                 !dec(existente.total).equals(total)
             ) {
                 throw new Conflicto(
-                    `La clave externa ${clave} ya se importó como la factura ${existente.id} (servicio ${existente.servicio_id}, periodo ${existente.periodo}, Q${existente.total})`,
+                    `El id_externo ${textoClave(claveOrigen)} ya se importó como la factura ${existente.id} (servicio ${existente.servicio_id}, periodo ${existente.periodo}, Q${existente.total})`,
                     'clave_externa_conflicto',
                     'Clave externa en uso',
                 )
@@ -140,6 +148,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
                 ? {}
                 : { mora_tipo: 'ninguna', mora_valor: '0.00', mora_recurrente: false }),
             importada: true,
+            origen: claveOrigen.origen,
             clave_externa: clave,
         }
 
@@ -152,6 +161,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
                 tipo: 'servicio',
                 periodo,
                 clave_unica: claveUnica,
+                origen: claveOrigen.origen,
                 clave_externa: clave,
                 vence_en: venceEn,
                 estado: vencida ? 'vencida' : 'emitida',
@@ -171,7 +181,7 @@ export default class ImportarFacturaPendiente extends DomainAction<
 
         await new RegistrarAsiento().execute(
             {
-                descripcion: `Factura importada ${facturaId} (${clave}) · servicio ${servicio.id} · periodo ${periodo}`,
+                descripcion: `Factura importada ${facturaId} (${textoClave(claveOrigen)}) · servicio ${servicio.id} · periodo ${periodo}`,
                 origen_tipo: 'factura',
                 origen_id: facturaId,
                 movimientos: [

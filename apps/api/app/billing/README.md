@@ -80,7 +80,9 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 Contrato completo (modos de importación, cuadre y errores) en `.claude/integration/contratos/importacion.md`. Saldo inicial y pago histórico aceptan `id_externo` (o `clave_externa`) y responden 422 `periodo_cerrado` con un detalle claro si la fecha cae en un mes cerrado.
 
-Todas idempotentes por `clave_externa` (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
+**Neutral respecto al origen** (decisión del PM): todas reciben `origen` (texto libre `^[a-z0-9_]{1,40}$`: `mikrowisp`, `smartisp`, `csv`…) y el `id_externo` es único **por origen** (`claveImportacion` en `importacion.ts`; sin `origen`, el prefijo del id antes de `:` o `externo`). Ninguna acción conoce un sistema en particular: los adaptadores son de A6. `Factura` y `Pago` exponen `origen` e `id_externo`.
+
+Todas idempotentes por (`origen`, `clave_externa`) (repetir → `creada/creado: false`; con otros datos → 409 `clave_externa_conflicto`), auditadas y sin eventos (carga histórica, no notifica). El ingreso y el IVA de lo importado ya están en el sistema de origen: la contrapartida es la cuenta transitoria `2.9.01`.
 
 ## Vencimiento y mora (tarea 5)
 
