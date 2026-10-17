@@ -39,6 +39,7 @@ onMounted(recargar)
                 <UBadge
                     :label="ESTADOS_FACTURA[factura.estado].etiqueta"
                     :color="ESTADOS_FACTURA[factura.estado].color"
+                    :icon="ESTADOS_FACTURA[factura.estado].icono"
                     variant="subtle"
                     class="shrink-0"
                 />

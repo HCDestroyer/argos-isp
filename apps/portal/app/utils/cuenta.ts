@@ -1,27 +1,34 @@
 import type { BadgeProps } from '@nuxt/ui'
 import type { Schema } from '@argosisp/contracts'
 
-/** Presentación de estados y métodos del portal autenticado (facturas, pagos, promesas). */
+/**
+ * Presentación de estados y métodos del portal autenticado (facturas, pagos, promesas).
+ * Todo estado = icono Lucide + texto + color (skill horus-identity, `estados.md`): la urgencia
+ * decide el color (¿hay que actuar ya? error · ¿conviene mirarlo? warning · bien: success ·
+ * solo informa: info/neutral), el icono distingue los que comparten color y el texto siempre está.
+ * Nunca `primary` para un estado: es la marca y la acción.
+ */
 
 type Color = NonNullable<BadgeProps['color']>
 
-interface Presentacion {
+export interface Presentacion {
     etiqueta: string
     color: Color
+    icono: string
 }
 
 export const ESTADOS_FACTURA: Record<Schema<'PortalFactura'>['estado'], Presentacion> = {
-    emitida: { etiqueta: 'Pendiente', color: 'info' },
-    parcial: { etiqueta: 'Abono parcial', color: 'warning' },
-    vencida: { etiqueta: 'Vencida', color: 'error' },
-    pagada: { etiqueta: 'Pagada', color: 'success' },
-    anulada: { etiqueta: 'Anulada', color: 'neutral' },
+    emitida: { etiqueta: 'Pendiente', color: 'info', icono: 'i-lucide-clock' },
+    parcial: { etiqueta: 'Abono parcial', color: 'warning', icono: 'i-lucide-circle-dashed' },
+    vencida: { etiqueta: 'Vencida', color: 'error', icono: 'i-lucide-calendar-x' },
+    pagada: { etiqueta: 'Pagada', color: 'success', icono: 'i-lucide-circle-check' },
+    anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
 }
 
 export const ESTADOS_PAGO: Record<Schema<'PortalPago'>['estado'], Presentacion> = {
-    registrado: { etiqueta: 'Aplicado', color: 'success' },
-    pendiente_verificacion: { etiqueta: 'En verificación', color: 'warning' },
-    anulado: { etiqueta: 'Anulado', color: 'neutral' },
+    registrado: { etiqueta: 'Aplicado', color: 'success', icono: 'i-lucide-circle-check' },
+    pendiente_verificacion: { etiqueta: 'En verificación', color: 'warning', icono: 'i-lucide-hourglass' },
+    anulado: { etiqueta: 'Anulado', color: 'neutral', icono: 'i-lucide-ban' },
 }
 
 export const METODOS_PAGO: Record<Schema<'PortalPago'>['metodo'], string> = {
@@ -36,12 +43,12 @@ export const METODOS_PAGO: Record<Schema<'PortalPago'>['metodo'], string> = {
 }
 
 export const ESTADOS_PROMESA: Record<Schema<'PortalPromesa'>['estado'], Presentacion> = {
-    activa: { etiqueta: 'Activa', color: 'info' },
-    pendiente_aprobacion: { etiqueta: 'Pendiente de aprobación', color: 'warning' },
-    cumplida: { etiqueta: 'Cumplida', color: 'success' },
-    incumplida: { etiqueta: 'Incumplida', color: 'error' },
-    rechazada: { etiqueta: 'Rechazada', color: 'error' },
-    cancelada: { etiqueta: 'Cancelada', color: 'neutral' },
+    activa: { etiqueta: 'Activa', color: 'info', icono: 'i-lucide-hand-coins' },
+    pendiente_aprobacion: { etiqueta: 'Pendiente de aprobación', color: 'warning', icono: 'i-lucide-hourglass' },
+    cumplida: { etiqueta: 'Cumplida', color: 'success', icono: 'i-lucide-circle-check' },
+    incumplida: { etiqueta: 'Incumplida', color: 'error', icono: 'i-lucide-calendar-x' },
+    rechazada: { etiqueta: 'Rechazada', color: 'error', icono: 'i-lucide-circle-x' },
+    cancelada: { etiqueta: 'Cancelada', color: 'neutral', icono: 'i-lucide-circle-slash' },
 }
 
 export const CANALES_PREFERIDOS: { label: string, value: Schema<'PortalContacto'>['canal_preferido'] }[] = [

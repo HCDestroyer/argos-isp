@@ -48,9 +48,9 @@ async function montarCorte(fixture?: string) {
     return wrapper
 }
 
-async function montarCuenta() {
+async function montarCuenta(ruta = '/cuenta') {
     clearNuxtData('portal:cuenta')
-    const wrapper = await mountSuspended(PaginaCuenta)
+    const wrapper = await mountSuspended(PaginaCuenta, { route: ruta })
     montados.push(wrapper)
     await esperar()
     return wrapper
@@ -157,13 +157,13 @@ describe('/corte con una IP que no se identifica', () => {
         expect(montos(wrapper)).toEqual([])
 
         // Pagar, subir comprobante o prometer necesitan saber el servicio: por IP la API dice 422.
-        for (const accion of ['Pagar en línea', 'Subir comprobante', 'Solicitar promesa', 'Ver mis facturas']) {
+        for (const accion of ['Pagar en línea', 'Subir comprobante', 'Prometer pago', 'Mis facturas']) {
             expect(boton(wrapper, accion), accion).toBeUndefined()
         }
         const entrar = boton(wrapper, 'Entrar con mi NIT o usuario')
         expect(entrar?.attributes('href')).toBe('/entrar')
         expect(boton(wrapper, 'Ver datos de depósito')).toBeDefined()
-        expect(boton(wrapper, 'Llamar a soporte')).toBeDefined()
+        expect(boton(wrapper, 'Llamar al 7765-4321')).toBeDefined()
         expect(wrapper.text()).toContain('Conexión desde 203.0.113.9')
         // Sin servicio no hay estado en vivo que esperar.
         expect(wrapper.find('[data-testid="estado-en-vivo"]').exists()).toBe(false)
@@ -293,9 +293,11 @@ describe('/cuenta con varios servicios', () => {
         expect(wrapper.findAll('[data-testid="saldo-servicio"]').map(s => s.text())).toEqual(['Q 175.00', 'Q 375.00', 'Q 0.00'])
         // Sin saldo no se ofrece promesa.
         expect(wrapper.findAll('[data-testid="pedir-promesa"]')).toHaveLength(2)
+        wrapper.unmount()
 
-        // Solo los servicios con saldo se pueden elegir para pagar; por defecto el primero.
-        const selector = wrapper.findComponent({ name: 'USelect' })
+        // Sección "Pagar": solo los servicios con saldo se pueden elegir; por defecto el primero.
+        const pagar = await montarCuenta('/cuenta?seccion=pagar')
+        const selector = pagar.findComponent({ name: 'USelect' })
         expect(selector.exists()).toBe(true)
         const opciones = selector.props('items') as { label: string, value: number }[]
         expect(opciones.map(o => o.value)).toEqual([41, 52])
@@ -303,7 +305,7 @@ describe('/cuenta con varios servicios', () => {
 
         selector.vm.$emit('update:modelValue', 52)
         await esperar()
-        await wrapper.find('[data-testid="pagar-en-linea"]').trigger('click')
+        await pagar.find('[data-testid="pagar-en-linea"]').trigger('click')
         await esperar()
         const llamadas = post.mock.calls as unknown as [string, { body?: unknown }][]
         const llamada = llamadas.find(([ruta]) => ruta === '/api/v1/portal/pagos/iniciar')
@@ -312,7 +314,7 @@ describe('/cuenta con varios servicios', () => {
 
     it('un solo servicio: sin selector', async () => {
         fijarSesionFixture(true)
-        const wrapper = await montarCuenta()
+        const wrapper = await montarCuenta('/cuenta?seccion=pagar')
         expect(wrapper.findComponent({ name: 'USelect' }).exists()).toBe(false)
         expect(wrapper.find('[data-testid="pagar-en-linea"]').exists()).toBe(true)
     })

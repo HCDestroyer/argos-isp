@@ -35,6 +35,7 @@ onMounted(recargar)
                 <UBadge
                     :label="ESTADOS_PROMESA[promesa.estado].etiqueta"
                     :color="ESTADOS_PROMESA[promesa.estado].color"
+                    :icon="ESTADOS_PROMESA[promesa.estado].icono"
                     variant="subtle"
                     class="shrink-0"
                 />
