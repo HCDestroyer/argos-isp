@@ -168,8 +168,14 @@ largas siguen en otra página.
 - La respuesta no lleva `cliente_id`, nombre, ruta del archivo ni quién lo revisó.
 - `Idempotency-Key` (la huella son los campos, no el archivo) y límite por IP propio (`comprobantes`,
   `bancos`).
-- El OpenAPI declara el cuerpo como JSON con los campos (el generador aún no conoce multipart; pedido
-  en `.claude/integration/a5.md`); la descripción del endpoint dice que es `multipart/form-data`.
+- El OpenAPI declara el cuerpo `multipart/form-data` (`multipart` en `DefinicionRuta`): los campos del
+  validador más `archivo` (`format: binary`, obligatorio).
+
+**OpenAPI del portal.** Las rutas que solo funcionan con la sesión (`/cuenta`, facturas, PDF, pagos,
+promesas y comprobantes de la sesión, contacto, Telegram, salir) son `seguridad: 'portal'`: el OpenAPI
+declara la cookie `argos_portal` y su 401; el handler la exige igual (`exigirSesionPortal`). Las de
+"IP o sesión" (promesas, comprobante, pago en línea) y las de IP siguen `publico`. Los PDF se declaran
+`application/pdf` (`respuesta.contenido`). Prueba: `tests/portal/openapi_portal.spec.ts`.
 
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada

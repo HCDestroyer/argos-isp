@@ -8,7 +8,6 @@ import { definirRuta, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import {
-    ArchivoPdf,
     Empresa,
     EmpresaPublica,
     EstadoPortal,
@@ -270,7 +269,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Cierra la sesión del portal',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
@@ -291,7 +290,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Datos de contacto, servicios y saldo del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Cuenta del cliente', esquema: PortalCuenta },
@@ -304,7 +303,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Facturas (avisos de cobro) del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -319,7 +318,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Detalle de una factura del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Factura con líneas', esquema: PortalFacturaDetalle },
@@ -333,7 +332,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Pagos del cliente de la sesión',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -347,7 +346,7 @@ const autenticadas: Ruta[] = [
         resumen: 'Promesas de pago del cliente de la sesión (solo lectura)',
         descripcion: SOBRE_LA_SESION,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
@@ -364,7 +363,7 @@ const autenticadas: Ruta[] = [
             `${SOBRE_LA_SESION} Acción \`portal.editar_contacto\` (canal portal) sobre \`clientes.editar\`: ` +
             'diff en audit.cambios, 409 si `version` cambió, 422 `telegram_no_vinculado`.',
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         versionada: true,
         cuerpo: editarContactoValidator,
@@ -391,7 +390,7 @@ const telegram: Ruta[] = [
         resumen: 'Estado de la vinculación de Telegram del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} El portal la consulta cada 3 s mientras el código está vigente. ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
@@ -407,7 +406,7 @@ const telegram: Ruta[] = [
             'portal): vence a los `TELEGRAM_CODIGO_VIGENCIA_S` y reemplaza el código pendiente anterior. 503 ' +
             `\`telegram_no_configurado\` sin bot. ${SOBRE_LA_IP} ${SOBRE_TELEGRAM}`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         limitada: true,
         permiso: null,
         respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
@@ -429,7 +428,7 @@ const telegram: Ruta[] = [
             `${SOBRE_LA_SESION} Acción \`portal.desvincular_telegram\` sobre \`clientes.desvincular_telegram\`. ` +
             'Si el canal preferido era Telegram pasa a correo. Idempotente.',
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Estado de Telegram', esquema: PortalTelegram },
@@ -452,10 +451,10 @@ const documentos: Ruta[] = [
         resumen: 'PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión',
         descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404. Responde application/pdf.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         limitada: true,
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { params }) => {
             const clienteId = await clienteDeLaSesionLimitada(ctx, 'factura-pdf')
             enviarPdf(ctx, await avisoCobroPdf(Number(params.id), { clienteId }))
@@ -470,7 +469,7 @@ const documentos: Ruta[] = [
             'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario. Responde application/pdf.',
         etiqueta: 'documentos',
         permiso: 'facturas.ver',
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { params }) => {
             const id = Number(params.facturaId)
             exigirAlcance(ctx.alcance, await dimensionesDeFactura(id))
@@ -523,7 +522,7 @@ const documentos: Ruta[] = [
         permiso: 'documentos.editar',
         parametros: PARAMETRO_TIPO,
         cuerpo: vistaPreviaDocumentoValidator,
-        respuesta: { status: 200, descripcion: 'PDF', esquema: ArchivoPdf },
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { cuerpo, params }) => {
             tipoDocumento(params.tipo)
             const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaDeEjemplo())
@@ -741,8 +740,7 @@ const comprobantes: Ruta[] = [
         operacion: 'portalSubirComprobante',
         resumen: 'El cliente sube el comprobante de un depósito, transferencia, ACH o remesa',
         descripcion:
-            '**`multipart/form-data`**: los campos del cuerpo más el archivo `archivo` (foto JPG, PNG o WebP, o ' +
-            'PDF, hasta 5 MB; el tipo se decide por el contenido). Llama `comprobantes.registrar` ' +
+            '`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` ' +
             '(`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que ' +
             'el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente ' +
             '(`archivo` con `rule` `required`, `tipo` o `tamano`); 409 `referencia_duplicada`. ' +
@@ -753,6 +751,12 @@ const comprobantes: Ruta[] = [
         idempotente: true,
         permiso: null,
         cuerpo: subirComprobanteValidator,
+        multipart: {
+            archivos: {
+                archivo:
+                    'Foto (JPG, PNG o WebP) o PDF del comprobante, hasta 5 MB; el tipo se decide por el contenido',
+            },
+        },
         respuesta: { status: 201, descripcion: 'Comprobante recibido', esquema: PortalComprobante },
         handler: async (ctx, { cuerpo }) => {
             const ip = await ipDelCliente(ctx, 'comprobantes')
@@ -790,7 +794,7 @@ const comprobantes: Ruta[] = [
         resumen: 'Comprobantes de depósito del cliente de la sesión, con su estado (solo lectura)',
         descripcion: `${SOBRE_LA_SESION} Incluye el motivo cuando se rechazó.`,
         etiqueta: 'portal',
-        seguridad: 'publico',
+        seguridad: 'portal',
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
