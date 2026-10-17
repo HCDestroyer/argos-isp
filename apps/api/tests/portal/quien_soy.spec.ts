@@ -20,7 +20,21 @@ const CAMPOS = [
     'promesa_activa',
     'monto_adeudado',
     'facturas_vencidas',
+    'empresa',
 ]
+
+/** Marca de la empresa principal sin guardar (`version = 0`): valores por defecto del entorno. */
+function marcaPrincipalPorDefecto() {
+    return {
+        id: 1,
+        nombre_comercial: process.env.NOTIFY_EMPRESA_NOMBRE || 'ArgosIsp',
+        logo_url: null,
+        nit: null,
+        direccion_fiscal: null,
+        telefono: process.env.NOTIFY_EMPRESA_TELEFONO || null,
+        whatsapp: null,
+    }
+}
 
 test.group('Portal: quien-soy por IP', (group) => {
     group.each.setup(() => {
@@ -60,6 +74,7 @@ test.group('Portal: quien-soy por IP', (group) => {
             promesa_activa: false,
             monto_adeudado: '399.75',
             facturas_vencidas: { cantidad: 2, total: '299.75' },
+            empresa: marcaPrincipalPorDefecto(),
         })
         assert.equal(respuesta.header('cache-control'), 'no-store')
     })
@@ -153,6 +168,7 @@ test.group('Portal: quien-soy por IP', (group) => {
             promesa_activa: null,
             monto_adeudado: null,
             facturas_vencidas: null,
+            empresa: null,
         })
 
         const nuevo = await crearServicio({ estado: 'activo', nombre: 'Pedro' })

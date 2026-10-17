@@ -28,6 +28,8 @@ export interface OpcionesServicio {
     clienteId?: number
     /** Sin facturas: servicio al día. */
     sinFacturas?: boolean
+    /** Empresa del servicio (multiempresa); sin ella, la única activa (trigger de A1). */
+    empresaId?: number
 }
 
 /** NIT guatemalteco válido y aleatorio (cuerpo de 8 dígitos + verificador módulo 11). */
@@ -78,6 +80,7 @@ export async function crearServicio(opciones: OpcionesServicio = {}) {
             estado: opciones.estado ?? 'suspendido',
             user_ppp: `ppp-${sufijo}`,
             pass_ppp: 'cifrado',
+            ...(opciones.empresaId === undefined ? {} : { empresa_id: opciones.empresaId }),
         })
         .returning('id')
 

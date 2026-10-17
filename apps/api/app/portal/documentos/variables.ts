@@ -6,6 +6,9 @@ import { D, dec } from '#ledger/dinero'
 import { ZONA, fechaCalendario, fechaCorta, fechaHora, mesAnio, quetzales } from '#notify/formato'
 import { numeroFactura } from '#portal/cuenta'
 import { leerEmpresa, type DatosEmpresa } from '#portal/empresa'
+import { SQL_EMPRESA_FACTURA } from '#portal/marca'
+import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
+import { leerArchivoLogo } from '#core/logos'
 
 /**
  * Variables de la plantilla del aviso de cobro (Mustache). Montos con `decimal.js` y ya
@@ -24,8 +27,23 @@ export interface LineaVista {
     total: string
 }
 
+/** Datos de la empresa en el documento: los de siempre más razón social y si hay logo. */
+export interface EmpresaDocumento extends DatosEmpresa {
+    razon_social: string | null
+    /** Sección `{{#empresa.logo}}`: la empresa tiene logo (se dibuja con `<img src="empresa:logo">`) */
+    logo: boolean
+}
+
+/** Logo de la empresa para el PDF (PNG o SVG saneado; nunca una URL externa). */
+export interface ImagenDocumento {
+    tipo: 'image/png' | 'image/svg+xml'
+    contenido: Buffer
+}
+
 export interface VistaAvisoCobro {
-    empresa: DatosEmpresa
+    empresa: EmpresaDocumento
+    /** id de la empresa del documento (no es variable de la plantilla) */
+    empresa_id?: number
     cliente: { nombre: string; nit: string; direccion: string | null; email: string | null }
     servicio: { plan: string | null; direccion: string | null }
     factura: {
@@ -52,9 +70,14 @@ export interface VistaAvisoCobro {
 }
 
 export const VARIABLES_AVISO_COBRO: ReadonlyArray<{ nombre: string; descripcion: string }> = [
-    { nombre: 'empresa.nombre', descripcion: 'Nombre comercial de la empresa' },
+    { nombre: 'empresa.nombre', descripcion: 'Nombre comercial de la empresa que factura' },
+    { nombre: 'empresa.razon_social', descripcion: 'Razón social (nombre fiscal) de la empresa' },
     { nombre: 'empresa.nit', descripcion: 'NIT de la empresa' },
-    { nombre: 'empresa.direccion', descripcion: 'Dirección de la empresa' },
+    { nombre: 'empresa.direccion', descripcion: 'Dirección fiscal de la empresa' },
+    {
+        nombre: 'empresa.logo',
+        descripcion: 'Sección: la empresa tiene logo. Se dibuja con <img src="empresa:logo" height="48">',
+    },
     { nombre: 'empresa.telefono', descripcion: 'Teléfono de atención' },
     { nombre: 'empresa.telefono_alterno', descripcion: 'Segundo teléfono' },
     { nombre: 'empresa.whatsapp', descripcion: 'WhatsApp de atención' },
@@ -133,7 +156,7 @@ export async function variablesAvisoCobro(
             'c.direccion as cliente_direccion',
             'c.email',
             's.direccion as servicio_direccion',
-            's.empresa_id',
+            cliente.raw(`${SQL_EMPRESA_FACTURA} as empresa_id`),
             'p.nombre as plan',
         )
         .first()) as Record<string, any> | null
@@ -156,10 +179,12 @@ export async function variablesAvisoCobro(
     const saldo = fila.estado === 'anulada' ? new D(0) : D.max(total.minus(pagado), 0)
     const id = Number(fila.id)
 
+    // Multiempresa: la empresa de la factura (`SQL_EMPRESA_FACTURA`, hoy la de su servicio; punto de
+    // cambio a `billing.facturas.empresa_id` anotado en `#portal/marca`).
+    const empresaId = Number(fila.empresa_id)
     return {
-        // multiempresa (A1): la empresa del servicio de la factura; sin servicio, la principal.
-        // Cuando A3 agregue `billing.facturas.empresa_id`, usar esa.
-        empresa: await leerEmpresa(cliente, fila.empresa_id ? Number(fila.empresa_id) : undefined),
+        empresa: await empresaDocumento(empresaId, cliente),
+        empresa_id: empresaId,
         cliente: {
             nombre: fila.nombre_fiscal || fila.cliente_nombre,
             nit: fila.nit_cui || 'CF',
@@ -203,11 +228,52 @@ function formatearCantidad(cantidad: string): string {
     return dec(cantidad).toString()
 }
 
-/** Datos de ejemplo para la vista previa del editor y para validar una plantilla al guardarla. */
-export async function vistaDeEjemplo(cliente?: QueryClientContract): Promise<VistaAvisoCobro> {
+/** Empresa del documento: datos de siempre (con los valores por defecto), razón social y logo. */
+export async function empresaDocumento(
+    empresaId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<EmpresaDocumento> {
+    const datos = await leerEmpresa(cliente, empresaId)
+    const fila = await cliente
+        .from('core.empresas')
+        .where('id', empresaId)
+        .select('razon_social', 'logo', 'version')
+        .first()
+    const guardada = fila && Number(fila.version) > 0
+    return {
+        ...datos,
+        razon_social: guardada ? (fila.razon_social ?? null) : null,
+        logo: Boolean(fila?.logo),
+    }
+}
+
+/**
+ * Logo de la empresa del documento para `htmlAPdf` (`imagenes['empresa:logo']`), o nada si no
+ * tiene o el archivo no se puede leer (el PDF sale igual, con el nombre en texto).
+ */
+export async function imagenesDocumento(vista: VistaAvisoCobro): Promise<Record<string, ImagenDocumento>> {
+    if (!vista.empresa.logo || vista.empresa_id === undefined) return {}
+    try {
+        const fila = await filaEmpresa(vista.empresa_id)
+        if (!fila.logo || !fila.logo_tipo) return {}
+        return { 'empresa:logo': { tipo: fila.logo_tipo, contenido: await leerArchivoLogo(fila.logo) } }
+    } catch {
+        return {}
+    }
+}
+
+/**
+ * Datos de ejemplo para la vista previa del editor y para validar una plantilla al guardarla. La
+ * empresa es real (la principal o la pedida), así la vista previa muestra su logo y sus datos.
+ */
+export async function vistaDeEjemplo(
+    cliente?: QueryClientContract,
+    empresaId: number = EMPRESA_PRINCIPAL,
+): Promise<VistaAvisoCobro> {
     const ahora = DateTime.now().setZone(ZONA)
     return {
-        empresa: await leerEmpresa(cliente),
+        empresa: await empresaDocumento(empresaId, cliente),
+        empresa_id: empresaId,
         cliente: {
             nombre: 'María José García López',
             nit: '1234567-8',

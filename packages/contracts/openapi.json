@@ -13338,10 +13338,34 @@
     "/api/v1/portal/empresa": {
       "get": {
         "operationId": "portalEmpresa",
-        "summary": "Datos de contacto, instrucciones de pago y cuentas para depósito (página de corte)",
-        "description": "Sin login: es información pública de la empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "summary": "Marca, contacto, instrucciones de pago y cuentas para depósito de una empresa",
+        "description": "Sin login: es información pública de la empresa (la de sus avisos de cobro). Multiempresa: con `empresa_id`, esa empresa (404 si no existe); con `de=cliente`, la principal del cliente de la sesión (401 sin sesión); sin parámetros, la del servicio de la IP de origen (página de corte), si no la principal del cliente de la sesión, si no la principal de la instalación. Las cuentas de depósito son solo las de esa empresa. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Esta empresa (la de un servicio o una factura de `/cuenta`)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "de",
+            "in": "query",
+            "required": false,
+            "description": "`cliente`: la empresa principal del cliente de la sesión (401 sin sesión)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cliente"
+              ]
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -13350,6 +13374,74 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EmpresaPublica"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/empresas/{id}/logo": {
+      "get": {
+        "operationId": "portalEmpresaLogo",
+        "summary": "Logo de una empresa por el mismo origen del portal (walled garden)",
+        "description": "El mismo archivo que `GET /empresas/:id/logo`, bajo `/portal` para que el cliente suspendido lo alcance. `ETag` y caché larga (la URL lleva `?v=<etag>`); con `If-None-Match` igual responde 304. 404 si la empresa no existe o no tiene logo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen del logo",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -25224,6 +25316,8 @@
       "EmpresaPublica": {
         "type": "object",
         "required": [
+          "id",
+          "logo_url",
           "nombre",
           "nit",
           "direccion",
@@ -25237,6 +25331,18 @@
           "pago_en_linea"
         ],
         "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa de la que son estos datos"
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Logo por el mismo origen del portal; null sin logo"
+          },
           "nombre": {
             "type": "string"
           },
@@ -25296,7 +25402,7 @@
             "items": {
               "$ref": "#/components/schemas/CuentaDeposito"
             },
-            "description": "Cuentas bancarias activas en quetzales para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran"
+            "description": "Cuentas bancarias activas en quetzales de ESTA empresa para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran"
           },
           "pago_en_linea": {
             "type": "boolean",
@@ -27798,7 +27904,8 @@
         "required": [
           "cliente",
           "servicios",
-          "monto_adeudado"
+          "monto_adeudado",
+          "empresa_principal"
         ],
         "properties": {
           "cliente": {
@@ -27812,7 +27919,11 @@
           },
           "monto_adeudado": {
             "$ref": "#/components/schemas/Dinero",
-            "description": "Saldo pendiente de todos los servicios"
+            "description": "Saldo pendiente de todos los servicios (solo informativo con varias empresas: cada una cobra lo suyo)"
+          },
+          "empresa_principal": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa con más servicios sin retirar (encabezado, título y manifiesto)"
           }
         }
       },
@@ -27835,7 +27946,8 @@
           "saldo",
           "fel_uuid",
           "fel_serie",
-          "fel_numero"
+          "fel_numero",
+          "empresa"
         ],
         "properties": {
           "id": {
@@ -27923,6 +28035,10 @@
               "string",
               "null"
             ]
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa que emite la factura"
           }
         }
       },
@@ -27972,6 +28088,60 @@
           },
           "total": {
             "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "PortalMarcaEmpresa": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre_comercial",
+          "logo_url",
+          "nit",
+          "direccion_fiscal",
+          "telefono",
+          "whatsapp"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre_comercial": {
+            "type": "string"
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Logo por el mismo origen del portal (`/api/v1/portal/empresas/:id/logo?v=…`); null sin logo"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direccion_fiscal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Teléfono de soporte"
+          },
+          "whatsapp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "WhatsApp de soporte"
           }
         }
       },
@@ -28210,7 +28380,8 @@
           "plan",
           "direccion",
           "promesa_activa",
-          "monto_adeudado"
+          "monto_adeudado",
+          "empresa"
         ],
         "properties": {
           "id": {
@@ -28237,6 +28408,10 @@
           },
           "monto_adeudado": {
             "$ref": "#/components/schemas/Dinero"
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa que factura este servicio"
           }
         }
       },
@@ -28244,7 +28419,8 @@
         "type": "object",
         "required": [
           "cliente",
-          "expira_en"
+          "expira_en",
+          "empresa_principal"
         ],
         "properties": {
           "cliente": {
@@ -28265,6 +28441,10 @@
             "type": "string",
             "format": "date-time",
             "description": "Vence por inactividad; cada consulta la extiende"
+          },
+          "empresa_principal": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa con más servicios sin retirar del cliente (título y marca del portal)"
           }
         }
       },
@@ -28492,7 +28672,8 @@
           "estado",
           "promesa_activa",
           "monto_adeudado",
-          "facturas_vencidas"
+          "facturas_vencidas",
+          "empresa"
         ],
         "properties": {
           "identificado": {
@@ -28547,6 +28728,17 @@
                 "type": "null"
               }
             ]
+          },
+          "empresa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalMarcaEmpresa"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Empresa del servicio de esa IP (su marca y su soporte); null sin identificar"
           }
         }
       },
