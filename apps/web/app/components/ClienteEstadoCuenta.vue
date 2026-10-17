@@ -69,12 +69,32 @@ const columnasMovimientos: TableColumn<Movimiento>[] = [
     { accessorKey: 'saldo', header: 'Saldo' },
 ]
 
-/** Avisos pendientes por empresa (o un solo grupo sin multiempresa). */
-const gruposFacturas = computed(() => {
+interface GrupoCuenta {
+    empresaId: number | null
+    filas: Factura[]
+    /** Lo que muestra el encabezado: el saldo de la sección (API) o, sin secciones, lo pendiente. */
+    detalle: string
+}
+
+/**
+ * Avisos pendientes por empresa. Con `EstadoCuenta.empresas[]` (A3) cada sección trae su saldo del
+ * auxiliar; sin ella (API anterior) se agrupan por la empresa del servicio y se muestra lo pendiente.
+ */
+const gruposFacturas = computed<GrupoCuenta[]>(() => {
     const facturas = estado.value?.facturas_pendientes ?? []
-    return porEmpresa.value
-        ? agruparPorEmpresa(facturas, factura => empresaDeFactura(factura, props.servicios))
-        : [{ empresaId: null, filas: facturas }]
+    if (!porEmpresa.value) {
+        return [{ empresaId: null, filas: facturas, detalle: '' }]
+    }
+    const secciones = estado.value?.empresas
+    if (secciones?.length) {
+        return secciones.map(seccion => ({
+            empresaId: seccion.empresa_id,
+            filas: seccion.facturas_pendientes,
+            detalle: `Saldo ${formatearQuetzales(seccion.saldo)}${new Decimal(seccion.saldo_a_favor).gt(0) ? ` · a favor ${formatearQuetzales(seccion.saldo_a_favor)}` : ''}`,
+        }))
+    }
+    return agruparPorEmpresa(facturas, factura => factura.empresa_id ?? empresaDeFactura(factura, props.servicios))
+        .map(grupo => ({ ...grupo, detalle: `Pendiente ${formatearQuetzales(pendienteDeFacturas(grupo.filas))}` }))
 })
 
 function pendiente(factura: Factura): Decimal {
@@ -124,7 +144,7 @@ onMounted(cargar)
                 :ui="{ container: 'gap-1 sm:p-4' }"
             >
                 <p class="text-xs font-medium text-muted">
-                    Saldo
+                    {{ porEmpresa && (estado?.empresas?.length ?? 0) > 1 ? 'Saldo total (informativo)' : 'Saldo' }}
                 </p>
                 <template v-if="cargando || !saldo">
                     <USkeleton class="h-8 w-32" />
@@ -222,10 +242,10 @@ onMounted(cargar)
                 :data-prueba="porEmpresa ? `pendientes-empresa-${grupo.empresaId}` : undefined"
             >
                 <EncabezadoEmpresa
-                    v-if="porEmpresa && grupo.filas.length"
+                    v-if="porEmpresa"
                     :empresa-id="grupo.empresaId"
                     nivel="h4"
-                    :detalle="`Pendiente ${formatearQuetzales(pendienteDeFacturas(grupo.filas))}`"
+                    :detalle="grupo.detalle"
                 />
                 <UTable
                     :data="grupo.filas"

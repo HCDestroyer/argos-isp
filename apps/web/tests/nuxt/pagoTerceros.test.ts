@@ -94,7 +94,7 @@ describe('pago de terceros y responsable de pago', () => {
             props: {
                 cliente: pagador.data,
                 pago: {
-                    id: 900, cliente_id: 10, metodo: 'caja', monto: '150.00', comision: '0.00', pasarela: null, referencia: null, caja_id: null, estado: 'registrado', nota: null,
+                    id: 900, empresa_id: 1, cobro_id: null, cliente_id: 10, metodo: 'caja', monto: '150.00', comision: '0.00', pasarela: null, referencia: null, caja_id: null, estado: 'registrado', nota: null,
                     registrado_por: 1, version: 1, created_at: '2026-10-16T15:00:00.000Z', updated_at: '2026-10-16T15:00:00.000Z', anulado_en: null, motivo_anulacion: null,
                     banco_origen_id: null, banco_origen_nombre: null, cuenta_bancaria_id: null, cuenta_bancaria_nombre: null,
                     aplicaciones: [{ factura_id: 501, monto: '150.00', cliente_id: 12, cliente_nombre: 'Andrea Paola Gómez' }],

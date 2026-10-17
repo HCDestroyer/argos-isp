@@ -26,6 +26,17 @@ import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
+/** Un cobro guardado: el recibo (`GET /cobros/:id`) se arma con sus pagos. */
+export interface CobroFixture {
+    id: number
+    cliente_id: number
+    metodo: Schema<'Pago'>['metodo']
+    monto: string
+    registrado_por: number | null
+    created_at: string
+    pagos: number[]
+}
+
 /** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
 export interface SesionSimulada {
     token: string | null
@@ -68,6 +79,8 @@ interface BaseFixtures {
     notificaciones: { global: Schema<'ConfiguracionNotificaciones'>, empresas: Record<number, Schema<'ConfiguracionNotificaciones'>> }
     /** Envíos de prueba hechos (para el `envio_id`). */
     enviosPrueba: number
+    /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
+    cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
@@ -129,6 +142,7 @@ function inicial(): BaseFixtures {
         usuarios,
         notificaciones: { global: configuracionGlobal, empresas: {} },
         enviosPrueba: 0,
+        cobros: [],
         plantillaAvisoCobro,
         clavesPpp: {},
         idempotencia: {},

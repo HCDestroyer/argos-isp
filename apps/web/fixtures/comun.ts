@@ -185,3 +185,9 @@ export function empresasDeLista(solicitud: SolicitudFixture): number[] | null {
     const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
     return !usuario || usuario.alcance_global ? null : (usuario.empresas ?? []).map(e => e.id)
 }
+
+/** Filtra una lista de documentos por las empresas de la petición (`filtrarPorEmpresa` de A3). */
+export function deLaEmpresa<T extends { empresa_id?: number }>(filas: readonly T[], solicitud: SolicitudFixture): T[] {
+    const empresas = empresasDeLista(solicitud)
+    return empresas === null ? [...filas] : filas.filter(f => empresas.includes(f.empresa_id ?? 1))
+}

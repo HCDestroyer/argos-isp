@@ -14,6 +14,7 @@ function ajusteManual(): Asiento {
     const id = Math.max(...bd.asientos.map(a => a.id)) + 1
     const asiento: Asiento = {
         id,
+        empresa_id: 1,
         fecha: '2026-10-15',
         descripcion: 'Ajuste manual: redondeo de caja',
         origen_tipo: 'ajuste',

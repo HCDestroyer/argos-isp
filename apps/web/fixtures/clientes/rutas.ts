@@ -266,7 +266,7 @@ export const rutasClientes: RutasFixture = {
     'GET /api/v1/clientes/:id/estado-cuenta': conPermiso('clientes.estado_cuenta', (solicitud) => {
         const id = idDe(solicitud)
         const cliente = bd.clientes.find(c => c.id === id)
-        return cliente ? { status: 200, cuerpo: estadoCuentaDe(cliente.id) } : noEncontrado('el cliente')
+        return cliente ? { status: 200, cuerpo: estadoCuentaDe(cliente.id, numeroQuery(solicitud, 'empresa_id')) } : noEncontrado('el cliente')
     }),
 
     'POST /api/v1/clientes': conPermiso('clientes.crear', conIdempotencia((solicitud) => {

@@ -1,6 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import { CLIENTE_IMPORTADO, clientes } from '../clientes/datos'
+import { empresas } from '../empresas/datos'
 import { planes } from '../planes/datos'
 import { servicios } from '../servicios/datos'
 
@@ -10,6 +11,9 @@ type Servicio = Schema<'Servicio'>
 
 /** "Hoy" de los fixtures, en Guatemala: las facturas que vencen antes están vencidas. */
 export const HOY_FIXTURES = '2026-10-15'
+
+/** Caja de Fibra del Sur (empresa 2), con turno abierto: el cobro repartido la usa. */
+export const CAJA_SUR_ID = 4
 
 const PERIODOS = ['2026-09-01', '2026-10-01'] as const
 const IVA = new Decimal('1.12')
@@ -65,6 +69,9 @@ export const facturas: Factura[] = servicios
             const estado = estadoFactura(pagado, total, vence)
             return {
                 id: servicio.id * 100 + indice + 9,
+                // Multiempresa (A3): la empresa del servicio, con su nombre comercial.
+                empresa_id: servicio.empresa_id,
+                empresa_nombre: empresas.find(e => e.id === servicio.empresa_id)?.nombre_comercial ?? '',
                 cliente_id: servicio.cliente_id,
                 servicio_id: servicio.id,
                 periodo,
@@ -99,6 +106,8 @@ export const clavesHistoricas: Record<number, string> = { 9001: 'mikrowisp:pago:
 /** Pago histórico importado de Mikrowisp: sin factura (anticipo), sin caja ni banco. */
 const pagoHistorico: Pago = {
     id: 9001,
+    empresa_id: 1,
+    cobro_id: null,
     cliente_id: CLIENTE_IMPORTADO,
     metodo: 'deposito',
     monto: '75.00',
@@ -131,12 +140,15 @@ export const pagos: Pago[] = facturas
         const fecha = `${sumarDias(factura.periodo, 4)}T16:20:00.000Z`
         return {
             id: factura.id + 5000,
+            // Multiempresa (A3): el pago es de la empresa de su factura, en una caja de esa empresa.
+            empresa_id: factura.empresa_id,
+            cobro_id: null,
             cliente_id: factura.cliente_id,
             metodo: 'caja',
             monto: factura.pagado,
             comision: '0.00',
             referencia: null,
-            caja_id: 1,
+            caja_id: factura.empresa_id === 2 ? CAJA_SUR_ID : 1,
             pasarela: null,
             estado: 'registrado',
             nota: null,
@@ -164,11 +176,15 @@ export const pagos: Pago[] = facturas
 
 const momentoCaja = '2026-10-15T13:00:00.000Z'
 
-/** Cajas: la del cajero y la de la oficina con turno abierto; Mixco sin turno. */
+/**
+ * Cajas: la del cajero y la de la oficina con turno abierto; Mixco sin turno (las tres de
+ * ArgosNet). Multiempresa: la caja Sur es de Fibra del Sur y también tiene turno abierto.
+ */
 export const cajas: Schema<'Caja'>[] = [
-    { id: 1, nombre: 'Caja Central', cajero_id: 2, cuenta_id: 3, activa: true, turno_abierto_id: 41, version: 3, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
-    { id: 2, nombre: 'Caja Oficina', cajero_id: 1, cuenta_id: 4, activa: true, turno_abierto_id: 42, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
-    { id: 3, nombre: 'Caja Mixco', cajero_id: null, cuenta_id: 5, activa: true, turno_abierto_id: null, version: 1, created_at: '2026-09-01T15:00:00.000Z', updated_at: '2026-09-01T15:00:00.000Z' },
+    { id: 1, empresa_id: 1, nombre: 'Caja Central', cajero_id: 2, cuenta_id: 3, activa: true, turno_abierto_id: 41, version: 3, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
+    { id: 2, empresa_id: 1, nombre: 'Caja Oficina', cajero_id: 1, cuenta_id: 4, activa: true, turno_abierto_id: 42, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
+    { id: 3, empresa_id: 1, nombre: 'Caja Mixco', cajero_id: null, cuenta_id: 5, activa: true, turno_abierto_id: null, version: 1, created_at: '2026-09-01T15:00:00.000Z', updated_at: '2026-09-01T15:00:00.000Z' },
+    { id: CAJA_SUR_ID, empresa_id: 2, nombre: 'Caja Sur', cajero_id: 1, cuenta_id: 6, activa: true, turno_abierto_id: 43, version: 2, created_at: '2026-09-01T15:00:00.000Z', updated_at: momentoCaja },
 ]
 
 type Turno = Schema<'CajaTurno'>
@@ -224,4 +240,5 @@ export const turnos: Turno[] = [
     turnoCerrado(40, 1, '2026-10-14', '500.00', '960.00', '980.00', 'Sobrante: un cliente no esperó su vuelto'),
     turnoAbierto(41, 1, '500.00'),
     turnoAbierto(42, 2, '300.00'),
+    turnoAbierto(43, CAJA_SUR_ID, '200.00'),
 ]

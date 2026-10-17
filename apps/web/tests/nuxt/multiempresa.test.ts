@@ -212,7 +212,8 @@ describe('multiempresa · pantallas', () => {
         await vi.waitFor(() => expect(vista.find('[data-prueba="pendientes-empresa-2"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="pendientes-empresa-1"]').text()).toContain('ArgosNet')
         expect(vista.get('[data-prueba="pendientes-empresa-2"]').text()).toContain('Fibra del Sur')
-        expect(vista.get('[data-prueba="pendientes-empresa-2"]').text()).toContain('Pendiente Q 450.00')
+        // El saldo de cada empresa sale de `EstadoCuenta.empresas[]` (A3), no se calcula en pantalla.
+        expect(vista.get('[data-prueba="pendientes-empresa-2"]').text()).toContain('Saldo Q 450.00')
     })
 
     it('cobro: facturas de dos empresas se muestran como un pago por empresa', async () => {

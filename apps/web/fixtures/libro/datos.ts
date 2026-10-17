@@ -91,6 +91,7 @@ export function cuentaDePago(pago: Schema<'Pago'>): number {
 export function asientoFactura(id: number, factura: Schema<'Factura'>): Asiento {
     return {
         id,
+        empresa_id: factura.empresa_id,
         fecha: fechaGuatemala(factura.emitida_en),
         descripcion: `Factura ${factura.id} · servicio ${factura.servicio_id ?? '—'} · periodo ${factura.periodo}`,
         origen_tipo: 'factura',
@@ -110,6 +111,7 @@ export function asientoFactura(id: number, factura: Schema<'Factura'>): Asiento 
 export function asientoPago(id: number, pago: Schema<'Pago'>): Asiento {
     return {
         id,
+        empresa_id: pago.empresa_id,
         fecha: fechaGuatemala(pago.created_at),
         descripcion: `Pago ${pago.id} · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''} · facturas ${pago.aplicaciones.map(a => a.factura_id).join(', ')}`,
         origen_tipo: 'pago',
@@ -128,6 +130,8 @@ export function asientoPago(id: number, pago: Schema<'Pago'>): Asiento {
 export function asientoReverso(id: number, original: Asiento, descripcion: string, instante: string, usuario: number | null): Asiento {
     return {
         id,
+        // Un reverso va al libro del original.
+        empresa_id: original.empresa_id,
         fecha: fechaGuatemala(instante),
         descripcion,
         origen_tipo: original.origen_tipo,
@@ -164,6 +168,6 @@ export function cuadra(asiento: Asiento): boolean {
  * cuenta 1.1.02.01 (la de los egresos con `banco` sin `banco_id`); el número va enmascarado.
  */
 export const bancosLibro: Schema<'BancoLibro'>[] = [
-    { id: 1, nombre: 'Banco principal', banco_id: null, banco: null, numero_enmascarado: null, cuenta_id: 6, cuenta_codigo: '1.1.02.01', cuenta_nombre: 'Banco principal' },
-    { id: 2, nombre: 'Banco Industrial · Monetaria', banco_id: 2, banco: 'Banco Industrial', numero_enmascarado: '******3456', cuenta_id: 16, cuenta_codigo: '1.1.02.02', cuenta_nombre: 'Banco Industrial · Monetaria (****3456)' },
+    { id: 1, empresa_id: 1, nombre: 'Banco principal', banco_id: null, banco: null, numero_enmascarado: null, cuenta_id: 6, cuenta_codigo: '1.1.02.01', cuenta_nombre: 'Banco principal' },
+    { id: 2, empresa_id: 1, nombre: 'Banco Industrial · Monetaria', banco_id: 2, banco: 'Banco Industrial', numero_enmascarado: '******3456', cuenta_id: 16, cuenta_codigo: '1.1.02.02', cuenta_nombre: 'Banco Industrial · Monetaria (****3456)' },
 ]
