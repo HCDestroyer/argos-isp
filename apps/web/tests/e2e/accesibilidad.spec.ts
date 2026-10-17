@@ -67,7 +67,8 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            test.setTimeout(300_000)
+            // 25 pantallas con axe; en CI corre en paralelo con el resto.
+            test.setTimeout(600_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 await page.goto(ruta)
