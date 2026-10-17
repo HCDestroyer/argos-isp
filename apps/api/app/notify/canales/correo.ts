@@ -1,14 +1,19 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 import { ErrorCanal, type Canal, type EstadoEntrega, type ResultadoEnvio } from '#notify/canales/canal'
 
+/** Remitente: `ArgosIsp <no-responder@dominio>` o nombre visible y dirección por separado. */
+export type Remitente = string | { name: string; address: string }
+
 export interface ConfigCorreo {
     host: string
     port: number
+    /** TLS desde el inicio (465). Equivale a `tls: 'tls'`. */
     secure?: boolean
+    /** modo TLS (`configuracion.ts`, `MODOS_TLS`); por defecto `auto` */
+    tls?: 'auto' | 'starttls' | 'tls' | 'ninguno'
     user?: string
     password?: string
-    /** remitente: `ArgosIsp <no-responder@dominio>` */
-    remitente: string
+    remitente: Remitente
 }
 
 /**
@@ -18,16 +23,19 @@ export interface ConfigCorreo {
 export class CanalCorreo implements Canal {
     readonly nombre = 'correo' as const
     readonly #transporte: Transporter
-    readonly #remitente: string
+    readonly #remitente: Remitente
 
-    constructor(config: ConfigCorreo | { transporte: Transporter; remitente: string }) {
+    constructor(config: ConfigCorreo | { transporte: Transporter; remitente: Remitente }) {
         if ('transporte' in config) {
             this.#transporte = config.transporte
         } else {
+            const tls = config.tls ?? (config.secure ? 'tls' : 'auto')
             this.#transporte = nodemailer.createTransport({
                 host: config.host,
                 port: config.port,
-                secure: config.secure ?? false,
+                secure: tls === 'tls',
+                requireTLS: tls === 'starttls',
+                ignoreTLS: tls === 'ninguno',
                 auth: config.user ? { user: config.user, pass: config.password ?? '' } : undefined,
                 connectionTimeout: 10_000,
                 greetingTimeout: 10_000,
