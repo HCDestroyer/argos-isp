@@ -23,10 +23,10 @@ export const NOMBRE_METODO: Record<MetodoComprobante, string> = {
     remesa: 'Remesa',
 }
 
-export const ESTADOS_COMPROBANTE: Record<EstadoComprobante, { etiqueta: string, color: Color }> = {
-    pendiente: { etiqueta: 'En revisión', color: 'warning' },
-    aprobado: { etiqueta: 'Aprobado', color: 'success' },
-    rechazado: { etiqueta: 'Rechazado', color: 'error' },
+export const ESTADOS_COMPROBANTE: Record<EstadoComprobante, { etiqueta: string, color: Color, icono: string }> = {
+    pendiente: { etiqueta: 'En revisión', color: 'warning', icono: 'i-lucide-hourglass' },
+    aprobado: { etiqueta: 'Aprobado', color: 'success', icono: 'i-lucide-circle-check' },
+    rechazado: { etiqueta: 'Rechazado', color: 'error', icono: 'i-lucide-circle-x' },
 }
 
 /** Igual que `DATOS_POR_METODO` de A3: el banco de origen solo se pide en transferencia y ACH. */

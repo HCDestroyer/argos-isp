@@ -9,10 +9,21 @@ export type CuentaPortal = Schema<'PortalCuenta'>
  */
 export function useCuenta() {
     const api = useApi()
+    const sesion = useSesionPortal()
 
     return useAsyncData<Resultado<CuentaPortal>>(
         'portal:cuenta',
-        () => resolver(api.GET('/api/v1/portal/cuenta')),
+        async () => {
+            const resultado = await resolver(api.GET('/api/v1/portal/cuenta'))
+            // La lectura de la cuenta es la que confirma (o descarta) la sesión del portal.
+            if (resultado.ok) {
+                sesion.confirmar()
+            }
+            else if (esSinSesion(resultado.problema)) {
+                sesion.cerrar()
+            }
+            return resultado
+        },
         { server: false },
     )
 }

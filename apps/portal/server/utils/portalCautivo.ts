@@ -68,8 +68,8 @@ export const SONDAS: readonly SondaPortalCautivo[] = [
 export const RUTAS_DETECCION: ReadonlySet<string> = new Set(SONDAS.map(sonda => sonda.ruta))
 
 /** Recursos de la propia página de corte que se sirven aunque el Host sea ajeno. */
-const PREFIJOS_RECURSOS = ['/_nuxt/', '/api/v1/portal/', '/api/_nuxt_icon/', '/_payload', '/__nuxt']
-const RECURSOS_EXACTOS = new Set(['/favicon.ico', '/robots.txt'])
+const PREFIJOS_RECURSOS = ['/_nuxt/', '/api/v1/portal/', '/api/_nuxt_icon/', '/_payload', '/__nuxt', '/iconos/']
+const RECURSOS_EXACTOS = new Set(['/favicon.ico', '/favicon.svg', '/robots.txt', '/manifest.webmanifest'])
 
 export const RUTA_CORTE = '/corte'
 
