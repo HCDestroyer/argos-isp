@@ -39,6 +39,9 @@ x-api-env: &api-env
   # se configura desde el panel; HORUS_PERMITIR_HTTP=true solo en laboratorio (Horus sin TLS).
   API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3333}
   HORUS_PERMITIR_HTTP: ${HORUS_PERMITIR_HTTP:-false}
+  # URL con la que el navegador llega al panel: autologin de Horus (/sso/entrar) y redirección del
+  # enlace de conexión (GET /conectar de la API → <panel>/conectar). Sin ella, 503 en producción.
+  PANEL_URL_PUBLICA: ${PANEL_URL_PUBLICA:-http://localhost:${WEB_PORT_HOST:-3000}}
   DB_HOST: postgres
   DB_PORT: '5432'
   # Usuario de la aplicación: miembro de argosisp_app, sin DDL ni UPDATE/DELETE en ledger y audit

@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { configHorus } from '#integraciones/horus/configuracion'
-import { ErrorHorus, llamarHorus } from '#integraciones/horus/cliente'
+import { ErrorHorus, llamarHorus, reintentarEnDe } from '#integraciones/horus/cliente'
 import { ConectorNoDisponible, HorusRespondioError } from '#integraciones/horus/errores'
 import { usuarioDelActor } from '#shared/contexto'
 
@@ -60,7 +60,10 @@ export default class AbrirEnHorus extends DomainAction<EntradaAbrirEnHorus, Sali
             )
             datos = respuesta.datos ?? {}
         } catch (error) {
-            throw new HorusRespondioError(error instanceof ErrorHorus ? error.message : String(error))
+            throw new HorusRespondioError(
+                error instanceof ErrorHorus ? error.message : String(error),
+                reintentarEnDe(error),
+            )
         }
         if (!datos.url || !datos.url.startsWith(`${config.urlBase}/`)) {
             throw new HorusRespondioError('Horus devolvió una URL de ticket que no es de su URL base')

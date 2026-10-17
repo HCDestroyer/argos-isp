@@ -21,6 +21,24 @@ import {
  */
 
 const ARGOS = 'https://argos.isp.example'
+const PANEL = 'https://panel.isp.example'
+
+/** Usuario con un rol hecho a la medida (p. ej. `horus.abrir` sin `horus.ver`). */
+async function usuarioConPermisos(permisos: string[]) {
+    const { usuario, token } = await usuarioConRoles([])
+    const [rol] = (await db
+        .table('core.roles')
+        .insert({ nombre: `prueba_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` })
+        .returning('id')) as Array<{ id: number }>
+    const ids = (await db.from('core.permisos').whereIn('nombre', permisos).select('id')) as Array<{
+        id: number
+    }>
+    await db
+        .table('core.roles_permisos')
+        .multiInsert(ids.map((p) => ({ role_id: rol!.id, permiso_id: p.id })))
+    await db.table('core.usuarios_roles').insert({ usuario_id: usuario.id, role_id: rol!.id })
+    return { usuario, token }
+}
 
 function canje(codigo: string, extra: Record<string, unknown> = {}) {
     return {
@@ -40,11 +58,13 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
     group.each.setup(async () => {
         process.env.HORUS_PERMITIR_HTTP = 'true'
         process.env.API_PUBLIC_URL = ARGOS
+        process.env.PANEL_URL_PUBLICA = PANEL
         await limpiarHorus()
         return async () => {
             await limpiarHorus()
             delete process.env.HORUS_PERMITIR_HTTP
             delete process.env.API_PUBLIC_URL
+            delete process.env.PANEL_URL_PUBLICA
         }
     })
 
@@ -320,5 +340,137 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
         } finally {
             await horus.detener()
         }
+    })
+    test('el enlace abierto en el navegador lleva a la página /conectar del panel; el canje sigue en la API', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const generado = await estado(
+            client.post('/api/v1/integraciones/horus/enlace').bearerToken(admin),
+            201,
+        )
+        const enlace = new URL(generado.body().enlace)
+        // Horus canjea en <host del enlace>/api/v1/…: el host es el de la API (contrato §1.4)
+        assert.equal(enlace.origin, ARGOS)
+        assert.equal(enlace.pathname, '/conectar')
+
+        // el navegador pide la ruta sin el fragmento: 302 a la página del panel
+        const abierto = await client.get(enlace.pathname).redirects(0)
+        abierto.assertStatus(302)
+        assert.equal(abierto.header('location'), `${PANEL}/conectar`)
+
+        // sin PANEL_URL_PUBLICA, en desarrollo, el panel local
+        delete process.env.PANEL_URL_PUBLICA
+        const local = await client.get('/conectar').redirects(0)
+        local.assertStatus(302)
+        assert.equal(local.header('location'), 'http://localhost:3000/conectar')
+
+        // el código sigue sirviendo para el canje en la API
+        const codigo = generado.body().enlace.split('#')[1]!
+        await estado(client.post('/api/v1/integraciones/horus/conexion/canjear').json(canje(codigo)), 200)
+    })
+
+    test('estado del conector con horus.abrir sin horus.ver: solo activo y pausa, sin secretos', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConPermisos(['horus.abrir'])
+        // con horus.abrir no se ve la configuración…
+        await estado(client.get('/api/v1/integraciones/horus').bearerToken(token), 403)
+
+        // …pero sí el estado: sin conector, apagado
+        const sinConector = await estado(
+            client.get('/api/v1/integraciones/horus/estado').bearerToken(token),
+            200,
+        )
+        assert.deepEqual(sinConector.body(), { activo: false, reintentar_en: null })
+
+        await fijarConector({ url_base: 'https://horus.isp.example' })
+        const encendido = await estado(
+            client.get('/api/v1/integraciones/horus/estado').bearerToken(token),
+            200,
+        )
+        assert.deepEqual(encendido.body(), { activo: true, reintentar_en: null })
+        assert.notInclude(JSON.stringify(encendido.body()), 'hf_pat_')
+        assert.notInclude(JSON.stringify(encendido.body()), 'horus.isp.example')
+
+        // en pausa por la espera exponencial: hasta cuándo
+        const pausa = new Date(Date.now() + 5 * 60_000)
+        await db
+            .from('integraciones.horus_salud')
+            .where('id', 1)
+            .update({ fallos_seguidos: 3, pausa_hasta: pausa })
+        const enPausa = await estado(client.get('/api/v1/integraciones/horus/estado').bearerToken(token), 200)
+        assert.deepEqual(enPausa.body(), { activo: true, reintentar_en: pausa.toISOString() })
+
+        await fijarConector({ activo: false, url_base: 'https://horus.isp.example' })
+        const apagado = await estado(client.get('/api/v1/integraciones/horus/estado').bearerToken(token), 200)
+        assert.deepEqual(apagado.body(), { activo: false, reintentar_en: null })
+
+        // sin horus.abrir: 403
+        const { token: soporte } = await usuarioConRoles(['soporte'])
+        await estado(client.get('/api/v1/integraciones/horus/estado').bearerToken(soporte), 403)
+    })
+
+    test('Horus en pausa: detail con la hora de Guatemala y reintentar_en (ISO UTC) en el problem+json y en las lecturas', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const servicioId = await crearServicio(await crearCliente())
+        await fijarConector({ url_base: 'https://horus.isp.example' })
+        // 20:33:04 UTC = 14:33 en Guatemala (UTC−6, sin horario de verano)
+        const pausa = new Date('2099-10-17T20:33:04.119Z')
+        await db.from('integraciones.horus_salud').where('id', 1).update({
+            fallos_seguidos: 4,
+            pausa_hasta: pausa,
+            ultimo_error: 'Horus respondió 503: mantenimiento',
+        })
+
+        const abrir = await estado(
+            client
+                .post('/api/v1/integraciones/horus/abrir')
+                .bearerToken(admin)
+                .json({ destino: { tipo: 'servicio', id_externo: String(servicioId) } }),
+            502,
+        )
+        assert.equal(abrir.body().reintentar_en, '2099-10-17T20:33:04.119Z')
+        assert.include(
+            abrir.body().detail,
+            'se reintenta después de las 17/10/2099 14:33 (hora de Guatemala)',
+        )
+        assert.notInclude(abrir.body().detail, '2099-10-17T')
+
+        const ficha = await estado(
+            client.get(`/api/v1/servicios/${servicioId}/horus`).bearerToken(admin),
+            200,
+        )
+        assert.equal(ficha.body().reintentar_en, '2099-10-17T20:33:04.119Z')
+        assert.include(ficha.body().error, '14:33 (hora de Guatemala)')
+
+        const seguridad = await estado(
+            client
+                .post('/api/v1/integraciones/horus/seguridad')
+                .bearerToken(admin)
+                .json({ servicio_ids: [servicioId] }),
+            200,
+        )
+        assert.equal(seguridad.body().reintentar_en, '2099-10-17T20:33:04.119Z')
+
+        const consumo = await estado(
+            client.get(`/api/v1/servicios/${servicioId}/horus/consumo`).bearerToken(admin),
+            200,
+        )
+        assert.equal(consumo.body().reintentar_en, '2099-10-17T20:33:04.119Z')
+
+        // sin pausa, el campo va en null
+        await db.from('integraciones.horus_salud').where('id', 1).update({ pausa_hasta: null })
+        await fijarConector({ activo: false, url_base: 'https://horus.isp.example' })
+        const apagada = await estado(
+            client.get(`/api/v1/servicios/${servicioId}/horus`).bearerToken(admin),
+            200,
+        )
+        assert.isNull(apagada.body().reintentar_en)
     })
 })

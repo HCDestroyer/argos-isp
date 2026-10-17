@@ -17,6 +17,7 @@ import {
     ConsumoHorus,
     EnlaceConexionHorus,
     EnvioHorus,
+    EstadoConectorHorus,
     Horus360Servicio,
     ResultadoPruebaHorus,
     ResultadoWebhookHorus,
@@ -25,7 +26,7 @@ import {
     WebhookHorusRecibido,
 } from '#integraciones/horus/esquemas'
 import * as v from '#integraciones/horus/validators'
-import { verConector, urlPublicaApi } from '#integraciones/horus/panel'
+import { estadoConector, verConector, urlPublicaApi } from '#integraciones/horus/panel'
 import {
     ZONA,
     consumoServicios,
@@ -81,6 +82,20 @@ const integraciones: Ruta[] = [
         handler: () => verConector(),
     }),
     definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/horus/estado',
+        operacion: 'horusConectorEstado',
+        resumen: 'Estado del conector para "Ver en Horus": encendido o no, y pausa (sin secretos)',
+        descripcion:
+            'Con `horus.abrir` (no hace falta `horus.ver`): el panel deshabilita "Ver en Horus" con el ' +
+            'conector apagado o sin URL o código, y avisa hasta cuándo está en pausa si Horus no ' +
+            'respondió. No llama a Horus. El conector es uno por instalación: igual para toda empresa.',
+        etiqueta: 'integraciones',
+        permiso: 'horus.abrir',
+        respuesta: { status: 200, descripcion: 'Estado del conector', esquema: EstadoConectorHorus },
+        handler: () => estadoConector(),
+    }),
+    definirRuta({
         metodo: 'put',
         ruta: '/integraciones/horus',
         operacion: 'horusConectorGuardar',
@@ -117,7 +132,10 @@ const integraciones: Ruta[] = [
         resumen: 'Generar enlace de conexión para pegar en Horus (15 min, un solo uso)',
         descripcion:
             '§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda ' +
-            'solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear`.',
+            'solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear` ' +
+            'del mismo host (la URL pública de la API). Si alguien abre el enlace en el navegador, ' +
+            '`GET /conectar` de la API lo redirige (302, el fragmento se conserva) a ' +
+            '`<PANEL_URL_PUBLICA>/conectar`, que explica que se pega en Horus.',
         etiqueta: 'integraciones',
         permiso: 'horus.configurar',
         respuesta: { status: 201, descripcion: 'Enlace', esquema: EnlaceConexionHorus },
@@ -194,7 +212,9 @@ const integraciones: Ruta[] = [
         descripcion:
             '§1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL ' +
             '(el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 ' +
-            '`horus_error` si Horus falla. Para `servicio` y `cliente` se revisa el acceso del usuario.',
+            '`horus_error` si Horus falla; si está en pausa por la espera exponencial, el problem+json ' +
+            'trae `reintentar_en` (ISO UTC) y `detail` la hora de Guatemala. Para `servicio` y ' +
+            '`cliente` se revisa el acceso del usuario.',
         etiqueta: 'integraciones',
         permiso: 'horus.abrir',
         cuerpo: v.abrirEnHorusValidator,

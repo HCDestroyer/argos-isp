@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { configHorus } from '#integraciones/horus/configuracion'
-import { ErrorHorus, llamarHorus } from '#integraciones/horus/cliente'
+import { ErrorHorus, llamarHorus, reintentarEnDe } from '#integraciones/horus/cliente'
 import { anotarError, guardarDato, leerDato, leerDatos, type DatoGuardado } from '#integraciones/horus/datos'
 
 /**
@@ -28,6 +28,8 @@ export interface Lectura<T> {
     actualizado_en: string | null
     /** por qué no hay dato fresco (null si lo hay) */
     error: string | null
+    /** Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (ISO UTC); null si no */
+    reintentar_en: string | null
     datos: T | null
 }
 
@@ -36,12 +38,13 @@ function iso(valor: Date | string | null | undefined): string | null {
     return (valor instanceof Date ? valor : new Date(valor)).toISOString()
 }
 
-function desdeGuardado<T>(guardado: DatoGuardado<T> | null, error: string): Lectura<T> {
+function desdeGuardado<T>(guardado: DatoGuardado<T> | null, error: unknown): Lectura<T> {
     return {
         conector: 'activo',
         stale: guardado !== null,
         actualizado_en: iso(guardado?.actualizado_en),
-        error,
+        error: mensajeDe(error),
+        reintentar_en: reintentarEnDe(error),
         datos: guardado?.datos ?? null,
     }
 }
@@ -107,6 +110,7 @@ export async function servicio360(servicioId: number): Promise<Lectura360> {
             stale: false,
             actualizado_en: null,
             error: null,
+            reintentar_en: null,
             datos: null,
             consulta: null,
         }
@@ -150,6 +154,7 @@ export async function servicio360(servicioId: number): Promise<Lectura360> {
             stale: false,
             actualizado_en: iso(actualizado),
             error: null,
+            reintentar_en: null,
             datos: respuesta.datos,
         }
     } catch (error) {
@@ -162,12 +167,12 @@ export async function servicio360(servicioId: number): Promise<Lectura360> {
                 stale: false,
                 actualizado_en: null,
                 error: 'Horus no tiene datos de este servicio (404)',
+                reintentar_en: null,
                 datos: null,
             }
         }
-        const mensaje = mensajeDe(error)
-        await anotarError('servicio_360', clave, mensaje)
-        return { ...base, consulta, ...desdeGuardado(await leerDato('servicio_360', clave), mensaje) }
+        await anotarError('servicio_360', clave, mensajeDe(error))
+        return { ...base, consulta, ...desdeGuardado(await leerDato('servicio_360', clave), error) }
     }
 }
 
@@ -245,6 +250,8 @@ export interface LecturaConsumo {
     stale: boolean
     actualizado_en: string | null
     error: string | null
+    /** ver `Lectura.reintentar_en` */
+    reintentar_en: string | null
     desde: string
     hasta: string
     granularidad: Granularidad
@@ -290,7 +297,15 @@ export async function consumoServicios(
     const meta = { desde: periodo.desde, hasta: periodo.hasta, granularidad: periodo.granularidad }
     const config = await configHorus()
     if (!config.activo) {
-        return { conector: 'apagado', stale: false, actualizado_en: null, error: null, ...meta, items: [] }
+        return {
+            conector: 'apagado',
+            stale: false,
+            actualizado_en: null,
+            error: null,
+            reintentar_en: null,
+            ...meta,
+            items: [],
+        }
     }
     const claves = ids.map((id) => claveConsumo(id, periodo))
     try {
@@ -333,6 +348,7 @@ export async function consumoServicios(
             stale: false,
             actualizado_en: iso(actualizado),
             error: null,
+            reintentar_en: null,
             ...meta,
             items,
         }
@@ -360,6 +376,7 @@ export async function consumoServicios(
             stale: guardados.size > 0,
             actualizado_en: fechas[0] ?? null,
             error: mensaje,
+            reintentar_en: reintentarEnDe(error),
             ...meta,
             items,
         }
@@ -387,6 +404,8 @@ export interface LecturaSeguridad {
     stale: boolean
     actualizado_en: string | null
     error: string | null
+    /** ver `Lectura.reintentar_en` */
+    reintentar_en: string | null
     /** `lotes` = §3.5; `alternativa` = Horus aún no lo tiene (H9) y se usa el último dato conocido */
     modo: 'lotes' | 'alternativa' | null
     items: SeguridadServicio[]
@@ -469,7 +488,15 @@ export async function seguridadServicios(servicioIds: number[]): Promise<Lectura
     const ids = [...new Set(servicioIds)]
     const config = await configHorus()
     if (!config.activo) {
-        return { conector: 'apagado', stale: false, actualizado_en: null, error: null, modo: null, items: [] }
+        return {
+            conector: 'apagado',
+            stale: false,
+            actualizado_en: null,
+            error: null,
+            reintentar_en: null,
+            modo: null,
+            items: [],
+        }
     }
     try {
         const respuesta = await llamarHorus<{ items?: ItemSeguridadHorus[]; meta?: { at?: string } }>(
@@ -507,6 +534,7 @@ export async function seguridadServicios(servicioIds: number[]): Promise<Lectura
             stale: false,
             actualizado_en: respuesta.datos?.meta?.at ?? ahora.toISOString(),
             error: null,
+            reintentar_en: null,
             modo: 'lotes',
             items,
         }
@@ -534,6 +562,7 @@ export async function seguridadServicios(servicioIds: number[]): Promise<Lectura
             stale: conocidos.size > 0,
             actualizado_en: fechas[0] ?? null,
             error: mensaje,
+            reintentar_en: alternativa ? null : reintentarEnDe(error),
             modo: alternativa ? 'alternativa' : 'lotes',
             items,
         }
