@@ -195,6 +195,11 @@ reactivación son de A3; el portal solo identifica al pagador, elige las factura
 
 `GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
 
+**Retorno.** El cobro lleva `url_retorno = <PORTAL_URL_PUBLICA>/corte?pago={cobro_id}` (`urlRetornoPortal`;
+vacía = `NOTIFY_PORTAL_URL`, sin ninguna no se manda). El proveedor devuelve al cliente con `&estado=pagado`
+o `&estado=fallido`; `/corte` lo muestra mientras el cobro siga `pendiente` y luego manda la API. El
+origen debe estar en `PASARELA_RETORNO_ORIGENES` (A3); si no, 503 `pasarela_no_configurada` y error en el log.
+
 ### Auditoría una vez por ventana
 
 Cada visita a `/corte` y cada consulta del estado en vivo (cada 5 s) escribían una fila y llenaban la

@@ -97,6 +97,7 @@ import {
     facturasAPagar,
     pagadorDeLaPeticion,
     pagoEnLineaDisponible,
+    urlRetornoPortal,
 } from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
 import { dimensionesDeFactura } from '#billing/facturas'
@@ -611,8 +612,9 @@ const pagosEnLinea: Ruta[] = [
             'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
             '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
             'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
-            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. El cliente vuelve a ' +
-            `\`/corte?pago=<id>\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
+            'ser del cliente (404 si no). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al ' +
+            'cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). ' +
+            `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP} ${SOBRE_EL_PAGO}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
@@ -628,7 +630,12 @@ const pagosEnLinea: Ruta[] = [
                 // Actor sistema aun con la sesión: `CrearCobroPasarela` guarda `actor.id` en
                 // `creado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
                 const cobro = await new CrearCobroPasarela().execute(
-                    { cliente_id: pagador.clienteId, servicio_id: pagador.servicioId, facturas },
+                    {
+                        cliente_id: pagador.clienteId,
+                        servicio_id: pagador.servicioId,
+                        facturas,
+                        url_retorno: urlRetornoPortal(),
+                    },
                     ctx.contextoAccion('portal'),
                 )
                 return cobroParaCliente(cobro)
