@@ -1,207 +1,131 @@
--- MySQL dump 10.13  Distrib 8.0.36, for Linux (x86_64)
+-- FIXTURE SINTÉTICO de ArgosIsp: datos inventados, no son de ningún ISP.
 --
--- Host: localhost    Database: mikrowisp
--- ------------------------------------------------------
+-- Solo trae los datos (INSERT); la estructura es la real de Mikrowisp 6:
+-- scripts/importacion/esquemas/mikrowisp6.sql. Un volcado de prueba completo es la estructura
+-- seguida de este archivo (así lo arman las pruebas):
 --
--- FIXTURE SINTÉTICO de ArgosIsp (no son datos reales). Sigue el esquema supuesto de Mikrowisp
--- descrito en apps/api/app/importacion/origenes/mikrowisp.ts (ESQUEMA). Cuando llegue el volcado real
--- del ISP se ajusta ese archivo y este fixture.
+--   cat scripts/importacion/esquemas/mikrowisp6.sql scripts/importacion/mikrowisp-sintetico.sql > /tmp/mikrowisp.sql
 --
--- Casos difíciles que cubre (ver la prueba tests/importacion/mikrowisp.spec.ts):
+-- Casos difíciles que cubre (tests/importacion/mikrowisp.spec.ts):
 --   * clientes duplicados por NIT: 2 y 3 (mismo NIT con y sin guion)
 --   * servicio sin plan: 107 (idperfil = 0) y su factura 5005 va al saldo inicial
---   * router con credenciales vacías: 2 (sin usuario, clave ni secreto RADIUS)
---   * facturas parcialmente pagadas: 5003 (abono de 250) y 5004 (abono de otro cliente)
---   * saldos a favor: clientes 4 (sin facturas) y 5 (con una factura pendiente)
+--   * router con credenciales vacías: 2 (sin usuario, clave ni secreto RADIUS, sin fila en nas)
+--   * IP RADIUS del router 1 desde la tabla nas (198.18.0.11), distinta de su IP de API
+--   * facturas abonadas: 5003 (cobrado 250) y 5004 (cobrado 100 por otro cliente)
+--   * saldos a favor (tabla saldos, estado 'no cobrado'): clientes 4 (sin facturas) y 5; el saldo
+--     'cobrado' del cliente 1 ya se aplicó y no cuenta
 --   * pago de un cliente a la factura de otro: operación 9003 (cliente 5 paga la 5004 del 6)
 --   * IPs repetidas: 101 y 111 con 198.18.10.10
 --   * MAC en distintos formatos: aabb.cc00.0801, AA-BB-CC-00-09-01, aabbcc000902, aa:bb:cc:00:01:01
---   * servicios con IP estática sin PPPoE: 108 (con amarre IP-MAC) y 113 (sin IP: se omite)
---   * DHCP fija sin IP: 109 (ArgosIsp le asigna una)
---   * servicio retirado (112), suspendido (104), factura anulada (5009) y pagada (5002)
---   * NIT inválido (cliente 9) y cliente sin NIT (4 y 10)
---   * cadenas con comillas, comas y acentos escapadas como las deja mysqldump
+--   * servicios sin PPPoE: el tipo lo da server.seguridad (router 1 = amarre IP/MAC, router 2 =
+--     DHCP leases): 108 IP estática con amarre, 113 IP estática sin IP (se omite), 109 DHCP sin IP
+--   * estado del cliente: 4 SUSPENDIDO (su servicio 104 entra activo), 11 RETIRADO (112 no entra)
+--   * factura anulada (5009), pagada (5002), concepto de dos líneas de facturaitems (5004)
+--   * zona por tblavisouser; cliente 8 sin fila (sin zona)
+--   * NIT inválido (cliente 9), clientes sin NIT (4 y 10), correo inválido (7)
+--   * cadenas con comillas, comas, acentos y saltos de línea escapadas como las deja mysqldump
 --
--- Suma de saldos en el origen = Q 1830.00
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET NAMES utf8mb4 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-
+-- Casos propios del esquema real de Mikrowisp 6:
+--   * ids zerofill con ceros, como los exporta Adminer: cliente '000010' (= 10), factura '00005009'
+--   * IP dinámica (tipoipv4 = 1): 105 trae la IP de su última sesión; no entra como IP fija
+--   * clave PPPoE vacía en tblservicios y presente en radcheck (Cleartext-Password): 106
+--   * varias IPs en tblservicios.ip: 102 (entra la primera, con aviso)
+--   * precio del servicio distinto al del plan: 101 (140 frente a 150, aviso)
+--   * IPv6 y DUID en el servicio: 110 (no se importan, aviso)
+--   * servicio que no es de internet (tiposervicio 'tv'): 114 (no entra)
+--   * factura y pago en dólares (moneda 2): 5011 y 9004 (no entran)
+--   * estado de factura desconocido ('Vencida'): 5012 (no entra; pregunta para el PM)
+--   * cobrado distinto de la suma de sus operaciones: 5007 (cobrado 50 sin pagos; aviso)
+--   * los triggers de la estructura (DELIMITER ;;, con INSERT dentro) no son datos
 --
--- Table structure for table `routers`
---
+-- Suma de saldos en el origen = Q 1780.00
 
-DROP TABLE IF EXISTS `routers`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-CREATE TABLE `routers` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(100) NOT NULL DEFAULT '',
-  `ip` varchar(45) NOT NULL DEFAULT '',
-  `ip_radius` varchar(45) DEFAULT NULL,
-  `usuario` varchar(100) DEFAULT '',
-  `clave` varchar(255) DEFAULT '',
-  `puerto_api` int DEFAULT '8728',
-  `secret_radius` varchar(255) DEFAULT '',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+SET NAMES utf8mb4;
 
-LOCK TABLES `routers` WRITE;
-/*!40000 ALTER TABLE `routers` DISABLE KEYS */;
-INSERT INTO `routers` VALUES (1,'Torre Norte','198.18.0.1','198.18.0.11','argos','clave-lab-norte',8728,'secreto-lab-norte'),(2,'Torre Sur','198.18.0.2','','','',8728,'');
-/*!40000 ALTER TABLE `routers` ENABLE KEYS */;
-UNLOCK TABLES;
+INSERT INTO `server` (`id`, `nodo`, `ip`, `user`, `pass`, `secret_radius`, `ip_radius`, `seguridad`, `port_api`) VALUES
+(1,'Torre Norte','198.18.0.1','argos','clave-lab-norte','secreto-lab-norte','',1,'8728'),
+(2,'Torre Sur','198.18.0.2','','','','',2,'8728');
 
---
--- Table structure for table `redes`
---
+INSERT INTO `nas` (`id`, `idserver`, `nasname`, `shortname`, `secret`) VALUES
+(1,1,'198.18.0.11','norte','secreto-lab-norte');
 
-DROP TABLE IF EXISTS `redes`;
-CREATE TABLE `redes` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `router` int NOT NULL,
-  `red` varchar(45) NOT NULL,
-  `cidr` int NOT NULL DEFAULT '24',
-  `gateway` varchar(45) DEFAULT NULL,
-  `tipo` varchar(20) DEFAULT 'estatico',
-  PRIMARY KEY (`id`),
-  KEY `router` (`router`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO `ipv4` (`id`, `nodo`, `nombre`, `red`, `cidr`, `tipo`, `rangos`, `host`) VALUES
+(1,1,'red-norte','198.18.10.0','24',0,'',0),
+(2,2,'red-sur','198.18.20.0','24',0,'',0);
 
-LOCK TABLES `redes` WRITE;
-INSERT INTO `redes` VALUES (1,1,'198.18.10.0',24,'198.18.10.1','estatico'),(2,2,'198.18.20.0',24,'198.18.20.1','estatico');
-UNLOCK TABLES;
+INSERT INTO `perfiles` (`id`, `plan`, `descripcion`, `velocidad`, `costo`, `profile`, `limit_down`, `limit_up`, `is_disabled`) VALUES
+(1,'MW Residencial 10M','','5M/10M',150.00,'default','0','0',0),
+(2,'MW Empresarial 50M','','25M/50M',600.00,'','0','0',0);
 
---
--- Table structure for table `perfiles`
---
-
-DROP TABLE IF EXISTS `perfiles`;
-CREATE TABLE `perfiles` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(100) NOT NULL,
-  `costo` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `velocidad` varchar(50) DEFAULT NULL COMMENT 'max-limit subida/bajada',
-  `perfil_ppp` varchar(100) DEFAULT NULL,
-  `pool` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-LOCK TABLES `perfiles` WRITE;
-INSERT INTO `perfiles` VALUES (1,'MW Residencial 10M',150.00,'5M/10M','default',NULL),(2,'MW Empresarial 50M',600.00,'25M/50M',NULL,NULL);
-UNLOCK TABLES;
-
---
--- Table structure for table `zonas`
---
-
-DROP TABLE IF EXISTS `zonas`;
-CREATE TABLE `zonas` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(100) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-LOCK TABLES `zonas` WRITE;
 INSERT INTO `zonas` VALUES (1,'MW Centro'),(2,'MW Aldea El Rosario');
-UNLOCK TABLES;
 
---
--- Table structure for table `usuarios`
---
+INSERT INTO `usuarios` (`id`, `nombre`, `estado`, `correo`, `telefono`, `movil`, `cedula`, `pasarela`, `codigo`, `direccion_principal`) VALUES
+(1,'Ana López','ACTIVO','ana.lopez@example.com','2222-0001','5555-0001','1234567-9','','','4a. calle 5-10, zona 1'),
+(2,'Comercial El Sol, S.A.','ACTIVO','pagos@elsol.example.com','2222-0002','','7654321-8','','','Km. 14.5, \"Bodega 3\"'),
+(3,'Comercial El Sol (bodega)','ACTIVO','','','','76543218','','','Km. 14.5, \'La Ceiba\''),
+(4,'Bruno Pérez','SUSPENDIDO','','','5555-0004','','','','Aldea El Rosario'),
+(5,'Carla Méndez','ACTIVO','carla@example.com','','5555-0005','CF','','','Aldea El Rosario'),
+(6,'Elena Méndez','ACTIVO','','','5555-0006','3141592-K','','','Aldea El Rosario'),
+(7,'Ernesto Juárez','ACTIVO','ernesto@example','','','2718281-9','','','Barrio El Centro\nCasa amarilla'),
+(8,'Finca Las Flores','ACTIVO','finca@example.com','','','1122334-0','','','Finca Las Flores'),
+(9,'Gabriel Ruiz','ACTIVO','','','5555-0009','123','','','Colonia Las Brisas'),
+('000010','Hilda Castillo','ACTIVO','','','','','','',''),
+(11,'Iris Retirada','RETIRADO','','','','','','','Colonia Las Brisas');
 
-DROP TABLE IF EXISTS `usuarios`;
-CREATE TABLE `usuarios` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(255) NOT NULL,
-  `estado` varchar(20) DEFAULT 'ACTIVO',
-  `correo` varchar(255) DEFAULT '',
-  `telefono` varchar(50) DEFAULT '',
-  `movil` varchar(50) DEFAULT '',
-  `cedula` varchar(50) DEFAULT '',
-  `direccion_principal` text,
-  `zona` int DEFAULT NULL,
-  `saldo` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT 'saldo a favor',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO `tblavisouser` (`id`, `cliente`, `zona`, `diapago`) VALUES
+(1,1,1,1),(2,2,1,1),(3,3,1,1),(4,4,2,1),(5,5,2,1),(6,6,2,1),(7,7,1,1),(8,9,1,1),(9,'000010',1,1),(10,11,1,1);
 
-LOCK TABLES `usuarios` WRITE;
-INSERT INTO `usuarios` VALUES (1,'Ana López','ACTIVO','ana.lopez@example.com','2222-0001','5555-0001','1234567-9','4a. calle 5-10, zona 1',1,0.00),(2,'Comercial El Sol, S.A.','ACTIVO','pagos@elsol.example.com','2222-0002','','7654321-8','Km. 14.5, \"Bodega 3\"',1,0.00),(3,'Comercial El Sol (bodega)','ACTIVO','','','','76543218','Km. 14.5, \'La Ceiba\'',1,0.00),(4,'Bruno Pérez','ACTIVO','','','5555-0004','','Aldea El Rosario',2,50.00),(5,'Carla Méndez','ACTIVO','carla@example.com','','5555-0005','CF','Aldea El Rosario',2,20.00),(6,'Elena Méndez','ACTIVO','','','5555-0006','3141592-K','Aldea El Rosario',2,0.00),(7,'Ernesto Juárez','ACTIVO','ernesto@example','','','2718281-9','Barrio El Centro\nCasa amarilla',1,0.00),(8,'Finca Las Flores','ACTIVO','finca@example.com','','','1122334-0','Finca Las Flores',NULL,0.00),(9,'Gabriel Ruiz','ACTIVO','','','5555-0009','123','Colonia Las Brisas',1,0.00),(10,'Hilda Castillo','ACTIVO','','','','',NULL,1,0.00);
-UNLOCK TABLES;
+INSERT INTO `tblservicios` (`id`, `idcliente`, `idperfil`, `nodo`, `costo`, `ip`, `mac`, `instalado`, `pppuser`, `ppppass`, `tiposervicio`, `tipoipv4`, `redipv4`, `coordenadas`, `direccion`, `ipv6`, `ipv6_duid`) VALUES
+(101,1,1,1,140.00,'198.18.10.10','aa:bb:cc:00:01:01','2024-03-15','mw.ana.lopez','clave101','internet',0,1,'14.6349,-90.5069','4a. calle 5-10, zona 1','',''),
+(102,2,2,1,600.00,'198.18.10.20,198.18.10.21','','2023-11-02','mw.elsol','clave102','internet',0,1,'','','',''),
+(103,3,1,2,150.00,'','','0000-00-00','mw.elsol.bodega','clave103','internet',0,2,'','','',''),
+(104,4,1,1,150.00,'198.18.10.40','','0000-00-00','mw.bruno','clave104','internet',0,1,'','','',''),
+(105,5,1,2,150.00,'198.18.20.50','','0000-00-00','mw.carla','clave105','internet',1,2,'','','',''),
+(106,6,1,2,150.00,'198.18.20.60','','0000-00-00','mw.elena','','internet',0,2,'','','',''),
+(107,7,0,1,150.00,'198.18.10.70','','0000-00-00','mw.ernesto','clave107','internet',0,1,'','','',''),
+(108,8,2,1,600.00,'198.18.10.80','aabb.cc00.0801','0000-00-00','','','internet',0,1,'','Finca Las Flores, casa patronal','',''),
+(109,9,1,2,150.00,'','AA-BB-CC-00-09-01','0000-00-00','','','internet',0,2,'','','',''),
+(110,9,1,2,150.00,'198.18.20.90','aabbcc000902','0000-00-00','mw.gabriel','clave110','internet',0,2,'','','2001:db8:20::/64','00:01:00:01:aa:bb:cc:00:09:02'),
+(111,'000010',1,1,150.00,'198.18.10.10','','0000-00-00','mw.hilda','clave111','internet',0,1,'','','',''),
+(112,11,1,1,150.00,'198.18.10.12','','0000-00-00','mw.iris','clave112','internet',0,1,'','','',''),
+(113,8,2,1,600.00,'','','0000-00-00','','','internet',0,1,'','Finca Las Flores, beneficio','',''),
+(114,2,1,1,95.00,'','','2024-05-01','','','tv',0,0,'','','','');
 
---
--- Table structure for table `tblservicios`
---
+INSERT INTO `facturas` (`id`, `legal`, `idcliente`, `emitido`, `vencimiento`, `pago`, `total`, `estado`, `tipo`, `cobrado`, `iva_igv`, `sub_total`, `saldo`, `moneda`) VALUES
+(5001,0,1,'2026-09-01','2026-09-10','0000-00-00',150.00,'No pagado',1,0.00,16.07,133.93,0.00,1),
+(5002,0,1,'2026-08-01','2026-08-10','2026-08-05',150.00,'Pagado',1,150.00,16.07,133.93,0.00,1),
+(5003,0,2,'2026-09-01','2026-09-10','0000-00-00',600.00,'No pagado',1,250.00,64.29,535.71,0.00,1),
+(5004,0,6,'2026-09-01','2026-09-10','0000-00-00',300.00,'No pagado',1,100.00,32.14,267.86,0.00,1),
+(5005,0,7,'2026-09-01','2026-09-10','0000-00-00',150.00,'No pagado',1,0.00,16.07,133.93,0.00,1),
+(5006,0,8,'2026-09-01','2026-09-10','0000-00-00',600.00,'No pagado',1,0.00,64.29,535.71,0.00,1),
+(5007,0,9,'2026-09-01','2026-09-10','0000-00-00',150.00,'No pagado',1,50.00,16.07,133.93,0.00,1),
+(5008,0,3,'2026-09-01','2026-09-10','0000-00-00',150.00,'No pagado',1,0.00,16.07,133.93,0.00,1),
+('00005009',0,'000010','2026-09-01','2026-09-10','0000-00-00',150.00,'Anulado',1,0.00,16.07,133.93,0.00,1),
+(5010,0,5,'2026-09-01','2026-09-10','0000-00-00',150.00,'No pagado',1,0.00,16.07,133.93,0.00,1),
+(5011,0,1,'2026-09-01','2026-09-10','0000-00-00',25.00,'No pagado',1,0.00,0.00,25.00,0.00,2),
+(5012,0,3,'2026-07-01','2026-07-10','0000-00-00',150.00,'Vencida',1,0.00,16.07,133.93,0.00,1);
 
-DROP TABLE IF EXISTS `tblservicios`;
-CREATE TABLE `tblservicios` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `idcliente` int NOT NULL,
-  `nodo` int NOT NULL,
-  `idperfil` int DEFAULT '0',
-  `tipo` varchar(20) DEFAULT 'PPPOE',
-  `pppuser` varchar(100) DEFAULT '',
-  `ppppass` varchar(100) DEFAULT '',
-  `ip` varchar(45) DEFAULT '',
-  `mac` varchar(45) DEFAULT '',
-  `amarre` tinyint(1) DEFAULT '0',
-  `direccion` text,
-  `coordenadas` varchar(100) DEFAULT '',
-  `instalado` datetime DEFAULT NULL,
-  `estado` varchar(20) DEFAULT 'ACTIVO',
-  PRIMARY KEY (`id`),
-  KEY `idcliente` (`idcliente`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO `facturaitems` (`id`, `idfactura`, `descripcion`, `cantidad`, `unidades`) VALUES
+(1,5001,'Internet septiembre 2026',150.00,1),
+(2,5002,'Internet agosto 2026',150.00,1),
+(3,5003,'Internet septiembre 2026',600.00,1),
+(4,5004,'Internet septiembre',150.00,1),
+(5,5004,'Internet agosto',150.00,1),
+(6,5006,'Enlace dedicado',600.00,1);
 
-LOCK TABLES `tblservicios` WRITE;
-INSERT INTO `tblservicios` VALUES (101,1,1,1,'PPPOE','mw.ana.lopez','clave101','198.18.10.10','aa:bb:cc:00:01:01',0,'4a. calle 5-10, zona 1','14.6349,-90.5069','2024-03-15 10:00:00','ACTIVO'),(102,2,1,2,'PPPOE','mw.elsol','clave102','198.18.10.20','',0,NULL,'','2023-11-02 00:00:00','ACTIVO'),(103,3,2,1,'PPPOE','mw.elsol.bodega','clave103','','',0,NULL,'','0000-00-00 00:00:00','ACTIVO'),(104,4,1,1,'PPPOE','mw.bruno','clave104','198.18.10.40','',0,NULL,'',NULL,'SUSPENDIDO'),(105,5,2,1,'PPPOE','mw.carla','clave105','198.18.20.50','',0,NULL,'',NULL,'ACTIVO'),(106,6,2,1,'PPPOE','mw.elena','clave106','198.18.20.60','',0,NULL,'',NULL,'ACTIVO'),(107,7,1,0,'PPPOE','mw.ernesto','clave107','198.18.10.70','',0,NULL,'',NULL,'ACTIVO'),(108,8,1,2,'ESTATICO','','','198.18.10.80','aabb.cc00.0801',1,'Finca Las Flores, casa patronal','',NULL,'ACTIVO'),(109,9,2,1,'DHCP','','','','AA-BB-CC-00-09-01',0,NULL,'',NULL,'ACTIVO'),(110,9,2,1,'PPPOE','mw.gabriel','clave110','198.18.20.90','aabbcc000902',0,NULL,'',NULL,'ACTIVO'),(111,10,1,1,'PPPOE','mw.hilda','clave111','198.18.10.10','',0,NULL,'',NULL,'ACTIVO'),(112,1,1,1,'PPPOE','mw.ana.vieja','clave112','198.18.10.12','',0,NULL,'',NULL,'RETIRADO'),(113,8,1,2,'ESTATICO','','','','',0,'Finca Las Flores, beneficio','',NULL,'ACTIVO');
-UNLOCK TABLES;
+INSERT INTO `operaciones` (`id`, `nfactura`, `idcliente`, `fecha_pago`, `operador`, `transaccion`, `forma_pago`, `descripcion`, `cobrado`, `comision`, `saldo`, `idmoneda`) VALUES
+(9001,5002,1,'2026-08-05 09:12:00',1,NULL,'Efectivo','',150.00,0.00,0.00,1),
+(9002,5003,2,'2026-09-08 15:40:00',1,'TRF-001','Transferencia','',250.00,0.00,0.00,1),
+(9003,5004,5,'2026-09-09 11:00:00',1,NULL,'Efectivo','',100.00,0.00,0.00,1),
+(9004,'00000000',1,'2026-09-12 10:00:00',1,'PAYPAL-77','PayPal','',10.00,0.00,0.00,2);
 
---
--- Table structure for table `facturas`
---
+INSERT INTO `saldos` (`id`, `iduser`, `idorigen`, `iddestino`, `estado`, `monto`, `fecha`, `moneda`) VALUES
+(1,4,0,0,'no cobrado',50.00,'2026-09-01',1),
+(2,5,0,0,'no cobrado',20.00,'2026-09-01',1),
+(3,1,0,0,'cobrado',30.00,'2026-07-01',1);
 
-DROP TABLE IF EXISTS `facturas`;
-CREATE TABLE `facturas` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `idcliente` int NOT NULL,
-  `emitido` date NOT NULL,
-  `vencimiento` date DEFAULT NULL,
-  `total` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `estado` varchar(20) DEFAULT 'No pagado',
-  `descripcion` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idcliente` (`idcliente`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO `monedas` VALUES (1,'GTQ','QUETZALES','',1.00,'','Q'),(2,'USD','DÓLARES','',7.75,'','$');
 
-LOCK TABLES `facturas` WRITE;
-INSERT INTO `facturas` VALUES (5001,1,'2026-09-01','2026-09-10',150.00,'No pagado','Internet septiembre 2026'),(5002,1,'2026-08-01','2026-08-10',150.00,'Pagado','Internet agosto 2026'),(5003,2,'2026-09-01','2026-09-10',600.00,'No pagado','Internet septiembre 2026'),(5004,6,'2026-09-01','2026-09-10',300.00,'No pagado','Internet septiembre y agosto'),(5005,7,'2026-09-01','2026-09-10',150.00,'No pagado',NULL),(5006,8,'2026-09-01','2026-09-10',600.00,'No pagado','Enlace dedicado'),(5007,9,'2026-09-01','2026-09-10',150.00,'No pagado',NULL),(5008,3,'2026-09-01','2026-09-10',150.00,'No pagado',NULL),(5009,10,'2026-09-01','2026-09-10',150.00,'Anulado',NULL),(5010,5,'2026-09-01','2026-09-10',150.00,'No pagado',NULL);
-UNLOCK TABLES;
-
---
--- Table structure for table `operaciones`
---
-
-DROP TABLE IF EXISTS `operaciones`;
-CREATE TABLE `operaciones` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nfactura` int DEFAULT NULL,
-  `idcliente` int NOT NULL,
-  `cobrado` decimal(10,2) NOT NULL,
-  `fecha_pago` datetime DEFAULT NULL,
-  `forma_pago` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-LOCK TABLES `operaciones` WRITE;
-INSERT INTO `operaciones` VALUES (9001,5002,1,150.00,'2026-08-05 09:12:00','Efectivo'),(9002,5003,2,250.00,'2026-09-08 15:40:00','Transferencia'),(9003,5004,5,100.00,'2026-09-09 11:00:00','Efectivo');
-UNLOCK TABLES;
-
-/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
-/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-
--- Dump completed on 2026-10-16 12:00:00
+INSERT INTO `radcheck` (`id`, `username`, `attribute`, `op`, `value`) VALUES
+(1,'mw.elena','Cleartext-Password',':=','clave106'),
+(2,'mw.elena','Simultaneous-Use',':=','1');

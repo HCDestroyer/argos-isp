@@ -8,52 +8,110 @@ import { COLUMNAS, ENTIDADES } from '#importacion/canonico'
 import { leerCsv } from '#importacion/csv'
 import { importar } from '#importacion/importador'
 import type { ReporteImportacion } from '#importacion/reporte'
+import type { ProblemaFila } from '#importacion/canonico'
 import { ARCHIVOS, generarPlantillas, leerDirectorio } from '#importacion/origenes/csv'
-import { leerDumpMikrowisp } from '#importacion/origenes/mikrowisp'
-import { fuenteDesdeDumpSmartisp } from '#importacion/origenes/smartisp'
+import {
+    ESQUEMA as ESQUEMA_MIKROWISP,
+    filasDesdeDump,
+    fuenteDesdeDump,
+    leerDumpMikrowisp,
+} from '#importacion/origenes/mikrowisp'
+import { ESQUEMA as ESQUEMA_SMARTISP, fuenteDesdeDumpSmartisp } from '#importacion/origenes/smartisp'
 import { EsquemaIncompleto } from '#importacion/origenes/esquema_sql'
 import { leerOrigen } from '#importacion/origenes/index'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
+import { archivoSintetico, rutaEsquema } from '#tests/importacion/ayudas_importacion'
 
 /**
  * Importador multi-origen: los adaptadores solo traducen al formato canónico, y el núcleo da el
  * mismo resultado para los mismos datos venga de donde venga.
  */
 
-const SQL = fileURLToPath(new URL('../../../../scripts/importacion/mikrowisp-sintetico.sql', import.meta.url))
+/** Volcado sintético de Mikrowisp sobre su esquema real (estructura + datos, archivo temporal). */
+let SQL: string
 /** Los mismos datos del volcado sintético de Mikrowisp, como CSV canónicos. */
 const CSV = fileURLToPath(new URL('../../../../scripts/importacion/sintetico-csv/', import.meta.url))
 
 /**
  * Lo que debe coincidir entre orígenes: todo salvo request_id, horas, nombre del origen y de la
  * fuente, y el archivo y la línea de los problemas de formato (`tblservicios` fila 13 frente a
- * `servicios.csv` línea 14).
+ * `servicios.csv` línea 14). `propios`: los problemas que solo ve el adaptador del volcado (filas
+ * que no traduce, avisos de datos que el formato canónico no lleva); el CSV no los puede tener.
  */
-function comparable(r: ReporteImportacion) {
+function comparable(r: ReporteImportacion, propios: ProblemaFila[] = []) {
     const copia: Partial<ReporteImportacion> = { ...r }
     for (const campo of ['request_id', 'inicio', 'fin', 'origen', 'fuente'] as const) delete copia[campo]
-    copia.formato = r.formato.map(({ id, mensaje, aviso }) => ({ archivo: '', linea: 0, id, mensaje, aviso }))
+    copia.formato = r.formato
+        .filter((x) => !propios.some((p) => p.id === x.id && p.mensaje === x.mensaje))
+        .map(({ id, mensaje, aviso }) => ({ archivo: '', linea: 0, id, mensaje, aviso }))
     return copia
 }
 
-const SMARTISP_COMPLETO = `
-CREATE TABLE routers (id int, name varchar(50), ip varchar(20), login varchar(20), password varchar(20), radius_secret varchar(20));
-INSERT INTO routers VALUES (1,'Torre SI','198.18.70.1','argos','clave','secreto');
-CREATE TABLE networks (router_id int, network varchar(20), gateway varchar(20));
-INSERT INTO networks VALUES (1,'198.18.70.0/24','198.18.70.1');
-CREATE TABLE plans (id int, name varchar(50), cost decimal(10,2), download varchar(10), upload varchar(10));
-INSERT INTO plans VALUES (1,'SI 10M',150.00,'10M','5M');
-CREATE TABLE clients (id int, name varchar(50), email varchar(50), phone varchar(20), dni varchar(20), address varchar(80), balance decimal(10,2));
-INSERT INTO clients VALUES (1,'Cliente SmartISP','si@example.com','22223333','CF','Zona 1',20.00);
-CREATE TABLE client_services (id int, client_id int, router_id int, plan_id int, user varchar(20), password varchar(20), ip varchar(20), mac varchar(20), status varchar(20));
-INSERT INTO client_services VALUES (1,1,1,1,'si.cliente','clave','198.18.70.10',NULL,'active'),(2,1,1,1,'si.viejo','clave',NULL,NULL,'cancelled');
-CREATE TABLE bills (id int, client_id int, period varchar(10), total decimal(10,2), paid decimal(10,2), status varchar(10));
-INSERT INTO bills VALUES (1,1,'2026-09',150.00,50.00,'unpaid'),(2,1,'2026-08',150.00,0,'void');
-CREATE TABLE payments (id int, client_id int, bill_id int, amount decimal(10,2), date date);
-INSERT INTO payments VALUES (1,1,1,50.00,'2026-09-05');
+/** Unos pocos datos sobre la estructura real de SmartISP (`scripts/importacion/esquemas/smartisp.sql`). */
+const DATOS_SMARTISP = `
+INSERT INTO routers (id,name,model,ip,location,coordinates,clients,status,connection,login,password,port,lan) VALUES (1,'Torre SI','RB4011','198.18.70.1','','',0,'on',1,'argos','clave',8728,'');
+INSERT INTO radius (id,secret,router_id) VALUES (1,'secreto',1);
+INSERT INTO control_routers (id,router_id,type_control,dhcp,arpmac,adv,address_list) VALUES (1,1,'pp',0,0,0,0);
+INSERT INTO address_routers (id,name,router_id,gateway,type,mask,network,hosts,used) VALUES (1,'Red SI',1,'198.18.70.1','static','24','198.18.70.0',254,0.00);
+INSERT INTO plans (id,name,download,upload,num_clients,cost,iva) VALUES (1,'SI 10M',10000,5000,1,150.00,0.00);
+INSERT INTO clients (id,name,email,phone,address,coordinates,photo,dni,password,balance,zona_id,wallet_balance) VALUES (1,'Cliente SmartISP','si@example.com','22223333','Zona 1',NULL,'','CF','portal',100.00,NULL,20.00);
+INSERT INTO client_services (id,client_id,ip,mac,date_in,plan_id,router_id,status,user_hot,pass_hot) VALUES (1,1,'198.18.70.10','00:00:00:00:00:00','2024-01-10',1,1,'ac','si.cliente','clave'),(2,1,'198.18.70.11',NULL,'2024-01-10',1,1,'baja','si.viejo','clave');
+INSERT INTO bill_customers (id,num_bill,period,release_date,expiration_date,iva,cost,total_pay,status,client_id,service_id,open,paid_on,start_date) VALUES (1,'B-1','Septiembre 2026','2026-09-01','2026-09-10',0.00,150.00,150.00,2,1,1,0,NULL,'2026-09-01'),(2,'B-2','Agosto 2026','2026-08-01','2026-08-10',0.00,150.00,150.00,4,1,NULL,0,NULL,NULL);
+INSERT INTO payment_news (id,client_id,way_to_pay,date,amount,num_bill,deleted_at) VALUES (1,1,'Efectivo','2026-09-05','50.00','B-1',NULL),(2,1,'Efectivo','2026-09-06','30.00','B-1','2026-09-07 08:00:00');
 `
 
-test.group('importacion · orígenes', () => {
+let SMARTISP_REAL: string
+
+test.group('importacion · orígenes', (group) => {
+    group.setup(async () => {
+        SQL = await archivoSintetico('mikrowisp')
+        SMARTISP_REAL = `${await readFile(rutaEsquema('smartisp'), 'utf8')}\n${DATOS_SMARTISP}`
+    })
+
+    test('los esquemas reales pasan la validación de su adaptador y no la del otro', async ({ assert }) => {
+        const mikrowisp = await readFile(rutaEsquema('mikrowisp'), 'utf8')
+        const smartisp = await readFile(rutaEsquema('smartisp'), 'utf8')
+        // Solo estructura: todo vacío, sin errores de esquema (los triggers con DELIMITER se ignoran)
+        const fm = fuenteDesdeDump(mikrowisp, 'mikrowisp6.sql')
+        assert.deepEqual([fm.routers, fm.clientes, fm.servicios, fm.problemas], [[], [], [], []])
+        const fs = fuenteDesdeDumpSmartisp(smartisp, 'smartisp.sql')
+        assert.deepEqual([fs.routers, fs.clientes, fs.servicios, fs.problemas], [[], [], [], []])
+        // Origen equivocado: se detiene con la lista de lo que falta
+        assert.throws(() => fuenteDesdeDump(smartisp, 'smartisp.sql'), /falta la tabla server/)
+        assert.throws(() => fuenteDesdeDumpSmartisp(mikrowisp, 'mikrowisp6.sql'), /falta la tabla clients/)
+    })
+
+    test('el runbook pide en el mysqldump exactamente las tablas que lee cada adaptador', async ({
+        assert,
+    }) => {
+        const runbook = await readFile(
+            new URL('../../../../docs/runbooks/importacion.md', import.meta.url),
+            'utf8',
+        )
+        const comandos = [
+            ...runbook.matchAll(/mysqldump [^`]*?-p <base> \\\n([\s\S]*?)> (\w+)-AAAAMMDD\.sql/g),
+        ]
+        const tablasDe = (origen: string) =>
+            comandos
+                .find((m) => m[2] === origen)?.[1]
+                ?.replace(/\\/g, ' ')
+                .split(/\s+/)
+                .filter(Boolean)
+                .sort()
+        assert.deepEqual(
+            tablasDe('mikrowisp'),
+            Object.values(ESQUEMA_MIKROWISP)
+                .map((t) => t.tabla)
+                .sort(),
+        )
+        assert.deepEqual(
+            tablasDe('smartisp'),
+            Object.values(ESQUEMA_SMARTISP)
+                .map((t) => t.tabla)
+                .sort(),
+        )
+    })
+
     test('CSV con los mismos datos que el volcado de Mikrowisp da el mismo reporte', async ({ assert }) => {
         const plantillaId = await crearPlantillaFila()
         const desdeSql = await importar(await leerOrigen('mikrowisp', SQL), {
@@ -66,11 +124,13 @@ test.group('importacion · orígenes', () => {
             dryRun: true,
             plantillaId,
         })
-        assert.deepEqual(comparable(desdeCsv), comparable(desdeSql))
+        const { problemas: propios } = filasDesdeDump(await readFile(SQL, 'utf8'), 'mikrowisp-sintetico.sql')
+        assert.lengthOf(propios, 8) // monedas, estado desconocido, tv, avisos (ver la cabecera del fixture)
+        assert.deepEqual(comparable(desdeCsv), comparable(desdeSql, propios))
         assert.equal(desdeCsv.origen, 'csv')
         assert.match(desdeCsv.request_id, /^importacion-csv-/)
         assert.isTrue(desdeCsv.saldos.cuadra)
-        assert.equal(desdeCsv.saldos.suma_origen, '1830.00')
+        assert.equal(desdeCsv.saldos.suma_origen, '1780.00')
         assert.deepEqual(desdeCsv.errores, [])
     })
 
@@ -96,7 +156,7 @@ test.group('importacion · orígenes', () => {
             for (const [entidad, c] of Object.entries(otra.resumen)) {
                 assert.equal(c.creados, 0, `${entidad} ya estaba importado`)
             }
-            assert.deepEqual(otra.resumen.clientes, { origen: 10, creados: 0, existentes: 10, omitidos: 0 })
+            assert.deepEqual(otra.resumen.clientes, { origen: 11, creados: 0, existentes: 11, omitidos: 0 })
             assert.isTrue(otra.saldos.cuadra)
         } finally {
             await trx.rollback()
@@ -105,8 +165,7 @@ test.group('importacion · orígenes', () => {
 
     test('el sistema de origen debe servir de clave', async ({ assert }) => {
         await assert.rejects(
-            () =>
-                importar(fuenteDesdeDumpSmartisp(SMARTISP_COMPLETO), { sistema: 'Smart ISP', dryRun: true }),
+            () => importar(fuenteDesdeDumpSmartisp(SMARTISP_REAL), { sistema: 'Smart ISP', dryRun: true }),
             /Sistema de origen "Smart ISP" inválido/,
         )
     })
@@ -117,7 +176,7 @@ test.group('importacion · orígenes', () => {
         const incompleto = `
             CREATE TABLE routers (id int, name varchar(50));
             INSERT INTO routers VALUES (1,'Torre');
-            CREATE TABLE plans (id int, name varchar(50), cost decimal(10,2), download varchar(10), upload varchar(10));
+            CREATE TABLE plans (id int, name varchar(50), cost decimal(10,2), download int, upload int);
         `
         try {
             fuenteDesdeDumpSmartisp(incompleto, 'smartisp.sql')
@@ -127,34 +186,46 @@ test.group('importacion · orígenes', () => {
             const e = error as EsquemaIncompleto
             assert.equal(e.origen, 'smartisp')
             assert.deepEqual(e.faltantes, [
-                'a la tabla routers le faltan las columnas ip',
+                'a la tabla routers le faltan las columnas ip, login, password',
+                'a la tabla plans le faltan las columnas iva',
                 'falta la tabla clients',
                 'falta la tabla client_services',
             ])
-            assert.include(e.message, 'smartisp.sql: no tiene el esquema que espera el origen smartisp')
+            assert.include(e.message, 'smartisp.sql: no tiene el esquema que espera el origen smartisp:\n')
+            assert.include(e.message, '  - falta la tabla clients\n')
             assert.include(e.message, 'apps/api/app/importacion/origenes/smartisp.ts')
+            assert.include(e.message, 'No se tocó la base')
         }
         // Un volcado de Mikrowisp tampoco pasa por SmartISP (origen equivocado)
         assert.throws(() => fuenteDesdeDumpSmartisp('CREATE TABLE usuarios (id int);'), EsquemaIncompleto)
     })
 
-    test('SmartISP: con el esquema supuesto traduce al formato canónico', ({ assert }) => {
-        const fuente = fuenteDesdeDumpSmartisp(SMARTISP_COMPLETO)
+    test('SmartISP: con el esquema real traduce al formato canónico', ({ assert }) => {
+        const fuente = fuenteDesdeDumpSmartisp(SMARTISP_REAL)
         assert.deepEqual(fuente.problemas, [])
-        assert.containSubset(fuente.routers, [{ id: '1', nas_ip: '198.18.70.1', api_usuario: 'argos' }])
+        assert.containSubset(fuente.routers, [
+            { id: '1', nas_ip: '198.18.70.1', api_usuario: 'argos', radius_secret: 'secreto' },
+        ])
+        assert.containSubset(fuente.redes, [{ router_id: '1', cidr: '198.18.70.0/24', tipo: 'estatico' }])
         assert.containSubset(fuente.planes, [{ id: '1', bajada_kbps: 10_000, subida_kbps: 5000 }])
+        // ac = activo; 'baja' (texto libre) = retirado; MAC 00:00:... = sin MAC
         assert.deepEqual(
-            fuente.servicios.map((s) => [s.id, s.user_ppp, s.estado]),
+            fuente.servicios.map((s) => [s.id, s.tipo_conexion, s.user_ppp, s.mac, s.estado]),
             [
-                ['1', 'si.cliente', 'activo'],
-                ['2', 'si.viejo', 'retirado'],
+                ['1', 'pppoe', 'si.cliente', null, 'activo'],
+                ['2', 'pppoe', 'si.viejo', null, 'retirado'],
             ],
         )
-        // La anulada no viene; la otra con lo pendiente; saldo = pendiente − saldo a favor
+        // La anulada (status 4) no viene; la pendiente descuenta su pago vigente (el borrado no)
         assert.deepEqual(
-            fuente.facturas.map((f) => [f.id, f.periodo, f.pendiente]),
-            [['1', '2026-09-01', '100.00']],
+            fuente.facturas.map((f) => [f.id, f.servicio_id, f.periodo, f.pendiente]),
+            [['1', '1', '2026-09-01', '100.00']],
         )
+        assert.deepEqual(
+            fuente.pagos.map((p) => [p.id, p.factura_id, p.monto]),
+            [['1', '1', '50.00']],
+        )
+        // Saldo = pendiente − wallet_balance; balance (100) cuadra con lo pendiente: sin aviso
         assert.deepEqual(fuente.saldos, [{ linea: 1, cliente_id: '1', saldo: '80.00' }])
         assert.equal(fuente.duenosFacturas?.get('2'), '1')
     })

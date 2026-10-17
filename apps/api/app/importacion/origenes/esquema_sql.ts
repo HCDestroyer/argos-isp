@@ -1,6 +1,7 @@
+import { Decimal } from 'decimal.js'
 import type { FilaCsv } from '#importacion/csv'
-import type { TablaSql } from '#importacion/mysql_dump'
-import { ENTIDADES, type Entidad, type FilasPorEntidad } from '#importacion/canonico'
+import type { FilaSql, TablaSql } from '#importacion/mysql_dump'
+import { ENTIDADES, type Entidad, type FilasPorEntidad, type ProblemaFila } from '#importacion/canonico'
 
 /**
  * Ayudas para los adaptadores que leen un volcado MySQL (Mikrowisp, SmartISP): comprobar que el
@@ -58,9 +59,11 @@ export function tablasDelEsquema<K extends string>(
         throw new EsquemaIncompleto(
             contexto.origen,
             faltantes,
-            `${contexto.nombre}: no tiene el esquema que espera el origen ${contexto.origen} ` +
-                `(${faltantes.join('; ')}). Revisa que --origen sea el sistema correcto; si lo es, ` +
-                `el esquema se ajusta en ${contexto.archivo}. No se tocó la base.`,
+            `${contexto.nombre}: no tiene el esquema que espera el origen ${contexto.origen}:\n` +
+                faltantes.map((f) => `  - ${f}\n`).join('') +
+                `Revisa que --origen sea el sistema correcto y que el volcado incluya esas tablas ` +
+                `(docs/runbooks/importacion.md); si lo es, el esquema se ajusta en ${contexto.archivo}. ` +
+                `No se tocó la base.`,
         )
     }
     return salida
@@ -90,6 +93,64 @@ export function filasCanonicas(
 
 export function texto(v: string | null | undefined): string {
     return (v ?? '').trim()
+}
+
+/**
+ * Id del origen sin ceros a la izquierda. MySQL guarda los `int zerofill` como número; según la
+ * herramienta del volcado salen `1` (mysqldump) o `'000001'` (Adminer, phpMyAdmin). Normalizado,
+ * los dos son el mismo registro y la clave de idempotencia no depende de la herramienta.
+ * Lo que no es un número entero se devuelve recortado, tal cual.
+ */
+export function normalizarId(v: string | null | undefined): string {
+    const t = texto(v)
+    return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, '') : t
+}
+
+/** Monto del origen para sumar (lo inválido cuenta 0; la validación de la fila lo reporta). */
+export function montoSeguro(v: string | null | undefined): Decimal {
+    try {
+        const d = new Decimal(texto(v).replace(/,/g, '') || '0')
+        return d.isFinite() ? d : new Decimal(0)
+    } catch {
+        return new Decimal(0)
+    }
+}
+
+/** Agrupa filas por una columna (ya normalizada con `clave`). */
+export function agrupar(
+    filas: FilaSql[],
+    columna: string,
+    clave: (v: string | null | undefined) => string = normalizarId,
+): Map<string, FilaSql[]> {
+    const grupos = new Map<string, FilaSql[]>()
+    for (const f of filas) {
+        const k = clave(f[columna])
+        const lista = grupos.get(k)
+        if (lista) lista.push(f)
+        else grupos.set(k, [f])
+    }
+    return grupos
+}
+
+/**
+ * Problemas propios del origen (no de formato): filas que el adaptador no traduce, avisos de
+ * datos que no se importan. Salen en el reporte con los de formato (`formato` / `diferencias.csv`).
+ * Nunca llevan contraseñas ni secretos.
+ */
+export class ProblemasOrigen {
+    readonly lista: ProblemaFila[] = []
+
+    constructor(private readonly nombre: string) {}
+
+    /** La fila no entra (`omitido` en el reporte). */
+    omitir(tabla: string, linea: number, id: string | null, mensaje: string) {
+        this.lista.push({ archivo: `${this.nombre}:${tabla}`, linea, id, mensaje, aviso: false })
+    }
+
+    /** La fila entra con una observación (`aviso`). */
+    avisar(tabla: string, linea: number, id: string | null, mensaje: string) {
+        this.lista.push({ archivo: `${this.nombre}:${tabla}`, linea, id, mensaje, aviso: true })
+    }
 }
 
 function aTexto(fila: FilaOrigen): Record<string, string> {

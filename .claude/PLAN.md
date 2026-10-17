@@ -124,6 +124,17 @@ Los tres humanos en el laboratorio con los agentes en espera para corregir. Se p
 | Pase a producción con INFILE y primera factura real | PM | Factura real válida en el portal de la SAT |
 | **Fase 1 completa** | PM | Viernes 20 de noviembre |
 
+## Distribución e instalación (al cerrar los sprints)
+
+Decisión del PM (17 oct): al terminar la fase 1, ArgosIsp se entrega como producto instalable, no como repositorio que se compila en cada servidor.
+
+| Requisito | Cómo | Criterio |
+| --- | --- | --- |
+| **Imágenes ya compiladas** | CI construye y publica las imágenes (`api`, `web`, `portal`, `aaa`, `coa`, `backup`) en GitHub Container Registry, multi-arquitectura (amd64 y arm64), etiquetadas con la versión. El servidor solo descarga; nunca compila | Un servidor limpio levanta el sistema sin Node, pnpm ni código fuente |
+| **Autoinstalable** | Script `instalar.sh` (Ubuntu/Debian): verifica requisitos, instala Docker si falta, pide los datos mínimos (dominio, correo del admin, contraseñas generadas), escribe `.env`, descarga el `docker-compose` de la versión y levanta | Un operador instala desde cero con un solo comando y sin editar archivos |
+| **Actualización automática según sea necesario** | Comando `argosisp actualizar` (y opción de revisión periódica): compara la versión instalada con la última publicada, hace backup, descarga imágenes, corre migraciones, verifica salud y revierte a la versión anterior si falla. Canal `estable`; parches automáticos y cambios mayores solo con confirmación | Actualizar y revertir probados en CI con un backup real |
+| **Versiones y cambios** | Versionado semántico (`MAYOR.MENOR.PARCHE`) a partir de Conventional Commits; `CHANGELOG.md` en español generado por versión y notas de la versión en GitHub Releases; el panel muestra la versión instalada y "qué cambió" | Cada versión publicada tiene etiqueta, imágenes y notas de cambios |
+
 ## Fase 2 (después del 20 de noviembre, por prioridad)
 
 1. SmartOLT: olt-gateway con interfaz genérica; autorizar ONU, señal, reinicio, habilitar/deshabilitar; catálogos en caché; ONU vinculada al servicio.
