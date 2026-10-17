@@ -166,6 +166,9 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
+| `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
+| `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
+| `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
