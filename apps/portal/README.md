@@ -134,7 +134,12 @@ la descripción pasaba por debajo del botón de cerrar.
 `pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y
 composables contra los fixtures) y `vitest.servidor.config.ts` (`tests/servidor/`, entorno node:
 compila el portal en `.nuxt/test/servidor` y lo levanta con una API falsa; unos 40 s).
-`pnpm test:servidor` corre solo la segunda.
+`pnpm test:servidor` corre solo la segunda. El servidor se levanta con `servidorCon(env)`
+(`tests/servidor/ayudas.ts`), no con `setup({ server: true })`: `startServer` elige un puerto libre y
+lo suelta antes de que Nitro escuche, y con varias apps probando en paralelo otro proceso puede
+tomarlo (`EADDRINUSE`). `servidorCon` reintenta con otro puerto (hasta 5 veces) y solo da por
+arrancado el servidor cuando el que responde es el nuestro (su `Listening on …:<puerto>`). Nitro no
+acepta `PORT=0` (`destr('0') || 3000`).
 
 ## Walled garden
 
