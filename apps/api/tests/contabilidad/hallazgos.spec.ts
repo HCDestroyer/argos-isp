@@ -6,6 +6,8 @@ import AnularPago from '#billing/actions/anular_pago'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
+import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import { libroDiario } from '#ledger/consultas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
@@ -137,30 +139,26 @@ test.group('Auditor contable · hallazgos', (group) => {
         )
     })
 
-    test('H4 · numeración del diario: un asiento con fecha anterior renumera las partidas existentes', async ({
+    test('H4 · numeración del diario: un asiento con fecha anterior no cambia el número guardado de los existentes', async ({
         assert,
     }) => {
-        // Producto: app/ledger/consultas.ts (libroDiario ordena por id, sin número propio) y el contrato de
-        // localización fiscal §7 (el Libro Diario numera la partida por (fecha, id)). No hay un correlativo
-        // almacenado en ledger.asientos: el número de partida sale del orden y cambia con un asiento anterior.
-        const e = await prepararEmpresas()
-        await servicioFacturado(e.B, '2026-10-01', { precio: '150.00', instalacion: '2026-10-01' })
-        const columnas = await db.rawQuery(
-            `SELECT column_name FROM information_schema.columns
-              WHERE table_schema = 'ledger' AND table_name = 'asientos'
-                AND column_name IN ('numero', 'partida', 'correlativo', 'numero_partida')`,
+        // Contrato de localización fiscal §10.7: el número de diario se asigna al INSERTAR y se guarda en
+        // ledger.asientos_numeros (asiento_id PK, diario_id, anio, numero; único diario_id, anio, numero),
+        // solo inserción. Se mide lo guardado antes y después de registrar un asiento con fecha anterior
+        // en un mes abierto: ningún asiento existente cambia de número.
+        // Producto: migración y acción de numeración de A3 (app/ledger/actions/registrar_asiento.ts).
+        assert.isTrue(
+            await existeTabla('ledger.asientos_numeros'),
+            'Falta ledger.asientos_numeros (contrato §10.7): los asientos no tienen número de diario guardado; ' +
+                'hoy la partida del Libro Diario sale del orden (fecha, id) y un asiento con fecha anterior renumera.',
         )
-        const partidas = async () => {
-            const resultado = await db.rawQuery(
-                `SELECT id, row_number() OVER (ORDER BY fecha, id)::int AS partida
-                   FROM ledger.asientos WHERE empresa_id = ? ORDER BY id`,
-                [e.B],
-            )
-            return resultado.rows as Array<{ id: number; partida: number }>
-        }
-        const antes = await partidas()
-        // asiento manual con fecha de septiembre (mes abierto) después de los de octubre
-        await new RegistrarAsiento().execute(
+        const e = await prepararEmpresas()
+        await servicioFacturado(e.B, '2026-10-01', { precio: '150.00', instalacion: '2026-09-01' })
+        const antes = await numerosDeDiario(e.B)
+        assert.isAbove(antes.size, 0)
+        const diarioAntes = await numerosDelLibroDiario(e.B)
+
+        const tardio = await new RegistrarAsiento().execute(
             {
                 empresa_id: e.B,
                 fecha: '2026-09-15',
@@ -173,21 +171,137 @@ test.group('Auditor contable · hallazgos', (group) => {
             },
             e.ctx,
         )
-        const nuevas = await partidas()
-        const despues = new Map(nuevas.map((p) => [Number(p.id), p.partida]))
-        const renumeradas = antes.filter((p) => despues.get(Number(p.id)) !== p.partida)
-        const diario = await libroDiario({ limit: 100 }, [e.B])
-        assert.isTrue(diario.data.length > 0)
+        const despues = await numerosDeDiario(e.B)
+        const cambiados = [...antes].filter(([id, numero]) => despues.get(id) !== numero)
         assert.deepEqual(
-            {
-                columna_de_numero: columnas.rows.map((c: { column_name: string }) => c.column_name),
-                renumeradas: renumeradas.length,
-            },
-            { columna_de_numero: ['numero'], renumeradas: 0 },
-            `ledger.asientos no guarda número de partida; con el orden del Libro Diario (fecha, id) un asiento del ` +
-                `2026-09-15 registrado el ${hoyGuatemala()} cambió el número de ${renumeradas.length} partidas existentes ` +
-                `(${renumeradas.map((p) => `asiento ${p.id}: ${p.partida} → ${despues.get(Number(p.id))}`).join(', ')}). ` +
-                'Hace falta un correlativo almacenado al insertar, único por (empresa, diario, año).',
+            cambiados.map(([id, numero]) => `asiento ${id}: ${numero} → ${despues.get(id) ?? 'sin número'}`),
+            [],
+            `Un asiento del 2026-09-15 registrado el ${hoyGuatemala()} cambió el número guardado de asientos existentes.`,
+        )
+        assert.isTrue(
+            despues.has(Number(tardio.id)),
+            `el asiento ${tardio.id} no recibió número al insertarse`,
+        )
+        const repetidos = await db.rawQuery(
+            `SELECT diario_id, anio, numero, count(*)::int AS n FROM ledger.asientos_numeros
+              GROUP BY 1, 2, 3 HAVING count(*) > 1`,
+        )
+        assert.deepEqual(repetidos.rows, [], 'números de diario repetidos')
+        // si el Libro Diario expone un número, tampoco cambia
+        const diarioDespues = await numerosDelLibroDiario(e.B)
+        for (const [id, numero] of diarioAntes) {
+            assert.equal(
+                diarioDespues.get(id),
+                numero,
+                `GET /libro/diario cambió el número del asiento ${id}`,
+            )
+        }
+    })
+
+    test('H4 · partida legal: al cerrar el mes es correlativa en orden cronológico y reabrir y volver a cerrar no la cambia', async ({
+        assert,
+    }) => {
+        // Contrato §10.7: el correlativo de partida por empresa y año se guarda en ledger.asientos_partidas
+        // al CERRAR el mes, en orden (fecha, numero); el mes cerrado no admite asientos, así que nunca se
+        // renumera. El contrato no dice qué pasa con un asiento nuevo tras reabrir (queda para el contador);
+        // aquí se exige lo que sí dice: reabrir y volver a cerrar sin cambios deja las mismas partidas.
+        assert.isTrue(
+            await existeTabla('ledger.asientos_partidas'),
+            'Falta ledger.asientos_partidas (contrato §10.7): el Libro Diario no tiene partida legal guardada al cerrar el mes.',
+        )
+        const columna = await columnaPartida()
+        assert.isNotNull(columna, 'ledger.asientos_partidas sin columna de correlativo (partida o numero)')
+        const e = await prepararEmpresas()
+        // septiembre con asientos registrados fuera de orden de fecha
+        for (const [fecha, monto] of [
+            ['2026-09-20', '20.00'],
+            ['2026-09-05', '5.00'],
+            ['2026-09-12', '12.00'],
+            ['2026-09-05', '5.50'],
+        ] as const) {
+            await new RegistrarAsiento().execute(
+                {
+                    empresa_id: e.B,
+                    fecha,
+                    descripcion: `auditoría: gasto del ${fecha}`,
+                    origen_tipo: 'ajuste',
+                    movimientos: [
+                        { cuenta: CUENTAS.GASTO_OTROS, debe: monto },
+                        { cuenta: CUENTAS.BANCO_PRINCIPAL, haber: monto },
+                    ],
+                },
+                e.ctx,
+            )
+        }
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const primera = await partidasDe(e.B, columna!)
+        assert.lengthOf(primera, 4, 'cada asiento del mes cerrado tiene exactamente una partida')
+        assert.deepEqual(
+            primera.map((p) => p.partida),
+            [1, 2, 3, 4],
+            'partidas correlativas desde 1 en una empresa nueva',
+        )
+        const fechas = primera.map((p) => p.fecha)
+        assert.deepEqual(fechas, [...fechas].sort(), 'la partida sigue el orden cronológico')
+
+        await new ReabrirPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9, motivo: 'revisión' }, e.ctx)
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        assert.deepEqual(
+            await partidasDe(e.B, columna!),
+            primera,
+            'reabrir y volver a cerrar cambió las partidas',
         )
     })
 })
+
+async function existeTabla(tabla: string): Promise<boolean> {
+    const fila = await db.rawQuery(`SELECT to_regclass(?) IS NOT NULL AS existe`, [tabla])
+    return Boolean(fila.rows[0]?.existe)
+}
+
+/** asiento_id → "diario/año/número" guardado en ledger.asientos_numeros. */
+async function numerosDeDiario(empresaId: number): Promise<Map<number, string>> {
+    const resultado = await db.rawQuery(
+        `SELECT n.asiento_id, n.diario_id, n.anio, n.numero
+           FROM ledger.asientos_numeros n JOIN ledger.asientos a ON a.id = n.asiento_id
+          WHERE a.empresa_id = ?`,
+        [empresaId],
+    )
+    const filas = resultado.rows as Array<{
+        asiento_id: number
+        diario_id: number
+        anio: number
+        numero: number
+    }>
+    return new Map(filas.map((f) => [Number(f.asiento_id), `${f.diario_id}/${f.anio}/${f.numero}`]))
+}
+
+/** Número que expone el Libro Diario por asiento (`numero` o `partida`), si lo expone. */
+async function numerosDelLibroDiario(empresaId: number): Promise<Map<number, unknown>> {
+    const diario = await libroDiario({ limit: 100 }, [empresaId])
+    const mapa = new Map<number, unknown>()
+    for (const asiento of diario.data as Array<Record<string, unknown>>) {
+        const numero = asiento.numero ?? asiento.partida
+        if (numero !== undefined && numero !== null) mapa.set(Number(asiento.id), numero)
+    }
+    return mapa
+}
+
+async function columnaPartida(): Promise<string | null> {
+    const resultado = await db.rawQuery(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'ledger' AND table_name = 'asientos_partidas'
+            AND column_name IN ('partida', 'numero', 'correlativo') ORDER BY column_name DESC LIMIT 1`,
+    )
+    return resultado.rows[0]?.column_name ?? null
+}
+
+async function partidasDe(empresaId: number, columna: string) {
+    const resultado = await db.rawQuery(
+        `SELECT p.asiento_id, p.${columna}::int AS partida, to_char(a.fecha, 'YYYY-MM-DD') AS fecha
+           FROM ledger.asientos_partidas p JOIN ledger.asientos a ON a.id = p.asiento_id
+          WHERE a.empresa_id = ? ORDER BY p.${columna}`,
+        [empresaId],
+    )
+    return resultado.rows as Array<{ asiento_id: number; partida: number; fecha: string }>
+}
