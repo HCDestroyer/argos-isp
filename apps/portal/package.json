@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "test": "vitest run && vitest run -c vitest.servidor.config.ts",
-    "test:servidor": "vitest run -c vitest.servidor.config.ts"
+    "test:servidor": "vitest run -c vitest.servidor.config.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@argosisp/contracts": "workspace:*",
@@ -25,8 +26,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
     "@nuxt/eslint": "^1.17.0",
     "@nuxt/test-utils": "^4.3.3",
+    "@playwright/test": "1.56.1",
     "@vue/test-utils": "^2.5.1",
     "eslint": "^10.12.0",
     "happy-dom": "^21.0.1",

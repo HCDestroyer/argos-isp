@@ -98,7 +98,7 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 
 `pago.registrado` y `pago.anulado`: `{ pago_id, empresa_id, cobro_id, cliente_id, monto, metodo, facturas[], clientes[] }`.
 
-- Multiempresa (2026-10-17): un pago es de una sola empresa y sus `facturas[]` son de esa empresa. Un cobro en caja que cubre facturas de varias empresas emite **un `pago.registrado` por empresa**, con el mismo `cobro_id`. Notify puede agruparlos por `cobro_id` para mandar un solo aviso con una sección por empresa.
+- Multiempresa (2026-10-17): un pago es de una sola empresa y sus `facturas[]` son de esa empresa. Un cobro en caja que cubre facturas de varias empresas emite **un `pago.registrado` por empresa**, con el mismo `cobro_id`. Decisión de A6 (17 oct): notify **no** los agrupa; manda un aviso por empresa (cada uno con su marca, su configuración y su bot) y la plantilla puede decir que es parte de un cobro mayor con `{{#cobro.repartido}}` (`{{cobro.monto_q}}`, `{{cobro.otras_empresas}}`; `apps/api/app/notify/README.md`, "Avisos de pago").
 
 - `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
 - `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.

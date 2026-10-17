@@ -138,12 +138,31 @@ export const PortalContacto = definirEsquema(
     }),
 )
 
+export const PortalTelegramEmpresa = definirEsquema(
+    'PortalTelegramEmpresa',
+    objeto({
+        empresa: PortalMarcaEmpresa,
+        disponible: {
+            ...booleano,
+            description: 'La empresa tiene bot (el suyo o el global): se pide el código con su `empresa_id`',
+        },
+        bot: nulable({ ...texto, description: 'Usuario del bot de la empresa sin @' }),
+        vinculado: { ...booleano, description: 'El bot de esta empresa ya le puede escribir al cliente' },
+    }),
+)
+
 export const PortalTelegram = definirEsquema(
     'PortalTelegram',
     objeto({
         vinculado: { ...booleano, description: 'El cliente tiene un chat de Telegram vinculado' },
-        disponible: { ...booleano, description: 'Hay bot configurado: se puede pedir un enlace' },
-        bot: nulable({ ...texto, description: 'Usuario del bot sin @' }),
+        disponible: { ...booleano, description: 'Hay bot global configurado: se puede pedir un enlace' },
+        bot: nulable({ ...texto, description: 'Usuario del bot global sin @' }),
+        empresas: {
+            ...lista(PortalTelegramEmpresa),
+            description:
+                'Una por empresa con servicios vigentes del cliente (vinculación por bot, `contratos/telegram.md` ' +
+                '"Varios bots"). Con varias, el portal muestra una tarjeta por empresa',
+        },
     }),
 )
 
@@ -158,6 +177,7 @@ export const PortalVinculoTelegram = definirEsquema(
         enlace: { ...texto, description: 'https://t.me/<bot>?start=<código>' },
         bot: { ...texto, description: 'Usuario del bot sin @' },
         vence_en: instante,
+        empresa_id: { ...nulable(id), description: 'Empresa cuyo bot se vincula (null = el bot global)' },
     }),
 )
 
@@ -174,6 +194,39 @@ export const PortalServicio = definirEsquema(
     }),
 )
 
+export const PortalFacturaPendiente = definirEsquema(
+    'PortalFacturaPendiente',
+    objeto({
+        id,
+        numero: { ...texto, description: 'Serie-número FEL si está certificada; si no, número del aviso' },
+        servicio_id: nulable(id),
+        vence_en: fecha,
+        estado: enumerado(['emitida', 'parcial', 'vencida']),
+        vencida: {
+            ...booleano,
+            description: 'Vencida o con fecha de vencimiento anterior a hoy (Guatemala)',
+        },
+        total: Dinero,
+        saldo: { ...Dinero, description: 'total - pagado' },
+    }),
+)
+
+export const PortalCuentaEmpresa = definirEsquema(
+    'PortalCuentaEmpresa',
+    objeto({
+        empresa: PortalMarcaEmpresa,
+        saldo: {
+            ...Dinero,
+            description: 'Saldo del cliente con esta empresa (auxiliar CxC de su libro; positivo = debe)',
+        },
+        saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en esta empresa' },
+        facturas_pendientes: {
+            ...lista(PortalFacturaPendiente),
+            description: 'Emitidas, parciales y vencidas de esta empresa, la más antigua primero',
+        },
+    }),
+)
+
 export const PortalCuenta = definirEsquema(
     'PortalCuenta',
     objeto({
@@ -187,6 +240,12 @@ export const PortalCuenta = definirEsquema(
         empresa_principal: {
             ...PortalMarcaEmpresa,
             description: 'Empresa con más servicios sin retirar (encabezado, título y manifiesto)',
+        },
+        empresas: {
+            ...lista(PortalCuentaEmpresa),
+            description:
+                'Una sección por empresa con facturas, movimientos o anticipos del cliente (estado de cuenta ' +
+                'de A3): cada NIT cobra lo suyo. La principal del cliente primero; luego por id',
         },
     }),
 )

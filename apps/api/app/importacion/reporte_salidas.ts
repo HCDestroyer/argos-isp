@@ -433,6 +433,25 @@ export function reporteMarkdown(r: ReporteImportacion): string {
             : `- **No cuadra: diferencia Q ${r.saldos.diferencia}** (ver la sección saldo)`,
         `- Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales'}`,
     )
+    s.push('', '## Empresas', '')
+    s.push(
+        r.empresas.cuadra
+            ? `- **Cuadra**: todo lo importado quedó en su empresa y la suma por empresa es Q ${r.empresas.suma}`
+            : `- **No cuadra**: ${r.empresas.fuera_de_empresa.length} registros fuera de su empresa; suma por empresa Q ${r.empresas.suma} contra Q ${r.saldos.suma_importada}`,
+        '',
+        '| Empresa | Facturas | Pagos | Promesas | Saldos iniciales | Saldo |',
+        '| --- | ---: | ---: | ---: | ---: | ---: |',
+    )
+    for (const e of r.empresas.por_empresa) {
+        s.push(
+            `| ${e.empresa_id}${e.empresa_id === r.empresas.corrida ? ' (corrida)' : ''} | ${e.facturas} | ${e.pagos} | ${e.promesas} | ${e.saldos_iniciales} | Q ${e.saldo} |`,
+        )
+    }
+    for (const x of r.empresas.fuera_de_empresa) {
+        s.push(
+            `- ${x.entidad} ${md(x.id_origen)} → ${x.id}: quedó en la empresa ${x.empresa_id}, se esperaba la ${x.esperada}`,
+        )
+    }
     const m = r.dinero
     s.push('', '## Dinero', '')
     s.push('| | Origen | ArgosIsp | Diferencia |', '| --- | ---: | ---: | ---: |')

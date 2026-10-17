@@ -6,6 +6,9 @@
  * pendiente si nada está vencido) y devuelve la página de pago del proveedor. Antes de ir, la URL
  * pasa a `/corte?pago=<id>`: al volver, el estado en vivo espera la confirmación del webhook.
  *
+ * Cobra lo de UN servicio (o, en `/corte`, el de la IP): nunca mezcla empresas. Si la API responde
+ * 422 `pago_de_varias_empresas`, lo dice con sus palabras.
+ *
  * Habilitado solo si `GET /portal/empresa` dice `pago_en_linea` (hay pasarela). Mientras carga se
  * ve deshabilitado; sin pasarela, apagado con la alternativa (oficina o depósito).
  *
@@ -31,6 +34,7 @@ const { iniciar } = usePagoEnLinea()
 const disponible = computed(() => empresa.value?.pago_en_linea === true)
 const yendo = ref(false)
 const error = ref<string | null>(null)
+const tituloError = ref('No pudimos iniciar el pago')
 let clave = claveIdempotencia()
 
 async function pagar() {
@@ -42,6 +46,10 @@ async function pagar() {
         if (respuesta.problema.status !== 0) {
             clave = claveIdempotencia()
         }
+        // Multiempresa: un cobro en línea es de una sola empresa (NIT); nunca se mezclan.
+        tituloError.value = esPagoDeVariasEmpresas(respuesta.problema)
+            ? 'Cada empresa se paga por separado'
+            : 'No pudimos iniciar el pago'
         error.value = mensajeProblema(respuesta.problema)
         return
     }
@@ -88,7 +96,7 @@ async function pagar() {
             color="error"
             variant="subtle"
             icon="i-lucide-circle-alert"
-            title="No pudimos iniciar el pago"
+            :title="tituloError"
             :description="error"
             role="alert"
             data-testid="pagar-en-linea-error"

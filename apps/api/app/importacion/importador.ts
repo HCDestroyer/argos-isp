@@ -9,7 +9,7 @@ import { normalizarNitCui } from '#core/nit_cui'
 import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import CrearServicio, { type EntradaCrearServicio } from '#core/actions/crear_servicio'
 import { saldoAnticipos } from '#billing/cobros'
-import { saldoCliente } from '#ledger/consultas'
+import { saldoCliente, saldoClientePorEmpresa } from '#ledger/consultas'
 import { hoyGuatemala } from '#ledger/fechas'
 import type { MetodoPago } from '#shared/eventos'
 import CrearCliente from '#core/actions/crear_cliente'
@@ -283,6 +283,8 @@ class Importador {
     readonly #zonas = new Map<string, number>()
     /** servicio_origen → servicio de ArgosIsp (creado o ya importado) */
     readonly #servicios = new Map<string, number>()
+    /** servicio de ArgosIsp → su empresa (la de la corrida, o otra si ya estaba importado allí) */
+    readonly #empresaServicio = new Map<number, number>()
     /** plantilla de los servicios nuevos (resuelta una vez) */
     #plantilla: number | null = null
     /** planes del origen que no se pueden usar: plan_origen → motivo */
@@ -302,6 +304,23 @@ class Importador {
     readonly #facturasCubiertas = new Set<string>()
     /** factura del origen → factura de ArgosIsp (creada o ya importada) */
     readonly #facturas = new Map<string, number>()
+    /**
+     * factura del origen → empresa con la que se importó (o con la que ya estaba). Es la de la
+     * corrida salvo las facturas de un servicio ya importado en otra empresa: van con su servicio
+     * (A3 rechaza otra con `empresa_servicio`). Los pagos y promesas de esa factura la siguen.
+     */
+    readonly #empresaFactura = new Map<string, number>()
+    /**
+     * lo que toca esta corrida → empresa esperada (verificación por empresa del reporte). null =
+     * ya importado por una corrida anterior: queda donde está (no se mueve) y solo se cuenta.
+     */
+    readonly #esperado = {
+        facturas: new Map<number, { id_origen: string; empresa_id: number | null }>(),
+        pagos: new Map<number, { id_origen: string; empresa_id: number | null }>(),
+        promesas: new Map<number, { id_origen: string; empresa_id: number | null }>(),
+        /** clave externa del saldo inicial → cliente del origen (los nuevos, en la empresa de la corrida) */
+        saldos: new Map<string, { id_origen: string; existente: boolean }>(),
+    }
     /** dueño de cada factura del origen (incluidas pagadas o anuladas si el origen lo sabe) */
     readonly #duenos: Map<string, string>
     /** resultado de cada entidad canónica (`<entidad>:<id>`), para el archivo y el cuadre por tabla */
@@ -392,6 +411,13 @@ class Importador {
                 diferencia: '0.00',
                 cuadra: true,
             },
+            empresas: {
+                corrida: empresa.id,
+                por_empresa: [],
+                fuera_de_empresa: [],
+                suma: '0.00',
+                cuadra: true,
+            },
             diferencias: {
                 routers_sin_credenciales: [],
                 clientes_nit_duplicado: [],
@@ -450,6 +476,7 @@ class Importador {
         await this.saldos()
         await this.promesas()
         await this.compararSaldos()
+        await this.verificarEmpresas()
         await this.cuadrarDinero()
         await this.archivar()
     }
@@ -949,6 +976,7 @@ class Importador {
                     }
                     conteo.existentes++
                     this.#servicios.set(s.id, Number(existente.id))
+                    this.#empresaServicio.set(Number(existente.id), Number(existente.empresa_id))
                     if (s.ip) ipTomada.set(s.ip, s.id)
                     this.#marcar('servicios', s.id, {
                         estado: 'existente',
@@ -1016,6 +1044,7 @@ class Importador {
                 entidad_id: creado.id,
             })
             this.#servicios.set(s.id, creado.id)
+            this.#empresaServicio.set(creado.id, this.empresa.id)
             await this.ids.registrar('servicio', s.id, creado.id)
             if (s.ip) ipTomada.set(s.ip, s.id)
             else d.ips_nuevas.push({ servicio_origen: s.id, ip: creado.ipv4 })
@@ -1098,8 +1127,8 @@ class Importador {
             const ya = (await this.trx
                 .from('billing.facturas')
                 .where({ origen: this.sistema, clave_externa: clave })
-                .select('id')
-                .first()) as { id: number } | null
+                .select('id', 'empresa_id')
+                .first()) as { id: number; empresa_id: number } | null
 
             // Servicio y periodo: sin servicio (cliente retirado, servicio que no entró) o sin
             // periodo es un cargo único del cliente; una segunda factura del mismo servicio y
@@ -1144,8 +1173,16 @@ class Importador {
                     total,
                 })
             }
+            // Empresa de la factura: la de la corrida (`--empresa`); la de su servicio si ese ya
+            // estaba importado en otra (servicios_otra_empresa: la factura sigue a su servicio).
+            const empresaId =
+                servicio.id === null
+                    ? this.empresa.id
+                    : (this.#empresaServicio.get(servicio.id) ?? this.empresa.id)
             if (ya) {
                 this.#facturas.set(f.id, Number(ya.id))
+                this.#empresaFactura.set(f.id, Number(ya.empresa_id))
+                this.#esperado.facturas.set(Number(ya.id), { id_origen: f.id, empresa_id: null })
                 if (!modoB) this.#sumarModoA(f)
                 conteo.existentes++
                 this.#marcar('facturas', f.id, {
@@ -1163,6 +1200,7 @@ class Importador {
                     {
                         origen: this.sistema,
                         id_externo: clave,
+                        empresa_id: empresaId,
                         servicio_id: servicio.id,
                         cliente_id: clienteId,
                         periodo,
@@ -1177,12 +1215,12 @@ class Importador {
                     this.trx,
                 ),
             )
-            this.#facturaHecha(f, hecha?.factura_id ?? null, modoB)
+            this.#facturaHecha(f, hecha?.factura_id ?? null, modoB, empresaId)
         }
     }
 
     /** Anota el resultado de una factura creada (o fallida: ya quedó en errores). */
-    #facturaHecha(f: FacturaOrigen, facturaId: number | null, modoB: boolean) {
+    #facturaHecha(f: FacturaOrigen, facturaId: number | null, modoB: boolean, empresaId: number) {
         const conteo = this.reporte.resumen.facturas
         if (facturaId === null) {
             conteo.omitidos++
@@ -1193,6 +1231,8 @@ class Importador {
             return
         }
         this.#facturas.set(f.id, facturaId)
+        this.#empresaFactura.set(f.id, empresaId)
+        this.#esperado.facturas.set(facturaId, { id_origen: f.id, empresa_id: empresaId })
         if (!modoB) this.#sumarModoA(f)
         conteo.creados++
         this.#marcar('facturas', f.id, { estado: 'creado', entidad_tipo: 'factura', entidad_id: facturaId })
@@ -1298,12 +1338,19 @@ class Importador {
             }
             const clave = `${this.sistema}:pago:${p.id}`
             const ya = await this.#pagoExistente(clave)
+            const facturaId = p.factura_id ? this.#facturas.get(p.factura_id) : undefined
+            // Un pago es de una sola empresa: la de su factura (la de la corrida salvo una factura
+            // de un servicio en otra empresa); sin factura, la de la corrida.
+            const empresaId =
+                facturaId === undefined
+                    ? this.empresa.id
+                    : (this.#empresaFactura.get(p.factura_id!) ?? this.empresa.id)
             if (ya !== null) {
+                this.#esperado.pagos.set(ya, { id_origen: p.id, empresa_id: null })
                 conteo.existentes++
                 this.#marcar('pagos', p.id, { estado: 'existente', entidad_tipo: 'pago', entidad_id: ya })
                 continue
             }
-            const facturaId = p.factura_id ? this.#facturas.get(p.factura_id) : undefined
             if (p.factura_id && facturaId === undefined) {
                 d.pagos_sin_factura.push({
                     pago_origen: p.id,
@@ -1319,6 +1366,7 @@ class Importador {
                         historico: true,
                         origen: this.sistema,
                         id_externo: clave,
+                        empresa_id: empresaId,
                         cliente_id: clienteId,
                         metodo,
                         monto: p.monto,
@@ -1334,6 +1382,7 @@ class Importador {
             )
             if (hecho) {
                 conteo.creados++
+                this.#esperado.pagos.set(Number(hecho.id), { id_origen: p.id, empresa_id: empresaId })
                 this.#marcar('pagos', p.id, {
                     estado: 'creado',
                     entidad_tipo: 'pago',
@@ -1396,7 +1445,10 @@ class Importador {
                 .where({ origen: this.sistema, clave_externa: clave })
                 .select('id')
                 .first()) as { id: number } | null
+            // La promesa es de la empresa del servicio de su factura (A3: `empresa_servicio`).
+            const empresaId = this.#empresaFactura.get(p.factura_id!) ?? this.empresa.id
             if (ya) {
+                this.#esperado.promesas.set(Number(ya.id), { id_origen: p.id, empresa_id: null })
                 conteo.existentes++
                 this.#marcar('promesas', p.id, {
                     estado: 'existente',
@@ -1412,6 +1464,7 @@ class Importador {
                     {
                         origen: this.sistema,
                         id_externo: clave,
+                        empresa_id: empresaId,
                         factura_id: facturaId,
                         vence: p.vence,
                         monto: p.monto,
@@ -1421,6 +1474,7 @@ class Importador {
                     this.trx,
                 )
                 conteo.creados++
+                this.#esperado.promesas.set(hecha.id, { id_origen: p.id, empresa_id: empresaId })
                 this.#marcar('promesas', p.id, {
                     estado: 'creado',
                     entidad_tipo: 'promesa',
@@ -1487,6 +1541,7 @@ class Importador {
                 .select('id')
                 .first()
             if (ya) {
+                this.#esperado.saldos.set(clave, { id_origen: clienteOrigen, existente: true })
                 conteo.origen++
                 conteo.existentes++
                 continue
@@ -1502,6 +1557,7 @@ class Importador {
                     {
                         origen: this.sistema,
                         id_externo: clave,
+                        empresa_id: this.empresa.id,
                         cliente_id: clienteId,
                         monto: monto.toFixed(2),
                         descripcion: `Saldo inicial importado de ${this.sistema}`,
@@ -1510,8 +1566,10 @@ class Importador {
                     this.trx,
                 ),
             )
-            if (hecho) conteo.creados++
-            else conteo.omitidos++
+            if (hecho) {
+                this.#esperado.saldos.set(clave, { id_origen: clienteOrigen, existente: false })
+                conteo.creados++
+            } else conteo.omitidos++
         }
     }
 
@@ -1672,6 +1730,113 @@ class Importador {
             diferencia: diferencia.toFixed(2),
             cuadra: diferencia.isZero() && this.reporte.diferencias.saldos_distintos.length === 0,
         }
+    }
+
+    /**
+     * Multiempresa: comprueba en la base (dentro de la corrida) que cada factura, pago, promesa y
+     * saldo inicial creado por esta corrida quedó en la empresa esperada (la de `--empresa`, o la
+     * del servicio ya importado en otra; lo ya importado antes solo se cuenta donde está), y reparte la suma de saldos importada por empresa (CxC −
+     * anticipos de cada cliente en cada empresa). Cuadra si nada quedó fuera de su empresa y la
+     * suma por empresa es la suma consolidada de `compararSaldos`.
+     */
+    async verificarEmpresas() {
+        const r = this.reporte.empresas
+        const filas = new Map<number, ReporteImportacion['empresas']['por_empresa'][number]>()
+        const fila = (empresaId: number) => {
+            let f = filas.get(empresaId)
+            if (!f) {
+                f = {
+                    empresa_id: empresaId,
+                    facturas: 0,
+                    pagos: 0,
+                    promesas: 0,
+                    saldos_iniciales: 0,
+                    saldo: '0.00',
+                }
+                filas.set(empresaId, f)
+            }
+            return f
+        }
+        fila(this.empresa.id)
+        const tablas = [
+            ['factura', 'facturas', 'billing.facturas'],
+            ['pago', 'pagos', 'billing.pagos'],
+            ['promesa', 'promesas', 'billing.promesas'],
+        ] as const
+        for (const [entidad, campo, tabla] of tablas) {
+            const esperado = this.#esperado[campo]
+            const ids = [...esperado.keys()]
+            for (let i = 0; i < ids.length; i += 1000) {
+                const reales = (await this.trx
+                    .from(tabla)
+                    .whereIn('id', ids.slice(i, i + 1000))
+                    .select('id', 'empresa_id')) as Array<{ id: number; empresa_id: number }>
+                for (const real of reales) {
+                    const e = esperado.get(Number(real.id))!
+                    const empresaId = Number(real.empresa_id)
+                    fila(empresaId)[campo]++
+                    if (e.empresa_id !== null && empresaId !== e.empresa_id) {
+                        r.fuera_de_empresa.push({
+                            entidad,
+                            id_origen: e.id_origen,
+                            id: Number(real.id),
+                            empresa_id: empresaId,
+                            esperada: e.empresa_id,
+                        })
+                    }
+                }
+            }
+        }
+        const claves = [...this.#esperado.saldos.keys()]
+        for (let i = 0; i < claves.length; i += 1000) {
+            const reales = (await this.trx
+                .from('billing.saldos_iniciales')
+                .where('origen', this.sistema)
+                .whereIn('clave_externa', claves.slice(i, i + 1000))
+                .select('id', 'clave_externa', 'empresa_id')) as Array<{
+                id: number
+                clave_externa: string
+                empresa_id: number
+            }>
+            for (const real of reales) {
+                const empresaId = Number(real.empresa_id)
+                const e = this.#esperado.saldos.get(real.clave_externa)!
+                fila(empresaId).saldos_iniciales++
+                if (!e.existente && empresaId !== this.empresa.id) {
+                    r.fuera_de_empresa.push({
+                        entidad: 'saldo_inicial',
+                        id_origen: e.id_origen,
+                        id: Number(real.id),
+                        empresa_id: empresaId,
+                        esperada: this.empresa.id,
+                    })
+                }
+            }
+        }
+
+        // Suma de saldos por empresa: los mismos clientes que compararSaldos.
+        const saldos = new Map<number, Decimal>()
+        for (const clienteOrigen of this.#saldosOrigen().keys()) {
+            const clienteId = this.#clientes.get(clienteOrigen)
+            if (!clienteId) continue
+            const cxc = await saldoClientePorEmpresa(clienteId, this.trx)
+            const empresas = new Set<number>([...filas.keys(), ...cxc.keys()])
+            for (const empresaId of empresas) {
+                const saldo = (cxc.get(empresaId) ?? new Decimal(0)).minus(
+                    await saldoAnticipos(this.trx, clienteId, empresaId),
+                )
+                if (saldo.isZero()) continue
+                saldos.set(empresaId, (saldos.get(empresaId) ?? new Decimal(0)).plus(saldo))
+            }
+        }
+        let suma = new Decimal(0)
+        for (const [empresaId, saldo] of saldos) {
+            fila(empresaId).saldo = saldo.toFixed(2)
+            suma = suma.plus(saldo)
+        }
+        r.por_empresa = [...filas.values()].sort((a, b) => a.empresa_id - b.empresa_id)
+        r.suma = suma.toFixed(2)
+        r.cuadra = r.fuera_de_empresa.length === 0 && suma.equals(this.reporte.saldos.suma_importada)
     }
 
     /** IP libre (en el origen y en ArgosIsp) y dentro de una red del router. Anota la diferencia si no. */

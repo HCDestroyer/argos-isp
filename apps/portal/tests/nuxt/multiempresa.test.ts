@@ -51,6 +51,32 @@ afterEach(() => {
 })
 
 describe('agruparPorEmpresa con la empresa real de cada servicio', () => {
+    it('con el estado de cuenta: el saldo de cada empresa sale de su sección', () => {
+        const secciones = CUENTA_DOS_EMPRESAS_FIXTURE.empresas
+        const grupos = agruparPorEmpresa(CUENTA_DOS_EMPRESAS_FIXTURE.servicios, MARCA_FIXTURE.id, [
+            secciones[0]!,
+            { ...secciones[1]!, saldo: '420.50' },
+        ])
+        expect(grupos.map(g => g.montoAdeudado)).toEqual(['175.00', '420.50'])
+        expect(grupos[1]!.cuenta?.facturas_pendientes.map(f => f.id)).toEqual([2201, 2250])
+
+        // Una empresa con deuda y sin servicios vigentes también tiene su sección
+        const sinServicios = agruparPorEmpresa([CUENTA_DOS_EMPRESAS_FIXTURE.servicios[0]!], MARCA_FIXTURE.id, secciones)
+        expect(sinServicios.map(g => [g.empresa.id, g.servicios.length, g.montoAdeudado])).toEqual([[1, 1, '175.00'], [2, 0, '398.00']])
+    })
+
+    it('resumenFacturas: pendientes y vencidas en palabras', () => {
+        const [norte, sur] = CUENTA_DOS_EMPRESAS_FIXTURE.empresas
+        expect(resumenFacturas(null)).toBeNull()
+        expect(resumenFacturas({ ...norte!, facturas_pendientes: [] })).toBeNull()
+        expect(resumenFacturas(norte!)).toBe('1 factura pendiente')
+        expect(resumenFacturas(sur!)).toBe('2 facturas pendientes, todas vencidas')
+        expect(resumenFacturas(CUENTA_FIXTURE.empresas[0]!)).toBe('4 facturas pendientes, todas vencidas')
+        const mezcla = { ...sur!, facturas_pendientes: [...sur!.facturas_pendientes, ...norte!.facturas_pendientes] }
+        expect(resumenFacturas(mezcla)).toBe('3 facturas pendientes, 2 vencidas')
+        expect(resumenFacturas({ ...sur!, facturas_pendientes: [sur!.facturas_pendientes[0]!] })).toBe('1 factura pendiente, vencida')
+    })
+
     it('un grupo por empresa, con su saldo; la principal primero', () => {
         const grupos = agruparPorEmpresa(CUENTA_DOS_EMPRESAS_FIXTURE.servicios, MARCA_SUR_FIXTURE.id)
         expect(grupos.map(g => g.empresa.nombre_comercial)).toEqual(['Fibra Sur', 'Red Altiplano'])
@@ -118,6 +144,29 @@ describe('/cuenta con servicios en dos empresas', () => {
         expect(secciones[1]!.text()).not.toContain('Hogar 20 Mbps')
         // Sin logo: las iniciales de la empresa, nunca el logo de otra.
         expect(secciones[1]!.find('[data-testid="marca-empresa"]').text()).toBe('FS')
+    })
+
+    it('cada sección con el saldo y las facturas pendientes de SU empresa (estado de cuenta)', async () => {
+        const wrapper = await montarCuenta()
+        const saldo = (grupo: number) => wrapper.find(`[data-testid="grupo-empresa-${grupo}"] [data-testid="saldo-grupo"]`).text()
+        const facturas = (grupo: number) => wrapper.find(`[data-testid="grupo-empresa-${grupo}"] [data-testid="facturas-grupo"]`).text()
+        expect(saldo(1)).toContain('175.00')
+        expect(saldo(2)).toContain('398.00')
+        expect(facturas(1)).toBe('1 factura pendiente')
+        expect(facturas(2)).toContain('2 facturas pendientes, todas vencidas')
+        expect(facturas(2)).toContain('Saldo a favor Q')
+        expect(facturas(1)).not.toContain('Saldo a favor')
+    })
+
+    it('Telegram: una tarjeta por empresa con su bot', async () => {
+        fijarSesionFixture(true)
+        fijarCuentaFixture(CUENTA_DOS_EMPRESAS_FIXTURE)
+        const wrapper = await montar(PaginaCuenta, { route: '/cuenta?seccion=cuenta' })
+        expect(wrapper.find('[data-testid="telegram"]').exists()).toBe(false)
+        const tarjetas = wrapper.findAll('[data-testid^="telegram-empresa-"]')
+        expect(tarjetas.map(t => t.attributes('data-testid'))).toEqual(['telegram-empresa-1', 'telegram-empresa-2'])
+        expect(tarjetas[1]!.text()).toContain('Telegram de Fibra Sur')
+        expect(tarjetas[1]!.text()).toContain('@FibraSurBot')
     })
 
     it('el soporte de cada sección es el de su empresa', async () => {

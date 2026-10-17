@@ -108,12 +108,37 @@ const servicioPago = computed(() => serviciosConSaldo.value.some(s => s.id === s
     : serviciosConSaldo.value[0]?.id)
 
 /** Grupos por empresa (la principal primero); cada uno calcula sus accesos con su empresa. */
-const grupos = computed(() => agruparPorEmpresa(cuenta.value?.servicios ?? [], cuenta.value?.empresa_principal.id ?? null))
+const grupos = computed(() => agruparPorEmpresa(
+    cuenta.value?.servicios ?? [],
+    cuenta.value?.empresa_principal.id ?? null,
+    cuenta.value?.empresas ?? [],
+))
 const variasEmpresas = computed(() => grupos.value.length > 1)
-/** Telegram es del cliente, no de la empresa: va solo en el primer grupo. */
-const estadoTelegram = computed(() => telegram.estado.value
-    ? { disponible: telegram.estado.value.disponible, vinculado: telegram.estado.value.vinculado }
-    : null)
+/**
+ * Telegram por empresa ("Varios bots"): un bot solo le escribe a quien lo inició, así que con
+ * servicios en varias empresas cada una tiene su tarjeta y su acceso "Vincular Telegram". Con una
+ * sola, la tarjeta de siempre (en el primer grupo).
+ */
+const telegramPorEmpresa = computed(() => {
+    const empresas = telegram.estado.value?.empresas ?? []
+    return empresas.length > 1 ? empresas : null
+})
+function telegramDelGrupo(grupo: GrupoEmpresa, indice: number) {
+    const estado = telegram.estado.value
+    if (!estado) {
+        return null
+    }
+    if (telegramPorEmpresa.value) {
+        const propio = telegramPorEmpresa.value.find(t => t.empresa.id === grupo.empresa.id)
+        return propio ? { disponible: propio.disponible, vinculado: propio.vinculado } : null
+    }
+    return indice === 0 ? { disponible: estado.disponible, vinculado: estado.vinculado } : null
+}
+function rutaTelegramDelGrupo(grupo: GrupoEmpresa) {
+    return telegramPorEmpresa.value
+        ? `/cuenta?seccion=cuenta#telegram-${grupo.empresa.id}`
+        : '/cuenta?seccion=cuenta#telegram'
+}
 
 /** Empresa del servicio que se paga en línea en "Pagar" (sus cuentas, su pasarela). */
 const grupoPago = computed(() => grupoDeServicio(grupos.value, servicioPago.value) ?? grupos.value[0] ?? null)
@@ -203,9 +228,9 @@ async function salir() {
 
 // Al llegar a "Cuenta" desde "Vincular Telegram", la tarjeta de Telegram queda a la vista.
 watch(() => route.hash, async (hash) => {
-    if (hash === '#telegram') {
+    if (/^#telegram(-\d+)?$/.test(hash)) {
         await nextTick()
-        document.getElementById('telegram')?.scrollIntoView({ block: 'start' })
+        document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' })
     }
 })
 </script>
@@ -299,7 +324,8 @@ watch(() => route.hash, async (hash) => {
                         :key="grupo.clave"
                         :grupo="grupo"
                         :mostrar-marca="variasEmpresas"
-                        :telegram="indice === 0 ? estadoTelegram : null"
+                        :telegram="telegramDelGrupo(grupo, indice)"
+                        :ruta-telegram="rutaTelegramDelGrupo(grupo)"
                         :promesa-por-servicio="promesaPorServicio"
                         @accion="alAcceso(grupo, $event)"
                         @pedir-promesa="pedirPromesa"
@@ -419,7 +445,18 @@ watch(() => route.hash, async (hash) => {
                     <h2 class="text-lg font-semibold text-highlighted">
                         Mi cuenta
                     </h2>
+                    <template v-if="telegramPorEmpresa">
+                        <CuentaTelegram
+                            v-for="propio in telegramPorEmpresa"
+                            :id="`telegram-${propio.empresa.id}`"
+                            :key="propio.empresa.id"
+                            :vinculado="propio.vinculado"
+                            :empresa="propio.empresa"
+                            @cambio="refresh(); telegram.cargar()"
+                        />
+                    </template>
                     <CuentaTelegram
+                        v-else
                         id="telegram"
                         :vinculado="cuenta.cliente.telegram_vinculado"
                         @cambio="refresh(); telegram.cargar()"

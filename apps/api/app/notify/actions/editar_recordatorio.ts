@@ -24,6 +24,7 @@ export default class EditarRecordatorio extends DomainAction<EntradaEditarRecord
 
     protected async handle(input: EntradaEditarRecordatorio, t: Transaccion): Promise<FilaRecordatorio> {
         t.fijarEntidad('recordatorio', input.id)
+        t.fijarEmpresa(null) // recordatorios globales
         const antes = (await t.trx
             .from('notify.recordatorios')
             .where('id', input.id)
