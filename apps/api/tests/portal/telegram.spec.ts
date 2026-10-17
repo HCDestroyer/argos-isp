@@ -195,9 +195,11 @@ test.group('Portal: vincular Telegram', (group) => {
         await estado(client.post('/api/v1/portal/telegram/desvincular').header('Cookie', b.cookie), 200)
         assert.equal(await chatDe(a.clienteId), '555555555')
 
-        // el código de B sigue siendo solo de B
-        const deB = await canjear(codigoB, '666666666')
+        // al desvincular, B anuló su código pendiente; uno nuevo es solo de B y no toca a A
+        await assert.rejects(() => canjear(codigoB, '666666666'), /no es válido o ya venció/)
+        const deB = await canjear(await pedirCodigo(client, b.cookie), '666666666')
         assert.equal(deB.cliente_id, b.clienteId)
+        assert.equal(await chatDe(a.clienteId), '555555555')
 
         // sin sesión: 401 (y no se genera código)
         await estado(
@@ -232,13 +234,46 @@ test.group('Portal: vincular Telegram', (group) => {
             .select('accion', 'canal', 'actor_tipo', 'actor_id')
         assert.sameMembers(
             acciones.map((a) => a.accion),
-            ['portal.desvincular_telegram', 'clientes.desvincular_telegram', 'clientes.editar'],
+            [
+                'portal.desvincular_telegram',
+                'clientes.desvincular_telegram',
+                'notificaciones.telegram_anular_codigos',
+                'clientes.editar',
+            ],
         )
         assert.isTrue(acciones.every((a) => a.canal === 'portal'))
         assert.isTrue(acciones.every((a) => a.actor_tipo === 'cliente' && Number(a.actor_id) === c.clienteId))
 
         // repetir es idempotente
         await estado(client.post('/api/v1/portal/telegram/desvincular').header('Cookie', c.cookie), 200)
+    })
+
+    test('desvincular anula el código pendiente: un enlace viejo no vuelve a vincular', async ({
+        client,
+        assert,
+    }) => {
+        const c = await clienteConSesion()
+        const viejo = await pedirCodigo(client, c.cookie)
+        await canjear(await pedirCodigo(client, c.cookie), '555555555')
+        // vuelve a pedir un código (queda pendiente) y se arrepiente
+        const pendiente = await pedirCodigo(client, c.cookie)
+        await estado(client.post('/api/v1/portal/telegram/desvincular').header('Cookie', c.cookie), 200)
+        assert.isNull(await chatDe(c.clienteId))
+
+        const fila = await db
+            .from('notify.telegram_codigos')
+            .where('codigo_hash', hashCodigoVinculacion(pendiente))
+            .select('estado')
+            .firstOrFail()
+        assert.equal(fila.estado, 'anulado')
+        await assert.rejects(() => canjear(pendiente, '666666666'), /no es válido o ya venció/)
+        await assert.rejects(() => canjear(viejo, '666666666'), /no es válido o ya venció/)
+        assert.isNull(await chatDe(c.clienteId))
+
+        // un código nuevo, pedido después, sí vincula
+        const nuevo = await pedirCodigo(client, c.cookie)
+        const vinculado = await canjear(nuevo, '666666666')
+        assert.equal(vinculado.cliente_id, c.clienteId)
     })
 
     test('sin bot configurado: disponible false y 503 telegram_no_configurado', async ({
