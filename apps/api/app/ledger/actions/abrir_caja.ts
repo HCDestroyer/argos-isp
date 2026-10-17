@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { verTurno, type TurnoVista } from '#ledger/cajas'
@@ -54,7 +55,11 @@ export default class AbrirCaja extends DomainAction<EntradaAbrirCaja, TurnoVista
         const [fila] = (await t.trx
             .insertQuery()
             .table('ledger.cajas_turnos')
-            .insert({ caja_id: caja.id, fondo_inicial: aTexto(fondo), abierto_por: t.ctx.actor.id })
+            .insert({
+                caja_id: caja.id,
+                fondo_inicial: aTexto(fondo),
+                abierto_por: usuarioDelActor(t.ctx.actor),
+            })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('caja_turno', fila!.id)
         return verTurno(fila!.id, t.trx)

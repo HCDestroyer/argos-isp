@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { METODOS_PAGO, type MetodoPago } from '#shared/eventos'
@@ -139,7 +140,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
                 historico: true,
                 clave_externa: clave,
                 nota: input.nota?.trim() || `Pago histórico importado (${clave})`,
-                registrado_por: t.ctx.actor.id,
+                registrado_por: usuarioDelActor(t.ctx.actor),
                 created_at: hechoEn,
             })
             .returning('id')) as Array<{ id: number }>

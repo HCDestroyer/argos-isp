@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -130,7 +131,7 @@ export default class AnularSaldoInicial extends DomainAction<
                 .update({
                     estado: 'anulada',
                     anulada_en: t.trx.knexRawQuery('now()'),
-                    anulada_por: t.ctx.actor.id,
+                    anulada_por: usuarioDelActor(t.ctx.actor),
                     motivo_anulacion: `anulación del saldo inicial ${saldo.clave_externa}: ${motivo}`,
                     version: t.trx.knexRawQuery('version + 1'),
                     updated_at: t.trx.knexRawQuery('now()'),
@@ -178,7 +179,7 @@ export default class AnularSaldoInicial extends DomainAction<
             .where('id', saldo.id)
             .update({
                 anulado_en: t.trx.knexRawQuery('now()'),
-                anulado_por: t.ctx.actor.id,
+                anulado_por: usuarioDelActor(t.ctx.actor),
                 motivo_anulacion: motivo,
             })
         await t.registrarCambios(

@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -87,7 +88,7 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
                 contado: aTexto(contado),
                 diferencia: aTexto(diferencia),
                 motivo,
-                cerrado_por: t.ctx.actor.id,
+                cerrado_por: usuarioDelActor(t.ctx.actor),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)

@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -126,7 +127,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 .update({
                     estado: 'anulada',
                     anulada_en: t.trx.knexRawQuery('now()'),
-                    anulada_por: t.ctx.actor.id,
+                    anulada_por: usuarioDelActor(t.ctx.actor),
                     motivo_anulacion:
                         f.id === factura.id ? motivo : `anulación de la factura ${factura.id}: ${motivo}`,
                     version: t.trx.knexRawQuery('version + 1'),

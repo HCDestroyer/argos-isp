@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
@@ -156,7 +157,7 @@ export default class RegistrarSaldoInicial extends DomainAction<EntradaSaldoInic
                 fecha,
                 descripcion,
                 factura_id: facturaId,
-                created_by: t.ctx.actor.id,
+                created_by: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const saldoId = fila!.id

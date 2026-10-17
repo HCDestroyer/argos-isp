@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, fechaValida, hoyGuatemala } from '#ledger/fechas'
@@ -180,7 +181,7 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
                 conciliados: conciliados.length,
                 diferencias: JSON.stringify(diferencias),
                 cobros_conciliados: t.trx.raw('?::bigint[]', [`{${conciliados.join(',')}}`]),
-                ejecutado_por: t.ctx.actor.id,
+                ejecutado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         t.fijarEntidad('conciliacion_pasarela', fila!.id)
