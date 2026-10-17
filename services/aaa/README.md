@@ -59,7 +59,7 @@ El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la pá
 
 Cuando **Redis y la API fallan a la vez** para un usuario (Redis caído o sin la clave, y la API con error, caída o sin responder en `AAA_API_TIMEOUT_MS`), `aaa` responde con el **último perfil conocido** de ese usuario (`src/ultimo_conocido.ts`) en vez de 503.
 
-**Decisión: aceptar con el último perfil conocido; rechazar solo si no hay perfil.** Por qué:
+**Decisión del PM (2026-10-17): el modo degradado se queda como está, acepta con el último perfil conocido; rechaza solo si no hay perfil.** La propuso A2 en la semana 3 y el PM la confirmó para el piloto; cambiarla (p. ej. a `AAA_DEGRADADO=rechazar` por defecto) es decisión del PM. Por qué:
 
 - Una caída corta de Redis o de la API no debe dejar sin servicio a clientes al día. Con 503 → Reject, un reinicio del router durante la caída deja a toda su base sin internet hasta que vuelva el backend, y RouterOS no cae a los secrets locales tras un Reject.
 - No se decide ningún estado (CLAUDE.md: lo decide billing): se repite el último que dijo A1. Un suspendido sigue entrando con el perfil de corte, un retirado o una lápida siguen rechazados, y la contraseña es la misma (PAP/CHAP siguen verificándose).
