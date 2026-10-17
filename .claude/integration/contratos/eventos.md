@@ -24,6 +24,8 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 | Evento | Campo | Desde | Valor |
 | --- | --- | --- | --- |
 | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` | `empresa_id` (entero) | 2026-10-17 (A1, multiempresa) | Empresa (NIT) del servicio en el momento del evento (`core.servicios.empresa_id`; `contratos/multiempresa.md`). Siempre presente desde esa fecha; los eventos anteriores no lo traen (era la empresa 1). Un consumidor que no lo lea no cambia |
+| `factura.emitida`, `factura.vencida`, `factura.anulada`, `pago.registrado`, `pago.anulado`, `nota_credito.emitida`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `caja.cerrada` | `empresa_id` (entero) | 2026-10-17 (A3, multiempresa) | Empresa (NIT) del documento: la factura, el pago, la promesa (la del servicio), el comprobante (la de su cuenta bancaria) o la caja. Siempre presente desde esa fecha; los eventos anteriores no lo traen (era la empresa 1). `{{empresa.*}}` de notify sale de aquí |
+| `pago.registrado`, `pago.anulado` | `cobro_id` (entero o null) | 2026-10-17 (A3, multiempresa) | Cobro de caja que cubrió facturas de varias empresas y se dividió en un pago por empresa (`billing.cobros`, `GET /cobros/:id`). Un evento por pago, cada uno con su `empresa_id`; null si el pago no vino de `POST /pagos` (pasarela, comprobante aprobado, histórico) |
 | `sesion.terminada` | `motivo` (texto o null) | semana 3 (A2) | `causa_fin` de la sesión: `Acct-Terminate-Cause` del NAS (`User-Request`, `Lost-Carrier`…), `NAS-Reboot` (Accounting-On/Off), `Sesion-Reemplazada` (otro Start del mismo usuario) o `sin_interim` (cron de sesiones colgadas: sin Stop ni Interim-Update en N intervalos). Un consumidor que no lo lea no cambia. Si después llega un Interim de una sesión cerrada por `sin_interim`, se reabre y se emite otro `sesion.iniciada`; si llega su Stop, se corrige `fin`/causa sin repetir `sesion.terminada` |
 
 ## Eventos fuera de la tabla de `CLAUDE.md`
@@ -94,7 +96,9 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 
 ## Payloads de pagos (A3)
 
-`pago.registrado` y `pago.anulado`: `{ pago_id, cliente_id, monto, metodo, facturas[], clientes[] }`.
+`pago.registrado` y `pago.anulado`: `{ pago_id, empresa_id, cobro_id, cliente_id, monto, metodo, facturas[], clientes[] }`.
+
+- Multiempresa (2026-10-17): un pago es de una sola empresa y sus `facturas[]` son de esa empresa. Un cobro en caja que cubre facturas de varias empresas emite **un `pago.registrado` por empresa**, con el mismo `cobro_id`. Notify puede agruparlos por `cobro_id` para mandar un solo aviso con una sección por empresa.
 
 - `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
 - `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.
@@ -102,11 +106,11 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 
 ## Payloads de notas de crédito (A3)
 
-`nota_credito.emitida`: `{ nota_credito_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). No hay `nota_credito.anulada`: una nota no se anula (corrección = factura nueva o cargo; FEL en la semana 5 decidirá su anulación).
+`nota_credito.emitida`: `{ nota_credito_id, empresa_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). No hay `nota_credito.anulada`: una nota no se anula (corrección = factura nueva o cargo; FEL en la semana 5 decidirá su anulación).
 
 ## Payloads de comprobantes (A3)
 
-`comprobante.recibido`, `comprobante.aprobado` y `comprobante.rechazado`: `{ comprobante_id, cliente_id, pago_id, motivo }`, siempre con las cuatro claves (`null` cuando no aplica).
+`comprobante.recibido`, `comprobante.aprobado` y `comprobante.rechazado`: `{ comprobante_id, empresa_id, cliente_id, pago_id, motivo }`, siempre con todas las claves (`null` cuando no aplica). `empresa_id` es la de la cuenta bancaria de destino.
 
 - `cliente_id` es el dueño del comprobante (quien depositó); notify no necesita resolverlo por `billing.pagos` (un comprobante pendiente o rechazado no tiene pago).
 - Al aprobar, el pago emite además su propio `pago.registrado` en la misma transacción. Decisión de A6 (día 4): el pagador recibe un solo aviso, el de `comprobante.aprobado`; notify omite `pago.registrado` para el pagador cuando `billing.comprobantes.pago_id` es ese pago (y la plantilla de `comprobante.aprobado` está activa), y deduplica por `pago_id`. Los dueños de facturas distintos del pagador reciben igual su aviso de `pago.registrado` (`pago.registrado.tercero`). Detalle en `apps/api/app/notify/README.md`, "Avisos de pago".
