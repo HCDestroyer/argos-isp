@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaComprobante from '~/pages/comprobantes/[id].vue'
 import PaginaComprobantes from '~/pages/comprobantes/index.vue'
@@ -8,12 +8,12 @@ import PaginaComprobantes from '~/pages/comprobantes/index.vue'
 describe('semana 2 · cola de comprobantes', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 
@@ -81,7 +81,7 @@ describe('semana 2 · cola de comprobantes', () => {
     })
 
     it('los permisos comprobantes.* se piden en cada acción', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const lista = await useComprobantes().listar()
         expect(lista.ok).toBe(true)
     })
@@ -95,8 +95,8 @@ describe('semana 2 · cola de comprobantes', () => {
         simularFalla('GET /api/v1/comprobantes', 500)
         await api.actualizarContador()
         expect(api.contador.value).toBeNull()
-        expect(textoContador({ cantidad: 100, hayMas: true })).toBe('100+')
-        expect(textoContador({ cantidad: 0, hayMas: false })).toBeUndefined()
+        expect(textoContador(150)).toBe('99+')
+        expect(textoContador(0)).toBeUndefined()
     })
 
     it('facturas por defecto: las del servicio del comprobante, la más antigua primero', async () => {

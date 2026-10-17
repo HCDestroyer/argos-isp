@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { cierresCaja, cobranzaDiaria, egresos } from '~~/fixtures/reportes/reportes'
 import PaginaReporte from '~/pages/reportes/[reporte].vue'
@@ -10,12 +10,12 @@ import PaginaReportes from '~/pages/reportes/index.vue'
 describe('semana 2 · reportes', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 

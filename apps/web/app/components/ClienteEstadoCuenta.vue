@@ -24,6 +24,15 @@ function enlaceMovimiento(movimiento: Movimiento): string | null {
     return null
 }
 
+/**
+ * Concepto del movimiento: sin "· pagado por …" (va en su insignia) y, si viene de una
+ * importación, sin la clave del origen (va aparte, discreta).
+ */
+function partesMovimiento(movimiento: Movimiento): { concepto: string, pagadoPor: string | null, origen: OrigenImportado | null } {
+    const origen = origenMovimiento(movimiento)
+    return { ...separarPagadoPor(origen?.descripcion ?? movimiento.descripcion), origen }
+}
+
 const estado = shallowRef<EstadoCuenta | null>(null)
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
@@ -246,24 +255,31 @@ onMounted(cargar)
                             :to="enlaceMovimiento(row.original) ?? undefined"
                             class="text-sm text-highlighted hover:text-primary"
                         >
-                            {{ separarPagadoPor(row.original.descripcion).concepto }}
+                            {{ partesMovimiento(row.original).concepto }}
                         </ULink>
                         <span
                             v-else
                             class="text-sm"
-                        >{{ separarPagadoPor(row.original.descripcion).concepto }}</span>
+                        >{{ partesMovimiento(row.original).concepto }}</span>
                         <span
-                            v-if="separarPagadoPor(row.original.descripcion).pagadoPor"
+                            v-if="partesMovimiento(row.original).pagadoPor"
                             class="mt-0.5"
                         >
                             <UBadge
-                                :label="`Pagado por ${separarPagadoPor(row.original.descripcion).pagadoPor}`"
+                                :label="`Pagado por ${partesMovimiento(row.original).pagadoPor}`"
                                 icon="i-lucide-hand-coins"
                                 color="info"
                                 variant="subtle"
                                 size="sm"
                                 data-prueba="pagado-por"
                             />
+                        </span>
+                        <span
+                            v-if="partesMovimiento(row.original).origen"
+                            class="text-xs text-dimmed"
+                            data-prueba="movimiento-importado"
+                        >
+                            Importado de {{ partesMovimiento(row.original).origen?.sistema }} · <span class="font-mono">{{ partesMovimiento(row.original).origen?.idExterno }}</span>
                         </span>
                         <span class="text-xs tabular-nums text-muted sm:hidden">
                             {{ formatearFecha(row.original.fecha) }} ·

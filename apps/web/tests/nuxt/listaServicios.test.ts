@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('lista de servicios · filtros del contrato', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     async function filas(filtros: FiltrosServicios) {
@@ -54,7 +54,7 @@ describe('lista de servicios · filtros del contrato', () => {
         }
         expect(todos.some(s => nombreZona(s) !== null)).toBe(true)
         // El cajero no tiene routers.ver, pero ve el nombre del router en el servicio.
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const delCajero = await filas({})
         expect(delCajero.every(s => s.router_nombre)).toBe(true)
     })

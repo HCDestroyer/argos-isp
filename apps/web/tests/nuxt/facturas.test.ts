@@ -1,16 +1,16 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import AsientoContable from '~/components/AsientoContable.vue'
 
 describe('tarea 10 · facturas', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('lista con los filtros del contrato: estado, cliente, servicio y periodo', async () => {
@@ -77,7 +77,7 @@ describe('tarea 10 · facturas', () => {
     })
 
     it('anular exige facturas.anular: el cajero no puede', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await useFacturas().anular(210, 'Prueba de permisos', nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })

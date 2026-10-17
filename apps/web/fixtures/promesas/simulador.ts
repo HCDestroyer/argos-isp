@@ -72,7 +72,7 @@ export function simularPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence
     const pendienteAprobacion = !falla && delCanal?.requiere_aprobacion
     const resultado: Simulacion['resultado'] = falla ? 'rechazada' : pendienteAprobacion ? 'pendiente_aprobacion' : 'aprobada'
     const regla = falla?.regla ?? (pendienteAprobacion ? 'requiere_aprobacion' : null)
-    const motivo = falla?.detalle ?? (pendienteAprobacion ? `Las promesas del canal ${canal} requieren aprobación de un supervisor` : 'Cumple todas las reglas de la plantilla')
+    const motivo = falla?.detalle ?? (pendienteAprobacion ? `Las promesas del canal ${canal} requieren aprobación de un supervisor` : 'Cumple todas las reglas de promesa de la plantilla')
     const abierta = bd.promesas.some(p => p.servicio_id === servicio.id && (p.estado === 'activa' || p.estado === 'pendiente_aprobacion'))
     const validaciones: Simulacion['validaciones'] = [
         { campo: 'monto', ok: monto.gt(0), regla: 'monto', detalle: `Monto ${q(monto)}` },
@@ -113,6 +113,47 @@ export function simularPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence
             en_periodo: enPeriodo,
         },
         suspension_manual: servicio.suspension_manual ?? false,
+    }
+}
+
+type EvaluacionPromesa = Schema<'EvaluacionPromesa'>
+type ReglaEvaluada = Schema<'ReglaEvaluada'>
+const NOMBRES_REGLA: readonly ReglaEvaluada['regla'][] = ['habilitadas', 'canal_permitido', 'sin_deuda', 'plazo_max_dias', 'no_exceder_siguiente_facturacion', 'deuda_maxima', 'abono_inicial_pct', 'antiguedad_minima_dias', 'cumplimiento_minimo_pct', 'bloqueo_tras_incumplida_dias', 'max_por_periodo', 'requiere_aprobacion']
+
+function nombreRegla(regla: string): ReglaEvaluada['regla'] {
+    const nombre = NOMBRES_REGLA.find(n => n === regla)
+    if (!nombre) {
+        throw new Error(`Fixture: regla desconocida ${regla}`)
+    }
+    return nombre
+}
+
+const ORIGENES: readonly ReglaEvaluada['origen'][] = ['general', 'portal', 'ia', 'operador', 'supervisor']
+
+function origenRegla(origen: string): ReglaEvaluada['origen'] {
+    return ORIGENES.find(o => o === origen) ?? 'general'
+}
+
+/**
+ * `resultado_evaluacion` de `POST /promesas` como `evaluarPromesa` de A3 (`Schema<'EvaluacionPromesa'>`):
+ * la misma evaluación que el simulador, pero solo las reglas que aplican y hasta la que decidió.
+ */
+export function evaluarPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence: Date, monto: Decimal): EvaluacionPromesa {
+    const simulacion = simularPromesa(servicio, canal, vence, monto)
+    const aplicadas = simulacion.reglas.filter(r => r.aplica)
+    const falla = aplicadas.findIndex(r => !r.ok)
+    const reglas: ReglaEvaluada[] = (falla >= 0 ? aplicadas.slice(0, falla + 1) : aplicadas)
+        .map(r => ({ regla: nombreRegla(r.regla), ok: r.ok, valor: r.valor, limite: r.limite, origen: origenRegla(r.origen), detalle: r.detalle }))
+    return {
+        resultado: simulacion.resultado,
+        regla: simulacion.regla === null ? null : nombreRegla(simulacion.regla),
+        motivo: simulacion.motivo,
+        canal,
+        evaluada_en: simulacion.evaluada_en,
+        reglas,
+        deuda: simulacion.deuda,
+        historial: simulacion.historial,
+        siguiente_facturacion: simulacion.siguiente_facturacion,
     }
 }
 

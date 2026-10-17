@@ -66,6 +66,7 @@ function comprobante(semilla: Semilla): Comprobante {
         pago_id: null,
         registrado_por: semilla.canal === 'panel' ? 2 : null,
         verificado_por: semilla.rechazo ? 1 : null,
+        verificado_por_nombre: semilla.rechazo ? 'Ana Administradora' : null,
         verificado_en: semilla.rechazo?.en ?? null,
         version: semilla.rechazo ? 2 : 1,
         created_at: semilla.subido,

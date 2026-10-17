@@ -2,7 +2,7 @@ import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schema } from '@argosisp/contracts'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import PaginaCobro from '~/pages/cobro/index.vue'
 
 type Factura = Schema<'Factura'>
@@ -25,11 +25,11 @@ describe('cobro · elegir facturas (pedido del PM)', () => {
 
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('por defecto las vencidas, y el monto es la suma de las marcadas', () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('esquemaCliente (espejo de crearClienteValidator)', () => {
     it('convierte vacíos en null, NIT a mayúsculas y la zona a número', () => {
@@ -40,25 +40,25 @@ describe('esquemaCliente (espejo de crearClienteValidator)', () => {
 
     it('entradaDesdeCliente rellena el formulario de edición', async () => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         const resultado = await useClientes().ver(3)
         expect(resultado.ok).toBe(true)
         if (resultado.ok) {
             const entrada = entradaDesdeCliente(resultado.data)
             expect(entrada).toMatchObject({ nombre: 'Comercial El Progreso, S.A.', tipo: 'empresa', zona: '2', movil: '' })
         }
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 })
 
 describe('useClientes · alta y edición', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('crear con la misma Idempotency-Key no duplica el cliente', async () => {
@@ -105,7 +105,7 @@ describe('useClientes · alta y edición', () => {
     })
 
     it('el cajero no puede crear clientes', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await useClientes().crear({ nombre: 'Sin permiso' }, nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })

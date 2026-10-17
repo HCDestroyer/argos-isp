@@ -1,4 +1,5 @@
 import type { Problem, Schema } from '@argosisp/contracts'
+import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
@@ -21,6 +22,20 @@ function revisado(comprobante: Comprobante): RespuestaFixture {
 
 function usuarioDe(solicitud: SolicitudFixture): number | null {
     return solicitud.token ? (usuariosPorToken[solicitud.token]?.id ?? null) : null
+}
+
+function nombreUsuarioDe(solicitud: SolicitudFixture): string | null {
+    return solicitud.token ? (usuariosPorToken[solicitud.token]?.nombre ?? null) : null
+}
+
+const METODOS: readonly Comprobante['metodo'][] = ['deposito', 'transferencia', 'ach', 'remesa']
+const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
+
+/** Como `resumenComprobantes` (A3): total y monto de lo filtrado; pendientes sin el filtro de estado. */
+function resumenDe(filtradas: readonly Comprobante[], sinEstado: readonly Comprobante[]): Schema<'ResumenComprobantes'> {
+    const suma = (filas: readonly Comprobante[]) => filas.reduce((total, c) => total.plus(c.monto), new Decimal(0)).toFixed(2)
+    const pendientes = sinEstado.filter(c => c.estado === 'pendiente')
+    return { total: filtradas.length, monto: suma(filtradas), pendientes: pendientes.length, monto_pendiente: suma(pendientes) }
 }
 
 /** Como `pendientesDelServicio` de `AprobarComprobante`: facturas con saldo del servicio, la más antigua primero. */
@@ -47,15 +62,36 @@ export const rutasComprobantes: RutasFixture = {
     'GET /api/v1/comprobantes': conPermiso('comprobantes.ver', (solicitud) => {
         const estado = solicitud.query.get('estado')
         const cliente = numeroQuery(solicitud, 'cliente_id')
+        const metodo = solicitud.query.get('metodo')
+        const cuenta = numeroQuery(solicitud, 'cuenta_bancaria_id')
+        const desde = solicitud.query.get('desde')
+        const hasta = solicitud.query.get('hasta')
+        const errores: NonNullable<Problem['errors']> = []
         if (estado && !(ESTADOS as readonly string[]).includes(estado)) {
-            return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
+            errores.push({ field: 'estado', message: 'Estado inválido', rule: 'enum' })
         }
-        // Como `listarComprobantes`: por id descendente.
-        const filas = bd.comprobantes
-            .filter(c => !estado || c.estado === estado)
+        if (metodo && !(METODOS as readonly string[]).includes(metodo)) {
+            errores.push({ field: 'metodo', message: 'Método inválido', rule: 'enum' })
+        }
+        for (const [campo, valor] of [['desde', desde], ['hasta', hasta]] as const) {
+            if (valor && !FECHA.test(valor)) {
+                errores.push({ field: campo, message: 'Fecha inválida', rule: 'regex' })
+            }
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        // Como `listarComprobantes`: por id descendente; el resumen cubre todas las páginas.
+        const sinEstado = bd.comprobantes
             .filter(c => cliente === undefined || c.cliente_id === cliente)
+            .filter(c => !metodo || c.metodo === metodo)
+            .filter(c => cuenta === undefined || c.cuenta_bancaria_id === cuenta)
+            .filter(c => !desde || c.fecha_deposito >= desde)
+            .filter(c => !hasta || c.fecha_deposito <= hasta)
             .sort((a, b) => b.id - a.id)
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        const filas = sinEstado.filter(c => !estado || c.estado === estado)
+        const cuerpo: Schema<'PaginaComprobantes'> = { ...paginar(filas, solicitud), resumen: resumenDe(filas, sinEstado) }
+        return { status: 200, cuerpo }
     }),
 
     'GET /api/v1/comprobantes/:id': conPermiso('comprobantes.ver', (solicitud) => {
@@ -116,6 +152,7 @@ export const rutasComprobantes: RutasFixture = {
             estado: 'aprobado',
             pago_id: pago.id,
             verificado_por: usuarioDe(solicitud),
+            verificado_por_nombre: nombreUsuarioDe(solicitud),
             verificado_en: momento,
             version: comprobante.version + 1,
             updated_at: momento,
@@ -142,6 +179,7 @@ export const rutasComprobantes: RutasFixture = {
             estado: 'rechazado',
             motivo_rechazo: texto,
             verificado_por: usuarioDe(solicitud),
+            verificado_por_nombre: nombreUsuarioDe(solicitud),
             verificado_en: momento,
             version: comprobante.version + 1,
             updated_at: momento,

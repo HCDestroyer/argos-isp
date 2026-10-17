@@ -1,20 +1,14 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type Comprobante = Schema<'Comprobante'>
+export type PaginaComprobantes = Schema<'PaginaComprobantes'>
+export type ResumenComprobantes = Schema<'ResumenComprobantes'>
 export type EstadoComprobante = Comprobante['estado']
 export type FiltrosComprobantes = Omit<NonNullable<paths['/api/v1/comprobantes']['get']['parameters']['query']>, 'cursor'>
 /** Cuerpo exacto de `POST /comprobantes/:id/aprobar` según `packages/contracts` (A3). */
 export type DatosAprobarComprobante = paths['/api/v1/comprobantes/{id}/aprobar']['post']['requestBody']['content']['application/json']
 
 export const LIMITE_COMPROBANTES = 25
-/** Hasta cuántos pendientes cuenta el menú; con más muestra "100+". */
-export const TOPE_CONTADOR_PENDIENTES = 100
-
-/** Contador de pendientes del menú: `null` si no se pudo leer (no se muestra nada inventado). */
-export interface ContadorPendientes {
-    cantidad: number
-    hayMas: boolean
-}
 
 /**
  * Comprobantes de depósito (A3): la cola que se verifica en el panel. Aprobar registra el pago
@@ -22,9 +16,15 @@ export interface ContadorPendientes {
  */
 export function useComprobantes() {
     const api = useApi()
-    const contador = useState<ContadorPendientes | null>('comprobantes-pendientes', () => null)
+    /** Pendientes de verificar para el menú: `null` si no se pudo leer (no se muestra nada inventado). */
+    const contador = useState<number | null>('comprobantes-pendientes', () => null)
 
-    function listar(filtros: FiltrosComprobantes = {}, cursor?: string): Promise<Resultado<Pagina<Comprobante>>> {
+    /**
+     * `GET /comprobantes` (`comprobantes.ver`) con estado, cliente, método, cuenta de destino y
+     * fecha de depósito. `resumen` trae el total y el monto de lo filtrado (todas las páginas) y
+     * los pendientes con los demás filtros sin importar el estado.
+     */
+    function listar(filtros: FiltrosComprobantes = {}, cursor?: string): Promise<Resultado<PaginaComprobantes>> {
         const query: FiltrosComprobantes & { cursor?: string } = { limit: LIMITE_COMPROBANTES, ...filtros }
         if (cursor) {
             query.cursor = cursor
@@ -37,8 +37,8 @@ export function useComprobantes() {
     }
 
     /**
-     * `GET /comprobantes/:id/archivo`: la foto o el PDF con su `Content-Type`. Va con el token
-     * Bearer, así que se pide como `Blob` y la pantalla lo muestra con una URL de objeto.
+     * `GET /comprobantes/:id/archivo`: la foto o el PDF con su `Content-Type`. Va con la cookie de
+     * sesión de la API (otro origen), así que se pide como `Blob` y se muestra con una URL de objeto.
      */
     function archivo(id: number): Promise<Resultado<Blob>> {
         return resolver(api.GET('/api/v1/comprobantes/{id}/archivo', {
@@ -72,23 +72,21 @@ export function useComprobantes() {
     }
 
     /**
-     * Vuelve a contar los pendientes para el menú. No hay endpoint de conteo: se lee una página de
-     * hasta 100 y, si hay más, el menú dice "100+". Con error el contador desaparece.
+     * Vuelve a contar los pendientes para el menú con `GET /comprobantes?limit=1`: el número sale
+     * de `resumen.pendientes`, no de las filas. Con error el contador desaparece.
      */
     async function actualizarContador(): Promise<void> {
-        const resultado = await listar({ estado: 'pendiente', limit: TOPE_CONTADOR_PENDIENTES })
-        contador.value = resultado.ok
-            ? { cantidad: resultado.data.data.length, hayMas: resultado.data.nextCursor !== null && resultado.data.nextCursor !== '' }
-            : null
+        const resultado = await listar({ limit: 1 })
+        contador.value = resultado.ok ? resultado.data.resumen.pendientes : null
     }
 
     return { listar, ver, archivo, aprobar, rechazar, contador, actualizarContador }
 }
 
-/** Texto del contador del menú: `3`, `100+`, o nada si no hay pendientes o no se pudo leer. */
-export function textoContador(contador: ContadorPendientes | null): string | undefined {
-    if (!contador || (contador.cantidad === 0 && !contador.hayMas)) {
+/** Texto del contador del menú: `3`, `99+`, o nada si no hay pendientes o no se pudo leer. */
+export function textoContador(pendientes: number | null): string | undefined {
+    if (pendientes === null || pendientes <= 0) {
         return undefined
     }
-    return contador.hayMas ? `${contador.cantidad}+` : String(contador.cantidad)
+    return pendientes > 99 ? '99+' : String(pendientes)
 }

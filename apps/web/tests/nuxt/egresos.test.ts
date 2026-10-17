@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import LibroCierres from '~/components/LibroCierres.vue'
@@ -9,12 +9,12 @@ import PaginaEgresos from '~/pages/egresos/index.vue'
 describe('semana 2 · egresos y cierre de periodo', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 

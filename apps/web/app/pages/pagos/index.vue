@@ -302,6 +302,11 @@ onMounted(async () => {
                         <div class="flex flex-col">
                             <span class="text-sm">{{ ETIQUETAS_METODO[row.original.metodo] }}</span>
                             <span
+                                v-if="esPagoHistorico(row.original)"
+                                class="text-xs text-dimmed"
+                                data-prueba="pago-historico"
+                            >Importado (histórico)</span>
+                            <span
                                 v-if="row.original.referencia || row.original.caja_id"
                                 class="font-mono text-xs text-muted"
                             >{{ row.original.referencia ?? nombreCaja(row.original.caja_id) }}</span>

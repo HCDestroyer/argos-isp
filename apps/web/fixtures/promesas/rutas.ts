@@ -3,8 +3,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken } from '../comun'
-import { fechaGuatemala } from '../libro/datos'
-import type { ResultadoEvaluacionFixture } from './datos'
+import { evaluarPromesa } from './simulador'
 
 type Promesa = Schema<'Promesa'>
 type Canal = Promesa['canal']
@@ -12,7 +11,6 @@ type Canal = Promesa['canal']
 const CANALES: readonly Canal[] = ['portal', 'ia', 'operador', 'supervisor']
 const ESTADOS: readonly Promesa['estado'][] = ['activa', 'cumplida', 'incumplida', 'cancelada', 'pendiente_aprobacion', 'rechazada']
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
-const DIA_MS = 86_400_000
 
 function esCanal(valor: unknown): valor is Canal {
     return typeof valor === 'string' && (CANALES as readonly string[]).includes(valor)
@@ -38,69 +36,10 @@ function activarPorPromesa(servicioId: number): void {
     }
 }
 
-/**
- * Evaluación de las reglas de promesas de la plantilla del servicio, en el orden de
- * `crearPromesaPago` (A3): habilitadas → canal → plazo → máximo por periodo → deuda → aprobación.
- * La primera que no se cumple decide; si todas se cumplen, decide la del plazo.
- */
-function evaluar(servicio: Schema<'Servicio'>, canal: Canal, vence: Date, monto: Decimal): ResultadoEvaluacionFixture {
-    const plantilla = bd.plantillas.find(p => p.id === servicio.plantilla_facturacion_id)
-    const verificaciones: ResultadoEvaluacionFixture['verificaciones'] = []
-    const rechazo = (regla: string, motivo: string): ResultadoEvaluacionFixture => ({ decision: 'rechazada', regla, motivo, canal, verificaciones })
-    if (!plantilla) {
-        verificaciones.push({ regla: 'plantilla', cumple: false, detalle: 'El servicio no tiene plantilla de facturación' })
-        return rechazo('plantilla', 'El servicio no tiene plantilla de facturación')
-    }
-    const reglas = plantilla.reglas_promesa
-    const delCanal = reglas.canales[canal]
-    if (!reglas.habilitadas) {
-        verificaciones.push({ regla: 'habilitadas', cumple: false, detalle: 'La plantilla no permite promesas' })
-        return rechazo('habilitadas', `La plantilla ${plantilla.nombre} no permite promesas de pago`)
-    }
-    verificaciones.push({ regla: 'habilitadas', cumple: true, detalle: 'La plantilla permite promesas' })
-    if (!delCanal.permitido) {
-        verificaciones.push({ regla: 'canal', cumple: false, detalle: `El canal ${canal} no está permitido` })
-        return rechazo(`canales.${canal}.permitido`, `La plantilla no permite promesas por el canal ${canal}`)
-    }
-    verificaciones.push({ regla: 'canal', cumple: true, detalle: 'El canal está permitido' })
-
-    const plazoMax = delCanal.plazo_max_dias ?? reglas.plazo_max_dias
-    // Días de calendario en Guatemala entre hoy y el día del vencimiento.
-    const dias = Math.round((Date.parse(fechaGuatemala(vence.toISOString())) - Date.parse(fechaGuatemala(new Date().toISOString()))) / DIA_MS)
-    if (dias > plazoMax) {
-        verificaciones.push({ regla: 'plazo_max_dias', cumple: false, detalle: `${dias} de ${plazoMax} días` })
-        return rechazo('plazo_max_dias', `El plazo de ${dias} días supera el máximo de ${plazoMax} del canal ${canal}`)
-    }
-    verificaciones.push({ regla: 'plazo_max_dias', cumple: true, detalle: `${dias} de ${plazoMax} días` })
-
-    const maximo = delCanal.max_por_periodo ?? reglas.max_por_periodo
-    const desde = Date.now() - 30 * DIA_MS
-    const usadas = bd.promesas.filter(p => p.servicio_id === servicio.id
-        && ['activa', 'cumplida', 'incumplida', 'pendiente_aprobacion'].includes(p.estado)
-        && new Date(p.created_at).getTime() >= desde).length
-    if (usadas >= maximo) {
-        verificaciones.push({ regla: 'max_por_periodo', cumple: false, detalle: `${usadas} de ${maximo} en el periodo` })
-        return rechazo('max_por_periodo', `Ya tiene ${usadas} ${usadas === 1 ? 'promesa' : 'promesas'} en este periodo (máximo ${maximo})`)
-    }
-    verificaciones.push({ regla: 'max_por_periodo', cumple: true, detalle: `${usadas + 1} de ${maximo} en el periodo` })
-
-    const deudaMaxima = delCanal.deuda_maxima ?? reglas.deuda_maxima
-    if (deudaMaxima !== null && monto.gt(deudaMaxima)) {
-        verificaciones.push({ regla: 'deuda_maxima', cumple: false, detalle: `Q ${monto.toFixed(2)} de Q ${deudaMaxima}` })
-        return rechazo('deuda_maxima', `El monto supera la deuda máxima de Q ${deudaMaxima}`)
-    }
-
-    if (delCanal.requiere_aprobacion) {
-        verificaciones.push({ regla: 'requiere_aprobacion', cumple: false, detalle: 'Necesita un supervisor' })
-        return {
-            decision: 'pendiente_aprobacion',
-            regla: `canales.${canal}.requiere_aprobacion`,
-            motivo: `La plantilla pide aprobación para las promesas del canal ${canal}`,
-            canal,
-            verificaciones,
-        }
-    }
-    return { decision: 'aprobada', regla: 'plazo_max_dias', motivo: `Plazo de ${dias} días dentro del máximo de ${plazoMax}`, canal, verificaciones }
+/** Problem con `type` `urn:argosisp:problema:<codigo>`, como `ReglaNegocio` y `Conflicto` de la API. */
+function problemaCodigo(status: number, codigo: string, titulo: string, detalle: string): RespuestaFixture {
+    const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title: titulo, status, detail: detalle }
+    return { status, cuerpo }
 }
 
 /** Como `exigirEstadoPromesa` de la API: 409 `promesa_no_pendiente`. */
@@ -136,7 +75,8 @@ function cerrar(solicitud: SolicitudFixture, estado: 'rechazada' | 'cancelada', 
     const momento = ahora()
     Object.assign(promesa, {
         estado,
-        resultado_evaluacion: { ...(promesa.resultado_evaluacion ?? {}), cierre: { estado, en: momento, motivo: texto, por: usuario(solicitud) } },
+        // Sin evaluación (no pasa con promesas creadas por la API) no se inventa una: queda null.
+        resultado_evaluacion: promesa.resultado_evaluacion ? { ...promesa.resultado_evaluacion, cierre: { estado, en: momento, motivo: texto, por: usuario(solicitud) } } : null,
         version: promesa.version + 1,
         updated_at: momento,
     })
@@ -199,10 +139,24 @@ export const rutasPromesas: RutasFixture = {
         if (servicio.estado === 'retirado') {
             return problema(422, 'Regla de negocio', 'El servicio está retirado')
         }
+        if (!bd.plantillas.some(p => p.id === servicio.plantilla_facturacion_id)) {
+            return problemaCodigo(422, 'sin_plantilla', 'Regla de negocio', 'El servicio no tiene plantilla de facturación')
+        }
+        // Como `CrearPromesaPago` (A3): una sola promesa abierta por servicio (409 `promesa_abierta`).
+        const abierta = bd.promesas.find(p => p.servicio_id === servicio.id && (p.estado === 'activa' || p.estado === 'pendiente_aprobacion'))
+        if (abierta) {
+            return problemaCodigo(409, 'promesa_abierta', 'Promesa abierta', `El servicio ${servicio.id} ya tiene la promesa ${abierta.id} ${abierta.estado === 'activa' ? 'activa' : 'pendiente de aprobación'}`)
+        }
         const canal = esCanal(cuerpo.canal) ? cuerpo.canal : 'operador'
         const monto = new Decimal(String(cuerpo.monto))
-        const evaluacion = evaluar(servicio, canal, vence, monto)
-        const estado: Promesa['estado'] = evaluacion.decision === 'aprobada' ? 'activa' : evaluacion.decision
+        const pendiente = bd.facturas
+            .filter(f => f.servicio_id === servicio.id && (f.estado === 'emitida' || f.estado === 'vencida' || f.estado === 'parcial'))
+            .reduce((suma, f) => suma.plus(f.total).minus(f.pagado), new Decimal(0))
+        if (pendiente.gt(0) && monto.gt(pendiente)) {
+            return datosInvalidos([{ field: 'monto', message: `El monto supera la deuda pendiente del servicio (Q${pendiente.toFixed(2)})`, rule: 'monto_maximo' }])
+        }
+        const evaluacion = evaluarPromesa(servicio, canal, vence, monto)
+        const estado: Promesa['estado'] = evaluacion.resultado === 'aprobada' ? 'activa' : evaluacion.resultado
         const momento = ahora()
         const nueva: Promesa = {
             id: siguienteId(bd.promesas),
@@ -235,7 +189,15 @@ export const rutasPromesas: RutasFixture = {
             return noPendiente(promesa, ['pendiente_aprobacion'], 'aprobar')
         }
         const { nota } = cuerpoObjeto(solicitud)
-        Object.assign(promesa, { estado: 'activa', aprobada_por: usuario(solicitud), version: promesa.version + 1, updated_at: ahora() })
+        const momento = ahora()
+        const aprobacion: Schema<'AprobacionPromesa'> = { por: usuario(solicitud), en: momento, nota: typeof nota === 'string' && nota.trim() ? nota.trim() : null }
+        Object.assign(promesa, {
+            estado: 'activa',
+            aprobada_por: usuario(solicitud),
+            resultado_evaluacion: promesa.resultado_evaluacion ? { ...promesa.resultado_evaluacion, aprobacion } : null,
+            version: promesa.version + 1,
+            updated_at: momento,
+        })
         activarPorPromesa(promesa.servicio_id)
         registrarAccion(solicitud, 'promesas.aprobar', { tipo: 'promesa', id: promesa.id }, { nota: typeof nota === 'string' ? nota : null })
         return { status: 200, cuerpo: promesa }

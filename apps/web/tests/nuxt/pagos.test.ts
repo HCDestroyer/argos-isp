@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 describe('tarea 11 · pagos', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('lista con filtros: cliente, método, estado y fechas de Guatemala en UTC', async () => {
@@ -20,7 +20,8 @@ describe('tarea 11 · pagos', () => {
         expect(delCliente.ok && delCliente.data.data.every(p => p.cliente_id === 1)).toBe(true)
 
         const deposito = await api.listar({ metodo: 'deposito' })
-        expect(deposito.ok && deposito.data.data).toHaveLength(0)
+        // El único depósito de los fixtures es el pago histórico importado del cliente 8.
+        expect(deposito.ok && deposito.data.data.map(p => [p.id, p.historico])).toEqual([[9001, true]])
 
         // Pagos del 5 de octubre (fixtures: 16:20 UTC = 10:20 en Guatemala).
         const delDia = await api.listar({ desde: inicioDiaGuatemala('2026-10-05'), hasta: finDiaGuatemala('2026-10-05') })
@@ -59,7 +60,7 @@ describe('tarea 11 · pagos', () => {
     })
 
     it('anular exige pagos.anular: el cajero no puede', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await usePagos().anular(109 + 5000, 'Prueba de permisos', nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })

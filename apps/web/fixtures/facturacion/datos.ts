@@ -1,6 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
-import { clientes } from '../clientes/datos'
+import { CLIENTE_IMPORTADO, clientes } from '../clientes/datos'
 import { planes } from '../planes/datos'
 import { servicios } from '../servicios/datos'
 
@@ -91,6 +91,37 @@ export const facturas: Factura[] = servicios
         })
     })
 
+/** Id en el sistema de origen de los pagos históricos (`RegistrarPagoHistorico`, A3). */
+export const clavesHistoricas: Record<number, string> = { 9001: 'mikrowisp:pago:987' }
+
+/** Pago histórico importado de Mikrowisp: sin factura (anticipo), sin caja ni banco. */
+const pagoHistorico: Pago = {
+    id: 9001,
+    cliente_id: CLIENTE_IMPORTADO,
+    metodo: 'deposito',
+    monto: '75.00',
+    comision: '0.00',
+    referencia: 'MW-987',
+    caja_id: null,
+    pasarela: null,
+    estado: 'registrado',
+    nota: null,
+    registrado_por: 1,
+    historico: true,
+    origen: 'mikrowisp',
+    id_externo: 'mikrowisp:pago:987',
+    aplicaciones: [],
+    anulado_en: null,
+    motivo_anulacion: null,
+    banco_origen_id: null,
+    banco_origen_nombre: null,
+    cuenta_bancaria_id: null,
+    cuenta_bancaria_nombre: null,
+    version: 1,
+    created_at: '2026-09-10T18:00:00.000Z',
+    updated_at: '2026-09-10T18:00:00.000Z',
+}
+
 /** Un pago en caja por cada factura con algo pagado, cuatro días después de emitida. */
 export const pagos: Pago[] = facturas
     .filter(factura => new Decimal(factura.pagado).gt(0))
@@ -108,6 +139,7 @@ export const pagos: Pago[] = facturas
             estado: 'registrado',
             nota: null,
             registrado_por: 2,
+            historico: false,
             aplicaciones: [{
                 factura_id: factura.id,
                 monto: factura.pagado,
@@ -126,6 +158,7 @@ export const pagos: Pago[] = facturas
             updated_at: fecha,
         }
     })
+    .concat(pagoHistorico)
 
 const momentoCaja = '2026-10-15T13:00:00.000Z'
 

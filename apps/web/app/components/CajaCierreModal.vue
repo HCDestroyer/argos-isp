@@ -11,10 +11,13 @@ import Decimal from 'decimal.js'
 const props = withDefaults(defineProps<{
     caja: Caja
     turno: TurnoCaja
-    /** Fondo + efectivo cobrado según los pagos leídos; `null` si no se pudieron leer. */
+    /** Fondo + efectivo cobrado − egresos en efectivo del turno; `null` si no se pudo calcular. */
     esperado?: Decimal | null
+    /** Por qué no hay esperado provisional (sin `egresos.ver`, o un dato que no se pudo leer). */
+    sinEsperado?: string | null
 }>(), {
     esperado: null,
+    sinEsperado: null,
 })
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -151,7 +154,7 @@ async function enviar(evento: FormSubmitEvent<DatosCierreFormulario>) {
                     v-if="!esperado"
                     class="text-xs text-muted"
                 >
-                    No se pudieron leer los cobros del turno: la API calcula el esperado y la diferencia al cerrar.
+                    {{ sinEsperado ?? 'No se pudieron leer los cobros del turno: la API calcula el esperado y la diferencia al cerrar.' }}
                 </p>
 
                 <USwitch

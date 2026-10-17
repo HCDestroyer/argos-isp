@@ -1,17 +1,21 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
+import meAdmin from '~~/fixtures/auth/me.admin.json'
+import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { bd } from '~~/fixtures/bd'
+import { esperadoDelTurno } from '~~/fixtures/cajas/rutas'
 import PaginaCaja from '~/pages/caja/index.vue'
 
 describe('tarea 12 · caja', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('denominaciones y esperado provisional con decimal.js', () => {
@@ -22,7 +26,15 @@ describe('tarea 12 · caja', () => {
             { metodo: 'caja', estado: 'anulado', monto: '99.00' },
             { metodo: 'deposito', estado: 'registrado', monto: '300.00' },
         ] as const
-        expect(esperadoProvisional('500.00', pagos.map(p => ({ ...base(), ...p }))).toFixed(2)).toBe('650.00')
+        expect(esperadoProvisional('500.00', pagos.map(p => ({ ...base(), ...p })), [], 41).toFixed(2)).toBe('650.00')
+        // Como `CerrarCaja`: resta los egresos en efectivo vigentes de este turno (no anulados, no de otro turno ni banco).
+        const egresos = [
+            { metodo: 'caja', estado: 'registrado', turno_id: 41, monto: '120.00' },
+            { metodo: 'caja', estado: 'anulado', turno_id: 41, monto: '50.00' },
+            { metodo: 'caja', estado: 'registrado', turno_id: 40, monto: '30.00' },
+            { metodo: 'banco', estado: 'registrado', turno_id: null, monto: '900.00' },
+        ] as const
+        expect(esperadoProvisional('500.00', pagos.map(p => ({ ...base(), ...p })), egresos, 41).toFixed(2)).toBe('530.00')
         expect(etiquetaDiferencia('-5')).toBe('Faltante Q 5.00')
         expect(etiquetaDiferencia('20.5')).toBe('Sobrante Q 20.50')
         expect(colorDiferencia('0.00')).toBe('success')
@@ -55,6 +67,37 @@ describe('tarea 12 · caja', () => {
         }
         const cajas = await api.listar()
         expect(cajas.ok && cajas.data.find(c => c.id === 1)?.turno_abierto_id).toBeNull()
+    })
+
+    it('con egresos.ver el esperado provisional resta el egreso en efectivo y coincide con el cierre', async () => {
+        sesionFixture('fixture-admin')
+        useUsuarioActual().value = meAdmin
+        const egreso = await useEgresos().registrar({ categoria: 'otros', monto: '120.00', metodo: 'caja', caja_id: 1 }, nuevaClaveIdempotencia())
+        expect(egreso.ok && egreso.data.turno_id).toBe(41)
+        const turno = bd.turnos.find(t => t.id === 41)
+        expect(turno).toBeDefined()
+        const oficial = turno ? esperadoDelTurno(turno) : new Decimal(0)
+
+        const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
+        await vi.waitFor(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="turno-esperado"]').text()).toContain(formatearQuetzales(oficial))
+        expect(vista.get('[data-prueba="turno-egresos"]').text()).toContain('− Q 120.00')
+        vista.unmount()
+
+        const cerrado = await useCajas().cerrar(1, { contado: oficial.toFixed(2) }, nuevaClaveIdempotencia())
+        expect(cerrado.ok && [cerrado.data.esperado, cerrado.data.diferencia]).toEqual([oficial.toFixed(2), '0.00'])
+        useUsuarioActual().value = null
+    })
+
+    it('sin egresos.ver (cajero) no hay esperado provisional y lo dice', async () => {
+        useUsuarioActual().value = meCajero
+        const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
+        await vi.waitFor(() => expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(true))
+        await vi.waitFor(() => expect(vista.find('[data-prueba="sin-esperado"]').text()).toContain('egresos.ver'))
+        expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(false)
+        expect(vista.text()).toContain('Efectivo cobrado')
+        vista.unmount()
+        useUsuarioActual().value = null
     })
 
     it('abrir turno con fondo inicial; abrir dos veces es 409', async () => {

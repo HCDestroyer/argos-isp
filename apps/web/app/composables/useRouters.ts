@@ -9,6 +9,10 @@ export type PlanEfectivo = Schema<'PlanEfectivo'>
 export type CambiosRouter = paths['/api/v1/routers/{id}']['put']['requestBody']['content']['application/json']
 export type VistaPreviaControl = Schema<'VistaPreviaControl'>
 export type CambioControlVelocidad = paths['/api/v1/routers/{id}/cambiar-control-velocidad']['post']['requestBody']['content']['application/json']
+export type MigracionAaa = Schema<'MigracionAaaRouter'>
+export type DatosMarcarMigrado = paths['/api/v1/routers/{id}/marcar-migrado']['post']['requestBody']['content']['application/json']
+export type ResumenSesionesRouter = Schema<'ResumenSesionesRouter'>
+export type ServicioSinSesion = Schema<'ServicioSinSesion'>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -61,5 +65,29 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques }
+    /** `GET /routers/:id/migracion-aaa` (`routers.ver`): fecha de paso al nuevo `aaa` y el primer accounting. */
+    function migracionAaa(id: number): Promise<Resultado<MigracionAaa>> {
+        return resolver(api.GET('/api/v1/routers/{id}/migracion-aaa', { params: { path: { id } } }))
+    }
+
+    /**
+     * `POST /routers/:id/marcar-migrado` (`routers.marcar_migrado`): `desde` omitido = ahora,
+     * `null` = desmarcar; motivo obligatorio; con `version` responde 409 si cambió. No toca el router.
+     */
+    function marcarMigrado(id: number, datos: DatosMarcarMigrado, claveIdempotencia: string): Promise<Resultado<MigracionAaa>> {
+        return resolver(api.POST('/api/v1/routers/{id}/marcar-migrado', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    /**
+     * `GET /routers/:id/resumen-sesiones?desde=` (`sesiones.ver`): servicios PPPoE, con sesión
+     * activa y los que no tuvieron sesión desde `desde` (sin él, la fecha de migración; 422 si no hay).
+     */
+    function resumenSesiones(id: number, desde?: string): Promise<Resultado<ResumenSesionesRouter>> {
+        return resolver(api.GET('/api/v1/routers/{id}/resumen-sesiones', { params: { path: { id }, query: desde ? { desde } : {} } }))
+    }
+
+    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones }
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 import type { TableColumn } from '@nuxt/ui'
-import type Decimal from 'decimal.js'
+import Decimal from 'decimal.js'
 
 definePageMeta({ permiso: 'cajas.ver' })
 
@@ -45,17 +45,48 @@ const cobros = shallowRef<Pago[]>([])
 const cargandoCobros = ref(false)
 const problemaCobros = ref<Problem | null>(null)
 
+/*
+ * Egresos en efectivo del turno (`GET /egresos?caja_id=&metodo=caja`, `egresos.ver`): bajan el
+ * esperado. Sin ese permiso (el cajero) el panel no puede leerlos y no muestra un esperado que
+ * saldría de más: lo calcula la API al cerrar.
+ */
+const egresos = shallowRef<Egreso[]>([])
+const cargandoEgresos = ref(false)
+const problemaEgresos = ref<Problem | null>(null)
+const leeEgresos = computed(() => puede('egresos.ver'))
+const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egresos.value, turnoAbierto.value.id) : []))
+const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
+
 const aperturaAbierta = ref(false)
 const cierreAbierto = ref(false)
 /** Resultado oficial del último cierre (lo que devolvió la API). */
 const ultimoCierre = shallowRef<TurnoCaja | null>(null)
 
-/** Fondo + efectivo del turno: solo si se leyeron los cobros (nunca sobre una lista que falló). */
-const esperado = computed<Decimal | null>(() => (turnoAbierto.value && !problemaCobros.value && !cargandoCobros.value
-    ? esperadoProvisional(turnoAbierto.value.fondo_inicial, cobros.value)
+/**
+ * Fondo + efectivo cobrado − egresos en efectivo del turno: solo con cobros y egresos leídos
+ * (nunca sobre una lista que falló ni sin poder leer los egresos).
+ */
+const esperado = computed<Decimal | null>(() => (turnoAbierto.value && leeEgresos.value
+    && !problemaCobros.value && !cargandoCobros.value && !problemaEgresos.value && !cargandoEgresos.value
+    ? esperadoProvisional(turnoAbierto.value.fondo_inicial, cobros.value, egresos.value, turnoAbierto.value.id)
     : null))
 
 const efectivo = computed(() => cobrosEnEfectivo(cobros.value))
+const efectivoCobrado = computed(() => efectivo.value.reduce((suma, p) => suma.plus(p.monto), new Decimal(0)))
+
+/** Por qué no hay esperado provisional (se muestra en la página y en el cierre). */
+const sinEsperado = computed<string | null>(() => {
+    if (!turnoAbierto.value || esperado.value) {
+        return null
+    }
+    if (!leeEgresos.value) {
+        return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver).'
+    }
+    if (problemaCobros.value || problemaEgresos.value) {
+        return 'No se pudieron leer los cobros o los egresos del turno: la API calcula el esperado y la diferencia al cerrar.'
+    }
+    return null
+})
 
 const columnasCobros: TableColumn<Pago>[] = [
     { accessorKey: 'id', header: 'Pago' },
@@ -86,9 +117,38 @@ async function cargarCobros(turno: TurnoCaja) {
     }
 }
 
+/** Egresos en efectivo de la caja desde el día en que abrió el turno (se filtran por `turno_id`). */
+async function cargarEgresos(turno: TurnoCaja) {
+    if (!leeEgresos.value) {
+        return
+    }
+    cargandoEgresos.value = true
+    const leidos: Egreso[] = []
+    let cursor: string | undefined
+    let fallo: Problem | null = null
+    // Un turno no tiene cientos de egresos; se leen hasta 5 páginas de 200.
+    for (let pagina = 0; pagina < 5; pagina++) {
+        const resultado = await useEgresos().listar({ caja_id: turno.caja_id, metodo: 'caja', estado: 'registrado', desde: fechaGuatemala(turno.abierto_en), limit: 200 }, cursor)
+        if (!resultado.ok) {
+            fallo = resultado.problema
+            break
+        }
+        leidos.push(...resultado.data.data)
+        if (!resultado.data.nextCursor) {
+            break
+        }
+        cursor = resultado.data.nextCursor
+    }
+    cargandoEgresos.value = false
+    egresos.value = fallo ? [] : leidos
+    problemaEgresos.value = fallo
+}
+
 async function cargarTurno() {
     turnoAbierto.value = null
     cobros.value = []
+    egresos.value = []
+    problemaEgresos.value = null
     problemaCobros.value = null
     problemaTurno.value = null
     if (!caja.value) {
@@ -102,6 +162,7 @@ async function cargarTurno() {
     turnoAbierto.value = id === null ? null : (historial.filas.value.find(t => t.id === id) ?? null)
     if (turnoAbierto.value) {
         void cargarCobros(turnoAbierto.value)
+        void cargarEgresos(turnoAbierto.value)
     }
 }
 
@@ -279,18 +340,26 @@ onMounted(cargar)
                                 etiqueta="Fondo inicial"
                                 :valor="formatearQuetzales(turnoAbierto.fondo_inicial)"
                             />
-                            <template v-if="esperado">
+                            <template v-if="!problemaCobros && !cargandoCobros && puede('pagos.ver')">
                                 <DatoFicha
                                     etiqueta="Cobros en efectivo"
                                     :valor="`${efectivo.length}`"
                                 />
                                 <DatoFicha
                                     etiqueta="Efectivo cobrado"
-                                    :valor="formatearQuetzales(esperado.minus(turnoAbierto.fondo_inicial))"
+                                    :valor="formatearQuetzales(efectivoCobrado)"
+                                />
+                            </template>
+                            <template v-if="esperado">
+                                <DatoFicha
+                                    etiqueta="Egresos en efectivo"
+                                    :valor="totalEgresos.isZero() ? formatearQuetzales(totalEgresos) : `− ${formatearQuetzales(totalEgresos)}`"
+                                    data-prueba="turno-egresos"
                                 />
                                 <DatoFicha
                                     etiqueta="Esperado en caja"
                                     :valor="formatearQuetzales(esperado)"
+                                    data-prueba="turno-esperado"
                                 />
                             </template>
                         </dl>
@@ -298,8 +367,17 @@ onMounted(cargar)
                             v-if="esperado"
                             class="text-xs text-muted"
                         >
-                            Esperado provisional con los cobros de esta página; la API calcula el oficial al cerrar.
+                            Esperado provisional: fondo + efectivo cobrado − {{ egresosTurno.length }} {{ egresosTurno.length === 1 ? 'egreso' : 'egresos' }} en efectivo del turno. La API calcula el oficial al cerrar.
                         </p>
+                        <UAlert
+                            v-else-if="sinEsperado"
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-info"
+                            title="Sin esperado provisional"
+                            :description="sinEsperado"
+                            data-prueba="sin-esperado"
+                        />
                     </div>
                 </UPageCard>
 
@@ -468,6 +546,7 @@ onMounted(cargar)
                     :caja="caja"
                     :turno="turnoAbierto"
                     :esperado="esperado"
+                    :sin-esperado="sinEsperado"
                     @hecho="alCerrar"
                 />
             </template>

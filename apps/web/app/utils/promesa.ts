@@ -5,6 +5,9 @@ import * as z from 'zod'
 import { formatearFecha, formatearFechaHora, formatearQuetzales } from './formato'
 
 type PromesaPago = Schema<'Promesa'>
+export type EvaluacionPromesaApi = Schema<'EvaluacionPromesa'>
+export type ReglaEvaluada = Schema<'ReglaEvaluada'>
+export type ReglaPromesa = ReglaEvaluada['regla']
 type Color = NonNullable<BadgeProps['color']>
 
 export const ESTADOS_PROMESA: Record<PromesaPago['estado'], { etiqueta: string, color: Color, icono: string }> = {
@@ -23,182 +26,151 @@ export const CANALES_PROMESA: Record<PromesaPago['canal'], string> = {
     ia: 'Agente de IA',
 }
 
-/** Nombres legibles de las reglas de `ReglasPromesa` (las desconocidas se muestran tal cual). */
-const REGLAS: Record<string, string> = {
-    plantilla: 'Plantilla de facturación',
+/** Nombres legibles de las reglas de `contratos/promesas.md` (las desconocidas se muestran tal cual). */
+const REGLAS: Record<ReglaPromesa, string> = {
     habilitadas: 'Promesas habilitadas',
-    canal: 'Canal permitido',
-    permitido: 'Canal permitido',
     canal_permitido: 'Canal permitido',
     sin_deuda: 'Tiene deuda',
     plazo_max_dias: 'Plazo máximo',
-    max_por_periodo: 'Máximo por periodo',
-    max_por_periodo_buen_historial: 'Máximo por buen historial',
     no_exceder_siguiente_facturacion: 'Antes de la siguiente factura',
     deuda_maxima: 'Deuda máxima',
     abono_inicial_pct: 'Abono inicial',
     antiguedad_minima_dias: 'Antigüedad mínima',
     cumplimiento_minimo_pct: 'Cumplimiento mínimo',
     bloqueo_tras_incumplida_dias: 'Bloqueo tras incumplir',
+    max_por_periodo: 'Máximo por periodo',
     requiere_aprobacion: 'Requiere aprobación',
 }
 
-/** `canales.operador.requiere_aprobacion` → `Requiere aprobación (operador)`. */
 export function etiquetaRegla(regla: string): string {
-    const partes = regla.split('.')
-    const ultima = partes.at(-1) ?? regla
-    const nombre = REGLAS[ultima] ?? regla
-    return partes[0] === 'canales' && partes[1] ? `${nombre} (${CANALES_PROMESA[partes[1] as PromesaPago['canal']] ?? partes[1]})` : nombre
+    return regla in REGLAS ? REGLAS[regla as ReglaPromesa] : regla
+}
+
+/** De dónde salió el límite: el general de la plantilla o el del canal que lo reemplazó. */
+export function etiquetaOrigenRegla(origen: ReglaEvaluada['origen']): string | null {
+    return origen === 'general' ? null : `límite del canal ${CANALES_PROMESA[origen].toLowerCase()}`
 }
 
 export type DecisionPromesa = 'aprobada' | 'rechazada' | 'pendiente'
 
-export interface Verificacion {
-    regla: string
-    cumple: boolean
-    detalle: string | null
+const RESULTADOS: readonly EvaluacionPromesaApi['resultado'][] = ['aprobada', 'rechazada', 'pendiente_aprobacion']
+const ORIGENES: readonly ReglaEvaluada['origen'][] = ['general', 'portal', 'ia', 'operador', 'supervisor']
+const CANALES: readonly PromesaPago['canal'][] = ['portal', 'ia', 'operador', 'supervisor']
+
+function esRegistro(valor: unknown): valor is Record<string, unknown> {
+    return typeof valor === 'object' && valor !== null && !Array.isArray(valor)
+}
+
+function esReglaEvaluada(valor: unknown): valor is ReglaEvaluada {
+    return esRegistro(valor)
+        && typeof valor.regla === 'string'
+        && typeof valor.ok === 'boolean'
+        && typeof valor.detalle === 'string'
+        && (ORIGENES as readonly unknown[]).includes(valor.origen)
+}
+
+/**
+ * `resultado_evaluacion` con la forma estable `Schema<'EvaluacionPromesa'>` (A3). El OpenAPI
+ * todavía lo declara como objeto libre: este guardia lo comprueba en lugar de suponerlo.
+ */
+export function esEvaluacionPromesa(valor: unknown): valor is EvaluacionPromesaApi {
+    return esRegistro(valor)
+        && (RESULTADOS as readonly unknown[]).includes(valor.resultado)
+        && (valor.regla === null || typeof valor.regla === 'string')
+        && typeof valor.motivo === 'string'
+        && (CANALES as readonly unknown[]).includes(valor.canal)
+        && typeof valor.evaluada_en === 'string'
+        && Array.isArray(valor.reglas) && valor.reglas.every(esReglaEvaluada)
+        && esRegistro(valor.deuda)
+        && esRegistro(valor.historial)
 }
 
 export interface EvaluacionLegible {
     decision: DecisionPromesa | null
-    regla: string | null
-    motivo: string | null
-    verificaciones: Verificacion[]
-    /**
-     * Datos extra de la evaluación (deuda, historial, fechas…) con su etiqueta en español; las
-     * claves que el panel no conoce van tal cual, para no esconder nada de lo que mande la API.
-     */
-    otros: { clave: string, etiqueta: string, valor: string, mono: boolean }[]
+    /** La evaluación de la API, o `null` si la promesa no la trae (o no tiene la forma estable). */
+    evaluacion: EvaluacionPromesaApi | null
 }
-
-function texto(valor: unknown): string | null {
-    return typeof valor === 'string' && valor.trim() ? valor.trim() : null
-}
-
-function decisionDe(valor: unknown): DecisionPromesa | null {
-    const t = texto(valor)?.toLowerCase()
-    if (!t) {
-        return null
-    }
-    if (['aprobada', 'aprobado', 'activa', 'ok', 'aceptada'].includes(t)) {
-        return 'aprobada'
-    }
-    if (['rechazada', 'rechazado', 'denegada'].includes(t)) {
-        return 'rechazada'
-    }
-    if (t.startsWith('pendiente')) {
-        return 'pendiente'
-    }
-    return null
-}
-
-function verificacionesDe(valor: unknown): Verificacion[] {
-    if (!Array.isArray(valor)) {
-        return []
-    }
-    return valor.flatMap((item: unknown): Verificacion[] => {
-        if (typeof item !== 'object' || item === null) {
-            return []
-        }
-        const registro = item as Record<string, unknown>
-        const regla = texto(registro.regla) ?? texto(registro.nombre)
-        const cumple = registro.cumple ?? registro.ok ?? registro.paso
-        if (!regla || typeof cumple !== 'boolean') {
-            return []
-        }
-        return [{ regla, cumple, detalle: texto(registro.detalle) ?? texto(registro.motivo) }]
-    })
-}
-
-const CONOCIDAS = new Set(['decision', 'resultado', 'estado', 'regla', 'regla_aplicada', 'motivo', 'detalle', 'mensaje', 'verificaciones', 'reglas', 'canal'])
 
 /**
- * Lee `resultado_evaluacion` (el contrato lo deja libre; la forma propuesta a A3 es
- * `{ decision, regla, motivo, canal, verificaciones: [{ regla, cumple, detalle }] }`). Si falta la
- * decisión, se deduce del estado de la promesa. Nunca inventa una regla: sin ella queda `null`.
+ * Lee `resultado_evaluacion` como `Schema<'EvaluacionPromesa'>`. Sin evaluación (promesas
+ * anteriores o un dato inesperado) la decisión se deduce del estado y nada más: nunca se inventa
+ * una regla ni un motivo.
  */
 export function leerEvaluacion(promesa: Pick<PromesaPago, 'estado' | 'resultado_evaluacion'>): EvaluacionLegible {
-    const datos = promesa.resultado_evaluacion ?? {}
-    const decision = decisionDe(datos.decision ?? datos.resultado ?? datos.estado) ?? decisionPorEstado(promesa.estado)
-    const otros = Object.entries(datos)
-        .filter(([clave]) => !CONOCIDAS.has(clave))
-        .map(([clave, valor]) => datoExtra(clave, valor))
+    const evaluacion = esEvaluacionPromesa(promesa.resultado_evaluacion) ? promesa.resultado_evaluacion : null
     return {
-        decision,
-        regla: texto(datos.regla) ?? texto(datos.regla_aplicada),
-        motivo: texto(datos.motivo) ?? texto(datos.detalle) ?? texto(datos.mensaje),
-        verificaciones: verificacionesDe(datos.verificaciones ?? datos.reglas),
-        otros,
+        decision: evaluacion ? decisionDeResultado(evaluacion.resultado) : decisionPorEstado(promesa.estado),
+        evaluacion,
     }
 }
 
-function registro(valor: unknown): Record<string, unknown> | null {
-    return typeof valor === 'object' && valor !== null && !Array.isArray(valor) ? (valor as Record<string, unknown>) : null
+export function decisionDeResultado(resultado: EvaluacionPromesaApi['resultado']): DecisionPromesa {
+    return resultado === 'pendiente_aprobacion' ? 'pendiente' : resultado
 }
 
-const MONTO_API = /^-?\d+(\.\d+)?$/
-
-function dinero(valor: unknown): string | null {
-    return typeof valor === 'string' && MONTO_API.test(valor) ? formatearQuetzales(valor) : null
+/** `valor` / `limite` de una regla en texto: montos con Q y dos decimales, booleanos en español. */
+export function textoValorRegla(valor: ReglaEvaluada['valor']): string | null {
+    if (valor === null) {
+        return null
+    }
+    if (typeof valor === 'boolean') {
+        return valor ? 'sí' : 'no'
+    }
+    if (typeof valor === 'string' && /^-?\d+\.\d{2}$/.test(valor)) {
+        return formatearQuetzales(valor)
+    }
+    return String(valor)
 }
 
-/** Cómo se muestran los datos extra que manda `evaluarPromesa` (A3, `app/billing/promesas.ts`). */
-const EXTRAS: Record<string, { etiqueta: string, leer: (valor: unknown) => string | null }> = {
-    deuda: {
-        etiqueta: 'Deuda del servicio',
-        leer: (valor) => {
-            const d = registro(valor)
-            if (!d) {
-                return null
-            }
-            const vencidas = typeof d.facturas_vencidas === 'number' ? ` · ${d.facturas_vencidas} ${d.facturas_vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : ''
-            return `Vencida ${dinero(d.vencida) ?? '—'} · pendiente ${dinero(d.pendiente) ?? '—'}${vencidas}`
-        },
-    },
-    historial: {
+/** Datos de la evaluación en español, para la ficha (deuda, historial, fechas, aprobación, cierre). */
+export function datosEvaluacion(evaluacion: EvaluacionPromesaApi): { clave: string, etiqueta: string, valor: string }[] {
+    const datos: { clave: string, etiqueta: string, valor: string }[] = []
+    const d = evaluacion.deuda
+    const vencidas = `${d.facturas_vencidas} ${d.facturas_vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}`
+    datos.push({ clave: 'deuda', etiqueta: 'Deuda del servicio', valor: `Vencida ${formatearQuetzales(d.vencida)} · pendiente ${formatearQuetzales(d.pendiente)} · ${vencidas}` })
+    const h = evaluacion.historial
+    const ventana = ` (últimas ${h.ventana})`
+    datos.push({
+        clave: 'historial',
         etiqueta: 'Historial de promesas',
-        leer: (valor) => {
-            const h = registro(valor)
-            if (!h || typeof h.resueltas !== 'number' || typeof h.cumplidas !== 'number') {
-                return null
-            }
-            const ventana = typeof h.ventana === 'number' ? ` (últimas ${h.ventana})` : ''
-            return h.resueltas === 0 ? `Sin promesas anteriores${ventana}` : `${h.cumplidas} de ${h.resueltas} cumplidas${ventana}`
-        },
-    },
-    evaluada_en: { etiqueta: 'Evaluada', leer: valor => (typeof valor === 'string' ? formatearFechaHora(valor) : null) },
-    siguiente_facturacion: { etiqueta: 'Siguiente facturación', leer: valor => (typeof valor === 'string' ? formatearFecha(valor) : null) },
-    aprobacion: {
-        etiqueta: 'Aprobación',
-        leer: (valor) => {
-            const a = registro(valor)
-            if (!a || typeof a.en !== 'string') {
-                return null
-            }
-            return `${formatearFechaHora(a.en)}${texto(a.nota) ? ` · ${texto(a.nota)}` : ''}`
-        },
-    },
-    cierre: {
-        etiqueta: 'Cierre',
-        leer: (valor) => {
-            const c = registro(valor)
-            if (!c || typeof c.en !== 'string') {
-                return null
-            }
-            const estado = texto(c.estado)
-            const etiqueta = estado && estado in ESTADOS_PROMESA ? ESTADOS_PROMESA[estado as PromesaPago['estado']].etiqueta : estado
-            return `${etiqueta ? `${etiqueta} · ` : ''}${formatearFechaHora(c.en)}${texto(c.motivo) ? ` · ${texto(c.motivo)}` : ''}`
-        },
-    },
+        valor: h.resueltas === 0 ? `Sin promesas anteriores${ventana}` : `${h.cumplidas} de ${h.resueltas} cumplidas${h.cumplimiento_pct !== null ? ` (${h.cumplimiento_pct} %)` : ''}${ventana}`,
+    })
+    datos.push({ clave: 'evaluada_en', etiqueta: 'Evaluada', valor: `${formatearFechaHora(evaluacion.evaluada_en)} · ${CANALES_PROMESA[evaluacion.canal]}` })
+    if (evaluacion.siguiente_facturacion) {
+        datos.push({ clave: 'siguiente_facturacion', etiqueta: 'Siguiente facturación', valor: formatearFecha(evaluacion.siguiente_facturacion) })
+    }
+    if (evaluacion.aprobacion) {
+        const a = evaluacion.aprobacion
+        datos.push({ clave: 'aprobacion', etiqueta: 'Aprobación', valor: `${formatearFechaHora(a.en)}${a.nota ? ` · ${a.nota}` : ''}` })
+    }
+    if (evaluacion.cierre) {
+        const c = evaluacion.cierre
+        const partes = [ESTADOS_PROMESA[c.estado].etiqueta, formatearFechaHora(c.en)]
+        if (c.motivo) {
+            partes.push(c.motivo)
+        }
+        if (c.pagado) {
+            partes.push(`pagó ${formatearQuetzales(c.pagado)}`)
+        }
+        if (c.deuda_vencida) {
+            partes.push(`deuda vencida ${formatearQuetzales(c.deuda_vencida)}`)
+        }
+        datos.push({ clave: 'cierre', etiqueta: 'Cierre', valor: partes.join(' · ') })
+    }
+    return datos
 }
 
-function datoExtra(clave: string, valor: unknown): EvaluacionLegible['otros'][number] {
-    const conocido = EXTRAS[clave]
-    const legible = conocido?.leer(valor) ?? null
-    if (conocido && legible !== null) {
-        return { clave, etiqueta: conocido.etiqueta, valor: legible, mono: false }
+/** Lo último que pasó con una promesa ya evaluada (cierre o aprobación), en una línea. */
+export function ultimoPaso(evaluacion: EvaluacionPromesaApi | null): string | null {
+    if (evaluacion?.cierre) {
+        const c = evaluacion.cierre
+        return `${ESTADOS_PROMESA[c.estado].etiqueta}: ${formatearFechaHora(c.en)}${c.motivo ? ` · ${c.motivo}` : ''}`
     }
-    return { clave, etiqueta: clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor), mono: true }
+    if (evaluacion?.aprobacion) {
+        const a = evaluacion.aprobacion
+        return `Aprobada: ${formatearFechaHora(a.en)}${a.nota ? ` · ${a.nota}` : ''}`
+    }
+    return null
 }
 
 function decisionPorEstado(estado: PromesaPago['estado']): DecisionPromesa | null {

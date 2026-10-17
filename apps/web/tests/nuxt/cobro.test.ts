@@ -1,18 +1,18 @@
 import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import ReciboPago from '~/components/ReciboPago.vue'
 
 describe('cobro rápido · composables y reglas', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
     })
 
     afterEach(() => {
         vi.useRealTimers()
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     async function cuenta(clienteId: number) {
@@ -114,11 +114,11 @@ describe('cobro rápido · composables y reglas', () => {
         expect(!inexistente.ok && inexistente.problema.status).toBe(422)
         expect(!inexistente.ok && inexistente.problema.errors?.[0]?.field).toBe('caja_id')
 
-        useNuxtApp().$tokenSesion.value = 'fixture-desconocido'
+        sesionFixture('fixture-desconocido')
         const sinSesion = await usePagos().registrar({ cliente_id: 2, metodo: 'deposito', monto: '10.00' }, nuevaClaveIdempotencia())
         expect(!sinSesion.ok && sinSesion.problema.status).toBe(401)
 
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         simularFalla('POST /api/v1/pagos', 501)
         const noImplementado = await usePagos().registrar({ cliente_id: 2, metodo: 'deposito', monto: '10.00', referencia: 'X-1' }, nuevaClaveIdempotencia())
         expect(!noImplementado.ok && noImplementado.problema.title).toBe('No implementado')

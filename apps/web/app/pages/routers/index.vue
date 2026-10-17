@@ -3,8 +3,9 @@ import type { TableColumn } from '@nuxt/ui'
 
 /**
  * Routers (A1): lista con su control de velocidad y la capacidad del enlace. "Velocidad" abre el
- * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`). El CRUD
- * completo, las redes IPv4 y los bloques IPv6 quedan para la tarea 6 completa.
+ * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
+ * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). El CRUD completo, las redes
+ * IPv4 y los bloques IPv6 quedan para la tarea 6 completa.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -35,10 +36,16 @@ function capacidad(router: RouterNas): string {
 
 const seleccionado = shallowRef<RouterNas | null>(null)
 const velocidadAbierta = ref(false)
+const conexionAbierta = ref(false)
 
 function abrir(router: RouterNas) {
     seleccionado.value = router
     velocidadAbierta.value = true
+}
+
+function abrirConexion(router: RouterNas) {
+    seleccionado.value = router
+    conexionAbierta.value = true
 }
 
 function alActualizar(router: RouterNas) {
@@ -114,15 +121,30 @@ onMounted(() => void lista.recargar())
                         <span class="text-sm">{{ capacidad(row.original) }}</span>
                     </template>
                     <template #acciones-cell="{ row }">
-                        <UButton
-                            label="Velocidad"
-                            icon="i-lucide-gauge"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            :data-prueba="`velocidad-router-${row.original.id}`"
-                            @click="abrir(row.original)"
-                        />
+                        <div class="flex justify-end gap-2">
+                            <UButton
+                                label="Conexión"
+                                icon="i-lucide-plug"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                :ui="{ label: 'hidden sm:inline' }"
+                                :aria-label="`Conexión de ${row.original.nombre}`"
+                                :data-prueba="`conexion-router-${row.original.id}`"
+                                @click="abrirConexion(row.original)"
+                            />
+                            <UButton
+                                label="Velocidad"
+                                icon="i-lucide-gauge"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                :ui="{ label: 'hidden sm:inline' }"
+                                :aria-label="`Velocidad de ${row.original.nombre}`"
+                                :data-prueba="`velocidad-router-${row.original.id}`"
+                                @click="abrir(row.original)"
+                            />
+                        </div>
                     </template>
                     <template #empty>
                         <UEmpty
@@ -148,6 +170,12 @@ onMounted(() => void lista.recargar())
         <RouterVelocidad
             v-if="seleccionado"
             v-model:open="velocidadAbierta"
+            :router="seleccionado"
+            @actualizado="alActualizar"
+        />
+        <RouterConexion
+            v-if="seleccionado"
+            v-model:open="conexionAbierta"
             :router="seleccionado"
             @actualizado="alActualizar"
         />

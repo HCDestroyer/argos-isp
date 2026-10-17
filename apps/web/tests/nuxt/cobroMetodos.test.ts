@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import ReciboPago from '~/components/ReciboPago.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
 
@@ -13,11 +13,11 @@ describe('cobro · cinco métodos', () => {
 
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('el esquema pide lo mismo que DATOS_POR_METODO de la API', () => {

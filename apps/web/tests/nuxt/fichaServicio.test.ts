@@ -1,16 +1,16 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import ServicioCredenciales from '~/components/ServicioCredenciales.vue'
 
 describe('ficha de servicio · composables', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     async function servicio(id: number): Promise<Servicio> {
@@ -76,7 +76,7 @@ describe('ficha de servicio · composables', () => {
     })
 
     it('las acciones exigen su permiso: cajero no suspende', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const resultado = await useServicios().ejecutar(5, 'suspender', 'Prueba', nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)
     })
@@ -91,7 +91,7 @@ describe('ficha de servicio · composables', () => {
         const bitacora = await useBitacora().acciones({ entidad_tipo: 'servicio', entidad_id: 5, accion: 'servicios.ver_credenciales' })
         expect(bitacora.ok && bitacora.data.data).toHaveLength(1)
 
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const sinPermiso = await useServicios().credenciales(5)
         expect(!sinPermiso.ok && sinPermiso.problema.status).toBe(403)
     })

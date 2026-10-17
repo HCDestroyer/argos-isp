@@ -3,6 +3,10 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Factura = Schema<'Factura'>
 export type FacturaDetalle = Schema<'FacturaDetalle'>
 export type FacturaLinea = Schema<'FacturaLinea'>
+export type NotaCredito = Schema<'NotaCredito'>
+export type NotaCreditoEmitida = Schema<'NotaCreditoEmitida'>
+export type DatosNotaCredito = paths['/api/v1/facturas/{id}/notas-credito']['post']['requestBody']['content']['application/json']
+export type FiltrosNotasCredito = Omit<NonNullable<paths['/api/v1/notas-credito']['get']['parameters']['query']>, 'cursor'>
 export type FiltrosFacturas = Omit<NonNullable<paths['/api/v1/facturas']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_FACTURAS = 25
@@ -31,5 +35,26 @@ export function useFacturas() {
         }))
     }
 
-    return { listar, ver, anular }
+    /**
+     * `POST /facturas/:id/notas-credito` (`facturas.nota_credito`): nota de crédito interna, parcial o
+     * total, sobre el saldo. Devuelve la factura con su nuevo saldo y `servicios[]` (reactivación).
+     * 422 `monto` si excede el saldo; 409 `factura_anulada` o `factura_sin_saldo`.
+     */
+    function notaCredito(id: number, datos: DatosNotaCredito, claveIdempotencia: string): Promise<Resultado<NotaCreditoEmitida>> {
+        return resolver(api.POST('/api/v1/facturas/{id}/notas-credito', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    /** `GET /notas-credito` (`facturas.ver`) por cliente, factura o fecha contable. */
+    function notasCredito(filtros: FiltrosNotasCredito = {}, cursor?: string): Promise<Resultado<Pagina<NotaCredito>>> {
+        const query: FiltrosNotasCredito & { cursor?: string } = { limit: 25, ...filtros }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/notas-credito', { params: { query } }))
+    }
+
+    return { listar, ver, anular, notaCredito, notasCredito }
 }

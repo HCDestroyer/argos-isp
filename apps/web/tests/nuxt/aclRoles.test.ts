@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { bd } from '~~/fixtures/bd'
@@ -46,12 +46,12 @@ async function montar(ruta: string) {
 describe('semana 3 · ACL por pantalla (en ejecución)', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
         document.body.innerHTML = ''
     })
@@ -179,7 +179,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
     it('cerrar sesión revoca el token en la API (POST /auth/logout), no solo borra la cookie', async () => {
         await useAuth().logout()
         expect(bd.sesionesCerradas).toEqual(['fixture-admin'])
-        expect(useNuxtApp().$tokenSesion.value).toBeNull()
+        expect(bd.sesion.token).toBeNull()
         expect(useUsuarioActual().value).toBeNull()
     })
 })

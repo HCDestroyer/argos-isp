@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 function iniciarSesion(token: 'fixture-admin' | 'fixture-cajero') {
-    useNuxtApp().$tokenSesion.value = token
+    sesionFixture(token)
 }
 
 describe('useClientes · lista y búsqueda', () => {
@@ -12,7 +12,7 @@ describe('useClientes · lista y búsqueda', () => {
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('lista la primera página con cursor hacia la siguiente', async () => {
@@ -45,7 +45,7 @@ describe('useClientes · lista y búsqueda', () => {
     })
 
     it('sin sesión devuelve un Problem 401', async () => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         const resultado = await useClientes().listar()
         expect(resultado.ok).toBe(false)
         if (!resultado.ok) {
@@ -85,7 +85,7 @@ describe('usePaginacionCursor', () => {
     })
 
     it('guarda el problema y vacía las filas si la API falla', async () => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         const lista = usePaginacionCursor(cursor => useClientes().listar({}, cursor))
         await lista.recargar()
         expect(lista.filas.value).toEqual([])

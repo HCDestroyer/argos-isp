@@ -1,10 +1,11 @@
 import { createApiClient } from '@argosisp/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
-import { rutasFixture } from '~~/fixtures'
+import { rutasFixture, sesionFixture } from '~~/fixtures'
+import { bd } from '~~/fixtures/bd'
 
 describe('modo fixtures', () => {
     afterEach(async () => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 
@@ -18,12 +19,12 @@ describe('modo fixtures', () => {
         expect(data?.usuario.roles).toEqual(['admin'])
     })
 
-    it('useAuth inicia sesión, guarda el token y carga /me', async () => {
+    it('useAuth inicia sesión con la cookie y carga /me', async () => {
         const { login, cargarMe, autenticado, usuario } = useAuth()
         const resultado = await login({ email: 'Cajero@Argos.test', password: 'x' })
         expect(resultado.ok).toBe(true)
         expect(autenticado.value).toBe(true)
-        expect(useNuxtApp().$tokenSesion.value).toBe('fixture-cajero')
+        expect(bd.sesion.token).toBe('fixture-cajero')
 
         usuario.value = null
         const me = await cargarMe()
@@ -41,7 +42,7 @@ describe('modo fixtures', () => {
     })
 
     it('un token inválido limpia la sesión al cargar /me', async () => {
-        useNuxtApp().$tokenSesion.value = 'token-vencido'
+        sesionFixture('token-vencido')
         const { cargarMe, autenticado } = useAuth()
         expect(await cargarMe()).toBeNull()
         expect(autenticado.value).toBe(false)

@@ -27,6 +27,7 @@ let clave = nuevaClaveIdempotencia()
 
 const cajas = shallowRef<Caja[]>([])
 const cuentas = shallowRef<CuentaBancaria[]>([])
+const bancosLibro = shallowRef<BancoLibro[]>([])
 const problemaCatalogos = ref<Problem | null>(null)
 
 const itemsCategoria = computed<SelectItem[]>(() => (props.categorias.length
@@ -34,6 +35,12 @@ const itemsCategoria = computed<SelectItem[]>(() => (props.categorias.length
     : Object.entries(CATEGORIAS_EGRESO).map(([value, label]) => ({ label, value }))))
 const itemsMetodo: SelectItem[] = Object.entries(METODOS_EGRESO).map(([value, label]) => ({ label, value }))
 const itemsCaja = computed<SelectItem[]>(() => cajas.value.filter(c => c.activa).map(c => ({ label: c.nombre, value: c.id })))
+/** Bancos del libro (`GET /libro/bancos`); el primero es el principal (1.1.02.01). */
+const itemsBanco = computed<SelectItem[]>(() => bancosLibro.value.map(b => ({
+    label: b.nombre,
+    value: b.id,
+    description: [b.banco, b.numero_enmascarado, `${b.cuenta_codigo} · ${b.cuenta_nombre}`].filter(Boolean).join(' · '),
+})))
 const itemsCuenta = computed<SelectItem[]>(() => cuentas.value
     .filter(c => c.activa && c.moneda === 'GTQ')
     .map(c => ({ label: `${c.banco_nombre} · ${c.alias}`, value: c.id, description: c.numero })))
@@ -43,16 +50,23 @@ const cajaElegida = computed(() => cajas.value.find(c => c.id === estado.caja_id
 
 async function cargarCatalogos() {
     problemaCatalogos.value = null
-    const [rCajas, rCuentas] = await Promise.all([
+    const [rCajas, rCuentas, rBancos] = await Promise.all([
         puede('cajas.ver') ? useCajas().listar() : null,
         puede('cuentas_bancarias.ver') ? useCuentasBancarias().listar({ activa: true }) : null,
+        puede('egresos.ver') ? useLibro().bancos() : null,
     ])
     cajas.value = rCajas?.ok ? rCajas.data : []
     cuentas.value = rCuentas?.ok ? rCuentas.data : []
-    const fallo = (rCajas && !rCajas.ok ? rCajas.problema : null) ?? (rCuentas && !rCuentas.ok ? rCuentas.problema : null)
+    bancosLibro.value = rBancos?.ok ? rBancos.data : []
+    const fallo = (rCajas && !rCajas.ok ? rCajas.problema : null)
+        ?? (rCuentas && !rCuentas.ok ? rCuentas.problema : null)
+        ?? (rBancos && !rBancos.ok ? rBancos.problema : null)
     problemaCatalogos.value = fallo
     if (estado.caja_id === null && cajas.value.length === 1) {
         estado.caja_id = cajas.value[0]?.id ?? null
+    }
+    if (estado.banco_id === null && bancosLibro.value.length === 1) {
+        estado.banco_id = bancosLibro.value[0]?.id ?? null
     }
 }
 
@@ -185,12 +199,21 @@ async function enviar(evento: FormSubmitEvent<SalidaEgreso>) {
                             class="w-full"
                         />
                     </UFormField>
-                    <p
+                    <UFormField
                         v-if="estado.metodo === 'banco'"
-                        class="text-xs text-muted sm:col-span-2"
+                        label="Banco"
+                        name="banco_id"
+                        class="sm:col-span-2"
+                        help="Cuenta bancaria del libro de donde sale el dinero. Sin elegir: el banco principal."
                     >
-                        Sale del banco principal del libro.
-                    </p>
+                        <USelect
+                            v-model="estado.banco_id"
+                            :items="itemsBanco"
+                            placeholder="Banco principal"
+                            class="w-full"
+                            data-prueba="egreso-banco"
+                        />
+                    </UFormField>
                     <UFormField
                         label="Proveedor"
                         name="proveedor"

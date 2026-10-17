@@ -146,7 +146,23 @@ onMounted(cargar)
                             Pago #{{ pago.id }}
                         </h2>
                         <EstadoPagoBadge :estado="pago.estado" />
+                        <UBadge
+                            v-if="esPagoHistorico(pago)"
+                            label="Importado"
+                            icon="i-lucide-import"
+                            color="neutral"
+                            variant="outline"
+                            data-prueba="pago-historico"
+                        />
                     </div>
+                    <p
+                        v-if="esPagoHistorico(pago)"
+                        class="text-xs text-dimmed"
+                    >
+                        Pago histórico de otro sistema, con su fecha original: no pasó por caja ni bancos.<template v-if="pago.origen || pago.id_externo">
+                            Origen: <span class="font-mono">{{ [pago.origen, pago.id_externo].filter(Boolean).join(' · ') }}</span>
+                        </template>
+                    </p>
                     <p class="text-sm text-muted">
                         {{ formatearFechaHora(pago.created_at) }} ·
                         <ULink

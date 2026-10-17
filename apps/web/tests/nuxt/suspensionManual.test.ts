@@ -2,18 +2,18 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { UApp } from '#components'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import ServicioAccionModal from '~/components/ServicioAccionModal.vue'
 import SuspensionManualBadge from '~/components/SuspensionManualBadge.vue'
 
 describe('suspensión manual', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     function accion(nombre: AccionServicio): PresentacionAccionServicio {

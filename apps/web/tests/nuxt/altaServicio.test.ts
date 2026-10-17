@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 
 function entradaValida(): EntradaServicio {
     return {
@@ -76,11 +76,11 @@ describe('esquemaServicio (espejo de crearServicioValidator)', () => {
 describe('useRouters, usePlantillas y useServicios.crear', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
     })
 
     it('planes, redes y bloques por router', async () => {
@@ -117,7 +117,7 @@ describe('useRouters, usePlantillas y useServicios.crear', () => {
     })
 
     it('el cajero no puede crear servicios', async () => {
-        useNuxtApp().$tokenSesion.value = 'fixture-cajero'
+        sesionFixture('fixture-cajero')
         const cuerpo = cuerpoServicio(esquemaServicio.parse(entradaValida()))
         const resultado = await useServicios().crear(cuerpo, nuevaClaveIdempotencia())
         expect(!resultado.ok && resultado.problema.status).toBe(403)

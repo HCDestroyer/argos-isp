@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import * as z from 'zod'
 
 type PagoCaja = Schema<'Pago'>
+type EgresoCaja = Pick<Schema<'Egreso'>, 'metodo' | 'estado' | 'turno_id' | 'monto'>
 
 /** Billetes y monedas de quetzal, de mayor a menor (en string para no usar `number` con dinero). */
 export const DENOMINACIONES: { valor: string, etiqueta: string, tipo: 'billete' | 'moneda' }[] = [
@@ -33,12 +34,19 @@ export function cobrosEnEfectivo(pagos: readonly PagoCaja[]): PagoCaja[] {
     return pagos.filter(p => p.metodo === 'caja' && p.estado !== 'anulado')
 }
 
+/** Egresos que salieron del efectivo de este turno: método `caja`, del turno y no anulados. */
+export function egresosEnEfectivo<T extends EgresoCaja>(egresos: readonly T[], turnoId: number): T[] {
+    return egresos.filter(e => e.metodo === 'caja' && e.turno_id === turnoId && e.estado === 'registrado')
+}
+
 /**
- * Esperado provisional: fondo inicial + cobros en efectivo del turno. Es una vista previa con
- * los pagos que el panel pudo leer; la API calcula el esperado oficial al cerrar.
+ * Esperado provisional, con la misma regla que `CerrarCaja` (A3): fondo inicial + cobros en
+ * efectivo del turno − egresos en efectivo del turno. Solo se calcula con los dos datos leídos;
+ * la API calcula el oficial al cerrar.
  */
-export function esperadoProvisional(fondoInicial: string, pagos: readonly PagoCaja[]): Decimal {
-    return cobrosEnEfectivo(pagos).reduce((suma, p) => suma.plus(p.monto), new Decimal(fondoInicial))
+export function esperadoProvisional(fondoInicial: string, pagos: readonly PagoCaja[], egresos: readonly EgresoCaja[], turnoId: number): Decimal {
+    const cobrado = cobrosEnEfectivo(pagos).reduce((suma, p) => suma.plus(p.monto), new Decimal(fondoInicial))
+    return egresosEnEfectivo(egresos, turnoId).reduce((suma, e) => suma.minus(e.monto), cobrado)
 }
 
 /** Color de una diferencia de arqueo: exacto verde, faltante rojo, sobrante ámbar. */

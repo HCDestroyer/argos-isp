@@ -9,6 +9,7 @@ export type OrigenAsiento = Asiento['origen_tipo']
 export type FiltrosDiario = Omit<NonNullable<paths['/api/v1/libro/diario']['get']['parameters']['query']>, 'cursor'>
 export type FiltrosMayor = Omit<paths['/api/v1/libro/mayor']['get']['parameters']['query'], 'cursor'>
 export type CierrePeriodo = Schema<'CierrePeriodo'>
+export type BancoLibro = Schema<'BancoLibro'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
 export function useLibro() {
@@ -89,5 +90,29 @@ export function useLibro() {
         }))
     }
 
-    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo }
+    /**
+     * `GET /libro/bancos` (`egresos.ver`): cuentas bancarias contables de `ledger.bancos`; su `id`
+     * es el `banco_id` de un egreso con método `banco`. El número viene enmascarado.
+     */
+    function bancos(): Promise<Resultado<BancoLibro[]>> {
+        return resolver(api.GET('/api/v1/libro/bancos'))
+    }
+
+    function asiento(id: number): Promise<Resultado<Asiento>> {
+        return resolver(api.GET('/api/v1/libro/asientos/{id}', { params: { path: { id } } }))
+    }
+
+    /**
+     * `POST /libro/asientos/:id/revertir` (`libro.revertir_asiento`): asiento espejo con motivo, con
+     * fecha de hoy. Solo asientos sin documento (`Asiento.revertible`); los de factura, pago, egreso…
+     * se corrigen anulando el documento (422 `reverso_por_documento`).
+     */
+    function revertir(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Asiento>> {
+        return resolver(api.POST('/api/v1/libro/asientos/{id}/revertir', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir }
 }

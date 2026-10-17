@@ -3,15 +3,39 @@ import type { TableColumn } from '@nuxt/ui'
 
 /**
  * Un asiento del libro diario con sus movimientos y los totales Debe/Haber (`decimal.js`).
- * Los reversos (anulaciones) se marcan y enlazan al asiento que revierten.
+ * Los reversos (anulaciones) se marcan y enlazan al asiento que revierten. Con `conReverso`
+ * (libro diario) ofrece "Revertir" si la API lo acepta (`Asiento.revertible`,
+ * `libro.revertir_asiento`); si no, dice por qué (`motivo_no_revertible`) y lleva al documento.
  */
 const props = withDefaults(defineProps<{
     asiento: Asiento
     /** Enlace al documento de origen (factura o pago); apágalo dentro de su propia ficha. */
     conOrigen?: boolean
+    /** Acción "Revertir" (solo en el libro diario). */
+    conReverso?: boolean
 }>(), {
     conOrigen: true,
+    conReverso: false,
 })
+
+const emit = defineEmits<{
+    revertido: [reverso: Asiento]
+}>()
+
+const { puede } = usePermisos()
+const toast = useToast()
+const revertirAbierto = ref(false)
+const puedeRevertir = computed(() => props.conReverso && puede('libro.revertir_asiento'))
+const rutaDocumento = computed(() => rutaOrigen(props.asiento))
+
+function revertir(motivo: string, clave: string) {
+    return useLibro().revertir(props.asiento.id, motivo, clave)
+}
+
+function alRevertir(reverso: Asiento) {
+    toast.add({ title: `Asiento #${props.asiento.id} revertido`, description: `Asiento de reverso #${reverso.id}`, icon: 'i-lucide-undo-2', color: 'success' })
+    emit('revertido', reverso)
+}
 
 const columnas: TableColumn<MovimientoAsiento>[] = [
     { accessorKey: 'cuenta_codigo', header: 'Cuenta' },
@@ -40,6 +64,15 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-1">
+                <UBadge
+                    v-if="asiento.revertido_por"
+                    :label="`Revertido por #${asiento.revertido_por}`"
+                    icon="i-lucide-undo-2"
+                    color="neutral"
+                    variant="subtle"
+                    size="sm"
+                    data-prueba="asiento-revertido"
+                />
                 <UBadge
                     v-if="asiento.reversa_de"
                     :label="`Reverso del #${asiento.reversa_de}`"
@@ -99,5 +132,47 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
                 size="sm"
             />
         </footer>
+
+        <div
+            v-if="puedeRevertir && asiento.revertible"
+            class="flex justify-end"
+        >
+            <UButton
+                label="Revertir"
+                icon="i-lucide-undo-2"
+                color="warning"
+                variant="outline"
+                size="sm"
+                :data-prueba="`revertir-asiento-${asiento.id}`"
+                @click="revertirAbierto = true"
+            />
+        </div>
+        <p
+            v-else-if="puedeRevertir && asiento.revertible === false && asiento.motivo_no_revertible"
+            class="flex flex-wrap items-center justify-end gap-x-2 text-xs text-muted"
+            :data-prueba="`no-revertible-${asiento.id}`"
+        >
+            <span>No se revierte aquí: {{ asiento.motivo_no_revertible }}</span>
+            <ULink
+                v-if="rutaDocumento"
+                :to="rutaDocumento"
+                class="text-primary"
+            >
+                Ir al documento
+            </ULink>
+        </p>
+
+        <AccionMotivoModal
+            v-if="puedeRevertir && asiento.revertible"
+            v-model:open="revertirAbierto"
+            titulo="Revertir asiento"
+            :descripcion="`Asiento #${asiento.id} · ${asiento.descripcion}`"
+            efecto="Se registra un asiento espejo (debe ↔ haber) con fecha de hoy. El original no se modifica y no se puede revertir dos veces."
+            confirmar="Revertir asiento"
+            icono="i-lucide-undo-2"
+            color="warning"
+            :ejecutar="revertir"
+            @hecho="alRevertir"
+        />
     </article>
 </template>

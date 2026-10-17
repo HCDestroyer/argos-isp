@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reiniciarFixtures } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaAviso from '~/pages/configuracion/aviso-cobro.vue'
 import PaginaEmpresa from '~/pages/configuracion/empresa.vue'
@@ -9,12 +9,12 @@ import PaginaFactura from '~/pages/facturas/[id].vue'
 describe('empresa y plantilla del aviso de cobro', () => {
     beforeEach(() => {
         reiniciarFixtures()
-        useNuxtApp().$tokenSesion.value = 'fixture-admin'
+        sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
-        useNuxtApp().$tokenSesion.value = null
+        sesionFixture(null)
         useUsuarioActual().value = null
     })
 

@@ -20,7 +20,7 @@ La API vuelve a validar todo (403); el panel no es la barrera, solo evita mostra
 | Prueba | Qué comprueba |
 | --- | --- |
 | `tests/nuxt/aclPantallas.test.ts` (estática) | (1) toda página declara permiso y el menú pide el mismo; (2) cada llamada a la API de una pantalla está cubierta por el `x-permiso` exacto de su endpoint en el OpenAPI (permiso de la página, `puede()` en el archivo, o el componente solo se abre desde pantallas que lo comprueban); (3) cada enlace a otra sección pasa por `enlace()`/`puedeAbrir()` o el archivo ya comprueba el permiso destino. Falla con la lista de huecos |
-| `tests/nuxt/aclRoles.test.ts` (en ejecución) | Cada ruta con permiso (30) lleva a `/sin-permiso` con el permiso exacto a un usuario sin permisos; la página 403 no muestra datos; menú del cajero; `enlace()`; 17 pantallas con el rol `lectura` (todos los `*.ver`) sin ningún botón de acción, con control admin; ficha de servicio y factura con lectura y con admin; ficha de servicio con cajero; logout revoca el token |
+| `tests/nuxt/aclRoles.test.ts` (en ejecución) | Cada ruta con permiso (30) lleva a `/sin-permiso` con el permiso exacto a un usuario sin permisos; la página 403 no muestra datos; menú del cajero; `enlace()`; 17 pantallas con el rol `lectura` (todos los `*.ver`) sin ningún botón de acción, con control admin; ficha de servicio y factura con lectura y con admin; ficha de servicio con cajero; logout revoca la sesión |
 | `tests/e2e/permisos.spec.ts` (Playwright, 1280 y 390) | El cajero no ve Routers en el menú y `/routers` lo manda a `/sin-permiso` |
 | `pnpm verificar:permisos` (CI) | Todo permiso escrito en el panel existe en el catálogo |
 
@@ -63,15 +63,41 @@ La API vuelve a validar todo (403); el panel no es la barrera, solo evita mostra
 
 ## Huecos encontrados y corregidos (semana 3)
 
-1. **Cerrar sesión no revocaba el token.** `logout()` solo borraba la cookie; el token seguía valiendo hasta 12 h. Ahora llama `POST /auth/logout` (queda `auth.logout` en la bitácora) y luego borra la cookie.
+1. **Cerrar sesión no revocaba el token.** `logout()` solo borraba la cookie; el token seguía valiendo hasta 12 h. Ahora llama `POST /auth/logout` (queda `auth.logout` en la bitácora); desde la 2.ª tanda la API además borra la cookie `HttpOnly`.
 2. **Enlaces a secciones sin permiso** (28): nombre del cliente en facturas, pagos, promesas, comprobantes y servicios; indicadores del tablero; "libro diario" en egresos; volver a la ficha al guardar o cancelar en alta y edición de cliente y servicio. Ahora pasan por `enlace()` / `destinoPermitido()`.
 3. **Llamadas a la API sin el permiso del endpoint** (11): búsqueda del nombre del cliente del filtro (`clientes.ver`) en 7 pantallas, servicios del cliente en facturas y en el simulador (`servicios.ver`), leer el cliente al editarlo. Sin el permiso no se llaman; el buscador de clientes queda deshabilitado con el motivo.
 
 Los roles base tienen todos `clientes.ver` y `servicios.ver`, así que 2 y 3 afectaban solo a roles a la medida; igual dejaban ver un 403 crudo o un enlace a `/sin-permiso`.
 
-## Token: dónde se guarda y por qué
+## Sesión: cookie `HttpOnly` y CSRF (semana 3, 2.ª tanda)
 
-- **Hoy:** cookie `argos_token` escrita por el panel (`useCookie`, `SameSite=Lax`, 12 h), leída por `getToken` del cliente HTTP y enviada como `Authorization: Bearer`. **No se usa `localStorage`** para el token (solo para fallas simuladas de los fixtures).
-- **CSRF:** la API autentica solo por el header `Authorization`, nunca por cookie, así que una página ajena no puede usar la cookie para llamar a la API.
-- **XSS:** una cookie que lee JavaScript no es más segura que `localStorage` ante un script inyectado. La opción más segura sería una cookie `HttpOnly; Secure; SameSite=Strict` emitida por la API (o un BFF en Nitro) y que la API acepte la sesión por cookie con protección CSRF. Requiere cambios en `apps/api` (A1) y en el cliente HTTP del líder; queda propuesta en `.claude/integration/a4.md`, no se hace en el panel solo.
-- **Mientras tanto:** el panel no usa `v-html` con datos de la API (salvo la vista previa del aviso, que es un PDF en `iframe` por `blob:`), el logout revoca el token, y conviene marcar la cookie `Secure` cuando el panel se sirve por HTTPS (una línea en `app/plugins/api.ts`, archivo del líder; propuesta en `a4.md`).
+Contrato: `.claude/integration/contratos/sesion-panel.md` (A1). Decisión del PM: la opción más segura sin cambiar el flujo.
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| Login | `useAuth().login()` → `POST /api/v1/auth/sesion` | La API pone la cookie `argos_sesion` (`HttpOnly`, `SameSite=Strict`, `Path=/api`, `Secure` salvo `PANEL_COOKIE_SEGURA=false` en desarrollo por IP). El cuerpo trae `usuario`, `csrf` y `expira_en`; **nunca el token** |
+| Token | — | El panel **no guarda ningún token**: ni cookie legible, ni `localStorage`, ni estado. La cookie vieja `argos_token` se borra al arrancar (`app/plugins/api.ts`) |
+| `csrf` | `useCsrf()` (`useState`, solo en memoria) | Va en `X-CSRF-Token` en POST, PUT y DELETE (`createApiClient({ credentials: 'include', getCsrf })`). Tras recargar la página se recupera con `GET /me`, que con la cookie trae `csrf` |
+| Peticiones | `app/plugins/api.ts` | `credentials: 'include'`, sin `Authorization` |
+| Ruta protegida | `app/middleware/01.auth.global.ts` | Sin usuario cargado pregunta `GET /me`; con 401 → `/login?redirect=` (igual que antes) |
+| 401 a mitad de sesión | `app/plugins/sesion.ts` | Sesión vencida, revocada o usuario desactivado: limpia la sesión local y vuelve a `/login?redirect=`. La sesión no se renueva sola (`expira_en`, 12 h) |
+| 403 `csrf_invalido` | `app/plugins/sesion.ts` | No es un 403 de permisos: recarga el `csrf` con `GET /me` y repite la petición **una vez**; si `/me` ya no tiene sesión, a `/login` |
+| Logout | `useAuth().logout()` → `POST /api/v1/auth/logout` con `X-CSRF-Token` | La API revoca el token y borra la cookie; con la sesión ya vencida (401) se sale igual |
+| CORS | `CORS_ORIGINS` de `apps/api` | Debe incluir el origen exacto del panel (con credenciales no se acepta `*`). Panel y API en el mismo sitio (mismo host, otro puerto) para que la cookie `SameSite=Strict` viaje |
+
+**XSS:** un script inyectado ya no puede leer ni robar la sesión (la cookie es `HttpOnly`); solo podría actuar mientras la página está abierta, con el `csrf` en memoria. El panel no usa `v-html` con datos de la API (la vista previa del aviso es un PDF en `iframe` por `blob:`).
+
+**CSRF:** `SameSite=Strict` impide que la cookie viaje desde otro sitio; además la API exige `X-CSRF-Token` (HMAC ligado a la sesión) en métodos no seguros y comprueba `Origin`.
+
+### Cómo se probó
+
+| Prueba | Qué comprueba |
+| --- | --- |
+| `tests/nuxt/sesionPanel.test.ts` | Login por `POST /auth/sesion` sin token legible; POST con `X-CSRF-Token` y 403 `csrf_invalido` sin él; reintento con el `csrf` de `GET /me`; recargar recupera el `csrf`; 401 limpia la sesión; logout revoca y borra la cookie. Los fixtures simulan la cookie (`bd.sesion`) y el CSRF (`fixtures/index.ts`) |
+| Flujo contra la API real (semana 3, 2.ª tanda) | Sin sesión `/planes` → `/login?redirect=`; credenciales malas; login vuelve a `/planes`; cookie `argos_sesion` `HttpOnly`/`Strict`/`Path=/api` y ningún token en `document.cookie`, `localStorage` ni `sessionStorage`; `POST /planes` y la vista previa con `X-CSRF-Token` y sin `Authorization`; recargar mantiene la sesión y un `PUT /routers/:id` funciona; sin la cookie → `/login`; logout con `X-CSRF-Token` borra la cookie y la cookie vieja da 401 |
+| Playwright (5 flujos, 1280 y 390) | El login de cada flujo pasa por `POST /auth/sesion` en modo fixtures |
+
+## Token: historia
+
+- **Hasta la semana 3 (1.ª tanda):** cookie `argos_token` escrita por el panel (`useCookie`, `SameSite=Lax`, 12 h) y `Authorization: Bearer`. Un XSS podía leerla. Reemplazada por la sesión de arriba.
+- Los tokens de API, agentes de IA, `aaa`/`coa`, pruebas y scripts siguen con `Authorization: Bearer` (`POST /auth/login`), sin cambios.
