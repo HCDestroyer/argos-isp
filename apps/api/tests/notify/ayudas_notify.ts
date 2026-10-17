@@ -37,7 +37,8 @@ export async function crearCliente(datos: DatosCliente = {}): Promise<number> {
     return fila!.id
 }
 
-export async function crearServicio(clienteId: number, plan = unico('Plan')): Promise<number> {
+/** `empresaId` por defecto es la principal (1): con varias empresas activas el trigger exige una. */
+export async function crearServicio(clienteId: number, plan = unico('Plan'), empresaId = 1): Promise<number> {
     const nasIp = `10.${randomInt(1, 255)}.${randomInt(1, 255)}.${randomInt(1, 255)}`
     const [router] = (await db
         .table('network.routers')
@@ -55,6 +56,7 @@ export async function crearServicio(clienteId: number, plan = unico('Plan')): Pr
             plan_id: planFila!.id,
             user_ppp: unico('ppp'),
             pass_ppp: 'cifrada',
+            empresa_id: empresaId,
         })
         .returning('id')) as Array<{ id: number }>
     return servicio!.id
