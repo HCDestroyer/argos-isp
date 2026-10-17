@@ -219,7 +219,7 @@ Las cinco acciones aceptan `empresa_id` opcional (contrato `multiempresa.md`). T
 | `ImportarPromesa` | la del servicio | debe ser la del servicio (422 `empresa_servicio`) |
 | `AnularSaldoInicial` | la del saldo (los reversos van a su libro) | — |
 
-- `--empresa=<id|nit>` del importador (A6) se pasa como `empresa_id` a cada acción; el mapa por zona o router lo resuelve A6 y pasa el id.
+- `--empresa=<id|nit>` del importador (A6) se pasa como `empresa_id` a cada acción; el mapa por zona o router lo resuelve A6 y pasa el id. Hecho por A6 (17 oct): explícito en las cuatro acciones; lo que cuelga de un servicio ya importado en otra empresa va con la empresa de ese servicio. El reporte lo verifica en `empresas` (`fuera_de_empresa`, saldo por empresa).
 - Periodo cerrado: el 422 `periodo_cerrado` mira el cierre **de esa empresa** (`ledger.periodo_cerrado(fecha, empresa_id)`).
 - El saldo a favor (anticipo) de un saldo inicial negativo o de un pago histórico solo se aplica a facturas de su misma empresa.
 - Cuadre del importador: `saldoCliente(cliente)` y `saldoAnticipos(trx, cliente)` sin empresa siguen siendo el consolidado del cliente; con un tercer argumento `empresa_id`, el de esa empresa.

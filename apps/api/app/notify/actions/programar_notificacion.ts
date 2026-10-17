@@ -63,6 +63,11 @@ interface Aviso {
  * - `pago.registrado` (`avisos_pago.ts`): el pagador recibe un solo aviso por pago. Si el pago
  *   salió de aprobar un comprobante, el aviso es el de `comprobante.aprobado` y aquí se omite.
  *   Cada dueño de factura distinto del pagador (`clientes[]`) recibe `pago.registrado.tercero`.
+ * - Cobro repartido (multiempresa): un cobro de caja con facturas de varias empresas llega como un
+ *   `pago.registrado` por empresa con el mismo `cobro_id`. Decisión de A6: **un aviso por
+ *   empresa** (cada pago es de un NIT distinto, con su marca, su configuración y su bot); la
+ *   plantilla dice que es parte de un cobro mayor con `{{#cobro.repartido}}` (`variables.ts`).
+ *   Idempotente igual que cualquier evento: por `origen` (`outbox:<id>`) + cliente y por `pago_id`.
  */
 export default class ProgramarNotificacion extends DomainAction<EntradaProgramar, ResultadoProgramar> {
     readonly nombre = 'notificaciones.programar'
@@ -70,6 +75,9 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
     protected async handle(input: EntradaProgramar, t: Transaccion): Promise<ResultadoProgramar> {
         const clienteId = await resolverCliente(t.trx, input.payload)
         if (!clienteId) return { clienteId: null, envios: [], encolar: [] }
+        // Auditoría: la empresa del evento (la del pago, la factura, el servicio…), no la activa
+        const empresaEvento = await empresaDelEvento(t.trx, input.payload)
+        if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
         const avisos: Aviso[] = [{ clienteId, evento: input.evento, payload: input.payload }]
         if (input.evento === 'pago.registrado') {
