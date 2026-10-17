@@ -1,22 +1,45 @@
 <script setup lang="ts">
-/** Encabezado y pie con los datos de la empresa configurados en el panel (`useEmpresa`). */
+/**
+ * Encabezado y pie con los datos de la empresa configurados en el panel (`useEmpresa`).
+ *
+ * Materiales "vidrio y luz": aura de fondo, barra superior de vidrio y el contenido encima. En
+ * `/corte` el aura es la liviana (`app-aura-lite`, sin difuminado ni deriva): esa página se abre
+ * en teléfonos de clientes suspendidos y tiene que ser lo más barata posible.
+ */
 const { empresa, nombre } = useEmpresa()
+const route = useRoute()
 const anio = new Date().getFullYear()
+
+const auraLiviana = computed(() => route.path === '/corte')
+/**
+ * Navegación del cliente: con sesión confirmada (`useSesionPortal`), en `/cuenta` y en `/corte`.
+ * Abajo en el teléfono, arriba del contenido en escritorio.
+ */
+const { activa: sesionActiva } = useSesionPortal()
+const conNavegacion = computed(() => sesionActiva.value && (route.path === '/cuenta' || route.path === '/corte'))
+/** "ArgosIsp" solo como firma del sistema cuando la empresa tiene su propio nombre. */
+const mostrarProducto = computed(() => nombre.value !== 'ArgosIsp')
 </script>
 
 <template>
-    <div class="flex min-h-dvh flex-col bg-default">
-        <header class="sticky top-0 z-10 border-b border-default bg-default/90 backdrop-blur">
+    <div
+        class="relative flex min-h-dvh flex-col"
+        :class="{ 'pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0': conNavegacion }"
+    >
+        <div
+            class="app-aura"
+            :class="{ 'app-aura-lite': auraLiviana }"
+            aria-hidden="true"
+            data-testid="app-aura"
+        />
+
+        <header class="chrome-material sticky top-0 z-10 border-b border-default pt-[env(safe-area-inset-top)]">
             <UContainer class="flex h-14 items-center justify-between gap-3">
                 <NuxtLink
                     to="/"
-                    class="flex min-h-11 min-w-0 items-center gap-2 font-semibold text-highlighted"
+                    class="flex min-h-11 min-w-0 items-center gap-2.5 font-semibold tracking-[-0.015em] text-highlighted"
                 >
-                    <UIcon
-                        name="i-lucide-wifi"
-                        class="size-6 shrink-0 text-primary"
-                        aria-hidden="true"
-                    />
+                    <LogoArgos class="size-8 shrink-0" />
                     <span class="truncate">{{ nombre }}</span>
                 </NuxtLink>
 
@@ -24,15 +47,21 @@ const anio = new Date().getFullYear()
             </UContainer>
         </header>
 
-        <main class="flex-1 py-6 sm:py-10">
-            <UContainer class="max-w-xl">
+        <main class="relative flex-1 py-6 sm:py-10">
+            <UContainer class="flex max-w-xl flex-col gap-4">
+                <PortalNavegacion
+                    v-if="conNavegacion"
+                    variante="superior"
+                />
                 <slot />
             </UContainer>
         </main>
 
-        <footer class="border-t border-default py-4">
+        <footer class="relative border-t border-default py-4">
             <UContainer class="flex flex-col items-center gap-1 text-center text-xs text-muted sm:flex-row sm:justify-between">
-                <span>© {{ anio }} {{ nombre }}</span>
+                <span>
+                    © {{ anio }} {{ nombre }}<template v-if="mostrarProducto"> · <span class="font-semibold">ArgosIsp</span></template>
+                </span>
                 <ULink
                     to="/contacto"
                     class="inline-flex min-h-11 items-center px-2 text-muted hover:text-default"
@@ -41,5 +70,10 @@ const anio = new Date().getFullYear()
                 </ULink>
             </UContainer>
         </footer>
+
+        <PortalNavegacion
+            v-if="conNavegacion"
+            variante="inferior"
+        />
     </div>
 </template>

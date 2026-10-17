@@ -20,9 +20,9 @@ function casillasCodigo(wrapper: { findAll: (s: string) => Array<{ attributes: (
     return wrapper.findAll('input').filter(i => i.attributes('type') !== 'hidden' && i.attributes('aria-hidden') !== 'true' && i.attributes('tabindex') !== '-1')
 }
 
-async function montarCuenta() {
+async function montarCuenta(ruta = '/cuenta') {
     clearNuxtData('portal:cuenta')
-    const wrapper = await mountSuspended(PaginaCuenta)
+    const wrapper = await mountSuspended(PaginaCuenta, { route: ruta })
     await flushPromises()
     await flushPromises()
     return wrapper
@@ -42,12 +42,16 @@ describe('portal autenticado /cuenta', () => {
         expect(wrapper.find('[data-testid="saldo-cuenta"]').exists()).toBe(false)
     })
 
-    it('con sesión: nombre, saldo, servicio y facturas', async () => {
+    it('con sesión: nombre, saldo y servicio en el inicio; facturas en su sección', async () => {
         fijarSesionFixture(true)
-        const wrapper = await montarCuenta()
-        expect(wrapper.text()).toContain('Juan Pérez López')
+        const inicio = await montarCuenta()
+        expect(inicio.text()).toContain('Juan Pérez López')
+        expect(inicio.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
+        expect(inicio.find('[data-testid="servicio-cuenta"]').text()).toContain('Suspendido')
+        inicio.unmount()
+
+        const wrapper = await montarCuenta('/cuenta?seccion=facturas')
         expect(wrapper.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
-        expect(wrapper.find('[data-testid="servicio-cuenta"]').text()).toContain('Suspendido')
         const facturas = wrapper.findAll('[data-testid="factura"]')
         expect(facturas).toHaveLength(5)
         expect(facturas[0]!.text()).toContain('Servicio de octubre 2026')
@@ -61,7 +65,7 @@ describe('portal autenticado /cuenta', () => {
 
     it('"Pagar en línea" está habilitado con pasarela y explica a dónde lleva', async () => {
         fijarSesionFixture(true)
-        const wrapper = await montarCuenta()
+        const wrapper = await montarCuenta('/cuenta?seccion=pagar')
         await flushPromises()
         const pagar = wrapper.find('[data-testid="pagar-en-linea"]')
         expect(pagar.attributes('disabled')).toBeUndefined()

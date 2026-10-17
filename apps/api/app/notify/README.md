@@ -19,7 +19,8 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 | Interfaz `Canal { enviar(destino, asunto, cuerpo), estado(id) }` y `ErrorCanal` | `canales/canal.ts`                                                                                                                                                                           |
 | Correo SMTP (nodemailer, texto plano)                                           | `canales/correo.ts`                                                                                                                                                                          |
 | Telegram (grammY, solo Bot API, sin `parse_mode`)                               | `canales/telegram.ts`                                                                                                                                                                        |
-| Canales activos según el entorno                                                | `canales/registro.ts`                                                                                                                                                                        |
+| Configuración de canales del panel (global y por empresa, caché, interruptores) | `configuracion.ts`, `configuracion_panel.ts`, `consumidor_config.ts`, `arranque.ts`, `actions/configurar_notificaciones.ts`, `actions/probar_canal_notificacion.ts`, `actions/sembrar_configuracion_canales.ts` |
+| Canales activos según la configuración                                          | `canales/registro.ts`                                                                                                                                                                        |
 | Consumidor de eventos (`ConsumidorEventos`, `EventoEntrante`)                   | `consumidor.ts`                                                                                                                                                                              |
 | Cola y worker BullMQ                                                            | `cola.ts`; proceso: `node ace notify:worker` (servicio `worker` del compose)                                                                                                                 |
 | Cron de recordatorios                                                           | `recordatorios.ts`, `actions/programar_recordatorios.ts`, `actions/editar_recordatorio.ts`                                                                                                   |
@@ -33,14 +34,28 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 
 **Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado` (también a los dueños de las facturas, ver abajo), `promesa.*`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`. Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada`.
 
-**Emite**: `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (también cuando el cliente no tiene destino). Las alertas internas sin cliente no lo emiten.
+**Emite**: `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (también cuando el cliente no tiene destino). Las alertas internas sin cliente y los envíos `omitido` no lo emiten. `notificaciones.config_cambiada { configuracion_id, empresa_id, campos }` al guardar o sembrar la configuración de canales; lo consume el propio `notify:worker` (`ConsumidorConfigNotify`).
 
 ## Reglas
 
 - **Idempotencia.** `origen` identifica qué produjo el envío (`outbox:<id>` para eventos) y `(origen, cliente_id, canal)` es único. Si el relay entrega un evento dos veces, `ProgramarNotificacion` no crea otro envío: solo vuelve a encolar los que sigan `encolado`, y la cola deduplica por `jobId = envio-<id>`. `EnviarNotificacion` bloquea la fila y no hace nada si el envío ya no está `encolado`.
-- **Canales.** Un envío por cada canal que sirva, con el `canal_preferido` primero (decisión del PM, 2026-10-15: que llegue por cualquier medio). Un canal sirve si el adaptador está configurado (`SMTP_HOST`, `TELEGRAM_BOT_TOKEN`), el cliente tiene destino (`email` o `telegram_chat_id`) y hay plantilla activa para ese evento y canal. WhatsApp aún no tiene adaptador. Si ningún canal sirve, queda un envío `fallido` con destino `-`.
+- **Canales.** Un envío por cada canal que sirva, con el `canal_preferido` primero (decisión del PM, 2026-10-15: que llegue por cualquier medio). Un canal sirve si está configurado en la configuración de canales que aplica (ver abajo), el cliente tiene destino (`email` o `telegram_chat_id`) y hay plantilla activa para ese evento y canal. WhatsApp aún no tiene adaptador. Si ningún canal sirve, queda un envío `fallido` con destino `-`.
+- **Apagados.** Si el canal o el tipo de aviso están apagados en la configuración, el envío queda `omitido` con `motivo` ("Correo apagado en la configuración global", "Aviso de tipo factura apagado en la configuración de la empresa 2") y no se encola. Si se apaga con el envío ya en la cola, `EnviarNotificacion` lo marca `omitido` al tomarlo (sin fallback).
 - **Reintentos.** BullMQ reintenta `NOTIFY_INTENTOS` veces (5 por defecto), con backoff exponencial desde 5 s. Un error transitorio (red, SMTP 4xx, Telegram 429 o 5xx) deja el envío `encolado`, guarda el error y suma un intento. Un error permanente (SMTP 5xx, Telegram 400 o 403, canal no configurado) o el último intento lo marcan `fallido`. Si el canal que falló no era correo y el cliente no tenía ya un envío por correo para ese aviso (por ejemplo, la plantilla de correo se activó después), se crea uno con `fallback_de`; si ya lo tenía, no se duplica.
 - **Texto.** El asunto y el cuerpo se renderizan al programar y se guardan en el envío, junto con un snapshot de `variables` que se usa para el fallback. Las plantillas son texto plano y no se escapa HTML. En Telegram el asunto va como primera línea.
+
+## Configuración de canales desde el panel
+
+Decisión del PM (17 oct, `contratos/multiempresa.md`): correo y Telegram se configuran en el panel, no con variables de entorno.
+
+- **Modelo.** `notify.configuracion_canales`: una fila global (`empresa_id` nulo) y una opcional por empresa con `hereda` (por defecto `true`: usa la global). Correo: host, puerto, TLS (`auto`, `starttls`, `tls`, `ninguno`), usuario, contraseña, remitente y nombre visible. Telegram: token, id del bot (público, sale del token), nombre del bot, chat del equipo y secreto del webhook. Interruptores: `correo_activo`, `telegram_clientes_activo`, `telegram_alertas_activo` y `avisos` (tipo → encendido; una clave ausente es encendido). `empresa_id` queda **sin FK** hasta que exista `core.empresas` (A1).
+- **Tipos de aviso.** `factura` (`factura.emitida`, `factura.anulada`), `vencimiento` (`factura.vencida`), `recordatorio` (`recordatorio.*`), `corte` (`servicio.estado_cambiado`), `pago` (`pago.*`), `promesa` (`promesa.*`), `comprobante` (`comprobante.*`). El mensaje directo (código del portal) solo mira el interruptor del canal; las alertas al equipo, `telegram_alertas_activo` de la global.
+- **Secretos.** Contraseña SMTP, token y secreto del webhook se cifran con `app/shared/cifrado.ts` (`AAA_PPP_KEY`, la clave de cifrado de la instalación que pide el contrato; no hace falta otra: los descifra solo la API). Nunca vuelven: la API los devuelve como `***` (o `null` si no hay) y la auditoría también. Al editar, omitido = se conserva, `null` = se borra, texto = se reemplaza. Un token sin secreto del webhook genera uno.
+- **Resolución.** Un aviso usa la configuración de la empresa del evento (`empresa_id` del payload o, cuando existan las columnas, la de la factura o el servicio) si tiene la suya con `hereda = false`; si no, la global; sin fila global, el entorno. `notify.envios.empresa_id` guarda cuál se aplicó.
+- **Caché e invalidación (regla 5).** Cada proceso guarda la configuración descifrada en memoria. `ConfigurarNotificaciones` emite `notificaciones.config_cambiada`; el consumidor del worker la relee y lo publica en Redis (`<COLAS_PREFIJO>:notify:config`), donde escuchan la API y las otras réplicas. Al confirmar, el proceso que guardó también se invalida. Al reconectar a Redis se invalida (un aviso perdido no deja la caché vieja). Sin TTL.
+- **Siembra desde el entorno.** `SembrarConfiguracionCanales` corre al arrancar la API (`start/notify.ts`, solo en `web`) y `notify:worker`: si no hay fila global y hay `SMTP_HOST` o `TELEGRAM_BOT_TOKEN`, la crea con `SMTP_*`, `MAIL_FROM`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_NOMBRE`, `TELEGRAM_CHAT_EQUIPO` y `TELEGRAM_WEBHOOK_SECRET`, una sola vez (log y bitácora, `sembrada_desde_entorno = true`). Después mandan los valores del panel.
+- **Prueba.** `ProbarCanalNotificacion` arma el canal con la configuración **guardada** (no la caché) y envía en el momento, sin mirar interruptores; devuelve el error real (`535 5.7.8 Authentication failed`, `401 Unauthorized`). Queda en `notify.envios` (`evento = notificaciones.prueba`).
+- **Varios bots.** Una URL de webhook por bot: `/api/v1/telegram/webhook/<id del bot>` con el secreto de ese bot; responde por el mismo bot. `node ace telegram:webhook --empresa=<id>` registra el bot de una empresa. Ver `contratos/telegram.md`.
 
 ## Bot de Telegram (semana 2)
 
@@ -116,7 +131,7 @@ Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. 
 - **Consumidor.** `ConsumidorAlertas` (`consumidor_alertas.ts`) en el grupo `notify`, junto a `ConsumidorNotify`. Un cierre cuadrado no se audita ni se registra.
 - **Vigilancia.** Job `vigilancia-crons` de la cola `notify-cron`, cada 5 min, en `notify:worker` (si `billing-worker` está caído, el que avisa es otro proceso). Lee las corridas que registra A3 con `RegistrarCorrida` (`audit.acciones`, canal `cron`, resultado `ok`) y las horas de corte de `billing.plantillas_facturacion` y `core.servicios_excepciones`. Gracia: `NOTIFY_CRON_TOLERANCIA_MIN` (30).
 - **Plantillas.** `alerta.aaa.caido`, `alerta.aaa.recuperado`, `alerta.coa.fallido`, `alerta.routeros.fallido`, `alerta.routeros.velocidad`, `alerta.caja.diferencia`, `alerta.cron.atrasado`, `alerta.cron.recuperado` (canal telegram, variables `alerta.*`). Si se desactiva una, esa alerta se silencia (el incidente igual se registra); si no existe, se usa el texto de `PLANTILLAS_ALERTA`.
-- **Sin configurar.** Sin `TELEGRAM_CHAT_EQUIPO` o sin `TELEGRAM_BOT_TOKEN`, la alerta queda como envío `fallido` con el motivo (visible en `GET /notificaciones/envios`). No emite `notificacion.enviada` (no hay cliente).
+- **Sin configurar.** Sin chat del equipo o sin token del bot en la configuración global, la alerta queda como envío `fallido` con el motivo (visible en `GET /notificaciones/envios`). Con las alertas apagadas (`telegram_alertas_activo = false`) queda `omitido`. No emite `notificacion.enviada` (no hay cliente).
 
 ## Particiones de auditoría (cron mensual)
 
@@ -161,6 +176,9 @@ Las fechas se muestran en `America/Guatemala`. Los montos llegan como string con
 | `GET /api/v1/notificaciones/envios?cliente_id=&evento=&canal=&estado=&cursor=&limit=`                                                                                                        | `notificaciones.ver`    |
 | `GET /api/v1/notificaciones/recordatorios`                                                                                                                                                   | `notificaciones.ver`    |
 | `PUT /api/v1/notificaciones/recordatorios/:id` (`version`, `dias?`, `hora?` HH:MM, `activo?`). Devuelve 409 si la `version` cambió y registra el cambio en `audit.cambios`                   | `notificaciones.editar` |
+| `GET /api/v1/notificaciones/configuracion`, `GET .../configuracion/empresas`, `GET .../configuracion/empresas/:empresaId`                                                                     | `notificaciones.ver`    |
+| `PUT /api/v1/notificaciones/configuracion`, `PUT .../configuracion/empresas/:empresaId` (`version`, 0 si no existe; 409)                                                                      | `notificaciones.configurar` |
+| `POST /api/v1/notificaciones/configuracion/probar`, `POST .../configuracion/empresas/:empresaId/probar` (`canal`, `destino?`)                                                                  | `notificaciones.probar` |
 
 ## Conexión con el relay (A1)
 
@@ -185,11 +203,11 @@ if (notify.acepta(fila.evento)) {
 
 ## Variables de entorno
 
-`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_API_ROOT`, `NOTIFY_INTENTOS`, `NOTIFY_EMPRESA_*`, `NOTIFY_PORTAL_URL`, `COLAS_PREFIJO`, `REDIS_*`. Están documentadas en `apps/api/.env.example`.
+`TELEGRAM_API_ROOT`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_CODIGO_VIGENCIA_S`, `NOTIFY_INTENTOS`, `NOTIFY_EMPRESA_*`, `NOTIFY_PORTAL_URL`, `COLAS_PREFIJO`, `REDIS_*`, `AAA_PPP_KEY` (cifrado de los secretos). Opcionales, solo valor inicial de la configuración global: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_NOMBRE`, `TELEGRAM_CHAT_EQUIPO`, `TELEGRAM_WEBHOOK_SECRET`. Están documentadas en `apps/api/.env.example`.
 
 ## Pruebas
 
-`tests/notify/*.spec.ts` corren contra Postgres y Redis reales. Cada corrida usa un prefijo de BullMQ propio (`a6test-*`) y lo borra al terminar. Telegram se prueba con un `fetch` simulado. La prueba de aceptación con Mailpit (factura emitida → correo en menos de 10 s) corre si están definidas `MAILPIT_API` y `SMTP_HOST`/`SMTP_PORT`; en CI corre siempre.
+`tests/notify/*.spec.ts` corren contra Postgres y Redis reales. Cada corrida usa un prefijo de BullMQ propio (`a6test-*`) y lo borra al terminar. Telegram se prueba con un `fetch` simulado y el correo de la configuración con un SMTP en memoria (`tests/notify/smtp_falso.ts`). `configuracion.spec.ts` vacía `notify.configuracion_canales` antes y después de cada prueba: el resto de la suite corre con el entorno. La prueba de aceptación con Mailpit (factura emitida → correo en menos de 10 s) corre si están definidas `MAILPIT_API` y `SMTP_HOST`/`SMTP_PORT`; en CI corre siempre.
 
 ```sh
 docker compose -f infra/docker-compose.yml up -d mailpit

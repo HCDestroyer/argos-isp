@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js'
 import { leerDumpMysql } from '#importacion/mysql_dump'
 import {
     normalizarFuente,
+    type ArchivoOrigen,
     type Entidad,
     type FilasPorEntidad,
     type FuenteCanonica,
@@ -16,6 +17,7 @@ import {
     ProblemasOrigen,
     tablasDelEsquema,
     texto,
+    TrazaOrigen,
     type DefTabla,
     type FilaOrigen,
 } from '#importacion/origenes/esquema_sql'
@@ -25,20 +27,31 @@ import {
  * phpMyAdmin) y lo traduce al formato canónico (`canonico.ts`).
  *
  * Esquema real: `scripts/importacion/esquemas/smartisp.sql`. Mapeo columna por columna, con sus
- * transformaciones y las dudas que solo resuelven los datos reales:
- * `docs/importacion/mapeo-smartisp.md`. Todo el conocimiento de SmartISP vive en este archivo.
+ * transformaciones y lo que confirmaron los diagnósticos sobre los datos reales
+ * (`docs/importacion/diagnostico*-smartisp.sql`): `docs/importacion/mapeo-smartisp.md`. Todo el
+ * conocimiento de SmartISP vive en este archivo.
  *
- * Lo esencial:
+ * Lo esencial (confirmado con los datos reales, segunda ronda de diagnóstico):
  * - Routers en `routers` (secreto en `radius`, tipo de control en `control_routers`), redes en
  *   `address_routers`, planes en `plans`, clientes en `clients` (zona en `zone`), servicios en
  *   `client_services` (usuario y clave en `user_hot` / `pass_hot`), facturas en `bill_customers`
  *   (+ `bill_customer_item`), pagos en `payment_news` (sin los borrados), saldo a favor en
  *   `clients.wallet_balance`.
- * - SmartISP tiene tablas de dos versiones: si `invoices` o `payments` traen filas, el reporte lo
- *   avisa (no se importan).
- * - Los códigos de estado (`ESTADOS_FACTURA`, `ESTADOS_SERVICIO`) y de control
- *   (`TIPOS_CONTROL`) son SUPUESTOS hasta ver datos reales: un valor desconocido omite la fila con
- *   su valor en el mensaje, nunca se adivina.
+ * - SmartISP tiene tablas de dos versiones: `invoices` y `payments` vienen vacías; si traen filas,
+ *   el reporte lo avisa (quedan en el archivo).
+ * - `bill_customers.status`: 1 pagada (con `paid_on`), 2 sin cargo (total 0), 3 pendiente; no hay
+ *   4. La columna `open` no significa pendiente: se ignora. Una pagada sin ningún `payment_news`
+ *   entra saldada en el origen (`saldada_en_origen` de A3: pagada sin asiento ni pago).
+ * - Un `payment_news` cuyo `num_bill` no existe entra como pago sin factura (a favor del cliente).
+ * - `clients.balance` no siempre es lo pendiente de sus facturas: el reporte lista cada cliente
+ *   distinto con los dos montos; manda lo de las facturas.
+ * - `client_services.status`: `ac` activo; `de` y `manually_cortado` suspendido. `typeauth` es
+ *   siempre `userpass` y `control_routers.type_control = ps` → PPPoE.
+ * - `plans.cost` sin IVA (`iva` 0): el precio entra tal cual. `download`/`upload` en kbps.
+ * - `routers.password` está cifrada por SmartISP (88 caracteres): no se importa; el router queda
+ *   con credenciales pendientes.
+ * - Un código desconocido omite la fila con su valor en el mensaje: nunca se adivina.
+ * - Toda fila de toda tabla del volcado va al archivo del origen (`importacion.filas_origen`).
  */
 export const ESQUEMA = {
     routers: { tabla: 'routers', columnas: ['id', 'name', 'ip', 'login', 'password'] },
@@ -114,24 +127,21 @@ export const ESQUEMA = {
     payments: { tabla: 'payments', columnas: ['id'], opcional: true },
 } as const satisfies Record<string, DefTabla>
 
-/** `bill_customers.status`. SUPUESTO (duda 1 de `docs/importacion/mapeo-smartisp.md`). */
-export const ESTADOS_FACTURA: Record<string, 'pagada' | 'pendiente' | 'anulada'> = {
+/** `bill_customers.status` (confirmado con los datos reales: 1, 2 y 3; no existe 4). */
+export const ESTADOS_FACTURA: Record<string, 'pagada' | 'sin_cargo' | 'pendiente'> = {
     '1': 'pagada',
-    '2': 'pendiente',
+    '2': 'sin_cargo',
     '3': 'pendiente',
-    '4': 'anulada',
 }
 
-/** `client_services.status` → estado canónico. SUPUESTO (duda 2). */
+/** `client_services.status` → estado canónico (confirmado: `ac`, `de` y `manually_cortado`). */
 export const ESTADOS_SERVICIO: Record<string, 'activo' | 'suspendido' | 'retirado'> = {
     ac: 'activo',
-    active: 'activo',
     de: 'suspendido',
-    blocked: 'suspendido',
-    suspended: 'suspendido',
+    manually_cortado: 'suspendido',
 }
 
-/** `control_routers.type_control`. SUPUESTO (duda 3); lo demás (colas simples...) = IP estática. */
+/** `control_routers.type_control` (en los datos reales, `ps`); lo demás (colas simples...) = IP estática. */
 export const TIPOS_CONTROL = {
     pppoe: ['pp', 'ps', 'pt', 'pa', 'ra'],
     hotspot: ['ho', 'ha'],
@@ -146,10 +156,11 @@ export async function leerDumpSmartisp(archivo: string): Promise<FuenteCanonica>
 
 /** Igual que `leerDumpSmartisp` con el texto del volcado (pruebas). */
 export function fuenteDesdeDumpSmartisp(contenido: string, nombre = 'smartisp.sql'): FuenteCanonica {
-    const { filas, duenosFacturas, problemas } = filasDesdeDumpSmartisp(contenido, nombre)
+    const { filas, duenosFacturas, problemas, archivo } = filasDesdeDumpSmartisp(contenido, nombre)
     const fuente = normalizarFuente(filas)
     fuente.problemas.push(...problemas)
     fuente.duenosFacturas = duenosFacturas
+    fuente.archivo = archivo
     return fuente
 }
 
@@ -157,13 +168,29 @@ export function fuenteDesdeDumpSmartisp(contenido: string, nombre = 'smartisp.sq
 export function filasDesdeDumpSmartisp(
     contenido: string,
     nombre = 'smartisp.sql',
-): { filas: FilasPorEntidad; duenosFacturas: Map<string, string>; problemas: ProblemaFila[] } {
-    const t = tablasDelEsquema(leerDumpMysql(contenido), ESQUEMA, {
+): {
+    filas: FilasPorEntidad
+    duenosFacturas: Map<string, string>
+    problemas: ProblemaFila[]
+    archivo: ArchivoOrigen
+} {
+    const todas = leerDumpMysql(contenido)
+    const t = tablasDelEsquema(todas, ESQUEMA, {
         nombre,
         origen: 'smartisp',
         archivo: 'apps/api/app/importacion/origenes/smartisp.ts',
     })
     const problemas = new ProblemasOrigen(nombre)
+    const traza = new TrazaOrigen()
+    traza.tabla(ESQUEMA.radius.tabla, 'secreto RADIUS: va en el router')
+    traza.tabla(
+        ESQUEMA.control.tabla,
+        'tipo de control del router: decide el tipo de conexión de sus servicios',
+    )
+    traza.tabla(ESQUEMA.zonas.tabla, 'las zonas se crean por nombre al importar los clientes')
+    traza.tabla(ESQUEMA.items.tabla, 'detalle de la factura: va en su concepto')
+    traza.tabla(ESQUEMA.invoices.tabla, 'tabla de otra versión de SmartISP: se leen bill_customers')
+    traza.tabla(ESQUEMA.payments.tabla, 'tabla de otra versión de SmartISP: se leen payment_news')
 
     for (const vieja of ['invoices', 'payments'] as const) {
         const n = t[vieja].filas.length
@@ -180,7 +207,15 @@ export function filasDesdeDumpSmartisp(
     // Pagos vigentes (sin borrado lógico) y lo pagado por número de factura
     const pagosVigentes = t.pagos.filas
         .map((fila, i) => ({ fila, linea: i + 1 }))
-        .filter(({ fila }) => !texto(fila.deleted_at))
+        .filter(({ fila, linea }) => {
+            if (!texto(fila.deleted_at)) return true
+            traza.soloArchivo(
+                ESQUEMA.pagos.tabla,
+                linea,
+                `borrado en el origen (deleted_at ${texto(fila.deleted_at)})`,
+            )
+            return false
+        })
     const pagadoPorNumero = new Map<string, Decimal>()
     for (const { fila } of pagosVigentes) {
         const num = texto(fila.num_bill)
@@ -208,11 +243,10 @@ export function filasDesdeDumpSmartisp(
                 tabla,
                 i + 1,
                 id,
-                `status "${texto(b.status)}" desconocido (supuestos: 1 pagada, 2 y 3 pendiente, 4 anulada)`,
+                `status "${texto(b.status)}" desconocido (se esperaba 1 pagada, 2 sin cargo o 3 pendiente)`,
             )
             return
         }
-        if (estado === 'anulada') return
         const pagadaEl = texto(b.paid_on)
         if (estado === 'pagada' && !pagadaEl) {
             problemas.avisar(
@@ -230,16 +264,26 @@ export function filasDesdeDumpSmartisp(
                 `status ${texto(b.status)} (pendiente) con paid_on ${pagadaEl}: revisar el significado del estado`,
             )
         }
-        const total =
+        const calculado =
             b.total_pay === null || texto(b.total_pay) === ''
                 ? montoSeguro(b.cost).plus(montoSeguro(b.iva))
                 : montoSeguro(b.total_pay)
+        if (estado === 'sin_cargo' && !calculado.isZero()) {
+            problemas.avisar(
+                tabla,
+                i + 1,
+                id,
+                `status 2 (sin cargo) con total ${calculado.toFixed(2)}: entra con total 0`,
+            )
+        }
+        const total = estado === 'sin_cargo' ? new Decimal(0) : calculado
         const pagado =
             estado === 'pagada'
                 ? total
                 : Decimal.min(total, pagadoPorNumero.get(texto(b.num_bill)) ?? new Decimal(0))
         const items = (conceptos.get(id) ?? []).map((x) => texto(x.description)).filter(Boolean)
         facturas.push({
+            __linea: String(i + 1),
             id,
             cliente_id: cliente,
             servicio_id: normalizarId(b.service_id) || null,
@@ -247,8 +291,12 @@ export function filasDesdeDumpSmartisp(
             total: total.toFixed(2),
             pagado: pagado.toFixed(2),
             vence: b.expiration_date,
+            emitida: b.release_date,
             concepto: items.join(' · ') || texto(b.period) || null,
+            fecha_pago: estado === 'pagada' ? b.paid_on : null,
+            nota: estado === 'sin_cargo' ? 'sin cargo en el origen (status 2)' : null,
         })
+        traza.vincular(tabla, i + 1, 'facturas', id)
         const pendiente = total.minus(pagado)
         if (pendiente.gt(0)) {
             pendientePorCliente.set(
@@ -293,7 +341,8 @@ export function filasDesdeDumpSmartisp(
         }
     })
 
-    const servicios: FilaOrigen[] = t.servicios.filas.map((s) => {
+    const servicios: FilaOrigen[] = t.servicios.filas.map((s, i) => {
+        traza.vincular(ESQUEMA.servicios.tabla, i + 1, 'servicios', normalizarId(s.id))
         const ctl = control.get(normalizarId(s.router_id))
         const usuario = texto(s.user_hot)
         const tipoControl = texto(ctl?.type_control).toLowerCase()
@@ -310,6 +359,7 @@ export function filasDesdeDumpSmartisp(
         const mac = texto(s.mac)
         const status = texto(s.status).toLowerCase()
         return {
+            __linea: String(i + 1),
             id: normalizarId(s.id),
             cliente_id: normalizarId(s.client_id),
             router_id: normalizarId(s.router_id),
@@ -325,34 +375,58 @@ export function filasDesdeDumpSmartisp(
         }
     })
 
+    t.routers.filas.forEach((r, i) => {
+        traza.vincular(ESQUEMA.routers.tabla, i + 1, 'routers', normalizarId(r.id))
+        if (texto(r.password)) {
+            problemas.avisar(
+                ESQUEMA.routers.tabla,
+                i + 1,
+                normalizarId(r.id),
+                'la clave de la API (routers.password) está cifrada por SmartISP: no se importa; cargarla en el panel (credenciales pendientes)',
+            )
+        }
+    })
+    t.redes.filas.forEach((_n, i) => traza.vincular(ESQUEMA.redes.tabla, i + 1, 'redes', `L${i + 1}`))
+    t.planes.filas.forEach((p, i) =>
+        traza.vincular(ESQUEMA.planes.tabla, i + 1, 'planes', normalizarId(p.id)),
+    )
+    t.clientes.filas.forEach((c, i) =>
+        traza.vincular(ESQUEMA.clientes.tabla, i + 1, 'clientes', normalizarId(c.id)),
+    )
+
     const entidades: Record<Entidad, FilaOrigen[]> = {
-        routers: t.routers.filas.map((r) => ({
+        routers: t.routers.filas.map((r, i) => ({
+            __linea: String(i + 1),
             id: normalizarId(r.id),
             nombre: r.name,
             host: r.ip,
             nas_ip: r.ip,
-            api_usuario: r.login,
-            api_password: r.password,
+            // routers.password está cifrada: usuario y clave de la API quedan pendientes
+            api_usuario: null,
+            api_password: null,
             radius_secret: secretos.get(normalizarId(r.id)) ?? null,
         })),
-        redes: t.redes.filas.map((n) => {
+        redes: t.redes.filas.map((n, i) => {
             const red = texto(n.network)
             const mascara = texto(n.mask).replace(/^\//, '')
             return {
+                __linea: String(i + 1),
                 router_id: normalizarId(n.router_id),
                 cidr: red.includes('/') ? red : red && mascara ? `${red}/${mascara}` : null,
                 gateway: n.gateway,
                 tipo: texto(n.type).toLowerCase().includes('pool') ? 'pool' : 'estatico',
             }
         }),
-        planes: t.planes.filas.map((p) => ({
+        planes: t.planes.filas.map((p, i) => ({
+            __linea: String(i + 1),
             id: normalizarId(p.id),
             nombre: p.name,
             precio: p.cost,
             bajada: p.download,
             subida: p.upload,
         })),
-        clientes: t.clientes.filas.map((c) => ({
+        clientes: t.clientes.filas.map((c, i) => ({
+            __linea: String(i + 1),
             id: normalizarId(c.id),
             nombre: c.name,
             nit: c.dni,
@@ -365,17 +439,29 @@ export function filasDesdeDumpSmartisp(
         servicios,
         facturas,
         saldos,
-        pagos: pagosVigentes.map(({ fila: p }) => {
+        pagos: pagosVigentes.map(({ fila: p, linea }) => {
             const num = texto(p.num_bill)
+            const factura = num ? (facturaPorNumero.get(num) ?? null) : null
+            if (num && !factura) {
+                problemas.avisar(
+                    ESQUEMA.pagos.tabla,
+                    linea,
+                    normalizarId(p.id),
+                    `num_bill ${num} no existe en bill_customers: entra como pago sin factura (a favor del cliente)`,
+                )
+            }
+            traza.vincular(ESQUEMA.pagos.tabla, linea, 'pagos', normalizarId(p.id))
             return {
+                __linea: String(linea),
                 id: normalizarId(p.id),
                 cliente_id: normalizarId(p.client_id),
-                factura_id: num ? (facturaPorNumero.get(num) ?? `num_bill ${num}`) : null,
+                factura_id: factura,
                 monto: p.amount,
                 fecha: p.date,
                 metodo: p.way_to_pay,
             }
         }),
+        promesas: [],
     }
 
     const filas = filasCanonicas(
@@ -389,10 +475,11 @@ export function filasDesdeDumpSmartisp(
             facturas: ESQUEMA.facturas.tabla,
             saldos: `${ESQUEMA.clientes.tabla}.wallet_balance`,
             pagos: ESQUEMA.pagos.tabla,
+            promesas: 'promesas',
         },
         nombre,
     )
-    return { filas, duenosFacturas, problemas: problemas.lista }
+    return { filas, duenosFacturas, problemas: problemas.lista, archivo: traza.archivo(todas) }
 }
 
 /** Fecha → `YYYY-MM` (primer día del mes en el formato canónico); vacía o `0000-00-00` → null. */

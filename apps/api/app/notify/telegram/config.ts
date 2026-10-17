@@ -1,18 +1,27 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto'
+import { configPara, configParaSync, type ConfigCanales } from '#notify/configuracion'
 
 /**
- * Configuración del bot de Telegram (`contratos/telegram.md`). Se lee del entorno en cada uso,
- * así las pruebas pueden cambiarla sin reiniciar el proceso.
+ * Configuración del bot de Telegram (`contratos/telegram.md`).
+ *
+ * Token, nombre del bot y secreto del webhook salen de la configuración de canales del panel
+ * (`notify/configuracion.ts`); sin configuración guardada, del entorno:
  *
  * - `TELEGRAM_BOT_TOKEN`: token de @BotFather (también lo usa el canal de notify).
  * - `TELEGRAM_BOT_NOMBRE`: usuario del bot sin `@` (arma `https://t.me/<nombre>?start=<código>`).
  * - `TELEGRAM_WEBHOOK_SECRET`: lo manda Telegram en `X-Telegram-Bot-Api-Secret-Token`. Sin él, el
  *   webhook rechaza todo (nunca acepta actualizaciones sin autenticar).
- * - `TELEGRAM_WEBHOOK_URL`: URL pública del webhook para `node ace telegram:webhook`.
+ *
+ * Siempre del entorno (instalación, no panel):
+ *
+ * - `TELEGRAM_WEBHOOK_URL`: URL pública base del webhook (`https://<api>/api/v1/telegram/webhook`);
+ *   `node ace telegram:webhook` registra `<base>/<id del bot>`.
  * - `TELEGRAM_CODIGO_VIGENCIA_S`: vigencia del código de vinculación (900 s).
  */
 export interface ConfigBot {
     token: string | null
+    /** id público del bot (parte numérica del token) */
+    botId: string | null
     nombre: string | null
     secreto: string | null
     webhookUrl: string | null
@@ -21,17 +30,29 @@ export interface ConfigBot {
     portalUrl: string | null
 }
 
-export function configBot(entorno: NodeJS.ProcessEnv = process.env): ConfigBot {
+/** Bot de una configuración de canales (global o de una empresa). */
+export function configBotDe(config: ConfigCanales, entorno: NodeJS.ProcessEnv = process.env): ConfigBot {
     const vigencia = Number(entorno.TELEGRAM_CODIGO_VIGENCIA_S)
     return {
-        token: entorno.TELEGRAM_BOT_TOKEN || null,
-        nombre: (entorno.TELEGRAM_BOT_NOMBRE || '').replace(/^@/, '') || null,
-        secreto: entorno.TELEGRAM_WEBHOOK_SECRET || null,
+        token: config.telegram.token,
+        botId: config.telegram.botId,
+        nombre: (config.telegram.botNombre || '').replace(/^@/, '') || null,
+        secreto: config.telegram.webhookSecreto,
         webhookUrl: entorno.TELEGRAM_WEBHOOK_URL || null,
         apiRoot: entorno.TELEGRAM_API_ROOT || undefined,
         vigenciaS: Number.isInteger(vigencia) && vigencia >= 60 ? vigencia : 900,
         portalUrl: entorno.NOTIFY_PORTAL_URL || null,
     }
+}
+
+/** Bot de la configuración global, con la última configuración cargada (síncrono). */
+export function configBot(entorno: NodeJS.ProcessEnv = process.env): ConfigBot {
+    return configBotDe(configParaSync(null), entorno)
+}
+
+/** Bot de la configuración global, leída de la base si hace falta. */
+export async function configBotGlobal(): Promise<ConfigBot> {
+    return configBotDe(await configPara(null))
 }
 
 /** Telegram solo acepta `A-Z a-z 0-9 _ -` (1 a 256) como `secret_token`. */

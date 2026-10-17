@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { ErrorCanal } from '#notify/canales/canal'
-import { obtenerCanal } from '#notify/canales/registro'
+import { resolverCanal } from '#notify/canales/registro'
 import { renderizar } from '#notify/plantillas'
 
 export type CanalDirecto = 'correo' | 'telegram'
@@ -24,6 +24,8 @@ export interface EntradaMensajeDirecto {
      * el cuerpo sin renderizar (con `{{secreto}}`) y la auditoría lo registra como `***`.
      */
     secreto?: string | null
+    /** empresa cuya configuración de canales se usa (null u omitida: la global) */
+    empresa_id?: number | null
 }
 
 export interface ResultadoMensajeDirecto {
@@ -46,6 +48,8 @@ export interface ResultadoMensajeDirecto {
  *   cliente, el evento `notificacion.enviada` con `evento_origen = motivo`.
  * - Si el canal falla no lanza: devuelve `fallido` con el error (queda registrado); quien llama
  *   decide (el portal muestra "no se pudo enviar"). Canal no configurado = `fallido`.
+ * - Canal apagado en la configuración: no se envía; la fila queda `omitido` con el motivo y la
+ *   acción devuelve `fallido` con ese motivo en `error` (para quien llama, no salió).
  */
 export default class EnviarMensajeDirecto extends DomainAction<
     EntradaMensajeDirecto,
@@ -103,14 +107,22 @@ export default class EnviarMensajeDirecto extends DomainAction<
         let estado: 'enviado' | 'fallido' = 'enviado'
         let error: string | null = null
         let proveedorId: string | null = null
-        const canal = obtenerCanal(input.canal)
-        try {
-            if (!canal) throw new ErrorCanal(input.canal, 'canal no configurado en este entorno', true)
-            const resultado = await canal.enviar(destino, asunto, cuerpo)
-            proveedorId = resultado.id || null
-        } catch (falla) {
+        const empresaId = input.empresa_id ?? null
+        const resuelto = await resolverCanal(input.canal, { empresaId })
+        if (resuelto.apagado) {
             estado = 'fallido'
-            error = (falla instanceof Error ? falla.message : String(falla)).slice(0, 2000)
+            error = resuelto.motivo
+        } else {
+            try {
+                if (!resuelto.canal) {
+                    throw new ErrorCanal(input.canal, resuelto.motivo ?? 'canal no configurado', true)
+                }
+                const resultado = await resuelto.canal.enviar(destino, asunto, cuerpo)
+                proveedorId = resultado.id || null
+            } catch (falla) {
+                estado = 'fallido'
+                error = (falla instanceof Error ? falla.message : String(falla)).slice(0, 2000)
+            }
         }
 
         const [fila] = (await t.trx
@@ -125,16 +137,18 @@ export default class EnviarMensajeDirecto extends DomainAction<
                 asunto: input.asunto ?? null,
                 cuerpo: input.cuerpo,
                 variables: JSON.stringify({ secreto: input.secreto ? '***' : null }),
-                estado,
-                error,
-                intentos: 1,
+                estado: resuelto.apagado ? 'omitido' : estado,
+                error: resuelto.apagado ? null : error,
+                motivo: resuelto.apagado ? resuelto.motivo : null,
+                empresa_id: empresaId,
+                intentos: resuelto.apagado ? 0 : 1,
                 proveedor_id: proveedorId,
                 enviado_en: estado === 'enviado' ? t.trx.knexRawQuery('now()') : null,
                 request_id: t.ctx.requestId,
             })
             .returning('id')) as Array<{ id: number }>
 
-        if (input.cliente_id !== null) {
+        if (input.cliente_id !== null && !resuelto.apagado) {
             await t.emit('notificacion.enviada', {
                 cliente_id: input.cliente_id,
                 canal: input.canal,

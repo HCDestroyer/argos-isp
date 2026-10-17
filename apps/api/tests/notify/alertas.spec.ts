@@ -215,7 +215,7 @@ test.group('notify · alertas internas', (group) => {
         assert.include(sinChat[0]!, {
             estado: 'fallido',
             destino: '-',
-            error: 'TELEGRAM_CHAT_EQUIPO no configurado',
+            error: 'Chat del equipo de Telegram no configurado',
         })
         assert.lengthOf(cola.ids, 0)
 

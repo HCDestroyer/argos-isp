@@ -547,6 +547,9 @@ export async function avanceDePromesa(
         .where('f.servicio_id', promesa.servicio_id)
         .where('p.estado', 'registrado')
         .where('a.created_at', '>=', promesa.created_at)
+        // un pago histórico importado después lleva la fecha del origen: si fue antes de la
+        // promesa (importada con su `creada_en`), no la cumple aunque su aplicación sea de hoy
+        .where((q) => q.where('p.historico', false).orWhere('p.created_at', '>=', promesa.created_at))
         .select(cliente.raw('coalesce(sum(a.monto), 0)::text as pagado'))
         .first()) as { pagado: string }
     const pagado = dec(fila.pagado)

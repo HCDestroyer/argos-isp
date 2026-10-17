@@ -12,50 +12,47 @@ La regla es **nunca importar en real sin dos corridas en seco limpias**. La corr
 | SmartISP                                                   | `smartisp`  | volcado `.sql` de su base MySQL      | `mysqldump`; ver la nota de SmartISP          |
 | Otro sistema, o uno de los anteriores sin acceso a la base | `csv`       | directorio con las plantillas llenas | exportación a Excel/CSV, una hoja por entidad |
 
-- **Mikrowisp** (versión 6) y **SmartISP**: los adaptadores leen el esquema real de cada sistema. Qué tabla y columna da cada dato, y las preguntas abiertas: `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`. Antes de tocar la base, el comando compara el volcado con las tablas y columnas que necesita; si falta algo se detiene con la lista completa ("no tiene el esquema que espera el origen mikrowisp:" y una línea por tabla o columna). Casi siempre es que el volcado no incluyó una tabla: repite el `mysqldump` con la lista de abajo. Si la tabla existe con otras columnas (otra versión del sistema), manda el mensaje completo al equipo (A6).
+- **Mikrowisp** (versión 6) y **SmartISP**: los adaptadores leen el esquema real de cada sistema. Qué tabla y columna da cada dato, y las preguntas abiertas: `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`. Antes de tocar la base, el comando compara el volcado con las tablas y columnas que necesita; si falta algo se detiene con la lista completa ("no tiene el esquema que espera el origen mikrowisp:" y una línea por tabla o columna). Casi siempre es que el volcado no es de la base completa: repite el `mysqldump` de abajo. Si la tabla existe con otras columnas (otra versión del sistema), manda el mensaje completo al equipo (A6).
 - **CSV**: sirve para cualquier sistema. Ver el paso 0.2.
 
 El origen y el id de cada fila en ese sistema forman la clave para no importar dos veces lo mismo. **Usa siempre el mismo origen para el mismo ISP**: si empezaste con CSV de un Mikrowisp, sigue con `--origen=csv --sistema=mikrowisp` (o pasa al volcado: `mikrowisp` reconoce lo que entró con `--sistema=mikrowisp`). Con otro `--sistema`, todo se crearía de nuevo.
 
 ### 0.1 Volcado SQL (Mikrowisp, SmartISP)
 
-Tomado **con el sistema sin cobros en curso** (o fuera de horario), en el servidor del sistema anterior o desde una máquina con acceso a su MySQL/MariaDB. Solo las tablas que lee el importador: es más chico y lleva menos datos personales.
+Tomado **con el sistema sin cobros en curso** (o fuera de horario), en el servidor del sistema anterior o desde una máquina con acceso a su MySQL/MariaDB. **La base completa**: decisión del PM, "se debe traer todo, para no perder ni dejar volando datos". Cada fila de cada tabla queda en el archivo del origen de ArgosIsp (`importacion.filas_origen`), también las que no tienen equivalente, con a qué registro se llevó o por qué no.
 
 **Mikrowisp 6** (la base suele llamarse `mikrowisp`; MariaDB):
 
 ```sh
 mysqldump --single-transaction --default-character-set=utf8mb4 --skip-triggers \
     -u <usuario> -p <base> \
-    server nas ipv4 perfiles usuarios tblavisouser zonas tblservicios radcheck \
-    facturas facturaitems operaciones saldos monedas \
     > mikrowisp-AAAAMMDD.sql
 ```
 
-| Obligatorias | Opcionales (sin ellas, ese dato entra vacío) |
-| --- | --- |
-| `server`, `perfiles`, `usuarios`, `tblservicios` | `nas` (IP RADIUS del router), `ipv4` (redes), `tblavisouser` y `zonas` (zona del cliente), `radcheck` (clave PPPoE si falta en el servicio), `facturas`, `facturaitems` (concepto), `operaciones` (pagos), `saldos` (saldo a favor), `monedas` |
+| Obligatorias para importar                       | Opcionales (sin ellas, ese dato entra vacío)                                                                                                                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server`, `perfiles`, `usuarios`, `tblservicios` | `nas`, `ipv4` (redes), `tblavisouser` y `zonas` (zona del cliente), `radcheck` (clave PPPoE si falta en el servicio), `facturas`, `facturaitems` (concepto), `operaciones` (pagos), `saldos`, `monedas`, `credito` (promesas) |
 
 **SmartISP** (la base suele llamarse `smartisp`; MySQL 5.7):
 
 ```sh
 mysqldump --single-transaction --default-character-set=utf8mb4 --skip-triggers \
     -u <usuario> -p <base> \
-    routers radius control_routers address_routers plans clients zone client_services \
-    bill_customers bill_customer_item payment_news invoices payments \
     > smartisp-AAAAMMDD.sql
 ```
 
-| Obligatorias | Opcionales |
-| --- | --- |
-| `routers`, `plans`, `clients`, `client_services` | `radius` (secreto RADIUS), `control_routers` (tipo de conexión), `address_routers` (redes), `zone`, `bill_customers` y `bill_customer_item` (facturas), `payment_news` (pagos), `invoices` y `payments` (solo para avisar si las tablas viejas tienen filas) |
+| Obligatorias para importar                       | Opcionales                                                                                                                                                                                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `routers`, `plans`, `clients`, `client_services` | `radius` (secreto RADIUS), `control_routers` (tipo de conexión), `address_routers` (redes), `zone`, `bill_customers` y `bill_customer_item` (facturas), `payment_news` (pagos), `invoices` y `payments` (vienen vacías; si traen filas, el reporte avisa) |
 
 Notas:
 
 - `--skip-triggers` es opcional: el lector ignora los triggers (Mikrowisp trae seis). Con MySQL 8 y un usuario sin privilegio `PROCESS`, agrega `--no-tablespaces`.
-- Sin acceso por consola, la exportación SQL de phpMyAdmin o de Adminer sirve igual: formato SQL, **estructura y datos**, solo esas tablas.
+- Sin acceso por consola, la exportación SQL de phpMyAdmin o de Adminer sirve igual: formato SQL, **estructura y datos**, todas las tablas.
+- Tablas muy grandes (`radacct`, logs): también entran al archivo del origen; la corrida tarda más y la base crece. Si el PM decide dejarlas fuera, se excluyen con `--ignore-table=<base>.radacct` y el reporte no las cuenta.
 - Para mandar la estructura al equipo sin datos (cuando el comando no reconoce el esquema): el mismo comando con `--no-data`.
-- El volcado lleva datos personales y **contraseñas en claro**: claves PPPoE (`tblservicios.ppppass`, `radcheck`, `client_services.pass_hot`), credenciales de los routers (`server.pass`, `routers.password`) y los hashes del portal (`clients.password`). Nunca al repositorio ni por chat: en el servidor de ArgosIsp, con permisos `600`, y se borra al terminar. ArgosIsp cifra las claves al importarlas y el reporte no las muestra.
-- Antes de la primera corrida, conviene contestar las preguntas de `docs/importacion/mapeo-*.md` (sección "Dudas para el PM") con el volcado: cada una trae la consulta SQL. La corrida en seco también las delata: un estado o un código desconocido sale como fila omitida con el valor en el mensaje.
+- El volcado lleva datos personales y **contraseñas en claro**: claves PPPoE (`tblservicios.ppppass`, `radcheck`, `client_services.pass_hot`), credenciales de los routers (`server.pass`, `routers.password`, que Mikrowisp y SmartISP guardan cifradas y no se importan) y los hashes del portal (`clients.password`). Nunca al repositorio ni por chat: en el servidor de ArgosIsp, con permisos `600`, y se borra al terminar. ArgosIsp cifra las claves PPPoE al importarlas; en el archivo del origen toda credencial queda como `***` y el reporte no las muestra.
+- Las dudas de `docs/importacion/mapeo-*.md` ya se resolvieron con los diagnósticos (`docs/importacion/diagnostico*-*.sql`); con otro ISP conviene correrlos de nuevo. La corrida en seco también las delata: un estado o un código desconocido sale como fila omitida con el valor en el mensaje.
 
 ### 0.2 Plantillas CSV (cualquier sistema)
 
@@ -78,7 +75,7 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 - [ ] Backup reciente de ArgosIsp (`infra/backups/respaldar.sh`, ver `docs/runbooks/restaurar-backup.md`).
 - [ ] Una plantilla de facturación creada en el panel. Si hay varias, anota el id de la que llevarán los servicios importados (`--plantilla=<id>`).
 - [ ] **Ningún mes cerrado en el libro** que caiga en las fechas de los pagos del origen: los pagos históricos entran con su fecha original y un mes cerrado los rechaza (`periodo_cerrado`). Importa antes del primer cierre mensual, o pide a contabilidad reabrir esos meses durante la importación.
-- [ ] Pagos: si el origen trae pagos, los clientes con pagos entran con su historial (facturas por su total + pagos con su fecha); los demás, solo con su saldo. En los dos casos el saldo final es el del origen.
+- [ ] Historial completo (modo B, por defecto): todas las facturas por su total (también las pagadas, los cargos únicos, las de clientes retirados y las de total 0), todos los pagos con su fecha, las promesas vigentes y un saldo inicial solo para la diferencia. El saldo final de cada cliente es el del origen.
 - [ ] El volcado y los CSV tienen datos personales y contraseñas PPPoE: guárdalos fuera del repositorio y bórralos al terminar.
 
 ## 1. Corrida en seco
@@ -108,18 +105,18 @@ Si el comando se detiene antes de importar ("no tiene el esquema que espera el o
 
 Qué revisar primero en el reporte de un volcado de Mikrowisp o SmartISP (son las filas que el adaptador no traduce o traduce con una observación, tipo `formato_fila` / `formato_campo`):
 
-| Mensaje | Qué significa | Qué hacer |
-| --- | --- | --- |
-| `estado "X" desconocido` / `status "X" desconocido` | El sistema usa un valor que no conocemos | Mandarlo al equipo con cuántas filas lo tienen; no corregir a mano |
-| `moneda USD: solo se importan … en quetzales` | Factura o pago en otra moneda (Mikrowisp) | Decidir con contabilidad; entra como saldo inicial si hace falta |
-| `tiposervicio "tv"` | Servicio que no es de internet (Mikrowisp) | Nada, o cobrarlo en ArgosIsp como cargo aparte |
-| `tipo_conexion "hotspot"` | Router de SmartISP en modo hotspot | ArgosIsp no maneja hotspot: queda fuera |
-| `precio del servicio … distinto al del plan` | El cliente paga otro precio que el de su plan (Mikrowisp) | Ajustar el plan o crear uno para esos clientes antes de facturar |
-| `cobrado … y la suma de sus operaciones … no coinciden` | Abono registrado sin pago (Mikrowisp) | Revisar con caja; el saldo entra con lo cobrado |
-| `balance del origen … no coinciden` | El saldo que muestra SmartISP no es la suma de sus facturas | Revisar con caja; entra lo de las facturas |
-| `IPv6 y DUID del origen no se importan` | Servicio con IPv6 en Mikrowisp | Configurar el IPv6 en ArgosIsp después |
-| `invoices trae N filas` | SmartISP tiene facturas en la tabla vieja | Confirmar con el ISP cuál usa antes de seguir |
-| `status … sin paid_on` / `con paid_on` | El significado supuesto del estado de factura puede estar mal | Mandarlo al equipo antes de la corrida real |
+| Mensaje                                                 | Qué significa                                                 | Qué hacer                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `estado "X" desconocido` / `status "X" desconocido`     | El sistema usa un valor que no conocemos                      | Mandarlo al equipo con cuántas filas lo tienen; no corregir a mano |
+| `moneda USD: solo se importan … en quetzales`           | Factura o pago en otra moneda (Mikrowisp)                     | Decidir con contabilidad; entra como saldo inicial si hace falta   |
+| `tiposervicio "tv"`                                     | Servicio que no es de internet (Mikrowisp)                    | Nada, o cobrarlo en ArgosIsp como cargo aparte                     |
+| `tipo_conexion "hotspot"`                               | Router de SmartISP en modo hotspot                            | ArgosIsp no maneja hotspot: queda fuera                            |
+| `precio del servicio … distinto al del plan`            | El cliente paga otro precio que el de su plan (Mikrowisp)     | Ajustar el plan o crear uno para esos clientes antes de facturar   |
+| `cobrado … y la suma de sus operaciones … no coinciden` | Abono registrado sin pago (Mikrowisp)                         | Revisar con caja; el saldo entra con lo cobrado                    |
+| `balance del origen … no coinciden`                     | El saldo que muestra SmartISP no es la suma de sus facturas   | Revisar con caja; entra lo de las facturas                         |
+| `IPv6 y DUID del origen no se importan`                 | Servicio con IPv6 en Mikrowisp                                | Configurar el IPv6 en ArgosIsp después                             |
+| `invoices trae N filas`                                 | SmartISP tiene facturas en la tabla vieja                     | Confirmar con el ISP cuál usa antes de seguir                      |
+| `status … sin paid_on` / `con paid_on`                  | El significado supuesto del estado de factura puede estar mal | Mandarlo al equipo antes de la corrida real                        |
 
 ## 2. Leer el reporte
 
@@ -133,10 +130,12 @@ Qué revisar primero en el reporte de un volcado de Mikrowisp o SmartISP (son la
 
 Orden de lectura:
 
-1. **Saldos.** "Cuadra" quiere decir que la suma de saldos en ArgosIsp es igual a la del origen, cliente por cliente. Si no cuadra, la sección `saldo` lista cada cliente con su diferencia; la causa está en las otras líneas de ese cliente (un servicio que no entró, una acción que falló).
-2. **Gravedad `error`**: una acción rechazó el dato o un saldo no cuadra. Hay que corregir antes de la corrida real.
-3. **Gravedad `omitido`**: esa fila no entra. Decide si se corrige en el origen o si está bien que no entre (un retirado, un duplicado).
-4. **`aviso`** e **`info`**: entra, con una observación. Revisa que la explicación tenga sentido.
+1. **Cuadre por tabla.** Cada tabla del origen: leídas = creadas + existentes + al saldo + solo archivo + omitidas. Si alguna fila no queda contada, la corrida falla antes de guardar nada ("Cuadre por tabla: hay filas del origen que no quedaron…"): avisar al equipo.
+2. **Dinero.** Facturado, cobrado, pendiente y pagos del origen contra ArgosIsp, con lo que explica cada diferencia (saldos iniciales, facturas saldadas en el origen sin pago).
+3. **Saldos.** "Cuadra" quiere decir que el saldo de cada cliente en ArgosIsp (CxC − anticipos) es el del origen. Si no cuadra, la sección `saldo` lista cada cliente con su diferencia; la causa está en las otras líneas de ese cliente (un servicio que no entró, una acción que falló).
+4. **Gravedad `error`**: una acción rechazó el dato o un saldo no cuadra. Hay que corregir antes de la corrida real.
+5. **Gravedad `omitido`**: esa fila no entra (queda en el archivo del origen con el motivo). Decide si se corrige en el origen o si está bien que no entre (un retirado, un duplicado).
+6. **`aviso`** e **`info`**: entra, con una observación. Revisa que la explicación tenga sentido.
 
 Cada fila dice `id_origen` (id en el sistema anterior), `detalle` (qué pasó), `causa` (por qué) y `accion` (qué hacer).
 
@@ -144,22 +143,24 @@ Cada fila dice `id_origen` (id en el sistema anterior), `detalle` (qué pasó), 
 
 Se corrige **en el sistema anterior** (o en una copia de su base) y se toma un volcado nuevo, o en las hojas CSV; nunca en ArgosIsp ni editando el volcado a mano. Casos frecuentes:
 
-| Diferencia (`tipo`)              | Qué hacer en el origen                                                                                                                               |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ip_duplicada`                   | Dejar la IP en un solo servicio; al otro, ponerle la suya o dejarla vacía (ArgosIsp le asigna una)                                                   |
-| `ip_fuera_de_red`                | Registrar la red del router (`redes`) o corregir la IP                                                                                               |
-| `servicio_sin_plan`              | Asignar el plan. Mientras no lo tenga, su deuda entra como saldo inicial del cliente                                                                 |
-| `plan_sin_equivalente`           | Revisar el plan del servicio; si es un plan viejo, cambiar el servicio a uno vigente                                                                 |
-| `user_ppp_duplicado`             | Cambiar el usuario PPPoE de uno de los dos servicios (y en el equipo del cliente)                                                                    |
-| `nit_duplicado`                  | Si es la misma persona, unir los clientes; si no, corregir el NIT                                                                                    |
-| `nit_invalido`                   | Corregir el NIT (dígito verificador). Entra sin NIT si no se corrige                                                                                 |
-| `router_sin_credenciales`        | No bloquea: cargar usuario, clave de la API y secreto RADIUS en el panel de ArgosIsp después                                                         |
-| `factura_a_saldo`                | No bloquea: el monto entra en el saldo inicial. Para que entre como factura, el cliente debe tener un solo servicio (o la factura, su `servicio_id`) |
-| `pago_cruzado`                   | Confirmar con caja que el pago a la factura de otro cliente fue a propósito (se importa igual y salda esa factura)                                   |
-| `pago_sin_factura`               | No bloquea: la factura que pagó no entró (ver sus líneas); el pago queda a favor y el saldo inicial lo compensa                                      |
-| `pago_no_importado`              | Completar la fecha del pago en el origen si se quiere en el estado de cuenta; el saldo cuadra igual                                                  |
-| `formato_fila` / `formato_campo` | Corregir el dato (correo, coordenadas, MAC, fecha, IP) o el nombre de la columna                                                                     |
-| `error_accion`                   | Leer `causa`; si no se entiende, avisar al equipo con el `reporte.json`                                                                              |
+| Diferencia (`tipo`)              | Qué hacer en el origen                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ip_duplicada`                   | Dejar la IP en un solo servicio; al otro, ponerle la suya o dejarla vacía (ArgosIsp le asigna una)                        |
+| `ip_fuera_de_red`                | Registrar la red del router (`redes`) o corregir la IP                                                                    |
+| `servicio_sin_plan`              | Asignar el plan. Mientras no lo tenga, su deuda entra como saldo inicial del cliente                                      |
+| `plan_sin_equivalente`           | Revisar el plan del servicio; si es un plan viejo, cambiar el servicio a uno vigente                                      |
+| `user_ppp_duplicado`             | Cambiar el usuario PPPoE de uno de los dos servicios (y en el equipo del cliente)                                         |
+| `nit_duplicado`                  | Si es la misma persona, unir los clientes; si no, corregir el NIT                                                         |
+| `nit_invalido`                   | Corregir el NIT (dígito verificador). Entra sin NIT si no se corrige                                                      |
+| `router_sin_credenciales`        | No bloquea: cargar usuario, clave de la API y secreto RADIUS en el panel de ArgosIsp después                              |
+| `cargo_unico`                    | Nada: la factura entra como cargo único sin periodo (tipo 1 de Mikrowisp, la segunda del mes, o sin servicio en ArgosIsp) |
+| `saldada_en_origen`              | Revisar cómo se pagó: entra pagada sin asiento ni pago (no aparece dinero que no se registró)                             |
+| `promesa_no_importada`           | Si sigue vigente, registrarla a mano en ArgosIsp                                                                          |
+| `pago_cruzado`                   | Confirmar con caja que el pago a la factura de otro cliente fue a propósito (se importa igual y salda esa factura)        |
+| `pago_sin_factura`               | No bloquea: la factura que pagó no entró (ver sus líneas); el pago queda a favor y el saldo inicial lo compensa           |
+| `pago_no_importado`              | Completar la fecha del pago en el origen si se quiere en el estado de cuenta; el saldo cuadra igual                       |
+| `formato_fila` / `formato_campo` | Corregir el dato (correo, coordenadas, MAC, fecha, IP) o el nombre de la columna                                          |
+| `error_accion`                   | Leer `causa`; si no se entiende, avisar al equipo con el `reporte.json`                                                   |
 
 Después, **repetir el paso 1** con el volcado o los CSV nuevos en otra carpeta (`reporte-2`) y comparar:
 

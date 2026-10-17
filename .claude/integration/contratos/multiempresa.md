@@ -76,6 +76,27 @@ Este contrato manda sobre lo que choque con él en `modelo-datos.md` y en los ot
 - **Importación (A6).** `--empresa=<id|nit>` asigna la empresa a todo lo importado, o se asigna por zona o router con un mapa en el archivo de origen.
 - **PDF del aviso de cobro (A5).** Lleva el logo, la razón social, el NIT y la dirección fiscal de la empresa de la factura.
 
+## Configuración de canales de notificación (decisión del PM, 17 oct)
+
+Correo (SMTP) y Telegram se configuran **desde el panel**, no con variables de entorno. Las variables quedan solo como valor inicial de laboratorio y desarrollo y se pueden borrar.
+
+- **Global y por empresa.** Hay una configuración **global** y cada empresa puede **heredarla** (el valor por defecto) o tener **la suya**.
+  - Correo: servidor, puerto, TLS, usuario, contraseña, remitente y nombre visible.
+  - Telegram: token del bot, nombre del bot y chat del equipo.
+- **Encender y apagar.** Cada canal se habilita o deshabilita por separado: correo, Telegram a clientes y Telegram de alertas al equipo. Cada tipo de aviso (recordatorio, corte, pago, comprobante…) también, a nivel global y por empresa.
+  - Un canal apagado no envía nada y lo registra.
+  - El cliente sigue eligiendo su canal preferido.
+- **Seguridad.**
+  - Las credenciales (contraseña SMTP, token del bot) se guardan **cifradas** en la base, con la misma clave de cifrado de la instalación que `AAA_PPP_KEY` o una propia de notify.
+  - Nunca vuelven a la interfaz ni a la auditoría: se muestran como `***` y solo se pueden reemplazar.
+  - Cambiar la configuración es una acción con permiso (`notificaciones.configurar`) y queda auditada.
+- **Probar desde el panel.** Botón "Enviar prueba" en correo y Telegram, que muestra el error real del servidor si falla.
+- **Efecto inmediato.** El worker de notify relee la configuración por evento (`notificaciones.config_cambiada`), sin reiniciar. Sigue la regla 5: invalidación por evento, nunca TTL.
+- **Responsables.**
+  - A6: modelo, cifrado, resolución global/empresa, worker y pruebas de envío.
+  - A4: pantallas en Configuración → Notificaciones, global y por empresa.
+  - El webhook de Telegram se registra con la URL pública configurada.
+
 ## Migración
 
 Los datos existentes pasan a la empresa 1. Ninguna prueba ni pantalla existente debe cambiar de comportamiento con una sola empresa. Con una sola empresa, el selector no aparece.

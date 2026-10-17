@@ -119,7 +119,8 @@ test.group('importacion · volcado MySQL', (group) => {
         assert.deepEqual(
             fuente.routers.map((r) => [r.id, r.nas_ip, r.api_usuario, r.radius_secret]),
             [
-                ['1', '198.18.0.11', 'argos', 'secreto-lab-norte'],
+                // IP NAS de server.ip_radius; server.pass viene cifrada: credenciales pendientes
+                ['1', '198.18.0.11', null, 'secreto-lab-norte'],
                 ['2', '198.18.0.2', null, null],
             ],
         )
@@ -136,12 +137,13 @@ test.group('importacion · volcado MySQL', (group) => {
 
         const s = (id: string) => fuente.servicios.find((x) => x.id === id)
         assert.isNull(s('107')!.plan_id) // sin plan
+        // Sin pppuser: IP estática con su IP y MAC, sin amarre (server.seguridad no decide)
         assert.containSubset(s('108'), {
             tipo_conexion: 'ip_estatica',
             mac: 'AA:BB:CC:00:08:01',
-            amarre_ip_mac: true,
+            amarre_ip_mac: false,
         })
-        assert.containSubset(s('109'), { tipo_conexion: 'dhcp_fija', mac: 'AA:BB:CC:00:09:01', ip: null })
+        assert.isUndefined(s('109')) // sin pppuser y sin IP: fila omitida
         assert.containSubset(s('110'), { tipo_conexion: 'pppoe', mac: 'AA:BB:CC:00:09:02' })
         assert.equal(s('101')!.mac, 'AA:BB:CC:00:01:01')
         assert.isNull(s('103')!.fecha_instalacion) // 0000-00-00
@@ -175,7 +177,7 @@ test.group('importacion · volcado MySQL', (group) => {
             'facturas',
             '5012',
             false,
-            'estado "Vencida" desconocido (se esperaba No pagado, Pagado o Anulado)',
+            'estado "Vencida" desconocido (se esperaba pagado, No pagado o anulado)',
         ])
         assert.deepInclude(propios, [
             'operaciones',
@@ -210,8 +212,25 @@ test.group('importacion · volcado MySQL', (group) => {
             '5007': '100.00', // cobrado 50 sin operaciones: se toma lo cobrado (con aviso)
             '5008': '150.00',
             '5010': '150.00',
+            '5013': '0.00', // cargo único pagado
+            '5014': '300.00',
+            '5015': '200.00', // cliente retirado sin servicios
         })
-        assert.equal(fuente.facturas.find((f) => f.id === '5001')!.periodo, '2026-09-01')
+        const periodo = (id: string) => fuente.facturas.find((f) => f.id === id)!.periodo
+        assert.equal(periodo('5001'), '2026-09-01') // mes del vencimiento
+        assert.isNull(periodo('5013')) // tipo 1: cargo único
+        assert.isNull(periodo('5014')) // segunda del cliente 8 con vencimiento en septiembre
+        assert.equal(periodo('5006'), '2026-09-01')
+        assert.include(fuente.facturas.find((f) => f.id === '5014')!.nota, 'cargo único')
+        // Promesas: solo la vigente sobre una factura No pagado
+        assert.deepEqual(
+            fuente.promesas.map((x) => [x.id, x.cliente_id, x.factura_id, x.vence]),
+            [['1', '1', '5001', '2099-12-31']],
+        )
+        assert.deepInclude(
+            fuente.notas ?? [],
+            'Router 2 Torre Sur (seguridad 0, seguridad2 3): 1 servicio sin usuario PPPoE entra como IP estática con su IP y MAC, sin amarre',
+        )
         // Saldo a favor: 4 sin facturas (−50) y 5 con 150 pendientes (150 − 20)
         assert.deepEqual(
             fuente.saldos.map((x) => [x.cliente_id, x.saldo]),
@@ -220,7 +239,7 @@ test.group('importacion · volcado MySQL', (group) => {
                 ['5', '130.00'],
             ],
         )
-        assert.lengthOf(fuente.pagos, 3)
+        assert.lengthOf(fuente.pagos, 4)
         assert.deepInclude(
             fuente.problemas.map((p) => [p.archivo, p.id, p.aviso]),
             ['mikrowisp-sintetico.sql:tblservicios', '113', false],
@@ -264,25 +283,52 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
 
         assert.deepEqual(r1.errores, [])
         assert.equal(r1.ids_externos, 'tabla')
+        // Todos los clientes en modo B: el cuadre es cliente por cliente, también los que no deben
         assert.deepEqual(r1.saldos, {
-            clientes: 9,
-            suma_origen: '1780.00',
-            suma_importada: '1780.00',
+            clientes: 11,
+            suma_origen: '2280.00',
+            suma_importada: '2280.00',
             diferencia: '0.00',
             cuadra: true,
         })
         assert.deepInclude(r1.resumen, {
             routers: { origen: 2, creados: 2, existentes: 0, omitidos: 0 },
             clientes: { origen: 11, creados: 11, existentes: 0, omitidos: 0 },
-            // 12 filas válidas: 107 sin plan, 111 IP repetida y 112 retirado no entran
-            servicios: { origen: 12, creados: 9, existentes: 0, omitidos: 3 },
-            // Modo B (clientes 1, 2, 5 y 6 tienen pagos): 5002 pagada entra por su total porque la
-            // cubre el pago 9001; 5005 (servicio sin plan) y 5007 (cliente con dos servicios) al saldo
-            facturas: { origen: 9, creados: 7, existentes: 0, omitidos: 2 },
-            // 4: −50; 5: 130 − 150 = −20 (su pago fue a la factura del 6); 7: 150; 9: 150
-            saldos: { origen: 4, creados: 4, existentes: 0, omitidos: 0 },
-            pagos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
+            // 11 filas válidas: 107 sin plan, 111 IP repetida y 112 retirado no entran
+            servicios: { origen: 11, creados: 8, existentes: 0, omitidos: 3 },
+            // Todas las facturas por su total (modo B): también las pagadas, los cargos únicos
+            // (5013), la segunda del mes (5014) y las sin servicio (5005, 5015 del retirado)
+            facturas: { origen: 12, creados: 12, existentes: 0, omitidos: 0 },
+            // la diferencia que el historial no explica: saldos a favor (4, 5) y lo cobrado sin operaciones (9)
+            saldos: { origen: 3, creados: 3, existentes: 0, omitidos: 0 },
+            pagos: { origen: 4, creados: 4, existentes: 0, omitidos: 0 },
+            promesas: { origen: 1, creados: 1, existentes: 0, omitidos: 0 },
         })
+        // Dinero: lo facturado y los pagos cuadran; los saldos iniciales explican el resto
+        assert.deepInclude(r1.dinero.origen, { facturado: '3150.00', pagos: '750.00' })
+        assert.deepInclude(r1.dinero.diferencia, { facturado: '0.00', pagos: '0.00' })
+        // Cuadre por tabla: cada fila del volcado queda contada
+        const tabla = (nombre: string) => r1.tablas.find((t) => t.tabla === nombre)!
+        assert.deepEqual(tabla('facturas'), {
+            tabla: 'facturas',
+            leidas: 15,
+            creadas: 12,
+            existentes: 0,
+            al_saldo: 0,
+            solo_archivo: 1, // anulada
+            omitidas: 2, // dólares y estado desconocido
+            sin_contar: 0,
+        })
+        assert.deepInclude(tabla('credito'), { leidas: 2, creadas: 1, solo_archivo: 1 })
+        assert.deepInclude(tabla('saldos'), { leidas: 4, solo_archivo: 4 })
+        assert.deepInclude(tabla('tblservicios'), { leidas: 14, creadas: 8, omitidas: 6 })
+        for (const t of r1.tablas) {
+            assert.equal(
+                t.leidas,
+                t.creadas + t.existentes + t.al_saldo + t.solo_archivo + t.omitidas,
+                t.tabla,
+            )
+        }
 
         const d = r1.diferencias
         assert.deepEqual(d.clientes_nit_duplicado, [{ nit: '76543218', clientes_origen: ['2', '3'] }])
@@ -290,6 +336,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
             { servicio_origen: '107', cliente_origen: '7', etiqueta: 'mw.ernesto' },
         ])
         assert.deepEqual(d.routers_sin_credenciales, [
+            { router_origen: '1', nombre: 'Torre Norte', faltan: ['api_usuario', 'api_password'] },
             {
                 router_origen: '2',
                 nombre: 'Torre Sur',
@@ -310,11 +357,12 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
         ])
         assert.sameMembers(
             d.ips_nuevas.map((x) => x.servicio_origen),
-            ['103', '105', '109'], // 105: su IP era dinámica (tipoipv4 = 1)
+            ['103', '105'], // 105: su IP era dinámica (tipoipv4 = 1)
         )
+        assert.deepEqual(d.facturas_a_saldo, [])
         assert.deepEqual(
-            d.facturas_a_saldo.map((x) => x.factura_origen),
-            ['5005', '5007'],
+            d.facturas_cargo_unico.map((x) => x.factura_origen),
+            ['5005', '5013', '5014', '5015'],
         )
         assert.deepEqual(
             d.nit_invalidos.map((x) => x.cliente_origen),
@@ -407,8 +455,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
                     x.amarre_ip_mac,
                 ]),
                 [
-                    ['108', 'ip_estatica', 'AA:BB:CC:00:08:01', true],
-                    ['109', 'dhcp_fija', 'AA:BB:CC:00:09:01', false],
+                    ['108', 'ip_estatica', 'AA:BB:CC:00:08:01', false],
                     ['110', 'pppoe', 'AA:BB:CC:00:09:02', false],
                 ],
             )
@@ -435,6 +482,51 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
                 assert.notInclude(salidas, secreto)
             }
 
+            // Archivo del origen: cada fila de cada tabla, con las credenciales como ***
+            const archivo = (await trx
+                .from('importacion.filas_origen')
+                .where('origen', 'mikrowisp')
+                .count('* as n')
+                .first()) as { n: string }
+            assert.equal(
+                Number(archivo.n),
+                primera.tablas.reduce((s, t) => s + t.leidas, 0),
+            )
+            const fila = async (tabla: string, id: string) =>
+                (await trx
+                    .from('importacion.filas_origen')
+                    .where({ origen: 'mikrowisp', tabla, id_externo: id })
+                    .first()) as Record<string, any>
+            const server = await fila('server', '1')
+            assert.equal(server.fila.pass, '***')
+            assert.equal(server.fila.secret_radius, '***')
+            assert.equal(server.fila.seguridad2, '0') // queda en el archivo
+            assert.containSubset(server, { estado: 'importada', entidad_tipo: 'router' })
+            const servicio101 = await fila('tblservicios', '101')
+            assert.equal(servicio101.fila.ppppass, '***')
+            const claveRadius = await fila('radcheck', '1')
+            assert.equal(claveRadius.fila.value, '***')
+            const simultaneo = await fila('radcheck', '2')
+            assert.equal(simultaneo.fila.value, '1') // Simultaneous-Use no es clave
+            assert.containSubset(await fila('facturas', '5009'), {
+                estado: 'solo_archivo',
+                motivo: 'anulada en el origen',
+            })
+            assert.containSubset(await fila('facturas', '5011'), { estado: 'omitida' })
+            assert.containSubset(await fila('tblavisouser', '1'), { estado: 'solo_archivo' })
+            const todo = JSON.stringify(
+                await trx.from('importacion.filas_origen').where('origen', 'mikrowisp').select('fila'),
+            )
+            for (const secreto of ['clave1', 'clave-lab-norte', 'secreto-lab-norte']) {
+                assert.notInclude(todo, secreto)
+            }
+            // La promesa vigente entra activa
+            const promesa = (await trx
+                .from('billing.promesas')
+                .where({ origen: 'mikrowisp', clave_externa: 'mikrowisp:promesa:1' })
+                .first()) as { estado: string } | null
+            assert.equal(promesa?.estado, 'activa')
+
             // Todo por acciones: auditoría con el request_id de la corrida
             const auditadas = (await trx
                 .from('audit.acciones')
@@ -456,11 +548,13 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
             assert.deepInclude(segunda.resumen, {
                 routers: { origen: 2, creados: 0, existentes: 2, omitidos: 0 },
                 clientes: { origen: 11, creados: 0, existentes: 11, omitidos: 0 },
-                servicios: { origen: 12, creados: 0, existentes: 9, omitidos: 3 },
-                facturas: { origen: 9, creados: 0, existentes: 7, omitidos: 2 },
-                saldos: { origen: 4, creados: 0, existentes: 4, omitidos: 0 },
-                pagos: { origen: 3, creados: 0, existentes: 3, omitidos: 0 },
+                servicios: { origen: 11, creados: 0, existentes: 8, omitidos: 3 },
+                facturas: { origen: 12, creados: 0, existentes: 12, omitidos: 0 },
+                saldos: { origen: 3, creados: 0, existentes: 3, omitidos: 0 },
+                pagos: { origen: 4, creados: 0, existentes: 4, omitidos: 0 },
+                promesas: { origen: 1, creados: 0, existentes: 1, omitidos: 0 },
             })
+            for (const t of segunda.tablas) assert.equal(t.creadas, 0, t.tabla)
             assert.deepEqual(segunda.errores, [])
             assert.isTrue(segunda.saldos.cuadra)
             const auditadas2 = (await trx
@@ -488,7 +582,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
             })
             assert.deepEqual(r.errores, [])
             assert.isTrue(r.saldos.cuadra)
-            assert.equal(r.saldos.suma_importada, '1780.00')
+            assert.equal(r.saldos.suma_importada, '2280.00')
 
             const factura = async (id: string) =>
                 (await trx
@@ -523,6 +617,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
                     ['mikrowisp:pago:9001', '150.00', 'caja', true, '2026-08-05'],
                     ['mikrowisp:pago:9002', '250.00', 'transferencia', true, '2026-09-08'],
                     ['mikrowisp:pago:9003', '100.00', 'caja', true, '2026-09-09'],
+                    ['mikrowisp:pago:9005', '250.00', 'caja', true, '2026-08-20'],
                 ],
             )
             // El pago cruzado (cliente 5 → factura 5004 del cliente 6) se aplica a esa factura
@@ -546,7 +641,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
                 trx,
                 plantillaId,
             })
-            assert.deepEqual(r2.resumen.pagos, { origen: 3, creados: 0, existentes: 3, omitidos: 0 })
+            assert.deepEqual(r2.resumen.pagos, { origen: 4, creados: 0, existentes: 4, omitidos: 0 })
             assert.isTrue(r2.saldos.cuadra)
         } finally {
             await trx.rollback()
@@ -565,11 +660,12 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
             carga,
         })
         assert.deepInclude(r.resumen, {
-            facturas: { origen: 9, creados: 6, existentes: 0, omitidos: 3 },
-            pagos: { origen: 3, creados: 0, existentes: 0, omitidos: 3 },
+            // solo las pendientes, por lo pendiente: 5002 y 5013 (pagadas) quedan en el archivo
+            facturas: { origen: 12, creados: 10, existentes: 0, omitidos: 2 },
+            pagos: { origen: 4, creados: 0, existentes: 0, omitidos: 4 },
         })
         assert.isTrue(r.saldos.cuadra)
-        assert.isTrue(r.pendiente.some((p) => p.startsWith('Pagos históricos: 3 pagos')))
+        assert.isTrue(r.pendiente.some((p) => p.startsWith('Pagos históricos: 4 pagos')))
     })
 
     test('pagos que no cuadran con sus facturas: el saldo inicial compensa y lo reporta', async ({
@@ -577,9 +673,9 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
     }) => {
         const plantillaId = await crearPlantillaFila()
         const fuente = await leerDumpMikrowisp(FIXTURE)
-        // 9001 sin fecha (no se importa) y 9002 a una factura que no entra (5005 no tiene servicio)
+        // 9001 sin fecha (no se importa) y 9002 a una factura que no está en el origen
         fuente.pagos.find((p) => p.id === '9001')!.fecha = null
-        fuente.pagos.find((p) => p.id === '9002')!.factura_id = '5005'
+        fuente.pagos.find((p) => p.id === '9002')!.factura_id = '5999'
         const r = await importar(fuente, { sistema: 'mikrowisp', dryRun: true, plantillaId })
         assert.deepEqual(r.errores, [])
         assert.deepEqual(
@@ -588,7 +684,7 @@ test.group('importacion · Mikrowisp desde volcado SQL', (group) => {
         )
         assert.deepEqual(
             r.diferencias.pagos_sin_factura.map((x) => [x.pago_origen, x.factura_origen]),
-            [['9002', '5005']],
+            [['9002', '5999']],
         )
         assert.isTrue(r.saldos.cuadra)
         assert.deepInclude(

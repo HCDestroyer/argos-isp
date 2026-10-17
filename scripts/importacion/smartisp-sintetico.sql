@@ -9,7 +9,8 @@
 -- Casos difíciles que cubre (tests/importacion/smartisp.spec.ts):
 --   * tipo de conexión por control_routers: router 1 PPPoE ('pp'), 2 colas simples con amarre
 --     IP/MAC ('sq', arpmac = 1), 3 DHCP leases ('dl', dhcp = 1), 4 hotspot ('ho', no se importa)
---   * secreto RADIUS en la tabla radius (router 1); routers 2 a 4 sin credenciales
+--   * secreto RADIUS en la tabla radius (router 1); la clave de la API (routers.password) viene
+--     cifrada por SmartISP y no se importa: todos quedan con credenciales pendientes
 --   * red con la máscara como '/24' (router 2) y con el /nn dentro de network (router 3)
 --   * plan con IVA aparte (plans.iva = 12.00, aviso) y velocidades en kbps
 --   * clientes duplicados por NIT (2 y 3), NIT inválido (6), sin NIT (4), correo y coordenadas
@@ -17,14 +18,16 @@
 --   * servicio con MAC 00:00:00:00:00:00 (el defecto: sin MAC), IP repetida (4 con la de 1),
 --     sin plan (8), estado 'de' (5, suspendido), estado desconocido (9), PPPoE sin usuario (10),
 --     DHCP sin IP (6), IP estática con amarre (3), hotspot (7)
---   * facturas: pendiente (101), pagada con su pago (102), abonada (103), vencida status 3 con
---     el pago de otro cliente (104), anulada (105), total_pay NULL = cost + iva y sin servicio
---     (106), status desconocido (107), pagada sin paid_on (108, aviso), pendiente con paid_on
---     (109, aviso), de un servicio sin plan (110, al saldo inicial)
---   * pagos: por num_bill; uno borrado (deleted_at, 504) no cuenta; pago cruzado (503)
+--   * facturas (status confirmado: 1 pagada, 2 sin cargo, 3 pendiente): pendiente (101), pagada
+--     con su pago (102), abonada (103), vencida con el pago de otro cliente (104), sin cargo
+--     (105, total 0), total_pay NULL = cost + iva y sin servicio (106), status desconocido (107),
+--     pagada sin paid_on y sin ningún pago (108: aviso y saldada en el origen), pendiente con
+--     paid_on (109, aviso), de un servicio sin plan (110: cargo único del cliente)
+--   * pagos: por num_bill; uno borrado (deleted_at, 504) no cuenta (solo archivo); pago cruzado
+--     (503); num_bill que no existe (505: pago sin factura)
 --   * saldo a favor en wallet_balance (4 sin facturas, 6 con factura); balance distinto de lo
 --     pendiente (5, aviso)
---   * la tabla vieja invoices trae una fila (aviso: no se importa)
+--   * la tabla vieja invoices trae una fila (aviso: queda en el archivo del origen)
 --
 -- Suma de saldos en el origen = Q 925.00
 
@@ -78,16 +81,16 @@ INSERT INTO `client_services` (`id`, `client_id`, `ip`, `mac`, `date_in`, `plan_
 (10, 2, '198.18.70.21', '00:00:00:00:00:00', '2024-09-01', 1, 1, 'ac', '', '', NULL, 1, 'recurring', 'ver', '{}');
 
 INSERT INTO `bill_customers` (`id`, `num_bill`, `period`, `release_date`, `expiration_date`, `iva`, `cost`, `total_pay`, `actual_total_pay`, `status`, `client_id`, `service_id`, `open`, `paid_on`, `start_date`, `recurring_invoice`) VALUES
-(101, 'F-101', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 2, 1, 1, 0, NULL, '2026-09-01', 'yes'),
+(101, 'F-101', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 3, 1, 1, 0, NULL, '2026-09-01', 'yes'),
 (102, 'F-102', 'Agosto 2026', '2026-08-01', '2026-08-10', '0.00', '150.00', '150.00', NULL, 1, 1, 1, 0, '2026-08-05', '2026-08-01', 'yes'),
-(103, 'F-103', 'Septiembre 2026', '2026-09-01', '2026-09-10', '64.29', '535.71', '600.00', NULL, 2, 2, 2, 0, NULL, '2026-09-01', 'yes'),
+(103, 'F-103', 'Septiembre 2026', '2026-09-01', '2026-09-10', '64.29', '535.71', '600.00', NULL, 3, 2, 2, 0, NULL, '2026-09-01', 'yes'),
 (104, 'F-104', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 3, 5, 5, 0, NULL, '2026-09-01', 'yes'),
-(105, 'F-105', 'Julio 2026', '2026-07-01', '2026-07-10', '0.00', '150.00', '150.00', NULL, 4, 1, 1, 0, NULL, '2026-07-01', 'yes'),
-(106, 'F-106', 'Septiembre 2026', '2026-09-03', '2026-09-13', '0.00', '150.00', NULL, NULL, 2, 6, NULL, 0, NULL, NULL, 'yes'),
+(105, 'F-105', 'Julio 2026', '2026-07-01', '2026-07-10', '0.00', '0.00', '0.00', NULL, 2, 1, 1, 0, NULL, '2026-07-01', 'yes'),
+(106, 'F-106', 'Septiembre 2026', '2026-09-03', '2026-09-13', '0.00', '150.00', NULL, NULL, 3, 6, NULL, 0, NULL, NULL, 'yes'),
 (107, 'F-107', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 9, 3, 3, 0, NULL, '2026-09-01', 'yes'),
 (108, 'F-108', 'Agosto 2026', '2026-08-01', '2026-08-10', '0.00', '150.00', '150.00', NULL, 1, 3, 3, 0, NULL, '2026-08-01', 'yes'),
-(109, 'F-109', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 2, 3, 3, 0, '2026-09-03', '2026-09-01', 'yes'),
-(110, 'F-110', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '75.00', '75.00', NULL, 2, 1, 8, 0, NULL, '2026-09-01', 'yes');
+(109, 'F-109', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '150.00', '150.00', NULL, 3, 3, 3, 0, '2026-09-03', '2026-09-01', 'yes'),
+(110, 'F-110', 'Septiembre 2026', '2026-09-01', '2026-09-10', '0.00', '75.00', '75.00', NULL, 3, 1, 8, 0, NULL, '2026-09-01', 'yes');
 
 INSERT INTO `bill_customer_item` (`id`, `bill_customer_id`, `plan_id`, `description`, `period_from`, `period_to`, `quantity`, `unit`, `price`, `iva`, `total`) VALUES
 (1, 101, 1, 'Internet septiembre 2026', '2026-09-01', '2026-09-30', 1, NULL, '150.00', '0.00', '150.00'),
@@ -98,7 +101,8 @@ INSERT INTO `payment_news` (`id`, `client_id`, `way_to_pay`, `date`, `amount`, `
 (501, 1, 'Efectivo', '2026-08-05', '150.00', NULL, NULL, NULL, NULL, NULL, NULL, 'F-102', 1, NULL),
 (502, 2, 'Depósito BI', '2026-09-08', '250.00', NULL, NULL, NULL, NULL, NULL, NULL, 'F-103', 1, 'BOL-552'),
 (503, 4, 'Transferencia', '2026-09-09', '50.00', 'paga lo de su vecina', NULL, NULL, NULL, NULL, NULL, 'F-104', 1, NULL),
-(504, 1, 'Efectivo', '2026-09-12', '20.00', 'cobro duplicado', NULL, NULL, NULL, NULL, '2026-09-12 18:00:00', 'F-101', 1, NULL);
+(504, 1, 'Efectivo', '2026-09-12', '20.00', 'cobro duplicado', NULL, NULL, NULL, NULL, '2026-09-12 18:00:00', 'F-101', 1, NULL),
+(505, 7, 'Efectivo', '2026-09-14', '30.00', 'factura que no existe', NULL, NULL, NULL, NULL, NULL, 'F-999', 1, NULL);
 
 INSERT INTO `invoices` (`id`, `client_id`, `date`, `bill_number`, `total`, `payment_date`, `status`) VALUES
 (1, 1, '2025-01-01', 'V-0001', '150.00', '2025-01-10', 'unpaid');

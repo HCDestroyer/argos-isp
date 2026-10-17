@@ -54,6 +54,8 @@ export function politicaCsp(hashes: readonly string[]): string {
         'img-src \'self\' data: blob:',
         'font-src \'self\' data:',
         'connect-src \'self\'',
+        // Manifiesto PWA del mismo origen (`/manifest.webmanifest`).
+        'manifest-src \'self\'',
         'object-src \'none\'',
         'base-uri \'self\'',
         'form-action \'self\'',

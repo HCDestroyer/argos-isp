@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js'
 import { leerDumpMysql, type FilaSql } from '#importacion/mysql_dump'
 import {
     normalizarFuente,
+    type ArchivoOrigen,
     type Entidad,
     type FilasPorEntidad,
     type FuenteCanonica,
@@ -16,6 +17,7 @@ import {
     ProblemasOrigen,
     tablasDelEsquema,
     texto,
+    TrazaOrigen,
     type DefTabla,
     type FilaOrigen,
 } from '#importacion/origenes/esquema_sql'
@@ -26,30 +28,56 @@ import {
  * validación es la del formato canónico y las reglas de negocio, las del importador.
  *
  * Esquema real: `scripts/importacion/esquemas/mikrowisp6.sql`. Mapeo columna por columna, con sus
- * transformaciones y las dudas que solo resuelven los datos reales:
- * `docs/importacion/mapeo-mikrowisp.md`. Todo el conocimiento de Mikrowisp vive en este archivo.
+ * transformaciones y lo que confirmaron los diagnósticos sobre los datos reales
+ * (`docs/importacion/diagnostico*-mikrowisp.sql`): `docs/importacion/mapeo-mikrowisp.md`. Todo el
+ * conocimiento de Mikrowisp vive en este archivo.
  *
- * Lo esencial:
- * - Routers en `server` (la IP RADIUS sale de `nas`), redes en `ipv4`, planes en `perfiles`,
- *   clientes en `usuarios` (zona por `tblavisouser`), servicios en `tblservicios`, facturas en
- *   `facturas` (+ `facturaitems`), pagos en `operaciones`, saldo a favor en `saldos`.
- * - El estado es **del cliente** (`usuarios.estado`); el tipo de conexión lo da la seguridad del
- *   router (`server.seguridad`) cuando el servicio no tiene usuario PPPoE.
+ * Lo esencial (confirmado con los datos reales, segunda ronda de diagnóstico):
+ * - Routers en `server`; la IP NAS es `server.ip_radius` (la tabla `nas` viene vacía). La clave
+ *   de la API (`server.pass`) está cifrada por Mikrowisp (32 caracteres): no se importa y el
+ *   router queda con credenciales pendientes.
+ * - Redes en `ipv4`, planes en `perfiles` (`costo` con IVA incluido; `velocidad` = `subida/bajada`
+ *   con K o M; `limit_down`/`limit_up` no se usan), clientes en `usuarios` (zona por
+ *   `tblavisouser`; un solo correo), servicios en `tblservicios`, facturas en `facturas`
+ *   (+ `facturaitems`), pagos en `operaciones`, promesas en `credito`.
+ * - El estado es **del cliente** (`usuarios.estado`: ACTIVO, SUSPENDIDO, RETIRADO).
+ * - Tipo de conexión: con `pppuser` → PPPoE; sin `pppuser` → IP estática con su IP y MAC, **sin
+ *   amarre** (`server.seguridad` no dice el tipo de conexión: el router con `seguridad = 1` tiene
+ *   solo PPPoE). `seguridad` y `seguridad2` del router quedan en el archivo del origen y el
+ *   reporte dice cuántos servicios entraron como IP estática por router.
+ * - Facturas: prepago, **periodo = mes del vencimiento**. `tipo = 1` son cargos únicos
+ *   (instalación, TV adicional) → sin periodo. Una segunda factura de servicio del mismo cliente
+ *   con vencimiento en el mismo mes entra como cargo único con nota. Estados `pagado`,
+ *   `No pagado` y `anulado`; `cobrado` = suma de `operaciones`; `facturas.saldo` siempre 0.
+ * - `saldos`: solo traslados entre facturas (`facturado`, ya reflejados en `cobrado`): no hay saldo
+ *   a favor; quedan en el archivo.
+ * - Promesas (`credito`): las vigentes (`fecha_limite` ≥ hoy) sobre facturas `No pagado`.
  * - Ids `zerofill`: se quitan los ceros a la izquierda (`000001` = `1`).
  * - Con `tipoipv4` 1 o 2 la IP del servicio es dinámica (la escribe un trigger de `radacct`): no se
  *   importa como IP fija.
+ * - Toda fila de toda tabla del volcado va al archivo del origen (`importacion.filas_origen`).
  * - La clave PPPoE nunca sale en el reporte: viaja a `CrearServicio`, que la cifra.
  */
 export const ESQUEMA = {
     routers: {
         tabla: 'server',
-        columnas: ['id', 'nodo', 'ip', 'user', 'pass', 'secret_radius', 'seguridad'],
+        columnas: [
+            'id',
+            'nodo',
+            'ip',
+            'user',
+            'pass',
+            'secret_radius',
+            'ip_radius',
+            'seguridad',
+            'seguridad2',
+        ],
     },
     nas: { tabla: 'nas', columnas: ['idserver', 'nasname', 'secret'], opcional: true },
     redes: { tabla: 'ipv4', columnas: ['nodo', 'red', 'cidr', 'tipo'], opcional: true },
     perfiles: {
         tabla: 'perfiles',
-        columnas: ['id', 'plan', 'costo', 'velocidad', 'profile', 'limit_down', 'limit_up'],
+        columnas: ['id', 'plan', 'costo', 'velocidad', 'profile'],
     },
     usuarios: {
         tabla: 'usuarios',
@@ -81,7 +109,18 @@ export const ESQUEMA = {
     radcheck: { tabla: 'radcheck', columnas: ['username', 'attribute', 'value'], opcional: true },
     facturas: {
         tabla: 'facturas',
-        columnas: ['id', 'idcliente', 'emitido', 'vencimiento', 'total', 'estado', 'cobrado', 'moneda'],
+        columnas: [
+            'id',
+            'idcliente',
+            'emitido',
+            'vencimiento',
+            'pago',
+            'total',
+            'estado',
+            'tipo',
+            'cobrado',
+            'moneda',
+        ],
         opcional: true,
     },
     items: { tabla: 'facturaitems', columnas: ['idfactura', 'descripcion'], opcional: true },
@@ -92,51 +131,80 @@ export const ESQUEMA = {
     },
     saldos: { tabla: 'saldos', columnas: ['iduser', 'monto', 'estado', 'moneda'], opcional: true },
     monedas: { tabla: 'monedas', columnas: ['id', 'codigo', 'simbolo'], opcional: true },
+    credito: {
+        tabla: 'credito',
+        columnas: ['id', 'idcliente', 'idfactura', 'fechaingreso', 'fecha_limite', 'descripcion'],
+        opcional: true,
+    },
 } as const satisfies Record<string, DefTabla>
 
-/**
- * `server.seguridad` → tipo de conexión de los servicios **sin** usuario PPPoE.
- * SUPUESTO (duda 2 de `docs/importacion/mapeo-mikrowisp.md`): confirmar con los datos reales.
- */
-export const SEGURIDAD = {
-    /** amarre IP/MAC (ARP estático): `ip_estatica` con `amarre_ip_mac` */
-    amarre: ['1'],
-    /** DHCP leases: `dhcp_fija` (la MAC amarra el lease) */
-    dhcp: ['2'],
-} as const
+/** `facturas.tipo`: 1 = cargo único (instalación, TV adicional, un cobro suelto); 2 = servicio. */
+export const TIPO_FACTURA_CARGO_UNICO = '1'
 
 /** `ipv4.tipo` y `tblservicios.tipoipv4`: 0 = estática; 1 y 2 = pool (IP dinámica, triggers de radacct). */
 const TIPOS_IP_DINAMICA = ['1', '2']
 
-export async function leerDumpMikrowisp(archivo: string): Promise<FuenteCanonica> {
-    return fuenteDesdeDump(await readFile(archivo, 'utf8'), archivo.split('/').at(-1) ?? archivo)
+export interface OpcionesMikrowisp {
+    /** día de hoy (YYYY-MM-DD) para decidir qué promesas siguen vigentes; por defecto, hoy */
+    hoy?: string
+}
+
+export async function leerDumpMikrowisp(
+    archivo: string,
+    opciones: OpcionesMikrowisp = {},
+): Promise<FuenteCanonica> {
+    return fuenteDesdeDump(await readFile(archivo, 'utf8'), archivo.split('/').at(-1) ?? archivo, opciones)
 }
 
 /** Igual que `leerDumpMikrowisp` con el texto del volcado (pruebas). */
-export function fuenteDesdeDump(contenido: string, nombre = 'dump.sql'): FuenteCanonica {
-    const { filas, duenosFacturas, problemas } = filasDesdeDump(contenido, nombre)
+export function fuenteDesdeDump(
+    contenido: string,
+    nombre = 'dump.sql',
+    opciones: OpcionesMikrowisp = {},
+): FuenteCanonica {
+    const { filas, duenosFacturas, problemas, notas, archivo } = filasDesdeDump(contenido, nombre, opciones)
     const fuente = normalizarFuente(filas)
     fuente.problemas.push(...problemas)
     fuente.duenosFacturas = duenosFacturas
+    fuente.notas = notas
+    fuente.archivo = archivo
     return fuente
 }
 
 /**
  * La traducción sola: filas con las columnas canónicas, sin validar (así se escriben como CSV
- * con `escribirCsv`, p. ej. el juego `scripts/importacion/sintetico-csv/`), y los problemas
- * propios del origen (filas que no se traducen, datos que no se importan).
+ * con `escribirCsv`, p. ej. el juego `scripts/importacion/sintetico-csv/`), los problemas propios
+ * del origen, las notas para el reporte y el archivo con todas las filas del volcado.
  */
 export function filasDesdeDump(
     contenido: string,
     nombre = 'dump.sql',
-): { filas: FilasPorEntidad; duenosFacturas: Map<string, string>; problemas: ProblemaFila[] } {
-    const t = tablasDelEsquema(leerDumpMysql(contenido), ESQUEMA, {
+    opciones: OpcionesMikrowisp = {},
+): {
+    filas: FilasPorEntidad
+    duenosFacturas: Map<string, string>
+    problemas: ProblemaFila[]
+    notas: string[]
+    archivo: ArchivoOrigen
+} {
+    const todas = leerDumpMysql(contenido)
+    const t = tablasDelEsquema(todas, ESQUEMA, {
         nombre,
         origen: 'mikrowisp',
         archivo: 'apps/api/app/importacion/origenes/mikrowisp.ts',
     })
+    const hoy = opciones.hoy ?? new Date().toISOString().slice(0, 10)
     const problemas = new ProblemasOrigen(nombre)
+    const traza = new TrazaOrigen()
+    const notas: string[] = []
     const monedaAjena = monedasAjenas(t.monedas.filas)
+
+    traza.tabla(ESQUEMA.nas.tabla, 'la IP NAS sale de server.ip_radius (nas se lee solo como respaldo)')
+    traza.tabla(ESQUEMA.avisos.tabla, 'zona del cliente: va en el cliente')
+    traza.tabla(ESQUEMA.zonas.tabla, 'las zonas se crean por nombre al importar los clientes')
+    traza.tabla(ESQUEMA.items.tabla, 'detalle de la factura: va en su concepto')
+    traza.tabla(ESQUEMA.radcheck.tabla, 'la clave PPPoE va al servicio (cifrada)')
+    traza.tabla(ESQUEMA.monedas.tabla, 'catálogo de monedas: solo se importa en quetzales')
 
     // Zona del cliente: tblavisouser.zona → zonas.zona
     const zonas = new Map(t.zonas.filas.map((z) => [normalizarId(z.id), texto(z.zona)]))
@@ -162,6 +230,7 @@ export function filasDesdeDump(
             return
         }
         operaciones.push({ fila: op, linea: i + 1 })
+        traza.vincular(ESQUEMA.operaciones.tabla, i + 1, 'pagos', id)
         const f = normalizarId(op.nfactura)
         if (!f || f === '0') return
         pagadoPorFactura.set(f, (pagadoPorFactura.get(f) ?? new Decimal(0)).plus(montoSeguro(op.cobrado)))
@@ -169,21 +238,31 @@ export function filasDesdeDump(
 
     const conceptos = agrupar(t.items.filas, 'idfactura')
 
-    // Facturas: las anuladas no se exportan; las pagadas van con pagado = total (pendiente 0).
+    // Facturas. Anuladas: solo archivo. Pagadas: pagado = total (pendiente 0); sin ninguna
+    // operación que la cubra, el importador la marca saldada en el origen.
     const facturas: FilaOrigen[] = []
+    const estadoFactura = new Map<string, string>()
     const pendientePorCliente = new Map<string, Decimal>()
     const duenosFacturas = new Map<string, string>()
+    /** cliente + mes de vencimiento de las facturas de servicio, para la segunda del mismo mes */
+    const periodosUsados = new Set<string>()
     t.facturas.filas.forEach((f, i) => {
+        const linea = i + 1
+        const tabla = ESQUEMA.facturas.tabla
         const id = normalizarId(f.id)
         const cliente = normalizarId(f.idcliente)
         duenosFacturas.set(id, cliente)
         const estado = texto(f.estado).toLowerCase()
-        if (estado.startsWith('anulad')) return
+        estadoFactura.set(id, estado)
+        if (estado.startsWith('anulad')) {
+            traza.soloArchivo(tabla, linea, 'anulada en el origen')
+            return
+        }
         const ajena = monedaAjena(f.moneda)
         if (ajena) {
             problemas.omitir(
-                ESQUEMA.facturas.tabla,
-                i + 1,
+                tabla,
+                linea,
                 id,
                 `moneda ${ajena}: solo se importan facturas en quetzales (GTQ)`,
             )
@@ -199,8 +278,8 @@ export function filasDesdeDump(
             const operado = pagadoPorFactura.get(id) ?? new Decimal(0)
             if (!operado.eq(cobrado)) {
                 problemas.avisar(
-                    ESQUEMA.facturas.tabla,
-                    i + 1,
+                    tabla,
+                    linea,
                     id,
                     `cobrado ${cobrado.toFixed(2)} y la suma de sus operaciones ${operado.toFixed(2)} no ` +
                         `coinciden; se importa lo cobrado`,
@@ -208,24 +287,43 @@ export function filasDesdeDump(
             }
         } else {
             problemas.omitir(
-                ESQUEMA.facturas.tabla,
-                i + 1,
+                tabla,
+                linea,
                 id,
-                `estado "${texto(f.estado)}" desconocido (se esperaba No pagado, Pagado o Anulado)`,
+                `estado "${texto(f.estado)}" desconocido (se esperaba pagado, No pagado o anulado)`,
             )
             return
         }
+
+        // Periodo = mes del vencimiento (prepago). Cargo único (tipo 1) o segunda del mismo mes: sin periodo.
+        let periodo = mesDe(f.vencimiento) ?? mesDe(f.emitido)
+        let nota: string | null = null
+        if (texto(f.tipo) === TIPO_FACTURA_CARGO_UNICO) {
+            periodo = null
+            nota = 'cargo único en el origen (facturas.tipo = 1): entra sin periodo'
+        } else if (periodo) {
+            const clave = `${cliente}:${periodo}`
+            if (periodosUsados.has(clave)) {
+                nota = `segunda factura de servicio del cliente con vencimiento en ${periodo}: entra como cargo único sin periodo`
+                periodo = null
+            } else periodosUsados.add(clave)
+        }
         const items = (conceptos.get(id) ?? []).map((x) => texto(x.descripcion)).filter(Boolean)
         facturas.push({
+            __linea: String(linea),
             id,
             cliente_id: cliente,
             servicio_id: null,
-            periodo: periodoDe(f.emitido),
+            periodo,
             total: f.total,
             pagado: pagado.toFixed(2),
             vence: f.vencimiento,
+            emitida: f.emitido,
             concepto: items.join(' · ') || null,
+            fecha_pago: estado === 'pagado' ? f.pago : null,
+            nota,
         })
+        traza.vincular(tabla, linea, 'facturas', id)
         const pendiente = total.minus(pagado)
         if (pendiente.gt(0)) {
             pendientePorCliente.set(
@@ -235,16 +333,29 @@ export function filasDesdeDump(
         }
     })
 
-    // Saldo a favor: saldos sin aplicar (`no cobrado`) del cliente, en quetzales.
+    // Saldo a favor: saldos sin aplicar (`no cobrado`) del cliente, en quetzales. En los datos
+    // reales solo hay `facturado` (traslados entre facturas, ya reflejados en cobrado).
     const favorPorCliente = new Map<string, Decimal>()
     t.saldos.filas.forEach((s, i) => {
-        if (texto(s.estado).toLowerCase() !== 'no cobrado') return
+        const tabla = ESQUEMA.saldos.tabla
+        const estado = texto(s.estado).toLowerCase()
+        if (estado !== 'no cobrado') {
+            traza.soloArchivo(
+                tabla,
+                i + 1,
+                estado === 'facturado'
+                    ? 'traslado entre facturas: ya está en lo cobrado de las facturas'
+                    : `saldo ${texto(s.estado)}: ya aplicado en el origen`,
+            )
+            return
+        }
         const cliente = normalizarId(s.iduser)
         const ajena = monedaAjena(s.moneda)
         if (ajena) {
-            problemas.omitir(ESQUEMA.saldos.tabla, i + 1, cliente, `saldo a favor en ${ajena}: no se importa`)
+            problemas.omitir(tabla, i + 1, cliente, `saldo a favor en ${ajena}: no se importa`)
             return
         }
+        traza.soloArchivo(tabla, i + 1, 'saldo a favor: entra en el saldo inicial del cliente')
         favorPorCliente.set(
             cliente,
             (favorPorCliente.get(cliente) ?? new Decimal(0)).plus(montoSeguro(s.monto)),
@@ -263,6 +374,45 @@ export function filasDesdeDump(
         saldos.push({ cliente_id: cliente, saldo: saldo.toFixed(2) })
     }
 
+    // Promesas vigentes sobre facturas No pagado
+    const promesas: FilaOrigen[] = []
+    t.credito.filas.forEach((c, i) => {
+        const tabla = ESQUEMA.credito.tabla
+        const id = normalizarId(c.id)
+        const limite = texto(c.fecha_limite).slice(0, 10)
+        const factura = normalizarId(c.idfactura)
+        if (!limite || limite.startsWith('0000') || limite < hoy) {
+            traza.soloArchivo(
+                tabla,
+                i + 1,
+                `promesa vencida en el origen (fecha_limite ${limite || 'vacía'})`,
+            )
+            return
+        }
+        const estado = estadoFactura.get(factura)
+        if (estado !== 'no pagado') {
+            traza.soloArchivo(
+                tabla,
+                i + 1,
+                estado
+                    ? `la factura ${factura} está ${estado}: la promesa ya no aplica`
+                    : `la factura ${factura} no existe`,
+            )
+            return
+        }
+        promesas.push({
+            __linea: String(i + 1),
+            id,
+            cliente_id: normalizarId(c.idcliente),
+            factura_id: factura,
+            vence: limite,
+            fecha: c.fechaingreso,
+            monto: null,
+            descripcion: c.descripcion,
+        })
+        traza.vincular(tabla, i + 1, 'promesas', id)
+    })
+
     const estadoCliente = new Map(usuarios.map((u) => [normalizarId(u.id), u.estado]))
     const routers = new Map(t.routers.filas.map((r) => [normalizarId(r.id), r]))
     const nasDe = agrupar(t.nas.filas, 'idserver')
@@ -274,6 +424,7 @@ export function filasDesdeDump(
     )
 
     const servicios: FilaOrigen[] = []
+    const estaticosPorRouter = new Map<string, number>()
     t.servicios.filas.forEach((s, i) => {
         const id = normalizarId(s.id)
         const tabla = ESQUEMA.servicios.tabla
@@ -288,13 +439,10 @@ export function filasDesdeDump(
             return
         }
         const pppuser = texto(s.pppuser)
-        const seguridad = texto(routers.get(normalizarId(s.nodo))?.seguridad)
-        const tipo = pppuser
-            ? 'pppoe'
-            : (SEGURIDAD.dhcp as readonly string[]).includes(seguridad)
-              ? 'dhcp_fija'
-              : 'ip_estatica'
-        const amarre = !pppuser && (SEGURIDAD.amarre as readonly string[]).includes(seguridad)
+        // Regla confirmada con los datos reales: sin usuario PPPoE = IP estática (con IP y MAC), sin amarre.
+        const tipo = pppuser ? 'pppoe' : 'ip_estatica'
+        const router = normalizarId(s.nodo)
+        if (!pppuser) estaticosPorRouter.set(router, (estaticosPorRouter.get(router) ?? 0) + 1)
 
         const dinamica = TIPOS_IP_DINAMICA.includes(texto(s.tipoipv4))
         const ips = texto(s.ip)
@@ -328,40 +476,70 @@ export function filasDesdeDump(
             )
         }
         servicios.push({
+            __linea: String(i + 1),
             id,
             cliente_id: normalizarId(s.idcliente),
-            router_id: normalizarId(s.nodo),
+            router_id: router,
             plan_id: normalizarId(s.idperfil),
             tipo_conexion: tipo,
             user_ppp: pppuser,
             pass_ppp: pppuser ? texto(s.ppppass) || (claveRadius.get(pppuser.toLowerCase()) ?? null) : null,
             ip: dinamica ? null : (ips[0] ?? null),
             mac: s.mac,
-            amarre_ip_mac: amarre ? 'si' : 'no',
+            amarre_ip_mac: 'no',
             direccion: s.direccion,
             coordenadas: s.coordenadas,
             fecha_instalacion: s.instalado,
             estado: estadoCliente.get(normalizarId(s.idcliente)) ?? null,
         })
+        traza.vincular(tabla, i + 1, 'servicios', id)
     })
 
+    for (const [router, n] of [...estaticosPorRouter.entries()].sort(([a], [b]) => Number(a) - Number(b))) {
+        const r = routers.get(router)
+        notas.push(
+            `Router ${router}${r ? ` ${texto(r.nodo)} (seguridad ${texto(r.seguridad) || '-'}, seguridad2 ${texto(r.seguridad2) || '-'})` : ''}: ` +
+                `${n} ${n === 1 ? 'servicio sin usuario PPPoE entra' : 'servicios sin usuario PPPoE entran'} como IP estática con su IP y MAC, sin amarre`,
+        )
+    }
+
+    t.routers.filas.forEach((r, i) => {
+        traza.vincular(ESQUEMA.routers.tabla, i + 1, 'routers', normalizarId(r.id))
+        if (texto(r.pass)) {
+            problemas.avisar(
+                ESQUEMA.routers.tabla,
+                i + 1,
+                normalizarId(r.id),
+                'la clave de la API (server.pass) está cifrada por Mikrowisp: no se importa; cargarla en el panel (credenciales pendientes)',
+            )
+        }
+    })
+    t.redes.filas.forEach((_r, i) => traza.vincular(ESQUEMA.redes.tabla, i + 1, 'redes', `L${i + 1}`))
+    t.perfiles.filas.forEach((p, i) =>
+        traza.vincular(ESQUEMA.perfiles.tabla, i + 1, 'planes', normalizarId(p.id)),
+    )
+    usuarios.forEach((u, i) => traza.vincular(ESQUEMA.usuarios.tabla, i + 1, 'clientes', normalizarId(u.id)))
+
     const entidades: Record<Entidad, FilaOrigen[]> = {
-        routers: t.routers.filas.map((r) => {
+        routers: t.routers.filas.map((r, i) => {
             const nas = nasDe.get(normalizarId(r.id))?.[0]
             return {
+                __linea: String(i + 1),
                 id: normalizarId(r.id),
                 nombre: r.nodo,
                 host: r.ip,
-                nas_ip: texto(nas?.nasname) || r.ip,
-                api_usuario: r.user,
-                api_password: r.pass,
+                nas_ip: texto(r.ip_radius) || texto(nas?.nasname) || r.ip,
+                // server.pass está cifrada: usuario y clave de la API quedan pendientes
+                api_usuario: null,
+                api_password: null,
                 radius_secret: texto(r.secret_radius) || nas?.secret,
             }
         }),
-        redes: t.redes.filas.map((r) => {
+        redes: t.redes.filas.map((r, i) => {
             const red = texto(r.red)
             const tipo = texto(r.tipo)
             return {
+                __linea: String(i + 1),
                 router_id: normalizarId(r.nodo),
                 cidr: red.includes('/')
                     ? red
@@ -377,21 +555,22 @@ export function filasDesdeDump(
                           : tipo,
             }
         }),
-        planes: t.perfiles.filas.map((p) => {
+        planes: t.perfiles.filas.map((p, i) => {
             const [subida, bajada] = velocidades(p.velocidad)
             return {
+                __linea: String(i + 1),
                 id: normalizarId(p.id),
                 nombre: p.plan,
+                // perfiles.costo ya trae el IVA (12 % incluido), igual que el precio de ArgosIsp
                 precio: p.costo,
                 bajada,
                 subida,
-                bajada_limitada: sinCero(p.limit_down),
-                subida_limitada: sinCero(p.limit_up),
                 perfil_ppp: p.profile,
                 pool_ipv4: null,
             }
         }),
-        clientes: usuarios.map((u) => ({
+        clientes: usuarios.map((u, i) => ({
+            __linea: String(i + 1),
             id: normalizarId(u.id),
             nombre: u.nombre,
             nit: u.cedula,
@@ -404,7 +583,8 @@ export function filasDesdeDump(
         servicios,
         facturas,
         saldos,
-        pagos: operaciones.map(({ fila: o }) => ({
+        pagos: operaciones.map(({ fila: o, linea }) => ({
+            __linea: String(linea),
             id: normalizarId(o.id),
             cliente_id: normalizarId(o.idcliente),
             factura_id: normalizarId(o.nfactura),
@@ -412,6 +592,7 @@ export function filasDesdeDump(
             fecha: o.fecha_pago,
             metodo: o.forma_pago,
         })),
+        promesas,
     }
 
     const filas = filasCanonicas(
@@ -423,17 +604,19 @@ export function filasDesdeDump(
             clientes: ESQUEMA.usuarios.tabla,
             servicios: ESQUEMA.servicios.tabla,
             facturas: ESQUEMA.facturas.tabla,
-            saldos: ESQUEMA.saldos.tabla,
+            // calculado (pendiente − saldo a favor): no es una fila de la tabla saldos
+            saldos: `${ESQUEMA.saldos.tabla} (calculado)`,
             pagos: ESQUEMA.operaciones.tabla,
+            promesas: ESQUEMA.credito.tabla,
         },
         nombre,
     )
-    return { filas, duenosFacturas, problemas: problemas.lista }
+    return { filas, duenosFacturas, problemas: problemas.lista, notas, archivo: traza.archivo(todas) }
 }
 
 /**
  * Moneda que no es quetzal, o null. Sin tabla `monedas` o sin fila para el id, se asume
- * quetzales (moneda 1, la de por defecto en Mikrowisp).
+ * quetzales (moneda 1, la de por defecto en Mikrowisp; los datos reales tienen una sola).
  */
 function monedasAjenas(monedas: FilaSql[]): (id: string | null | undefined) => string | null {
     const porId = new Map(monedas.map((m) => [normalizarId(m.id), m]))
@@ -447,19 +630,13 @@ function monedasAjenas(monedas: FilaSql[]): (id: string | null | undefined) => s
     }
 }
 
-/** `2026-09-15` → `2026-09` (mes de emisión); vacío o `0000-00-00` → null. */
-function periodoDe(emitido: string | null | undefined): string | null {
-    const v = texto(emitido)
+/** `2026-09-15` → `2026-09`; vacío o `0000-00-00` → null. */
+function mesDe(fecha: string | null | undefined): string | null {
+    const v = texto(fecha)
     return /^\d{4}-\d{2}/.test(v) && !v.startsWith('0000') ? v.slice(0, 7) : null
 }
 
-/** `'0'` es el defecto de `limit_down` / `limit_up`: sin dato. */
-function sinCero(v: string | null | undefined): string | null {
-    const t = texto(v)
-    return t === '' || t === '0' ? null : t
-}
-
-/** `5M/10M` (max-limit de MikroTik: subida/bajada) → ['5M', '10M']; `10M` → ['10M', '10M']. */
+/** `5M/10M` o `3000K/5000K` (max-limit de MikroTik: subida/bajada) → ['5M', '10M']; `10M` → ['10M', '10M']. */
 function velocidades(v: string | null | undefined): [string | null, string | null] {
     const valor = texto(v)
     if (!valor) return [null, null]

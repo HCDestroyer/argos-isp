@@ -46,7 +46,7 @@ const emit = defineEmits<{
  * pendiente (el webhook no llegó), lo que dijo el proveedor al volver (`confirmando` = aprobado
  * por el proveedor, aún sin registrar).
  */
-const estadoPago = computed(() => {
+const estadoPago = computed<EstadoPagoVisible | null>(() => {
     if (!props.pagoEnCurso) {
         return null
     }
@@ -84,9 +84,9 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="estadoPago === 'fallido'"
-            color="error"
+            :color="ESTADOS_PAGO_EN_LINEA.fallido.color"
             variant="subtle"
-            icon="i-lucide-credit-card"
+            :icon="ESTADOS_PAGO_EN_LINEA.fallido.icono"
             title="Tu pago no se completó"
             description="El proveedor de pagos rechazó la operación y no se hizo ningún cobro. Intenta de nuevo con otra tarjeta o paga por depósito."
             :actions="accionDescartar"
@@ -96,9 +96,9 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="estadoPago === 'expirado'"
-            color="error"
+            :color="ESTADOS_PAGO_EN_LINEA.expirado.color"
             variant="subtle"
-            icon="i-lucide-timer-off"
+            :icon="ESTADOS_PAGO_EN_LINEA.expirado.icono"
             title="El enlace de pago venció"
             description="No se hizo ningún cobro. Vuelve a tocar «Pagar en línea» para empezar de nuevo."
             :actions="accionDescartar"
@@ -130,7 +130,7 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="vigilando && estadoPago === 'pendiente'"
-            color="info"
+            :color="ESTADOS_PAGO_EN_LINEA.pendiente.color"
             variant="subtle"
             icon="i-lucide-loader-circle"
             title="Procesando tu pago…"
@@ -142,7 +142,7 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="vigilando && estadoPago === 'confirmando'"
-            color="success"
+            :color="ESTADOS_PAGO_EN_LINEA.confirmando.color"
             variant="subtle"
             icon="i-lucide-loader-circle"
             title="Tu pago fue aprobado"
@@ -153,7 +153,7 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="vigilando && estadoPago === 'pagado'"
-            color="success"
+            :color="ESTADOS_PAGO_EN_LINEA.pagado.color"
             variant="subtle"
             icon="i-lucide-loader-circle"
             :title="`Recibimos tu pago de ${montoEnTexto(pago?.monto)}`"
@@ -174,9 +174,9 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
 
         <UAlert
             v-else-if="agotado && estadoPago === 'pagado'"
-            color="success"
+            :color="ESTADOS_PAGO_EN_LINEA.pagado.color"
             variant="subtle"
-            icon="i-lucide-circle-check"
+            :icon="ESTADOS_PAGO_EN_LINEA.pagado.icono"
             :title="`Recibimos tu pago de ${montoEnTexto(pago?.monto)}`"
             description="Tu servicio aún no aparece activo: puede quedar saldo pendiente. Revisa de nuevo o comunícate con soporte."
             :actions="[{ label: 'Revisar de nuevo', icon: 'i-lucide-refresh-cw', color: 'neutral', variant: 'outline', onClick: () => emit('revisar') }]"

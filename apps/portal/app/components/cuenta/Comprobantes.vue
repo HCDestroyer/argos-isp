@@ -40,6 +40,8 @@ async function enviado(comprobante: ComprobantePortal) {
                 label="Subir comprobante"
                 icon="i-lucide-upload"
                 size="sm"
+                color="neutral"
+                variant="outline"
                 data-testid="cuenta-subir-comprobante"
                 @click="verSubir = true"
             />
@@ -77,6 +79,7 @@ async function enviado(comprobante: ComprobantePortal) {
                     <UBadge
                         :label="ESTADOS_COMPROBANTE[comprobante.estado].etiqueta"
                         :color="ESTADOS_COMPROBANTE[comprobante.estado].color"
+                        :icon="ESTADOS_COMPROBANTE[comprobante.estado].icono"
                         variant="subtle"
                         class="shrink-0"
                     />

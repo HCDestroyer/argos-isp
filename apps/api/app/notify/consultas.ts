@@ -43,6 +43,8 @@ export async function listarEnvios(filtros: FiltrosEnvios): Promise<Pagina<Fila>
             'cuerpo',
             'estado',
             'error',
+            'motivo',
+            'empresa_id',
             'intentos',
             'proveedor_id',
             'fallback_de',

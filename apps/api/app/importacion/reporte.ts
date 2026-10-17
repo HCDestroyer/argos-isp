@@ -1,4 +1,19 @@
 import type { ProblemaFila } from '#importacion/canonico'
+import type { CuadreTabla } from '#importacion/archivo'
+
+export type { CuadreTabla } from '#importacion/archivo'
+
+/** Montos del origen o de ArgosIsp para el cuadre de dinero (strings con 2 decimales). */
+export interface MontosCuadre {
+    /** total de las facturas (IVA incluido) */
+    facturado: string
+    /** lo cobrado de esas facturas (total − pendiente) */
+    cobrado: string
+    /** lo que se debe de esas facturas */
+    pendiente: string
+    /** suma de los pagos registrados */
+    pagos: string
+}
 
 /**
  * Reporte de una corrida del importador. Todo id de `*_origen` es el id del sistema de origen; los ids de
@@ -39,7 +54,26 @@ export interface ReporteImportacion {
         saldos: ConteoEntidad
         /** pagos históricos (RegistrarPagoHistorico de A3, modo B) */
         pagos: ConteoEntidad
+        /** promesas vigentes del origen */
+        promesas: ConteoEntidad
     }
+    /** líneas informativas del adaptador (p. ej. servicios sin PPPoE por router) */
+    notas_origen: string[]
+    /**
+     * Cuadre de dinero del origen contra ArgosIsp. En ArgosIsp cuentan las facturas y pagos de
+     * esta importación (por su id externo) y los saldos iniciales, que explican lo que no entró
+     * como factura o pago.
+     */
+    dinero: {
+        origen: MontosCuadre
+        argosisp: MontosCuadre & { saldos_iniciales: string }
+        /** ArgosIsp − origen */
+        diferencia: MontosCuadre
+        /** lo que explica cada diferencia */
+        explicacion: string[]
+    }
+    /** cuadre por tabla del origen: leídas = creadas + existentes + solo archivo + omitidas */
+    tablas: CuadreTabla[]
     /** cómo se reconoce lo ya importado: `core.ids_externos` o solo claves naturales */
     ids_externos: 'tabla' | 'ninguno'
     /**
@@ -119,6 +153,19 @@ export interface ReporteImportacion {
             pendiente: string
             motivo: string
         }>
+        /** factura de cargo único (sin periodo): con su nota del origen */
+        facturas_cargo_unico: Array<{
+            factura_origen: string
+            cliente_origen: string
+            total: string
+            nota: string | null
+        }>
+        /** factura sin cargo (total 0): no mueve dinero */
+        facturas_sin_cargo: Array<{ factura_origen: string; cliente_origen: string; motivo: string }>
+        /** factura pagada en el origen sin ningún pago que la cubra: entra `saldada_en_origen` */
+        facturas_saldadas_en_origen: Array<{ factura_origen: string; cliente_origen: string; total: string }>
+        /** promesa vigente del origen que no entró */
+        promesas_no_importadas: Array<{ promesa_origen: string; cliente_origen: string; motivo: string }>
         /** cliente cuyo saldo en ArgosIsp no es el del origen */
         saldos_distintos: Array<{
             cliente_origen: string
@@ -163,6 +210,27 @@ export function formatearReporte(r: ReporteImportacion): string {
     lineas.push(
         `Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales (sin core.ids_externos)'}`,
     )
+    const m = r.dinero
+    lineas.push('', 'Dinero            origen       ArgosIsp     diferencia')
+    for (const campo of ['facturado', 'cobrado', 'pendiente', 'pagos'] as const) {
+        lineas.push(
+            `${campo.padEnd(14)} ${m.origen[campo].padStart(12)} ${m.argosisp[campo].padStart(12)} ${m.diferencia[campo].padStart(12)}`,
+        )
+    }
+    lineas.push(`saldos iniciales en ArgosIsp: Q ${m.argosisp.saldos_iniciales}`)
+    for (const e of m.explicacion) lineas.push(`  - ${e}`)
+    if (r.tablas.length > 0) {
+        lineas.push(
+            '',
+            'Tabla del origen        leídas  creadas  existentes  al saldo  solo archivo  omitidas',
+        )
+        for (const t of r.tablas) {
+            lineas.push(
+                `${t.tabla.padEnd(22)} ${String(t.leidas).padStart(7)} ${String(t.creadas).padStart(8)} ${String(t.existentes).padStart(11)} ${String(t.al_saldo).padStart(9)} ${String(t.solo_archivo).padStart(13)} ${String(t.omitidas).padStart(9)}`,
+            )
+        }
+    }
+    for (const n of r.notas_origen) lineas.push(n)
 
     const d = r.diferencias
     const seccion = (titulo2: string, filas: string[]) => {
@@ -270,6 +338,31 @@ export function formatearReporte(r: ReporteImportacion): string {
         d.facturas_a_saldo.map(
             (x) =>
                 `factura ${x.factura_origen} · cliente ${x.cliente_origen} · Q ${x.pendiente}: ${x.motivo}`,
+        ),
+    )
+    seccion(
+        'Cargos únicos (sin periodo)',
+        d.facturas_cargo_unico.map(
+            (x) =>
+                `factura ${x.factura_origen} · cliente ${x.cliente_origen} · Q ${x.total}${x.nota ? ` · ${x.nota}` : ''}`,
+        ),
+    )
+    seccion(
+        'Facturas sin cargo (total 0)',
+        d.facturas_sin_cargo.map(
+            (x) => `factura ${x.factura_origen} · cliente ${x.cliente_origen}: ${x.motivo}`,
+        ),
+    )
+    seccion(
+        'Facturas pagadas sin ningún pago en el origen (entran saldadas en el origen, sin asiento)',
+        d.facturas_saldadas_en_origen.map(
+            (x) => `factura ${x.factura_origen} · cliente ${x.cliente_origen} · Q ${x.total}`,
+        ),
+    )
+    seccion(
+        'Promesas no importadas',
+        d.promesas_no_importadas.map(
+            (x) => `promesa ${x.promesa_origen} · cliente ${x.cliente_origen}: ${x.motivo}`,
         ),
     )
     seccion(
