@@ -20,6 +20,7 @@ import {
     PortalCuenta,
     PortalFactura,
     PortalFacturaDetalle,
+    PortalNotaCredito,
     PortalPago,
     PortalPagoEnLinea,
     PortalPromesa,
@@ -55,6 +56,7 @@ import {
     ponerCookieSesion,
 } from '#portal/acceso/sesion'
 import { cuentaPortal, facturaPortal, facturasPortal, pagosPortal, promesasPortal } from '#portal/cuenta'
+import { notasCreditoPortal, xmlDeFacturaCliente, xmlDeNotaCliente, type XmlDte } from '#portal/fel'
 import IdentificarPorIp from '#portal/actions/identificar_por_ip'
 import ConsultarEstadoPorIp from '#portal/actions/consultar_estado_por_ip'
 import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
@@ -115,6 +117,15 @@ function enviarPdf(ctx: HttpContext, documento: DocumentoPdf): void {
     ctx.response.header('Content-Disposition', `inline; filename="${documento.nombreArchivo}"`)
     ctx.response.header('Cache-Control', 'private, no-store')
     ctx.response.send(documento.pdf)
+}
+
+/** Responde el XML certificado de un DTE como descarga. */
+function enviarXml(ctx: HttpContext, documento: XmlDte): void {
+    ctx.response.header('Content-Type', 'application/xml; charset=utf-8')
+    ctx.response.header('Content-Disposition', `attachment; filename="${documento.nombreArchivo}"`)
+    ctx.response.header('Cache-Control', 'private, no-store')
+    ctx.response.header('X-Content-Type-Options', 'nosniff')
+    ctx.response.send(documento.xml)
 }
 
 const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro'] } }
@@ -335,6 +346,25 @@ const autenticadas: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/portal/notas-credito',
+        operacion: 'portalNotasCredito',
+        resumen: 'Notas de crédito (internas y NCRE) del cliente de la sesión',
+        descripcion: `${SOBRE_LA_SESION} Solo las de sus facturas visibles en el portal; una nota anulada sale como anulada.`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        query: paginaPortalValidator,
+        limitada: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de notas de crédito',
+            esquema: pagina(PortalNotaCredito),
+        },
+        handler: async (ctx, { query }) =>
+            notasCreditoPortal(await clienteDeLaSesionLimitada(ctx, 'notas-credito'), query),
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/portal/pagos',
         operacion: 'portalPagos',
         resumen: 'Pagos del cliente de la sesión',
@@ -471,7 +501,10 @@ const documentos: Ruta[] = [
         ruta: '/portal/facturas/:id/pdf',
         operacion: 'portalFacturaPdf',
         resumen: 'PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión',
-        descripcion: `${SOBRE_LA_SESION} Una factura de otro cliente responde 404. Responde application/pdf.`,
+        descripcion:
+            `${SOBRE_LA_SESION} Con la marca de la empresa que emite la factura y, si su DTE está certificado, ` +
+            'serie, número y autorización. Una factura de otro cliente o por certificar responde 404. ' +
+            'Responde application/pdf.',
         etiqueta: 'portal',
         seguridad: 'portal',
         permiso: null,
@@ -480,6 +513,40 @@ const documentos: Ruta[] = [
         handler: async (ctx, { params }) => {
             const clienteId = await clienteDeLaSesionLimitada(ctx, 'factura-pdf')
             enviarPdf(ctx, await avisoCobroPdf(Number(params.id), { clienteId }))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/facturas/:id/xml',
+        operacion: 'portalFacturaXml',
+        resumen: 'XML certificado (FEL) de una factura del cliente de la sesión',
+        descripcion:
+            `${SOBRE_LA_SESION} 404 si la factura es de otro cliente, está por certificar o su DTE no está ` +
+            'certificado. Responde application/xml como descarga.',
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'XML', contenido: 'application/xml' },
+        handler: async (ctx, { params }) => {
+            const clienteId = await clienteDeLaSesionLimitada(ctx, 'factura-xml')
+            enviarXml(ctx, await xmlDeFacturaCliente(clienteId, Number(params.id)))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/notas-credito/:id/xml',
+        operacion: 'portalNotaCreditoXml',
+        resumen: 'XML certificado (NCRE) de una nota de crédito del cliente de la sesión',
+        descripcion: `${SOBRE_LA_SESION} 404 si la nota es de otro cliente o su NCRE no está certificada.`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'XML', contenido: 'application/xml' },
+        handler: async (ctx, { params }) => {
+            const clienteId = await clienteDeLaSesionLimitada(ctx, 'nota-xml')
+            enviarXml(ctx, await xmlDeNotaCliente(clienteId, Number(params.id)))
         },
     }),
     definirRuta({

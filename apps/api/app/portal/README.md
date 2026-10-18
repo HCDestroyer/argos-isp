@@ -64,8 +64,9 @@ Reglas:
 | `POST /api/v1/documentos/plantillas/aviso_cobro/vista-previa` | `documentos.editar`          | PDF con datos de ejemplo, sin guardar                                                                                              |
 
 El PDF responde `Content-Type: application/pdf` y `Content-Disposition: inline; filename="aviso-cobro-<número>.pdf"`
-(`factura-<serie>-<número>.pdf` cuando la factura tiene `fel_uuid`: el documento pasa a llamarse
-"Factura" y muestra serie, número y autorización FEL).
+(`factura-<serie>-<número>.pdf` cuando su DTE está certificado en `fiscal.dte`: el documento pasa a
+llamarse "Factura", o "Nota de débito" en la mora, y muestra serie, número, autorización y fecha de
+certificación). Ver "FEL en el portal" abajo.
 
 **Generación** (`documentos/`): Mustache (`render.ts`, ya era dependencia) sobre la plantilla de
 `core.plantillas_documentos` o la de fábrica (`plantilla_base.ts`), y el HTML resultante a PDF con
@@ -78,7 +79,7 @@ Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemal
 
 | Variable                                                                                                                                                                                        | Ejemplo                                                                          |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `{{empresa.razon_social}}`, `{{#empresa.logo}}…{{/empresa.logo}}` (sección: hay logo) | Empresa de la factura (multiempresa) |
+| `{{empresa.razon_social}}`, `{{#empresa.logo}}…{{/empresa.logo}}` (sección: hay logo)                                                                                                           | Empresa de la factura (multiempresa)                                             |
 | `{{empresa.nombre}}`, `{{empresa.nit}}`, `{{empresa.direccion}}`, `{{empresa.telefono}}`, `{{empresa.whatsapp}}`, `{{empresa.correo}}`, `{{empresa.horario}}`, `{{empresa.instrucciones_pago}}` | Configuración de empresa (tarea 9)                                               |
 | `{{cliente.nombre}}`                                                                                                                                                                            | Nombre fiscal o, si no hay, el nombre                                            |
 | `{{cliente.nit}}`                                                                                                                                                                               | NIT/CUI o `CF`                                                                   |
@@ -93,7 +94,8 @@ Montos ya formateados en quetzales con `decimal.js`; fechas en `America/Guatemal
 | `{{factura.lineas}}`                                                                                                                                                                            | Tabla de líneas ya armada (concepto, cantidad, precio, total)                    |
 | `{{#lineas}}…{{/lineas}}`                                                                                                                                                                       | Para una tabla propia: `concepto`, `cantidad`, `precio_unitario`, `iva`, `total` |
 | `{{#factura.tiene_pagos}}…{{/factura.tiene_pagos}}`                                                                                                                                             | Sección si hay abonos                                                            |
-| `{{#factura.fel}}…{{/factura.fel}}`, `{{factura.fel_uuid}}`, `{{factura.fel_serie}}`, `{{factura.fel_numero}}`                                                                                  | Datos FEL (semana 5)                                                             |
+| `{{#factura.fel}}…{{/factura.fel}}`, `{{factura.fel_uuid}}`, `{{factura.fel_serie}}`, `{{factura.fel_numero}}`                                                                                  | Datos del DTE certificado (`fiscal.dte`)                                         |
+| `{{factura.fel_fecha}}`, `{{factura.fel_tipo}}`, `{{#factura.fel_anulado}}…{{/factura.fel_anulado}}`                                                                                            | Fecha de certificación, tipo de DTE en palabras, sección si la SAT lo anuló      |
 | `{{generado}}`                                                                                                                                                                                  | Fecha y hora de generación                                                       |
 
 Una variable vacía se oculta con su sección: `{{#empresa.nit}}NIT {{empresa.nit}}{{/empresa.nit}}`.
@@ -135,24 +137,45 @@ largas siguen en otra página.
   quetzales y un depósito a una cuenta en dólares lo convierte el banco a su tipo de cambio, así que lo
   acreditado no cuadra con la deuda. Ocultarlas es más claro en el teléfono que marcarlas.
 
+### FEL en el portal (localización fiscal, fase 3)
+
+Contrato: `.claude/integration/contratos/localizacion-fiscal.md` §8 y §14 (fila de A5). Código:
+`fel.ts` (solo lectura de `fiscal.dte`, `billing.notas_credito` y `billing.sustituciones` de A3).
+
+| Endpoint                                   | Qué hace                                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/facturas`              | Cada factura con `documento`, `dte`, `acreditado`, `sustituida`, `sustituida_por`, `sustituye_a`     |
+| `GET /api/v1/portal/facturas/:id/xml`      | XML certificado (descarga). 404 si es ajena, `por_certificar` o sin DTE certificado                  |
+| `GET /api/v1/portal/notas-credito`         | Notas de crédito del cliente: internas (`nota_credito`) o certificadas (`ncre`), vigentes o anuladas |
+| `GET /api/v1/portal/notas-credito/:id/xml` | XML de la NCRE certificada (404 si es ajena o no está certificada)                                   |
+
+- Las facturas `por_certificar` (FEL obligatoria con `emitir`) no salen en ninguna lectura del portal
+  (lista, detalle, PDF, XML ni cuenta): todavía no son deuda ni documento.
+- «Factura» solo con el DTE **certificado**: estado `certificado`, `anulacion_pendiente` (vigente
+  hasta que la SAT confirme) o `anulado`. Pendiente, en contingencia, con error o rechazado: sigue
+  siendo aviso de cobro. Las columnas `billing.facturas.fel_*` ya no se leen (A3 dejó de escribirlas).
+- Sustitución: la original dice `sustituida`; el enlace a la nueva aparece cuando la nueva es visible
+  (no `por_certificar`).
+- Todas las lecturas filtran por el cliente de la sesión: lo ajeno responde 404, como lo inexistente.
+
 ### Multiempresa: la marca de la empresa de cada servicio
 
 Contrato: `.claude/integration/contratos/multiempresa.md` § Marca. Código: `marca.ts`.
 
-| Dónde | Qué empresa |
-| --- | --- |
-| `GET /portal/quien-soy` (`/corte`) | `empresa`: la del servicio de esa IP (null sin identificar) |
-| `GET /portal/cuenta` | `empresa` en cada servicio; `empresa_principal` = la que tiene más servicios sin retirar (a igualdad, la del servicio más antiguo); sin servicios, la 1. `empresas[]` (`PortalCuentaEmpresa`): una sección por empresa con `saldo` (auxiliar CxC de su libro), `saldo_a_favor` y `facturas_pendientes` (`PortalFacturaPendiente`), de `estadoCuenta(clienteId).empresas` de A3; la principal primero |
-| `POST /portal/verificar` | `empresa_principal` en la sesión |
-| `GET /portal/facturas`, `/portal/facturas/:id` | `empresa` de cada factura: `SQL_EMPRESA_FACTURA` = `coalesce(f.empresa_id, s.empresa_id, 1)` (la que la emitió: una factura vieja de un servicio que cambió de empresa conserva su NIT) |
-| Cuentas de depósito (`GET /portal/empresa` → `cuentas_deposito`) | `listarCuentasDeposito(trx, empresaId)` de A3: solo las de esa empresa, activas y en quetzales; una empresa sin cuentas da `[]` |
-| `POST /portal/comprobantes` | La cuenta debe ser de la empresa del servicio: A3 responde 422 `cuenta_de_otra_empresa` y el portal lo reescribe para el cliente (campo `cuenta_bancaria_id`, sin ids internos) |
-| `POST /portal/pagos/iniciar` | Un cobro es de una sola empresa: facturas de varias → 422 `pago_de_varias_empresas` (el portal lo revisa antes de A3 y reescribe el de A3); por servicio o por IP, la empresa del servicio |
-| `GET /portal/telegram`, `POST /portal/telegram/vincular` | Vinculación por bot ("Varios bots" de `contratos/telegram.md`): `empresas[]` con `telegramPorEmpresa` de A6 y `empresa_id` opcional al pedir el código (404 si el cliente no tiene servicios en ella) |
-| `POST /portal/codigo` por Telegram | Sale por un bot que el cliente inició (el de la empresa del servicio de la IP o de su principal; si ese no lo tiene, el de otra empresa suya) y con la marca de esa empresa (`EnviarMensajeDirecto` con `empresa_id`) |
-| `GET /portal/empresa` | `?empresa_id=` (404 si no existe), `?de=cliente` (principal de la sesión, 401 sin ella) o, sin parámetros, la de la IP → la principal de la sesión → la 1. Agrega `id` y `logo_url` |
-| `GET /portal/empresas/:id/logo` | El logo (PNG o SVG saneado) por el walled garden, con `ETag` y caché larga (`logo_url` lleva `?v=`) |
-| Aviso de cobro (PDF) | Logo, razón social, NIT y dirección fiscal de la empresa de la factura |
+| Dónde                                                            | Qué empresa                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /portal/quien-soy` (`/corte`)                               | `empresa`: la del servicio de esa IP (null sin identificar)                                                                                                                                                                                                                                                                                                                                          |
+| `GET /portal/cuenta`                                             | `empresa` en cada servicio; `empresa_principal` = la que tiene más servicios sin retirar (a igualdad, la del servicio más antiguo); sin servicios, la 1. `empresas[]` (`PortalCuentaEmpresa`): una sección por empresa con `saldo` (auxiliar CxC de su libro), `saldo_a_favor` y `facturas_pendientes` (`PortalFacturaPendiente`), de `estadoCuenta(clienteId).empresas` de A3; la principal primero |
+| `POST /portal/verificar`                                         | `empresa_principal` en la sesión                                                                                                                                                                                                                                                                                                                                                                     |
+| `GET /portal/facturas`, `/portal/facturas/:id`                   | `empresa` de cada factura: `SQL_EMPRESA_FACTURA` = `coalesce(f.empresa_id, s.empresa_id, 1)` (la que la emitió: una factura vieja de un servicio que cambió de empresa conserva su NIT)                                                                                                                                                                                                              |
+| Cuentas de depósito (`GET /portal/empresa` → `cuentas_deposito`) | `listarCuentasDeposito(trx, empresaId)` de A3: solo las de esa empresa, activas y en quetzales; una empresa sin cuentas da `[]`                                                                                                                                                                                                                                                                      |
+| `POST /portal/comprobantes`                                      | La cuenta debe ser de la empresa del servicio: A3 responde 422 `cuenta_de_otra_empresa` y el portal lo reescribe para el cliente (campo `cuenta_bancaria_id`, sin ids internos)                                                                                                                                                                                                                      |
+| `POST /portal/pagos/iniciar`                                     | Un cobro es de una sola empresa: facturas de varias → 422 `pago_de_varias_empresas` (el portal lo revisa antes de A3 y reescribe el de A3); por servicio o por IP, la empresa del servicio                                                                                                                                                                                                           |
+| `GET /portal/telegram`, `POST /portal/telegram/vincular`         | Vinculación por bot ("Varios bots" de `contratos/telegram.md`): `empresas[]` con `telegramPorEmpresa` de A6 y `empresa_id` opcional al pedir el código (404 si el cliente no tiene servicios en ella)                                                                                                                                                                                                |
+| `POST /portal/codigo` por Telegram                               | Sale por un bot que el cliente inició (el de la empresa del servicio de la IP o de su principal; si ese no lo tiene, el de otra empresa suya) y con la marca de esa empresa (`EnviarMensajeDirecto` con `empresa_id`)                                                                                                                                                                                |
+| `GET /portal/empresa`                                            | `?empresa_id=` (404 si no existe), `?de=cliente` (principal de la sesión, 401 sin ella) o, sin parámetros, la de la IP → la principal de la sesión → la 1. Agrega `id` y `logo_url`                                                                                                                                                                                                                  |
+| `GET /portal/empresas/:id/logo`                                  | El logo (PNG o SVG saneado) por el walled garden, con `ETag` y caché larga (`logo_url` lleva `?v=`)                                                                                                                                                                                                                                                                                                  |
+| Aviso de cobro (PDF)                                             | Logo, razón social, NIT y dirección fiscal de la empresa de la factura                                                                                                                                                                                                                                                                                                                               |
 
 `PortalMarcaEmpresa` = `id`, `nombre_comercial`, `logo_url`, `nit`, `direccion_fiscal`, `telefono`, `whatsapp`
 (datos públicos de la empresa, los del aviso de cobro: pueden salir por la IP). La empresa 1 sin
@@ -223,8 +246,8 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 
 | Ruta                                                            | Acción                                                                         | Qué hace                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/portal/telegram` (sesión)                          | `acceso/telegram.ts` (`estadoTelegram`, lectura)                               | `PortalTelegram`: vinculado (general), bot global disponible y su usuario, y `empresas[]` (`PortalTelegramEmpresa`: marca, `disponible`, `bot`, `vinculado` del bot de esa empresa, de `telegramPorEmpresa`)                                                          |
-| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | Cuerpo opcional `{ empresa_id }` (el bot de esa empresa; 404 si el cliente no tiene servicios en ella). 201 `{ codigo, enlace, bot, vence_en, empresa_id }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado` |
+| `GET /api/v1/portal/telegram` (sesión)                          | `acceso/telegram.ts` (`estadoTelegram`, lectura)                               | `PortalTelegram`: vinculado (general), bot global disponible y su usuario, y `empresas[]` (`PortalTelegramEmpresa`: marca, `disponible`, `bot`, `vinculado` del bot de esa empresa, de `telegramPorEmpresa`)                                                            |
+| `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | Cuerpo opcional `{ empresa_id }` (el bot de esa empresa; 404 si el cliente no tiene servicios en ella). 201 `{ codigo, enlace, bot, vence_en, empresa_id }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado`                             |
 | `POST /api/v1/portal/telegram/desvincular` (sesión)             | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`)              | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
 
 ### Pago en línea desde el portal (semana 2)

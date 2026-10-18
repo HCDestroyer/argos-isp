@@ -48,7 +48,8 @@ export const PLANTILLA_AVISO_COBRO = `{{#empresa.logo}}<img src="empresa:logo" h
     <tr><td class="derecha grande"><strong>Saldo a pagar</strong></td><td class="derecha grande"><strong>{{factura.saldo}}</strong></td></tr>
 </table>
 {{#factura.fel}}
-<p class="tenue"><small>Factura electrónica (FEL) · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}</small></p>
+<p class="tenue"><small>Documento Tributario Electrónico (FEL) · {{factura.fel_tipo}} · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
+{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}
 {{/factura.fel}}
 {{^factura.fel}}
 <p class="tenue"><small>Este aviso de cobro no es una factura electrónica (FEL).</small></p>
