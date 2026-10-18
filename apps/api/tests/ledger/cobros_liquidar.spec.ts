@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
@@ -167,7 +168,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
                 neto: '144.75',
                 pagos: [p1.id, p2.id],
                 archivo: 'liq-1.csv',
-                contenido: 'pago,monto\n1,100\n2,50\n',
+                sha256: createHash('sha256').update('pago,monto\n1,100\n2,50\n').digest('hex'),
             },
             e.ctx,
         )

@@ -82,12 +82,13 @@ export const liquidarCobrosValidator = vine.compile(
             .optional()
             .meta({ description: 'Pagos ya liquidados y después anulados que el proveedor descuenta' }),
         archivo: texto(200).nullable().optional(),
-        contenido: vine
+        sha256: vine
             .string()
-            .maxLength(5_000_000)
+            .trim()
+            .regex(/^[0-9a-fA-F]{64}$/)
             .nullable()
             .optional()
-            .meta({ description: 'Contenido del archivo de la liquidación (se guarda su sha256)' }),
+            .meta({ description: 'sha256 del archivo original (lo calcula quien lo leyó)' }),
         nota: texto(500).nullable().optional(),
         ...cuentaBanco('Banco donde se depositó el neto (por defecto el del proveedor)'),
     }),
@@ -150,12 +151,13 @@ export const importarExtractoValidator = vine.compile(
         saldo_inicial: montoConSigno(),
         saldo_final: montoConSigno(),
         archivo: texto(200).nullable().optional(),
-        contenido: vine
+        sha256: vine
             .string()
-            .maxLength(10_000_000)
+            .trim()
+            .regex(/^[0-9a-fA-F]{64}$/)
             .nullable()
             .optional()
-            .meta({ description: 'Contenido del archivo original (se guarda su sha256)' }),
+            .meta({ description: 'sha256 del archivo original (lo calcula quien lo leyó)' }),
         motivo_no_encadena: motivo()
             .nullable()
             .optional()

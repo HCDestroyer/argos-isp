@@ -121,6 +121,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bancos/conciliaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conciliar una línea del extracto con movimientos, depósitos o traslados del libro
+         * @description Nunca reescribe un asiento: liga la línea con lo que ya está en el libro. Un depósito o traslado en tránsito llega con un asiento nuevo Banco / 1.1.11. Σ = monto de la línea (422 conciliacion_descuadrada); 409 linea_conciliada o movimiento_conciliado. Emite banco.conciliado.
+         */
+        post: operations["bancosConciliar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/conciliaciones/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deshacer una conciliación (fila de anulación; el libro no cambia) */
+        post: operations["bancosAnularConciliacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bancos/depositos": {
         parameters: {
             query?: never;
@@ -138,6 +175,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bancos/extractos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Extractos importados */
+        get: operations["bancosExtractos"];
+        put?: never;
+        /**
+         * Importar un extracto bancario (neutral al origen; solo inserción)
+         * @description Líneas con signo dentro de desde..hasta; Σ líneas = saldo_final − saldo_inicial (422 extracto_descuadrado). El saldo inicial encadena con el final anterior (422 extracto_no_encadena; se fuerza con motivo_no_encadena). Una línea ya importada (huella por cuenta) responde 409 extracto_duplicado. Los adaptadores por banco (CSV, XLSX) son de A6. Emite banco.extracto_importado.
+         */
+        post: operations["bancosImportarExtracto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver extracto */
+        get: operations["bancosVerExtracto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}/aplicar-reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aplicar las reglas de conciliación a las líneas sin conciliar del extracto */
+        post: operations["bancosAplicarReglas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}/lineas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Líneas del extracto con su conciliación */
+        get: operations["bancosLineasExtracto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/lineas/{id}/registrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar una partida del extracto sin documento (asiento nuevo) y conciliarla
+         * @description Cargo: contrapartida (por defecto 5.3.07 Gastos y comisiones bancarias) / Banco; abono: Banco / contrapartida (obligatoria). Origen banco, fecha de la línea. 409 linea_registrada.
+         */
+        post: operations["bancosRegistrarDesdeExtracto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bancos/fondos-en-transito": {
         parameters: {
             query?: never;
@@ -148,6 +277,61 @@ export interface paths {
         /** Check fondos_transito: 1.1.11 = depósitos y traslados sin acreditar, por empresa */
         get: operations["bancosFondosEnTransito"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/movimientos-sin-conciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Movimientos del libro en una cuenta bancaria sin conciliación vigente
+         * @description De la empresa activa o, sin ella, de la empresa dueña de la cuenta.
+         */
+        get: operations["bancosMovimientosSinConciliar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reglas de conciliación */
+        get: operations["bancosReglas"];
+        put?: never;
+        /** Crear regla de conciliación */
+        post: operations["bancosCrearRegla"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/reglas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Editar regla de conciliación (con version) */
+        put: operations["bancosEditarRegla"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3427,6 +3611,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/conciliacion-bancaria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen de conciliación por cuenta y fecha: libro, extracto y partidas en tránsito
+         * @description Por cuenta con extractos: saldo del libro, saldo del extracto, partidas en tránsito de cada lado y diferencia (0 = saldo del extracto = libro ± partidas en tránsito).
+         */
+        get: operations["reportesConciliacionBancaria"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/egresos": {
         parameters: {
             query?: never;
@@ -4704,6 +4908,22 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Conciliacion: {
+            /** @description Primera fila del grupo */
+            id: number;
+            grupo: string;
+            empresa_id: number;
+            cuenta_id: number;
+            linea_id: number;
+            monto: components["schemas"]["Dinero"];
+            regla_id: number | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            anulada: boolean;
+            motivo_anulacion: string | null;
+            movimientos: components["schemas"]["MovimientoConciliado"][];
+        };
         ConciliacionPasarela: {
             id: number;
             proveedor: string;
@@ -5428,6 +5648,30 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        Extracto: {
+            id: number;
+            empresa_id: number;
+            /** @description Subcuenta 1.1.02.NN del extracto */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            cuenta_bancaria_id: number | null;
+            /** Format: date */
+            desde: string;
+            /** Format: date */
+            hasta: string;
+            saldo_inicial: components["schemas"]["Dinero"];
+            saldo_final: components["schemas"]["Dinero"];
+            archivo: string | null;
+            sha256: string | null;
+            /** @description Motivo con el que se forzó un saldo inicial distinto del final anterior */
+            motivo_no_encadena: string | null;
+            lineas: number;
+            conciliadas: number;
+            importado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         Factura: {
             id: number;
             /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -5734,6 +5978,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        LineaExtracto: {
+            id: number;
+            extracto_id: number;
+            empresa_id: number;
+            cuenta_id: number;
+            orden: number;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            referencia: string | null;
+            /** @description + entra a la cuenta, − sale */
+            monto: components["schemas"]["Dinero"];
+            saldo: components["schemas"]["Dinero"] | null;
+            /** @description Única por cuenta: detecta líneas ya importadas */
+            huella: string;
+            conciliada: boolean;
+            /** @description Para anularla: POST /bancos/conciliaciones/:id/anular */
+            conciliacion_id: number | null;
+            movimientos: components["schemas"]["MovimientoConciliado"][];
+        };
         LineaMayor: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -5897,6 +6161,19 @@ export interface components {
             /** @description Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro */
             cuadricula?: string | null;
         };
+        MovimientoConciliado: {
+            /** @description Fila de ledger.conciliaciones */
+            conciliacion_id: number;
+            movimiento_id: number;
+            asiento_id: number;
+            origen_tipo: string;
+            origen_id: number | null;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            /** @description Neto del movimiento en la cuenta (debe − haber) */
+            monto: components["schemas"]["Dinero"];
+        };
         MovimientoEstadoCuenta: {
             /** @description Empresa (libro) del asiento */
             empresa_id?: number;
@@ -5909,6 +6186,17 @@ export interface components {
             cargo: components["schemas"]["Dinero"];
             abono: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
+        };
+        MovimientoSinConciliar: {
+            movimiento_id: number;
+            asiento_id: number;
+            origen_tipo: string;
+            origen_id: number | null;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            /** @description debe − haber en la cuenta */
+            monto: components["schemas"]["Dinero"];
         };
         NotaCredito: {
             id: number;
@@ -6081,6 +6369,13 @@ export interface components {
             pais: string;
             localizacion: string;
             parametros: components["schemas"]["ParametroFiscal"][];
+        };
+        PartidaEnTransito: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            monto: components["schemas"]["Dinero"];
         };
         Permiso: {
             id: number;
@@ -6698,6 +6993,31 @@ export interface components {
             valor_id: number;
             frases: components["schemas"]["FraseFiscal"][];
         };
+        ReglaConciliacion: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /** @description Solo esta cuenta bancaria; null = todas */
+            cuenta_id: number | null;
+            /** @enum {string} */
+            tipo_condicion: "contiene" | "regex";
+            patron: string;
+            monto_min: components["schemas"]["Dinero"] | null;
+            monto_max: components["schemas"]["Dinero"] | null;
+            /** @enum {string} */
+            accion: "contrapartida" | "cliente";
+            contrapartida_cuenta_id: number | null;
+            /** @description Código de la contrapartida */
+            contrapartida: string | null;
+            prioridad: number;
+            activa: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ReglaEvaluada: {
             /**
              * @description Nombre estable de la regla (contratos/promesas.md)
@@ -7139,6 +7459,19 @@ export interface components {
             /** @description Uno por IP pedida, en el mismo orden */
             resultados: (components["schemas"]["IpResueltaHorus"] | components["schemas"]["IpNoEncontradaHorus"])[];
         };
+        ResultadoAplicarReglas: {
+            extracto_id: number;
+            conciliadas: {
+                linea_id: number;
+                regla_id: number;
+                /** @enum {string} */
+                accion: "contrapartida" | "cliente";
+                conciliacion_id: number;
+            }[];
+            /** @description Líneas con regla cliente sin un pago único que coincida */
+            sin_pago: number[];
+            sin_regla: number[];
+        };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
             horas: string[];
@@ -7273,6 +7606,34 @@ export interface components {
             pendientes: number;
             /** @description Suma de los montos pendientes */
             monto_pendiente: components["schemas"]["Dinero"];
+        };
+        ResumenConciliacionBancaria: {
+            empresa_id: number;
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            /** Format: date */
+            fecha: string;
+            /** @description Saldo de la cuenta en el libro de la empresa al día */
+            saldo_libro: components["schemas"]["Dinero"];
+            /** @description Saldo inicial del primer extracto + Σ líneas al día */
+            saldo_extracto: components["schemas"]["Dinero"] | null;
+            /**
+             * Format: date
+             * @description Primer día cubierto por extractos
+             */
+            desde: string | null;
+            /** @description Saldo inicial del primer extracto − libro antes de esa fecha */
+            diferencia_apertura: components["schemas"]["Dinero"];
+            /** @description Movimientos del libro sin conciliar al día (id = movimiento) */
+            libro_en_transito: components["schemas"]["PartidaEnTransito"][];
+            total_libro_en_transito: components["schemas"]["Dinero"];
+            /** @description Líneas del extracto sin conciliar al día (id = línea) */
+            extracto_en_transito: components["schemas"]["PartidaEnTransito"][];
+            total_extracto_en_transito: components["schemas"]["Dinero"];
+            /** @description saldo_extracto − (saldo_libro − libro en tránsito + extracto en tránsito); 0 = cuadra */
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
         };
         ResumenDashboard: {
             servicios: {
@@ -8121,6 +8482,153 @@ export interface operations {
             };
         };
     };
+    bancosConciliar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    linea_id: number;
+                    /** @description Movimientos del libro en la cuenta del extracto (GET /bancos/movimientos-sin-conciliar) */
+                    movimientos?: number[] | null;
+                    /** @description Depósitos de caja en tránsito que llegan con esta línea (asiento Banco / 1.1.11) */
+                    depositos?: number[] | null;
+                    /** @description Traslados en tránsito que llegan a esta cuenta con esta línea */
+                    traslados?: number[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosAnularConciliacion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación anulada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     bancosDepositos: {
         parameters: {
             query?: {
@@ -8179,6 +8687,416 @@ export interface operations {
             };
         };
     };
+    bancosExtractos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cuenta_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de extractos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Extracto"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosImportarExtracto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    /** @description Cuenta del extracto: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Cuenta del extracto: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Cuenta del extracto: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                    /** Format: date */
+                    desde: string;
+                    /** Format: date */
+                    hasta: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    saldo_inicial: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    saldo_final: string;
+                    archivo?: string | null;
+                    /** @description sha256 del archivo original (lo calcula quien lo leyó) */
+                    sha256?: string | null;
+                    /** @description Fuerza un saldo inicial distinto del final del extracto anterior */
+                    motivo_no_encadena?: string | null;
+                    lineas: {
+                        /** Format: date */
+                        fecha: string;
+                        descripcion: string;
+                        referencia?: string | null;
+                        /**
+                         * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                         * @example -15.00
+                         */
+                        monto: string;
+                        /**
+                         * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                         * @example -15.00
+                         */
+                        saldo?: string | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Extracto importado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Extracto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.importar_extracto; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosVerExtracto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Extracto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Extracto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosAplicarReglas: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoAplicarReglas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosLineasExtracto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Líneas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineaExtracto"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosRegistrarDesdeExtracto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Código de la contrapartida; por defecto 5.3.07 Gastos y comisiones bancarias en un cargo (obligatoria en un abono) */
+                    cuenta?: string | null;
+                    descripcion?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación con el asiento nuevo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     bancosFondosEnTransito: {
         parameters: {
             query?: {
@@ -8211,6 +9129,294 @@ export interface operations {
             };
             /** @description Sin el permiso bancos.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosMovimientosSinConciliar: {
+        parameters: {
+            query: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                cuenta_id: number;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Movimientos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimientoSinConciliar"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosReglas: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reglas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosCrearRegla: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    nombre: string;
+                    /** @description Solo en esta cuenta bancaria; null = todas */
+                    cuenta_id?: number | null;
+                    /** @enum {string} */
+                    tipo_condicion: "contiene" | "regex";
+                    patron: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_min?: string | null;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_max?: string | null;
+                    /** @enum {string} */
+                    accion: "contrapartida" | "cliente";
+                    /** @description Código de la cuenta (acción contrapartida) */
+                    contrapartida?: string | null;
+                    prioridad?: number;
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosEditarRegla: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre: string;
+                    /** @description Solo en esta cuenta bancaria; null = todas */
+                    cuenta_id?: number | null;
+                    /** @enum {string} */
+                    tipo_condicion: "contiene" | "regex";
+                    patron: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_min?: string | null;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_max?: string | null;
+                    /** @enum {string} */
+                    accion: "contrapartida" | "cliente";
+                    /** @description Código de la cuenta (acción contrapartida) */
+                    contrapartida?: string | null;
+                    prioridad?: number;
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9849,8 +11055,8 @@ export interface operations {
                     /** @description Pagos ya liquidados y después anulados que el proveedor descuenta */
                     contracargos?: number[] | null;
                     archivo?: string | null;
-                    /** @description Contenido del archivo de la liquidación (se guarda su sha256) */
-                    contenido?: string | null;
+                    /** @description sha256 del archivo original (lo calcula quien lo leyó) */
+                    sha256?: string | null;
                     nota?: string | null;
                     /** @description Banco donde se depositó el neto (por defecto el del proveedor): cuenta bancaria propia (GET /cuentas-bancarias) */
                     cuenta_bancaria_id?: number | null;
@@ -20567,6 +21773,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReporteCobranzaDiaria"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesConciliacionBancaria: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                cuenta_id?: number;
+                /** @description Al día (por defecto hoy, Guatemala) */
+                fecha?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por cuenta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenConciliacionBancaria"][];
                 };
             };
             /** @description No autenticado */

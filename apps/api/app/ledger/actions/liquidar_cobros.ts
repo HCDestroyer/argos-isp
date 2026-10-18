@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
@@ -35,9 +34,9 @@ export interface EntradaLiquidarCobros extends PedidoCuentaBanco {
     neto?: string | null
     pagos: number[]
     contracargos?: number[] | null
-    /** nombre del archivo de la liquidación (si se importó) y su contenido para el sha256 */
+    /** nombre del archivo de la liquidación (si se importó) y su sha256 */
     archivo?: string | null
-    contenido?: string | null
+    sha256?: string | null
     nota?: string | null
 }
 
@@ -241,10 +240,7 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
         if (comision.gt(0)) movimientos.push({ cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(comision) })
         movimientos.push({ cuenta: Number(proveedor.cuenta_id), haber: aTexto(bruto) })
 
-        const sha =
-            input.contenido !== undefined && input.contenido !== null
-                ? createHash('sha256').update(input.contenido, 'utf8').digest('hex')
-                : null
+        const sha = input.sha256?.trim().toLowerCase() || null
         const [fila] = (await t.trx
             .insertQuery()
             .table('ledger.liquidaciones_cobro')

@@ -159,3 +159,176 @@ export const ResumenFondosEnTransito = definirEsquema(
         traslados: { ...entero, description: 'Traslados en tránsito' },
     }),
 )
+
+export const Extracto = definirEsquema(
+    'Extracto',
+    objeto({
+        id,
+        empresa_id: id,
+        cuenta_id: { ...id, description: 'Subcuenta 1.1.02.NN del extracto' },
+        cuenta_codigo: texto,
+        cuenta_nombre: texto,
+        cuenta_bancaria_id: nulable(id),
+        desde: fecha,
+        hasta: fecha,
+        saldo_inicial: Dinero,
+        saldo_final: Dinero,
+        archivo: nulable(texto),
+        sha256: nulable(texto),
+        motivo_no_encadena: {
+            ...nulable(texto),
+            description: 'Motivo con el que se forzó un saldo inicial distinto del final anterior',
+        },
+        lineas: entero,
+        conciliadas: entero,
+        importado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+const MovimientoConciliado = definirEsquema(
+    'MovimientoConciliado',
+    objeto({
+        conciliacion_id: { ...id, description: 'Fila de ledger.conciliaciones' },
+        movimiento_id: id,
+        asiento_id: id,
+        origen_tipo: texto,
+        origen_id: nulable(id),
+        fecha,
+        descripcion: texto,
+        monto: { ...Dinero, description: 'Neto del movimiento en la cuenta (debe − haber)' },
+    }),
+)
+
+export const LineaExtracto = definirEsquema(
+    'LineaExtracto',
+    objeto({
+        id,
+        extracto_id: id,
+        empresa_id: id,
+        cuenta_id: id,
+        orden: entero,
+        fecha,
+        descripcion: texto,
+        referencia: nulable(texto),
+        monto: { ...Dinero, description: '+ entra a la cuenta, − sale' },
+        saldo: nulable(Dinero),
+        huella: { ...texto, description: 'Única por cuenta: detecta líneas ya importadas' },
+        conciliada: booleano,
+        conciliacion_id: {
+            ...nulable(id),
+            description: 'Para anularla: POST /bancos/conciliaciones/:id/anular',
+        },
+        movimientos: lista(MovimientoConciliado),
+    }),
+)
+
+export const Conciliacion = definirEsquema(
+    'Conciliacion',
+    objeto({
+        id: { ...id, description: 'Primera fila del grupo' },
+        grupo: texto,
+        empresa_id: id,
+        cuenta_id: id,
+        linea_id: id,
+        monto: Dinero,
+        regla_id: nulable(id),
+        creado_por: nulable(id),
+        created_at: instante,
+        anulada: booleano,
+        motivo_anulacion: nulable(texto),
+        movimientos: lista(MovimientoConciliado),
+    }),
+)
+
+export const MovimientoSinConciliar = definirEsquema(
+    'MovimientoSinConciliar',
+    objeto({
+        movimiento_id: id,
+        asiento_id: id,
+        origen_tipo: texto,
+        origen_id: nulable(id),
+        fecha,
+        descripcion: texto,
+        monto: { ...Dinero, description: 'debe − haber en la cuenta' },
+    }),
+)
+
+export const ReglaConciliacion = definirEsquema(
+    'ReglaConciliacion',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        cuenta_id: { ...nulable(id), description: 'Solo esta cuenta bancaria; null = todas' },
+        tipo_condicion: enumerado(['contiene', 'regex']),
+        patron: texto,
+        monto_min: nulable(Dinero),
+        monto_max: nulable(Dinero),
+        accion: enumerado(['contrapartida', 'cliente']),
+        contrapartida_cuenta_id: nulable(id),
+        contrapartida: { ...nulable(texto), description: 'Código de la contrapartida' },
+        prioridad: entero,
+        activa: booleano,
+        ...auditable,
+    }),
+)
+
+export const ResultadoAplicarReglas = definirEsquema(
+    'ResultadoAplicarReglas',
+    objeto({
+        extracto_id: id,
+        conciliadas: lista(
+            objeto({
+                linea_id: id,
+                regla_id: id,
+                accion: enumerado(['contrapartida', 'cliente']),
+                conciliacion_id: id,
+            }),
+        ),
+        sin_pago: { ...lista(id), description: 'Líneas con regla cliente sin un pago único que coincida' },
+        sin_regla: lista(id),
+    }),
+)
+
+const PartidaEnTransito = definirEsquema(
+    'PartidaEnTransito',
+    objeto({ id, fecha, descripcion: texto, monto: Dinero }),
+)
+
+export const ResumenConciliacionBancaria = definirEsquema(
+    'ResumenConciliacionBancaria',
+    objeto({
+        empresa_id: id,
+        cuenta_id: id,
+        cuenta_codigo: texto,
+        cuenta_nombre: texto,
+        fecha,
+        saldo_libro: { ...Dinero, description: 'Saldo de la cuenta en el libro de la empresa al día' },
+        saldo_extracto: {
+            ...nulable(Dinero),
+            description: 'Saldo inicial del primer extracto + Σ líneas al día',
+        },
+        desde: { ...nulable(fecha), description: 'Primer día cubierto por extractos' },
+        diferencia_apertura: {
+            ...Dinero,
+            description: 'Saldo inicial del primer extracto − libro antes de esa fecha',
+        },
+        libro_en_transito: {
+            ...lista(PartidaEnTransito),
+            description: 'Movimientos del libro sin conciliar al día (id = movimiento)',
+        },
+        total_libro_en_transito: Dinero,
+        extracto_en_transito: {
+            ...lista(PartidaEnTransito),
+            description: 'Líneas del extracto sin conciliar al día (id = línea)',
+        },
+        total_extracto_en_transito: Dinero,
+        diferencia: {
+            ...Dinero,
+            description:
+                'saldo_extracto − (saldo_libro − libro en tránsito + extracto en tránsito); 0 = cuadra',
+        },
+        cuadra: booleano,
+    }),
+)
