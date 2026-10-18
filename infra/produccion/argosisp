@@ -259,7 +259,9 @@ esperar_sano() {
             if [ "$estado" = exited ] && $reciente; then
                 case "$codigo" in 0 | 137 | 143) ;; *) fallo=true ;; esac
             fi
-            if $fallo || [ "$salud" = unhealthy ] || { [ "$reinicios" -ge 3 ] && [ "$estado" != running ]; }; then
+            # La salud de un contenedor detenido es la de su última corrida (p. ej. el de la versión
+            # anterior que compose detuvo para recrearlo): solo cuenta mientras corre.
+            if $fallo || { [ "$salud" = unhealthy ] && [ "$estado" = running ]; } || { [ "$reinicios" -ge 3 ] && [ "$estado" != running ]; }; then
                 log "$servicio no arrancó (estado $estado, salud ${salud:-sin healthcheck}, código $codigo, reinicios $reinicios)"
                 return 1
             fi
