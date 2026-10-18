@@ -169,9 +169,20 @@ export const Factura = definirEsquema(
                     'Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp',
             },
             id_externo: { ...nulable(texto), description: 'Id de la factura en su sistema de origen' },
+            sustituida_por: {
+                ...nulable(id),
+                description:
+                    'Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida',
+            },
+            sustituye_a: {
+                ...nulable(id),
+                description: 'Factura original que esta sustituye; null si no es una sustituta',
+            },
             ...auditable,
         },
         [
+            'sustituida_por',
+            'sustituye_a',
             'tipo',
             'factura_origen_id',
             'vencida_en',
@@ -219,8 +230,31 @@ export const NotaCredito = definirEsquema(
                 description:
                     'Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente',
             },
+            dte_id: {
+                ...nulable(id),
+                description:
+                    'Su NCRE (GET /dte/:id): la vigente o la última rechazada; null en una nota interna',
+            },
+            fel_estado: {
+                ...nulable(texto),
+                description:
+                    'Estado de su NCRE: pendiente, enviando, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado',
+            },
+            fel_uuid: { ...nulable(texto), description: 'Autorización (UUID SAT) de su NCRE' },
+            fel_serie: nulable(texto),
+            fel_numero: nulable(texto),
+            fel_error: { ...nulable(texto), description: 'Error visible de su NCRE (SAT…)' },
         },
-        ['empresa_id', 'anulada_en'],
+        [
+            'empresa_id',
+            'anulada_en',
+            'dte_id',
+            'fel_estado',
+            'fel_uuid',
+            'fel_serie',
+            'fel_numero',
+            'fel_error',
+        ],
     ),
 )
 

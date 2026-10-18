@@ -4355,7 +4355,7 @@
       "get": {
         "operationId": "dteListar",
         "summary": "Listar DTE (certificaciones FEL)",
-        "description": "De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo.",
+        "description": "De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo. estado se repite para pedir varios (?estado=pendiente&estado=error_temporal); desde/hasta filtran por la fecha de emisión en Guatemala.",
         "tags": [
           "fel"
         ],
@@ -4405,18 +4405,44 @@
             "name": "estado",
             "in": "query",
             "required": false,
+            "description": "Uno o varios estados (se repite el parámetro): cualquiera de ellos",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "pendiente",
+                  "enviando",
+                  "certificado",
+                  "error_temporal",
+                  "rechazado",
+                  "contingencia",
+                  "anulacion_pendiente",
+                  "anulado"
+                ]
+              }
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de emisión desde (inclusive, en Guatemala)",
             "schema": {
               "type": "string",
-              "enum": [
-                "pendiente",
-                "enviando",
-                "certificado",
-                "error_temporal",
-                "rechazado",
-                "contingencia",
-                "anulacion_pendiente",
-                "anulado"
-              ]
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de emisión hasta (inclusive, en Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
             }
           },
           {
@@ -4539,6 +4565,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Dte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/dte/{id}/intentos": {
+      "get": {
+        "operationId": "dteIntentos",
+        "summary": "Bitácora del DTE ante el certificador",
+        "description": "Cada envío, anulación y consulta (fiscal.dte_intentos), del más antiguo al más reciente, con su resultado, duración y la respuesta del certificador (nunca credenciales).",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DteIntento"
+                  }
                 }
               }
             }
@@ -8714,6 +8816,61 @@
         "x-implementado": true
       }
     },
+    "/api/v1/fel/proveedores": {
+      "get": {
+        "operationId": "felProveedores",
+        "summary": "Catálogo de certificadores FEL (campos de credenciales y ambientes)",
+        "description": "Los certificadores registrados en la instalación: código, nombre, campos obligatorios, opcionales y visibles de PUT /fel/credenciales/:ambiente, ambientes que admite (solo_pruebas = no admite produccion) y capacidades (contingencia, consulta de NIT, PDF).",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Certificadores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProveedorFelCatalogo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
       "post": {
         "operationId": "fiscalActualizarLocalizacion",
@@ -12017,6 +12174,157 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/diarios": {
+      "get": {
+        "operationId": "libroDiarios",
+        "summary": "Diarios del libro y su numeración por año",
+        "description": "Diarios de la empresa activa (o empresas=todas): VEN, COB, COM, IMP, CIE, VAR, uno CAJ-n por caja y uno BAN-n por cuenta bancaria, con el último número asignado de cada año (§10.7). Solo lectura: los diarios se crean solos cuando un asiento los necesita.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Diario"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/diarios/{id}": {
+      "get": {
+        "operationId": "libroDiarioVer",
+        "summary": "Ver un diario y su numeración",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Diario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31269,6 +31577,115 @@
           }
         }
       },
+      "Diario": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "codigo",
+          "nombre",
+          "tipo",
+          "cuenta_por_defecto",
+          "cuenta_por_defecto_codigo",
+          "caja_id",
+          "cuenta_bancaria_id",
+          "activo",
+          "secuencias",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "codigo": {
+            "type": "string",
+            "description": "VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta bancaria>"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "ventas",
+              "cobros",
+              "caja",
+              "banco",
+              "compras",
+              "impuestos",
+              "cierre",
+              "varios"
+            ]
+          },
+          "cuenta_por_defecto": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_por_defecto_codigo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "caja_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "secuencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "anio",
+                "ultimo"
+              ],
+              "properties": {
+                "anio": {
+                  "type": "integer"
+                },
+                "ultimo": {
+                  "type": "integer"
+                }
+              }
+            },
+            "description": "Numeración guardada por año: último número asignado (el siguiente es ultimo + 1)"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Dinero": {
         "type": "string",
         "pattern": "^-?\\d{1,12}\\.\\d{2}$",
@@ -31539,6 +31956,53 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DteIntento": {
+        "type": "object",
+        "required": [
+          "id",
+          "dte_id",
+          "operacion",
+          "enviado_en",
+          "resultado",
+          "duracion_ms",
+          "respuesta"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dte_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "operacion": {
+            "type": "string",
+            "enum": [
+              "certificar",
+              "anular",
+              "consultar",
+              "validar"
+            ]
+          },
+          "enviado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resultado": {
+            "type": "string",
+            "description": "enviando, certificado, rechazado, error_temporal, anulado… (lo que respondió el certificador)"
+          },
+          "duracion_ms": {
+            "type": "integer"
+          },
+          "respuesta": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Respuesta del certificador, sin credenciales"
           }
         }
       },
@@ -33195,6 +33659,22 @@
             ],
             "description": "Id de la factura en su sistema de origen"
           },
+          "sustituida_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida"
+          },
+          "sustituye_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Factura original que esta sustituye; null si no es una sustituta"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -34728,6 +35208,47 @@
             ],
             "format": "date-time",
             "description": "Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente"
+          },
+          "dte_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Su NCRE (GET /dte/:id): la vigente o la última rechazada; null en una nota interna"
+          },
+          "fel_estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Estado de su NCRE: pendiente, enviando, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado"
+          },
+          "fel_uuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Autorización (UUID SAT) de su NCRE"
+          },
+          "fel_serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fel_numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fel_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error visible de su NCRE (SAT…)"
           }
         }
       },
@@ -37110,6 +37631,81 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ProveedorFelCatalogo": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "campos_obligatorios",
+          "campos_opcionales",
+          "campos_visibles",
+          "ambientes",
+          "solo_pruebas",
+          "capacidades"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "proveedor de PUT /fel/configuracion y /fel/credenciales"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "campos_obligatorios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Campos de credenciales que exige"
+          },
+          "campos_opcionales": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "campos_visibles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Campos que la API devuelve guardados (los demás son secretos y nunca salen)"
+          },
+          "ambientes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pruebas",
+                "produccion"
+              ]
+            }
+          },
+          "solo_pruebas": {
+            "type": "boolean",
+            "description": "No admite produccion (laboratorio)"
+          },
+          "capacidades": {
+            "type": "object",
+            "required": [
+              "contingencia",
+              "consulta_nit",
+              "pdf"
+            ],
+            "properties": {
+              "contingencia": {
+                "type": "boolean"
+              },
+              "consulta_nit": {
+                "type": "boolean"
+              },
+              "pdf": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },

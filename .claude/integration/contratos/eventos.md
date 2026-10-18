@@ -116,7 +116,7 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 
 ## Payloads de notas de crédito (A3)
 
-`nota_credito.emitida`: `{ nota_credito_id, empresa_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). No hay `nota_credito.anulada`: una nota no se anula (corrección = factura nueva o cargo; FEL en la semana 5 decidirá su anulación).
+`nota_credito.emitida`: `{ nota_credito_id, empresa_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). `nota_credito.anulada` (fase 3): `{ nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo }`, solo cuando la SAT rechazó en definitivo la NCRE de la nota y se anuló con `facturas.anular_nota_credito` (reverso espejo de su asiento; el monto vuelve al saldo de la factura; una vez por nota). Una nota interna (sin NCRE) no se anula: se corrige con otra nota o un cargo.
 
 ## Payloads de comprobantes (A3)
 

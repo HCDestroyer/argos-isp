@@ -21,12 +21,17 @@ import { ProveedorFelInfile } from '#fiscal/fel/infile'
  */
 
 registrarProveedorFel(new ProveedorFelInfile(), {
+    nombre: 'INFILE',
     obligatorios: ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api'],
+    opcionales: ['correo_copia'],
     visibles: ['usuario_firma', 'usuario_api', 'correo_copia'],
+    ambientes: ['pruebas', 'produccion'],
 })
 registrarProveedorFel(new ProveedorFelFalso(), {
+    nombre: 'Certificador de laboratorio (falso)',
     obligatorios: ['usuario', 'llave'],
     visibles: ['usuario'],
+    ambientes: ['pruebas'],
 })
 
 export type ModoFel = 'obligatoria' | 'opcional' | 'desactivada'

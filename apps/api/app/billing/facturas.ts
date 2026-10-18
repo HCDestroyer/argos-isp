@@ -120,6 +120,9 @@ export interface FacturaFila {
     /** factura importada: sistema de origen e id allí */
     origen?: string | null
     id_externo?: string | null
+    /** sustitución (`billing.sustituciones`): la factura nueva que reemplazó a esta, y la original que esta reemplaza */
+    sustituida_por?: number | null
+    sustituye_a?: number | null
     version: number
     created_at: Date
     updated_at: Date
@@ -162,6 +165,12 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('motivo_anulacion'),
         c('origen'),
         cliente.raw(`${alias}.clave_externa as id_externo`),
+        cliente.raw(
+            `(select su.nueva_id from billing.sustituciones su where su.original_id = ${alias}.id) as sustituida_por`,
+        ),
+        cliente.raw(
+            `(select su.original_id from billing.sustituciones su where su.nueva_id = ${alias}.id) as sustituye_a`,
+        ),
         c('version'),
         c('created_at'),
         c('updated_at'),

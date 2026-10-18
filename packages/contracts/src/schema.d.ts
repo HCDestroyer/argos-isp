@@ -629,7 +629,7 @@ export interface paths {
         };
         /**
          * Listar DTE (certificaciones FEL)
-         * @description De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo.
+         * @description De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo. estado se repite para pedir varios (?estado=pendiente&estado=error_temporal); desde/hasta filtran por la fecha de emisión en Guatemala.
          */
         get: operations["dteListar"];
         put?: never;
@@ -649,6 +649,26 @@ export interface paths {
         };
         /** Ver un DTE */
         get: operations["dteVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dte/{id}/intentos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bitácora del DTE ante el certificador
+         * @description Cada envío, anulación y consulta (fiscal.dte_intentos), del más antiguo al más reciente, con su resultado, duración y la respuesta del certificador (nunca credenciales).
+         */
+        get: operations["dteIntentos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1228,6 +1248,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fel/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catálogo de certificadores FEL (campos de credenciales y ambientes)
+         * @description Los certificadores registrados en la instalación: código, nombre, campos obligatorios, opcionales y visibles de PUT /fel/credenciales/:ambiente, ambientes que admite (solo_pruebas = no admite produccion) y capacidades (contingencia, consulta de NIT, PDF).
+         */
+        get: operations["felProveedores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
         parameters: {
             query?: never;
@@ -1741,6 +1781,43 @@ export interface paths {
         };
         /** Libro diario: asientos con sus movimientos */
         get: operations["libroDiario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/diarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diarios del libro y su numeración por año
+         * @description Diarios de la empresa activa (o empresas=todas): VEN, COB, COM, IMP, CIE, VAR, uno CAJ-n por caja y uno BAN-n por cuenta bancaria, con el último número asignado de cada año (§10.7). Solo lectura: los diarios se crean solos cuando un asiento los necesita.
+         */
+        get: operations["libroDiarios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/diarios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un diario y su numeración */
+        get: operations["libroDiarioVer"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4685,6 +4762,30 @@ export interface components {
             pagado_pendientes: components["schemas"]["Dinero"];
             facturas_vencidas: number;
         };
+        Diario: {
+            id: number;
+            empresa_id: number;
+            /** @description VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta bancaria> */
+            codigo: string;
+            nombre: string;
+            /** @enum {string} */
+            tipo: "ventas" | "cobros" | "caja" | "banco" | "compras" | "impuestos" | "cierre" | "varios";
+            cuenta_por_defecto: number | null;
+            cuenta_por_defecto_codigo: string | null;
+            caja_id: number | null;
+            cuenta_bancaria_id: number | null;
+            activo: boolean;
+            /** @description Numeración guardada por año: último número asignado (el siguiente es ultimo + 1) */
+            secuencias: {
+                anio: number;
+                ultimo: number;
+            }[];
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /**
          * @description Monto en quetzales con 2 decimales, como string
          * @example 150.00
@@ -4755,6 +4856,21 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        DteIntento: {
+            id: number;
+            dte_id: number;
+            /** @enum {string} */
+            operacion: "certificar" | "anular" | "consultar" | "validar";
+            /** Format: date-time */
+            enviado_en: string;
+            /** @description enviando, certificado, rechazado, error_temporal, anulado… (lo que respondió el certificador) */
+            resultado: string;
+            duracion_ms: number;
+            /** @description Respuesta del certificador, sin credenciales */
+            respuesta: {
+                [key: string]: unknown;
+            };
         };
         Egreso: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -5153,6 +5269,10 @@ export interface components {
             origen?: string | null;
             /** @description Id de la factura en su sistema de origen */
             id_externo?: string | null;
+            /** @description Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida */
+            sustituida_por?: number | null;
+            /** @description Factura original que esta sustituye; null si no es una sustituta */
+            sustituye_a?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -5570,6 +5690,16 @@ export interface components {
              * @description Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente
              */
             anulada_en?: string | null;
+            /** @description Su NCRE (GET /dte/:id): la vigente o la última rechazada; null en una nota interna */
+            dte_id?: number | null;
+            /** @description Estado de su NCRE: pendiente, enviando, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado */
+            fel_estado?: string | null;
+            /** @description Autorización (UUID SAT) de su NCRE */
+            fel_uuid?: string | null;
+            fel_serie?: string | null;
+            fel_numero?: string | null;
+            /** @description Error visible de su NCRE (SAT…) */
+            fel_error?: string | null;
         };
         NotaCreditoEmitida: components["schemas"]["NotaCredito"] & {
             /** @description La factura con su nuevo saldo y estado */
@@ -6191,6 +6321,24 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ProveedorFelCatalogo: {
+            /** @description proveedor de PUT /fel/configuracion y /fel/credenciales */
+            codigo: string;
+            nombre: string;
+            /** @description Campos de credenciales que exige */
+            campos_obligatorios: string[];
+            campos_opcionales: string[];
+            /** @description Campos que la API devuelve guardados (los demás son secretos y nunca salen) */
+            campos_visibles: string[];
+            ambientes: ("pruebas" | "produccion")[];
+            /** @description No admite produccion (laboratorio) */
+            solo_pruebas: boolean;
+            capacidades: {
+                contingencia: boolean;
+                consulta_nit: boolean;
+                pdf: boolean;
+            };
         };
         QuienSoy: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
@@ -9752,7 +9900,12 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
-                estado?: "pendiente" | "enviando" | "certificado" | "error_temporal" | "rechazado" | "contingencia" | "anulacion_pendiente" | "anulado";
+                /** @description Uno o varios estados (se repite el parámetro): cualquiera de ellos */
+                estado?: ("pendiente" | "enviando" | "certificado" | "error_temporal" | "rechazado" | "contingencia" | "anulacion_pendiente" | "anulado")[];
+                /** @description Fecha de emisión desde (inclusive, en Guatemala) */
+                desde?: string;
+                /** @description Fecha de emisión hasta (inclusive, en Guatemala) */
+                hasta?: string;
                 documento_tipo?: "factura" | "nota_credito" | "nota_debito";
                 documento_id?: number;
             };
@@ -9821,6 +9974,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Dte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fel.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    dteIntentos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Intentos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DteIntento"][];
                 };
             };
             /** @description No autenticado */
@@ -12165,6 +12367,44 @@ export interface operations {
             };
         };
     };
+    felProveedores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Certificadores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorFelCatalogo"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fel.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     fiscalActualizarLocalizacion: {
         parameters: {
             query?: never;
@@ -14062,6 +14302,105 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroDiarios: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diarios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diario"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroDiarioVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diario */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
