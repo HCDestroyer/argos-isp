@@ -34,6 +34,13 @@ export const ORIGENES_ASIENTO = [
     'cierre_caja',
     'ajuste',
     'reclasificacion',
+    // fase 4 (§10.3, §10.9): cobros y bancos, cartera
+    'liquidacion_cobro',
+    'deposito',
+    'traslado',
+    'banco',
+    'provision',
+    'castigo',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 

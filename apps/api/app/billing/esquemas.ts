@@ -434,6 +434,15 @@ export const Pago = definirEsquema(
                 ...nulable(texto),
                 description: 'Banco y alias de la cuenta de destino',
             },
+            proveedor_cobro_id: {
+                ...nulable(id),
+                description:
+                    'Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco',
+            },
+            liquidacion_id: {
+                ...nulable(id),
+                description: 'Liquidación del proveedor que incluyó el pago; null = sin liquidar',
+            },
             historico: {
                 ...booleano,
                 description:
@@ -448,6 +457,8 @@ export const Pago = definirEsquema(
             ...auditable,
         },
         [
+            'proveedor_cobro_id',
+            'liquidacion_id',
             'historico',
             'origen',
             'id_externo',

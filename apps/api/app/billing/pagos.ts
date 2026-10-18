@@ -38,6 +38,10 @@ export interface PagoVista {
     banco_origen_nombre: string | null
     cuenta_bancaria_id: number | null
     cuenta_bancaria_nombre: string | null
+    /** proveedor de cobro cuya cuenta puente 1.1.10.NN recibió el pago (fase 4); null = al banco */
+    proveedor_cobro_id: number | null
+    /** liquidación del proveedor que incluyó el pago (null = sin liquidar o sin proveedor) */
+    liquidacion_id: number | null
     /** pago importado de otro sistema (`RegistrarPagoHistorico`): no pasó por caja ni bancos */
     historico: boolean
     /** sistema de origen del pago histórico (`mikrowisp`, `smartisp`…); null si es de ArgosIsp */
@@ -73,6 +77,10 @@ const COLUMNAS = [
     'p.cuenta_bancaria_id',
     db.raw(
         "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
+    ),
+    'p.proveedor_cobro_id',
+    db.raw(
+        "(select lp.liquidacion_id from ledger.liquidaciones_pagos lp where lp.pago_id = p.id and lp.tipo = 'cobro') as liquidacion_id",
     ),
     'p.historico',
     'p.origen',

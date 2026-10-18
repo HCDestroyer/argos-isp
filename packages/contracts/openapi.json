@@ -18,6 +18,9 @@
       "name": "auth"
     },
     {
+      "name": "bancos"
+    },
+    {
       "name": "bitacora"
     },
     {
@@ -2922,6 +2925,931 @@
           }
         },
         "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/liquidaciones": {
+      "get": {
+        "operationId": "cobrosLiquidaciones",
+        "summary": "Liquidaciones de proveedores de cobro",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "proveedor_cobro_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de liquidaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LiquidacionCobro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cobrosLiquidar",
+        "summary": "Registrar la liquidación de un proveedor (Banco neto + Comisión / 1.1.10.NN bruto)",
+        "description": "bruto = Σ pagos − Σ contracargos (422 liquidacion_descuadrada); neto = bruto − comisión. Cada pago se liquida una vez (409 pago_ya_liquidado); referencia única por proveedor (409 liquidacion_duplicada). Emite cobros.liquidados.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proveedor_cobro_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del depósito; por defecto hoy"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "bruto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "comision": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "neto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Si se manda, debe ser bruto − comisión",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "pagos": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 5000
+                  },
+                  "contracargos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 5000,
+                    "description": "Pagos ya liquidados y después anulados que el proveedor descuenta"
+                  },
+                  "archivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "contenido": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 5000000,
+                    "description": "Contenido del archivo de la liquidación (se guarda su sha256)"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "proveedor_cobro_id",
+                  "referencia",
+                  "bruto",
+                  "comision",
+                  "pagos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Liquidación registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquidacionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.liquidar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.liquidar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/liquidaciones/{id}": {
+      "get": {
+        "operationId": "cobrosVerLiquidacion",
+        "summary": "Ver liquidación",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liquidación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquidacionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/por-liquidar": {
+      "get": {
+        "operationId": "cobrosPorLiquidar",
+        "summary": "Cobros por liquidar por proveedor: puente 1.1.10.NN vs pagos pendientes y antigüedad",
+        "description": "Check cobros_por_liquidar (§10.3): saldo de 1.1.10.NN = Σ pagos sin liquidar − contracargos; anomalias = pagos más antiguos que cobros_liquidar_dias.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenCobrosPorLiquidar"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/proveedores": {
+      "get": {
+        "operationId": "cobrosProveedores",
+        "summary": "Proveedores de cobro (pasarelas, agentes, débito) con su cuenta puente 1.1.10.NN",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proveedores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProveedorCobro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cobrosCrearProveedor",
+        "summary": "Dar de alta un proveedor de cobro (crea su subcuenta 1.1.10.NN)",
+        "description": "Desde `desde` (fecha de corte, hoy o futura) los pagos de ese proveedor van a su 1.1.10.NN por el bruto y la comisión sale de la liquidación. Los anteriores quedan contra el banco (§12.11). 409 proveedor_cobro_duplicado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "pasarela",
+                      "agente",
+                      "debito"
+                    ]
+                  },
+                  "pasarela": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 60,
+                    "description": "Solo pasarela: el nombre que trae el pago (falsa, recurrente…)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha de corte (por defecto hoy; no anterior a hoy)"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "metodo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Proveedor creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/proveedores/{id}": {
+      "put": {
+        "operationId": "cobrosEditarProveedor",
+        "summary": "Editar nombre, banco de liquidación o activo de un proveedor de cobro",
+        "description": "Con version (409 si cambió). La fecha de corte no se edita (422 campo_solo_lectura).",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "activo": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "No se edita (422 campo_solo_lectura)"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proveedor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.configurar",
         "x-implementado": true
       }
     },
@@ -12108,7 +13036,13 @@
                 "egreso",
                 "cierre_caja",
                 "ajuste",
-                "reclasificacion"
+                "reclasificacion",
+                "liquidacion_cobro",
+                "deposito",
+                "traslado",
+                "banco",
+                "provision",
+                "castigo"
               ]
             }
           },
@@ -22510,11 +23444,18 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "bancos.conciliar",
+                        "bancos.importar_extracto",
+                        "bancos.trasladar",
+                        "bancos.ver",
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
+                        "cajas.depositar",
                         "cajas.ver",
+                        "cartera.castigar",
+                        "cartera.provisionar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -22523,6 +23464,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cobros.configurar",
+                        "cobros.liquidar",
                         "compras.anular",
                         "compras.pagar",
                         "compras.registrar",
@@ -22590,6 +23533,7 @@
                         "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
+                        "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
                         "planes.crear",
@@ -22751,11 +23695,18 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "bancos.conciliar",
+                        "bancos.importar_extracto",
+                        "bancos.trasladar",
+                        "bancos.ver",
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
+                        "cajas.depositar",
                         "cajas.ver",
+                        "cartera.castigar",
+                        "cartera.provisionar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -22764,6 +23715,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cobros.configurar",
+                        "cobros.liquidar",
                         "compras.anular",
                         "compras.pagar",
                         "compras.registrar",
@@ -22831,6 +23784,7 @@
                         "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
+                        "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
                         "planes.crear",
@@ -27283,11 +28237,18 @@
                         "items": {
                           "type": "string",
                           "enum": [
+                            "bancos.conciliar",
+                            "bancos.importar_extracto",
+                            "bancos.trasladar",
+                            "bancos.ver",
                             "bitacora.ver",
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.crear",
+                            "cajas.depositar",
                             "cajas.ver",
+                            "cartera.castigar",
+                            "cartera.provisionar",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -27296,6 +28257,8 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "cobros.configurar",
+                            "cobros.liquidar",
                             "compras.anular",
                             "compras.pagar",
                             "compras.registrar",
@@ -27363,6 +28326,7 @@
                             "notificaciones.probar",
                             "notificaciones.ver",
                             "pagos.anular",
+                            "pagos.cerrar_diferencia",
                             "pagos.registrar",
                             "pagos.ver",
                             "planes.crear",
@@ -28980,7 +29944,13 @@
               "egreso",
               "cierre_caja",
               "ajuste",
-              "reclasificacion"
+              "reclasificacion",
+              "liquidacion_cobro",
+              "deposito",
+              "traslado",
+              "banco",
+              "provision",
+              "castigo"
             ]
           },
           "origen_id": {
@@ -34634,6 +35604,134 @@
           }
         }
       },
+      "LiquidacionCobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "proveedor_cobro_id",
+          "proveedor_codigo",
+          "proveedor_nombre",
+          "fecha",
+          "referencia",
+          "bruto",
+          "comision",
+          "neto",
+          "cuenta_id",
+          "cuenta_codigo",
+          "asiento_id",
+          "archivo",
+          "sha256",
+          "nota",
+          "registrado_por",
+          "created_at",
+          "pagos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_cobro_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_codigo": {
+            "type": "string"
+          },
+          "proveedor_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "bruto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "comision": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "neto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Banco que recibió el neto"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "archivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "pago_id",
+                "tipo",
+                "monto"
+              ],
+              "properties": {
+                "pago_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "cobro",
+                    "contracargo"
+                  ]
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          }
+        }
+      },
       "LocalizacionEmpresa": {
         "type": "object",
         "required": [
@@ -35471,6 +36569,22 @@
             ],
             "description": "Banco y alias de la cuenta de destino"
           },
+          "proveedor_cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco"
+          },
+          "liquidacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Liquidación del proveedor que incluyó el pago; null = sin liquidar"
+          },
           "historico": {
             "type": "boolean",
             "description": "Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos"
@@ -35501,6 +36615,53 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PagoPorLiquidar": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "tipo",
+          "cliente_id",
+          "monto",
+          "referencia",
+          "fecha",
+          "dias"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "cobro",
+              "contracargo"
+            ],
+            "description": "contracargo = pago liquidado y luego anulado (resta)"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "dias": {
+            "type": "integer",
+            "description": "Días desde el pago"
           }
         }
       },
@@ -37618,6 +38779,91 @@
           "servicio": {
             "$ref": "#/components/schemas/ServicioEvaluado",
             "description": "Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProveedorCobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "metodo",
+          "codigo",
+          "nombre",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_liquidacion_id",
+          "cuenta_liquidacion_codigo",
+          "cuenta_liquidacion_nombre",
+          "desde",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "pasarela",
+              "agente",
+              "debito"
+            ]
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Nombre normalizado de la pasarela, o el método"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta 1.1.10.NN Cobros por liquidar del proveedor"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_liquidacion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Banco donde deposita las liquidaciones"
+          },
+          "cuenta_liquidacion_codigo": {
+            "type": "string"
+          },
+          "cuenta_liquidacion_nombre": {
+            "type": "string"
+          },
+          "desde": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha de corte: sus pagos desde este día van a 1.1.10.NN"
+          },
+          "activo": {
+            "type": "boolean"
           },
           "version": {
             "type": "integer",
@@ -40492,6 +41738,83 @@
           "ignorado": {
             "type": "string",
             "description": "cobro_desconocido o cobro_ya_pagado"
+          }
+        }
+      },
+      "ResumenCobrosPorLiquidar": {
+        "type": "object",
+        "required": [
+          "proveedor_cobro_id",
+          "empresa_id",
+          "metodo",
+          "codigo",
+          "nombre",
+          "cuenta_codigo",
+          "saldo_libro",
+          "pendiente",
+          "diferencia",
+          "cuadra",
+          "dias_limite",
+          "pagos",
+          "anomalias"
+        ],
+        "properties": {
+          "proveedor_cobro_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "pasarela",
+              "agente",
+              "debito"
+            ]
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "saldo_libro": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.10.NN en el libro de la empresa"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ pagos sin liquidar − Σ contracargos pendientes"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "saldo_libro − pendiente (0 = el puente cuadra)"
+          },
+          "cuadra": {
+            "type": "boolean"
+          },
+          "dias_limite": {
+            "type": "integer",
+            "description": "cobros_liquidar_dias de la empresa"
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoPorLiquidar"
+            }
+          },
+          "anomalias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoPorLiquidar"
+            },
+            "description": "Pagos sin liquidar más antiguos que dias_limite"
           }
         }
       },

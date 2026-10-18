@@ -51,6 +51,9 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',
     'ledger.conciliaciones': 'conciliación; deshacer = conciliaciones_anulaciones (§10.3)',
     'ledger.conciliaciones_anulaciones': 'anulación de conciliación (§10.3)',
+    // fase 4 (A3): cobros por liquidar (§10.3)
+    'ledger.liquidaciones_cobro': 'liquidación de un proveedor de cobro (§10.3)',
+    'ledger.liquidaciones_pagos': 'pago o contracargo incluido en una liquidación (§10.3)',
     // §10.10 integridad, activos y diferidos
     'ledger.asientos_sellos': 'cadena de hash de asientos (§10.10)',
     'ledger.activos': 'activo fijo; la baja es activos_bajas (§10.10)',
@@ -76,6 +79,8 @@ export const MUTABLES: Record<string, string> = {
     'ledger.secuencias': 'contador del correlativo (`ultimo`) tomado con FOR UPDATE (§10.7)',
     'ledger.proveedores': 'catálogo de proveedores con version (§3.4)',
     'ledger.reglas_conciliacion': 'configuración con version y audit.cambios (§10.3)',
+    'ledger.proveedores_cobro':
+        'fase 4 (A3): configuración del proveedor de cobro (nombre, banco, activo) con version y audit.cambios (§10.3)',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */
