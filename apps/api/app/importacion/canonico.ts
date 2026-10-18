@@ -1,5 +1,6 @@
 import { isIPv4 } from 'node:net'
-import { Decimal } from 'decimal.js'
+import { D, type Dec } from '#ledger/dinero'
+import { decimalDe, leerMonto, type FormatoDecimal, type SeparadorDecimal } from '#importacion/montos'
 import type { FilaCsv } from '#importacion/csv'
 
 /**
@@ -377,7 +378,10 @@ class FilaInvalida extends Error {}
  * Valida y normaliza las filas de cada entidad (columnas de `COLUMNAS`). Lo llaman todos los
  * adaptadores de origen después de traducir sus datos.
  */
-export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
+export function normalizarFuente(
+    entrada: FilasPorEntidad,
+    opciones: { decimal?: FormatoDecimal } = {},
+): FuenteCanonica {
     const problemas: ProblemaFila[] = []
     const leer = (entidad: Entidad) => entrada[entidad]
 
@@ -385,7 +389,7 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
         const archivo = datos.origen
         const salida: T[] = []
         for (const fila of datos.filas) {
-            const campos = new Campos(archivo, fila, problemas)
+            const campos = new Campos(archivo, fila, problemas, decimalDe(opciones.decimal, archivo))
             try {
                 salida.push(convertir(campos))
             } catch (error) {
@@ -480,7 +484,7 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
     const facturas = procesar(leer('facturas'), (f) => {
         const total = f.dinero('total')
         const pagado = f.opcional('pagado') ? f.dinero('pagado') : '0.00'
-        const pendiente = new Decimal(total).minus(pagado)
+        const pendiente = new D(total).minus(pagado)
         return {
             id: f.requerido('id'),
             cliente_id: f.requerido('cliente_id'),
@@ -532,16 +536,16 @@ export function normalizarFuente(entrada: FilasPorEntidad): FuenteCanonica {
             .map((f) => f.valores.id?.trim()),
     )
     if (pagos.length > 0 && sinPagado.size > 0) {
-        const pagadoPor = new Map<string, Decimal>()
+        const pagadoPor = new Map<string, Dec>()
         for (const p of pagos) {
             if (!p.factura_id) continue
-            pagadoPor.set(p.factura_id, (pagadoPor.get(p.factura_id) ?? new Decimal(0)).plus(p.monto))
+            pagadoPor.set(p.factura_id, (pagadoPor.get(p.factura_id) ?? new D(0)).plus(p.monto))
         }
         for (const f of facturas) {
             const pagado = pagadoPor.get(f.id)
             if (!sinPagado.has(f.id) || !pagado) continue
-            const pendiente = new Decimal(f.pendiente).minus(pagado)
-            f.pendiente = (pendiente.isNegative() ? new Decimal(0) : pendiente).toFixed(2)
+            const pendiente = new D(f.pendiente).minus(pagado)
+            f.pendiente = (pendiente.isNegative() ? new D(0) : pendiente).toFixed(2)
         }
     }
 
@@ -575,6 +579,7 @@ class Campos {
         private readonly archivo: string,
         private readonly fila: FilaCsv,
         private readonly problemas: ProblemaFila[],
+        private readonly decimal: SeparadorDecimal = 'punto',
     ) {}
 
     get linea() {
@@ -650,24 +655,23 @@ class Campos {
         return kbps
     }
 
-    /** `150.00`, `Q 1,250.50`, `-20` (solo con `conSigno`) → `"150.00"`. Más de 2 decimales: fila omitida. */
+    /**
+     * `150.00`, `Q 1,250.50`, `-20` (solo con `conSigno`) → `"150.00"`; con coma decimal declarada,
+     * `1.250,50`. Ilegible o ambiguo (`1,50` con punto decimal) o con más de 2 decimales: fila
+     * omitida con el motivo (`montos.ts`). Nunca se convierte en 0.
+     */
     dinero(columna: string, conSigno = false): string {
         const crudo = this.requerido(columna)
-        const negativo = /^-\s*/.test(crudo)
-        const valor = crudo.replace(/^-\s*/, '').replace(/^Q\s*/i, '').replace(/,/g, '')
-        let monto: Decimal
-        try {
-            monto = new Decimal(valor)
-        } catch {
-            throw new FilaInvalida(`${columna} "${crudo}" no es un monto`)
-        }
-        if (monto.isNegative() || !monto.isFinite() || (negativo && !conSigno)) {
-            throw new FilaInvalida(`${columna} "${crudo}" no es válido`)
+        const lectura = leerMonto(crudo, this.decimal)
+        if (!lectura.ok) throw new FilaInvalida(`${columna} "${crudo}" ${lectura.motivo}`)
+        const monto = lectura.valor
+        if (monto.isNegative() && !conSigno) {
+            throw new FilaInvalida(`${columna} "${crudo}" no es válido (no puede ser negativo)`)
         }
         if (monto.decimalPlaces() > 2) {
             throw new FilaInvalida(`${columna} "${crudo}" tiene más de 2 decimales`)
         }
-        return (negativo ? monto.negated() : monto).toFixed(2)
+        return monto.toFixed(2)
     }
 
     /** `2026-08`, `2026-08-01` o `08/2026` → `2026-08-01`; `2026-08-15` se respeta (corte día 15). */
