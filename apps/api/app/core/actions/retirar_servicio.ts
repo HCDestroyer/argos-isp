@@ -5,6 +5,7 @@ import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { liberarAsignaciones } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { registrarTramo } from '#network/historial'
+import { cancelarPorRetiro } from '#core/planes_temporales'
 
 export interface EntradaRetirarServicio {
     id: number
@@ -15,7 +16,8 @@ export interface EntradaRetirarServicio {
  * Retira un servicio (baja definitiva): estado `retirado` desde cualquier estado, libera su IPv4
  * y sus prefijos IPv6 (quedan en el historial) y emite `servicio.estado_cambiado` y
  * `asignacion.cambiada`. El `user_ppp` se conserva para la bitácora; en Redis su clave
- * `aaa:user:<user_ppp>` queda con una lápida.
+ * `aaa:user:<user_ppp>` queda con una lápida. Un plan temporal programado o activo queda
+ * `cancelado` (motivo `retiro`) y el servicio vuelve a su plan base.
  */
 export default class RetirarServicio extends DomainAction<EntradaRetirarServicio, ServicioVista> {
     readonly nombre = 'servicios.retirar'
@@ -44,6 +46,7 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
+        await cancelarPorRetiro(t, input.id)
         await liberarAsignaciones(t.trx, input.id)
         // cierra el tramo vigente del historial (un retirado no abre otro)
         await registrarTramo(t.trx, input.id, `retiro: ${input.motivo}`)

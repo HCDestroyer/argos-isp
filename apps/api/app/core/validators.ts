@@ -102,7 +102,22 @@ const camposCliente = {
     }),
 }
 
-export const crearClienteValidator = vine.compile(vine.object(camposCliente))
+export const crearClienteValidator = vine.compile(
+    vine.object({
+        ...camposCliente,
+        codigo_referido: vine
+            .string()
+            .trim()
+            .maxLength(20)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Código de referido de otro cliente (programa de lealtad, 8 caracteres). 422 ' +
+                    '`referido_invalido` si no existe o el referidor tiene el mismo NIT o CUI',
+            }),
+    }),
+)
 
 export const editarClienteValidator = vine.compile(
     vine.object({
@@ -352,6 +367,26 @@ export const listarServiciosValidator = vine.compile(
 
 /** suspender, reactivar, limitar, quitar-limite, retirar, desconectar */
 export const motivoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/** `POST /servicios/:id/planes-temporales` (lealtad, `contratos/lealtad.md` §5). */
+export const programarPlanTemporalValidator = vine.compile(
+    vine.object({
+        plan_id: idEntidad().meta({
+            description: 'Plan temporal (mejora): activo, disponible en el router y compatible',
+        }),
+        inicio: instanteIso()
+            .optional()
+            .meta({ description: 'Por defecto, ahora (se inicia en la misma petición)' }),
+        fin: instanteIso().optional().meta({ description: 'Fin de la vigencia; o `dias` (uno de los dos)' }),
+        dias: vine.number().withoutDecimals().range([1, 366]).optional(),
+        motivo: motivo().nullable().optional(),
+    }),
+)
+
+/** `POST /servicios/:id/planes-temporales/:plan_temporal_id/cancelar`. */
+export const cancelarPlanTemporalValidator = vine.compile(
+    vine.object({ version: versionEsperada(), motivo: motivo() }),
+)
 
 export const cambiarEmpresaServicioValidator = vine.compile(
     vine.object({

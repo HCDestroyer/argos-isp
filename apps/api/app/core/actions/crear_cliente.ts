@@ -3,6 +3,7 @@ import { ValidacionFallida } from '#shared/errores'
 import { limpiarDocumento, validarDocumentoFiscal, type TipoDocumentoFiscal } from '#core/nit_cui'
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
+import { resolverCodigoReferido } from '#core/referidos'
 
 export interface DatosCliente {
     nombre?: string
@@ -30,6 +31,11 @@ export interface EntradaCrearCliente extends DatosCliente {
     nombre: string
     /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
     externo?: IdExterno
+    /**
+     * Código de referido de otro cliente (programa de lealtad): guarda quién lo refirió y en qué
+     * empresa cuenta. 422 `referido_invalido` si no existe o es del mismo NIT/CUI.
+     */
+    codigo_referido?: string | null
 }
 
 const CAMPOS_DOCUMENTO = ['tipo_documento_fiscal', 'nit_cui', 'pais_fiscal'] as const
@@ -100,13 +106,21 @@ export async function columnasCliente(
  *
  * `codigo` (`C-000455`) lo deriva la base del id al insertar y es inmutable; el código que traiga
  * el importador del sistema anterior va en `codigo_externo`.
+ *
+ * `codigo_referido` (lealtad, `contratos/lealtad.md` §4): se resuelve con `resolverCodigoReferido`
+ * y queda en `referido_por_id` / `referido_empresa_id`. El referido lo registra y califica A3.
  */
 export default class CrearCliente extends DomainAction<EntradaCrearCliente, ClienteVista> {
     readonly nombre = 'clientes.crear'
 
     protected async handle(input: EntradaCrearCliente, t: Transaccion): Promise<ClienteVista> {
-        const { externo, ...datos } = input
+        const { externo, codigo_referido: codigoReferido, ...datos } = input
         const columnas = await columnasCliente(t, datos)
+        if (codigoReferido) {
+            const referido = await resolverCodigoReferido(t.trx, t.ctx, codigoReferido, columnas)
+            columnas.referido_por_id = referido.referido_por_id
+            columnas.referido_empresa_id = referido.referido_empresa_id
+        }
         const [fila] = (await t.trx
             .insertQuery()
             .table('core.clientes')
@@ -118,7 +132,10 @@ export default class CrearCliente extends DomainAction<EntradaCrearCliente, Clie
         t.fijarEntidad('cliente', id)
         await vincularExterno(t.trx, 'cliente', id, externo)
         const cliente = await verCliente(id, t.trx)
-        await t.registrarCambios({ tipo: 'cliente', id }, null, cliente)
+        // los códigos de referido no son datos del alta (los crea el primer servicio)
+        const auditable: Record<string, unknown> = { ...cliente }
+        delete auditable.codigos_referido
+        await t.registrarCambios({ tipo: 'cliente', id }, null, auditable)
         return cliente
     }
 }
