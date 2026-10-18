@@ -32,6 +32,10 @@ import { verCobro } from '#billing/cobros_vista'
 import type { EmpresasReporte } from '#billing/reportes/reportes'
 import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { NoEncontrado, Prohibido } from '#shared/errores'
+import SustituirFactura from '#billing/actions/sustituir_factura'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
+import { dteVigente } from '#fiscal/fel/dte'
+import db from '@adonisjs/lucid/services/db'
 import { dimensionesDePromesa, listarPromesas, verPromesa } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
@@ -103,6 +107,7 @@ import {
     FacturaDetalle,
     NotaCredito,
     NotaCreditoEmitida,
+    SustitucionFactura,
     Pago,
     Cobro,
     PlantillaFacturacion,
@@ -247,11 +252,24 @@ const facturas: Ruta[] = [
         cuerpo: v.anularFacturaValidator,
         idempotente: true,
         descripcion:
-            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.',
-        respuesta: { status: 200, descripcion: 'Factura anulada', esquema: Factura },
+            'Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba. FEL: con DTE certificado exige además el permiso fel.anular; dentro del plazo (dte_anulacion_plazo) el DTE queda anulacion_pendiente (fel_estado) y la factura se anula cuando el certificador lo confirma; fuera de plazo 422 anulacion_fuera_de_plazo (emite una nota de crédito). 409 anulacion_en_proceso, dte_en_proceso.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Factura anulada (o con su DTE en anulación)',
+            esquema: Factura,
+        },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDeFactura(id))
+            const dte = await dteVigente(db.connection(), 'factura', id)
+            if (dte?.estado === 'certificado' && ctx.auth.user) {
+                const alcance = await alcanceDePermiso(ctx.auth.user.id, 'fel.anular', alcancesDelToken(ctx))
+                if (!alcance) {
+                    throw new Prohibido(
+                        'Anular una factura certificada requiere además el permiso fel.anular',
+                    )
+                }
+            }
             return new AnularFactura().execute(
                 { factura_id: id, motivo: cuerpo.motivo },
                 ctx.contextoAccion(),
@@ -271,13 +289,56 @@ const notasCredito: Ruta[] = [
         cuerpo: v.notaCreditoValidator,
         idempotente: true,
         descripcion:
-            'Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.',
+            'Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura, o por línea con lineas[]; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). FEL: sobre una factura certificada es una NCRE (IVA a 2.1.02, su DTE en cola; 422 nota_fuera_de_plazo); sobre un aviso sin DTE, nota interna (IVA de 2.1.11). 422 monto si excede el saldo; 409 factura_anulada, factura_sin_saldo, dte_en_proceso, nota_por_linea_no_disponible.',
         respuesta: { status: 201, descripcion: 'Nota de crédito emitida', esquema: NotaCreditoEmitida },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDeFactura(id))
             return new EmitirNotaCredito().execute(
-                { factura_id: id, monto: cuerpo.monto, motivo: cuerpo.motivo },
+                { factura_id: id, monto: cuerpo.monto, motivo: cuerpo.motivo, lineas: cuerpo.lineas },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/notas-credito/:id/anular',
+        operacion: 'notasCreditoAnular',
+        resumen: 'Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.anular_nota_credito',
+        cuerpo: v.anularNotaCreditoValidator,
+        idempotente: true,
+        descripcion:
+            'Reverso espejo del asiento de la nota; el monto vuelve al saldo de la factura y el servicio se reevalúa. Emite nota_credito.anulada. 409 nota_anulada, ncre_certificada, dte_en_proceso (la NCRE sigue en cola), nota_sin_ncre_rechazada.',
+        respuesta: { status: 200, descripcion: 'Nota anulada', esquema: NotaCredito },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            const nota = await verNotaCredito(id)
+            exigirAcceso(ctx, await dimensionesDeFactura(nota.factura_id))
+            return new AnularNotaCredito().execute(
+                { nota_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/facturas/:id/sustituir',
+        operacion: 'facturasSustituir',
+        resumen: 'Sustituir una factura mal emitida (mismo periodo)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.sustituir',
+        cuerpo: v.sustituirFacturaValidator,
+        idempotente: true,
+        descripcion:
+            'Anula la original (sin DTE certificado) o la acredita con una NCRE por todo su saldo (con DTE certificado) y emite una nueva con las mismas líneas, periodo y vencimiento y el receptor corregido (cliente_fiscal). Emite factura.sustituida. 409 sustitucion_no_permitida (pagos, mora, ya sustituida), factura_anulada; 422 nota_fuera_de_plazo.',
+        respuesta: { status: 201, descripcion: 'Original y nueva', esquema: SustitucionFactura },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeFactura(id))
+            return new SustituirFactura().execute(
+                { factura_id: id, motivo: cuerpo.motivo, cliente_fiscal: cuerpo.cliente_fiscal },
                 ctx.contextoAccion(),
             )
         },

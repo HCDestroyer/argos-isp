@@ -97,6 +97,19 @@ interface PayloadSesion {
     prefijos_v6: string[]
 }
 
+/**
+ * Campos de `core.clientes` que emiten `cliente.actualizado`: los que Horus muestra (`nombre`,
+ * `tipo`, `codigo`) y la identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`).
+ */
+export const CAMPOS_CLIENTE_ACTUALIZADO = [
+    'nombre',
+    'tipo',
+    'codigo',
+    'nit_cui',
+    'tipo_documento_fiscal',
+] as const
+export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -198,6 +211,17 @@ export interface CatalogoEventos {
     /** `aaa` volvió a responder. `desde` = inicio de la caída, `hasta` = primer health check bueno. */
     'aaa.recuperado': { nodo: string; desde: string; hasta: string; ultimo_error: string | null }
 
+    /**
+     * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
+     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
+     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar). Sin `empresa_id`: el
+     * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
+     */
+    'cliente.actualizado': {
+        cliente_id: number
+        campos: CampoClienteActualizado[]
+    }
+
     // billing (A3)
     'factura.emitida': PayloadFactura
     'factura.vencida': PayloadFactura
@@ -206,6 +230,15 @@ export interface CatalogoEventos {
     'pago.anulado': PayloadPago
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
+    /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
+    'nota_credito.anulada': {
+        nota_credito_id: number
+        empresa_id: number
+        factura_id: number
+        cliente_id: number
+        monto: Dinero
+        motivo: string
+    }
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
@@ -225,6 +258,18 @@ export interface CatalogoEventos {
         contado: Dinero
         diferencia: Dinero
     }
+    /**
+     * La cadena de hash del libro de la empresa no verifica (contrato de localización fiscal
+     * §10.10): el sello `sello` guarda `esperado` y el recálculo dio `obtenido`. Lo emite el
+     * sellador o la verificación diaria, una vez por (empresa, sello).
+     */
+    'libro.integridad_rota': {
+        empresa_id: number
+        sello: number
+        asiento_id: number | null
+        esperado: string
+        obtenido: string
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -242,6 +287,130 @@ export interface CatalogoEventos {
         empresa_id: number | null
         campos: string[]
     }
+
+    // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
+    'fiscal.localizacion_instalada': {
+        empresa_id: number
+        pais: string
+        /** versión instalada, p. ej. `gt-2026.1` */
+        codigo: string
+        /** versión anterior; null en la primera instalación */
+        de_codigo: string | null
+    }
+    /** invalida la caché de parámetros (regla 5); null = valor global de la instalación */
+    'fiscal.parametros_cambiados': {
+        empresa_id: number | null
+        claves: string[]
+        /** YYYY-MM-DD: la vigencia más antigua de lo insertado */
+        vigente_desde: string
+    }
+    /** nunca lleva valores secretos */
+    'fiscal.config_cambiada': {
+        empresa_id: number
+        campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
+    }
+    // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
+    'dte.certificado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        tipo_dte: string
+        autorizacion: string
+        serie: string | null
+        numero: string | null
+        contingencia: boolean
+    }
+    /** `definitivo: false` = se agotaron los reintentos automáticos (sigue en error_temporal) */
+    'dte.rechazado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        error: string
+        definitivo: boolean
+    }
+    'dte.anulado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        motivo: string
+    }
+    'fel.contingencia_cambiada': {
+        empresa_id: number
+        activa: boolean
+        motivo: string
+    }
+    'factura.sustituida': {
+        factura_id: number
+        nueva_factura_id: number
+        empresa_id: number
+        servicio_id: number | null
+        cliente_id: number
+        motivo: string
+    }
+    // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
+    // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
+    /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
+    'horus.config_cambiada': { activo: boolean; campos: string[] }
+    /** Horus abrió un hallazgo de seguridad de un cliente (§3.4 `finding.opened`). */
+    'horus.hallazgo_abierto': PayloadHallazgoHorus
+    /** Horus resolvió un hallazgo (§3.4 `finding.resolved`). */
+    'horus.hallazgo_resuelto': PayloadHallazgoHorus
+    /** Cambió el estado de seguridad de un cliente en Horus (§3.4 `customer.security_state_changed`). */
+    'horus.estado_seguridad_cambiado': PayloadClienteHorus & {
+        estado: string
+        estado_anterior: string | null
+        hallazgos_abiertos: number | null
+    }
+    /** Un router que vigila Horus cambió de estado (§3.4 `router.status_changed`). */
+    'horus.router_estado_cambiado': {
+        webhook_id: string
+        router: {
+            id: string
+            nombre: string | null
+            estado: string
+            estado_anterior: string | null
+            motivo: string | null
+        }
+    }
+    /** Un servicio de infraestructura (IPTV, HTTP…) cambió de estado (§3.4 `infra_service.state_changed`). */
+    'horus.servicio_infra_cambiado': {
+        webhook_id: string
+        servicio_infra: {
+            id: string
+            nombre: string | null
+            estado: string
+            estado_anterior: string | null
+            motivo: string | null
+        }
+    }
+}
+
+/**
+ * Lo común de los eventos de Horus sobre un cliente: el `servicio_id`, `cliente_id` y
+ * `empresa_id` de Argos (de `external` del webhook, verificados contra `core.servicios`; null si
+ * Horus no tiene identidad vigente) y la IP que vio Horus.
+ */
+interface PayloadClienteHorus {
+    /** `X-Webhook-Id` / `id` del webhook de Horus (deduplicación) */
+    webhook_id: string
+    servicio_id: number | null
+    cliente_id: number | null
+    empresa_id: number | null
+    ip: string | null
+}
+
+type PayloadHallazgoHorus = PayloadClienteHorus & {
+    hallazgo: {
+        id: string | null
+        tipo: string | null
+        severidad: string | null
+        resumen: string | null
+        abierto_en: string | null
+        reabierto: boolean
+    }
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -255,6 +424,7 @@ export const EVENTOS = [
     'asignacion.cambiada',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',
     'sesion.desconexion_solicitada',
@@ -268,6 +438,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'nota_credito.emitida',
+    'nota_credito.anulada',
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
@@ -275,8 +446,23 @@ export const EVENTOS = [
     'comprobante.aprobado',
     'comprobante.rechazado',
     'caja.cerrada',
+    'libro.integridad_rota',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'fiscal.localizacion_instalada',
+    'fiscal.parametros_cambiados',
+    'fiscal.config_cambiada',
+    'dte.certificado',
+    'dte.rechazado',
+    'dte.anulado',
+    'fel.contingencia_cambiada',
+    'factura.sustituida',
+    'horus.config_cambiada',
+    'horus.hallazgo_abierto',
+    'horus.hallazgo_resuelto',
+    'horus.estado_seguridad_cambiado',
+    'horus.router_estado_cambiado',
+    'horus.servicio_infra_cambiado',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

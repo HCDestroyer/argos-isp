@@ -55,6 +55,10 @@ export const PERMISOS = {
     'facturas.generar': 'Generar facturas',
     'facturas.anular': 'Anular facturas',
     'facturas.nota_credito': 'Emitir notas de crédito (parcial o total) sobre el saldo de una factura',
+    'facturas.anular_nota_credito':
+        'Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)',
+    'facturas.sustituir':
+        'Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)',
     'pagos.ver': 'Ver pagos',
     'pagos.registrar': 'Registrar pagos',
     'pagos.anular': 'Anular pagos',
@@ -89,11 +93,51 @@ export const PERMISOS = {
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
 
+    'horus.ver':
+        'Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)',
+    'horus.configurar':
+        'Configurar el conector con Horus Flow (URL, código de conexión, webhooks, enlace de conexión); solo admin',
+    'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
+    'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
+
     'empresas.ver': 'Ver las empresas (NIT) de la instalación',
     'empresas.crear': 'Crear empresas (NIT)',
     'empresas.editar': 'Editar los datos fiscales y de contacto de una empresa',
     'empresas.desactivar': 'Desactivar una empresa (no se borra)',
     'empresas.cambiar_logo': 'Subir o quitar el logo de una empresa',
+    'empresas.cambiar_pais':
+        'Cambiar el país de la localización fiscal de una empresa (solo sin documentos); solo admin',
+
+    // Localización fiscal (`contratos/localizacion-fiscal.md` §10.2); los endpoints son de A3
+    'fiscal.ver': 'Ver la localización fiscal, parámetros, régimen, establecimientos y el tablero fiscal',
+    'fiscal.configurar': 'Configurar establecimientos, frases y consejos fiscales de la empresa',
+    'fiscal.instalar': 'Instalar o actualizar el paquete de localización fiscal de una empresa; solo admin',
+    'fiscal.editar_parametros': 'Agregar valores con vigencia a los parámetros fiscales',
+    'fiscal.cambiar_regimen': 'Cambiar el régimen tributario de la empresa (con vigencia y aviso a la SAT)',
+    'fel.ver': 'Ver la configuración FEL y los DTE (estado, XML y PDF)',
+    'fel.configurar': 'Configurar el proveedor FEL, credenciales y modo de emisión; solo admin',
+    'fel.certificar': 'Certificar facturas con FEL y reintentar DTE',
+    'fel.anular': 'Anular DTE certificados (junto con facturas.anular)',
+    'fel.contingencia': 'Activar o desactivar la contingencia FEL',
+    'proveedores.ver': 'Ver proveedores',
+    'proveedores.editar': 'Crear y editar proveedores',
+    'compras.ver': 'Ver compras (libro de compras)',
+    'compras.registrar': 'Registrar compras, también desde un egreso',
+    'compras.anular': 'Anular compras con asiento de reverso',
+    'compras.pagar': 'Registrar y anular pagos a proveedores',
+    'libros.ver': 'Ver los libros legales (vista previa) y sus habilitaciones',
+    'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
+    'libros.habilitar': 'Registrar habilitaciones de folios de libros',
+    'libro.cerrar_ejercicio': 'Cerrar el ejercicio anual (resultados a cero y reserva legal)',
+    'libro.reabrir_ejercicio': 'Reabrir un ejercicio cerrado (con motivo); solo admin',
+    'libro.bloquear': 'Bloquear el libro hasta una fecha (bloqueo normal)',
+    'libro.bloquear_duro': 'Bloqueo duro del libro (no retrocede); solo admin',
+    'libro.desbloquear': 'Quitar el bloqueo normal del libro (con motivo)',
+    'declaraciones.ver': 'Ver obligaciones fiscales y borradores de declaraciones',
+    'declaraciones.calcular': 'Calcular borradores de declaraciones',
+    'declaraciones.revisar': 'Marcar como revisado un borrador de declaración',
+    'declaraciones.presentar': 'Marcar una declaración como presentada en la SAT (el sistema no la envía)',
+    'declaraciones.pagar': 'Registrar el pago de una declaración',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
@@ -110,6 +154,12 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'horus.generar_token':
+        'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
+    'horus.revocar_token': 'Revocar el token de una integración',
+    'sso.emitir':
+        'Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus)',
+    'vinculaciones.revocar': 'Revocar las vinculaciones de autologin de todos los usuarios o de uno',
 } as const satisfies Record<string, string>
 
 export type Permiso = keyof typeof PERMISOS
@@ -121,6 +171,25 @@ export function esPermiso(nombre: string): nombre is Permiso {
 }
 
 const lectura = NOMBRES_PERMISOS.filter((p) => p.endsWith('.ver'))
+
+/**
+ * Permisos nuevos de la localización fiscal (§10.2) y los que `contabilidad` NO recibe (quedan para
+ * `admin`): instalar paquetes, configurar FEL, bloqueo duro, reabrir ejercicio y cambiar el país.
+ */
+const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
+    (p) =>
+        p === 'empresas.cambiar_pais' ||
+        /^(fiscal|fel|proveedores|compras|libros|declaraciones)\./.test(p) ||
+        /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear)$/.test(p),
+)
+const SOLO_ADMIN_FISCAL: readonly Permiso[] = [
+    'fiscal.instalar',
+    'fel.configurar',
+    'libro.bloquear_duro',
+    'libro.reabrir_ejercicio',
+    'empresas.cambiar_pais',
+]
+export const PERMISOS_FISCALES_CONTABILIDAD = PERMISOS_FISCALES.filter((p) => !SOLO_ADMIN_FISCAL.includes(p))
 
 /**
  * Roles base. `admin` tiene todo. `cajero` NO tiene `routers.*` ni `servicios.suspender`.
@@ -152,6 +221,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'fel.ver',
         ],
     },
     soporte: {
@@ -218,7 +288,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         ],
     },
     contabilidad: {
-        descripcion: 'Facturación, pagos, libro y cierres',
+        descripcion:
+            'Facturación, pagos, libro, cierres y localización fiscal (FEL, compras, libros, declaraciones)',
         permisos: [
             'clientes.ver',
             'clientes.estado_cuenta',
@@ -232,6 +303,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.generar',
             'facturas.anular',
             'facturas.nota_credito',
+            'facturas.sustituir',
+            'facturas.anular_nota_credito',
             'pagos.ver',
             'pagos.registrar',
             'pagos.anular',
@@ -255,6 +328,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
+            ...PERMISOS_FISCALES_CONTABILIDAD,
         ],
     },
     lectura: {

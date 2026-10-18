@@ -4,6 +4,10 @@ import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { aplicarAnticipos } from '#billing/cobros'
+import { lineaConIva } from '#billing/facturas'
+import { cuentaIva } from '#billing/fel_facturas'
+import { valorParametro } from '#fiscal/parametros'
+import { configuracionFel } from '#fiscal/fel/configuracion'
 
 /**
  * Mora: recargo por vencimiento. Se documenta como una factura `tipo = 'mora'` ligada a la
@@ -11,7 +15,8 @@ import { aplicarAnticipos } from '#billing/cobros'
  * primero) y el estado de cuenta la muestra. No cuenta para limitar/cortar.
  *
  * - `mora_tipo` `fija`: `mora_valor` quetzales; `porcentaje`: `mora_valor` % del total de la
- *   factura vencida. Sin IVA (asiento `CxC / Recargos por mora`).
+ *   factura vencida. Sin IVA (asiento `CxC / Recargos por mora`) salvo `mora_con_iva` de la
+ *   empresa (solo el contador lo activa): con IVA desglosado y, con FEL, como aviso que sale NDEB.
  * - Se usa la regla del `reglas_snapshot` de la factura (la vigente cuando se emitió).
  * - `mora_recurrente`: un recargo más por cada mes que la factura siga vencida. Clave
  *   `mora-<factura>-<n>`: aplicarla dos veces no duplica.
@@ -81,6 +86,38 @@ export async function crearMora(
     if (monto.lte(0)) return null
 
     const concepto = `Recargo por mora de la factura ${factura.id}` + (n > 1 ? ` (mes ${n})` : '')
+    // `mora_con_iva` (decisión del PM: no por defecto; solo el contador lo activa). Con IVA y FEL
+    // activa, el recargo es un aviso (IVA a 2.1.11) que sale como NDEB al cobrarse (§8.3).
+    const conIva = await valorParametro<boolean>(factura.empresa_id, 'mora_con_iva', hoy, t.trx).catch(
+        () => false,
+    )
+    // H9: es aviso solo si su factura es aviso de cobro o lleva DTE; si la factura no va por FEL, la mora
+    // tampoco (su IVA va a 2.1.02 como el de su factura)
+    const origenConFel = (await t.trx
+        .from('billing.facturas as f')
+        .where('f.id', factura.id)
+        .where((q) =>
+            q
+                .where('f.aviso_cobro', true)
+                .orWhereExists((d) =>
+                    d
+                        .from('fiscal.dte as d')
+                        .whereRaw('d.documento_id = f.id')
+                        .where('d.documento_tipo', 'factura')
+                        .whereNot('d.estado', 'rechazado'),
+                ),
+        )
+        .first()) as unknown
+    const felActiva = await configuracionFel(factura.empresa_id, t.trx).then((c) => c.modo !== 'desactivada')
+    const avisoCobro = conIva === true && felActiva && Boolean(origenConFel)
+    const linea = lineaConIva({
+        concepto,
+        tipo: 'mora',
+        cantidad: '1',
+        gravable: conIva === true,
+        total: monto,
+    })
+    const iva = dec(linea.iva)
     const insertadas = (await t.trx
         .knexQuery()
         .table('billing.facturas')
@@ -95,10 +132,16 @@ export async function crearMora(
             vence_en: hoy,
             vencida_en: t.trx.knexRawQuery('now()'),
             estado: 'vencida',
-            subtotal: aTexto(monto),
-            iva: '0.00',
+            subtotal: aTexto(monto.minus(iva)),
+            iva: aTexto(iva),
             total: aTexto(monto),
-            reglas_snapshot: JSON.stringify({ ...regla, factura_origen_id: factura.id, numero: n }),
+            aviso_cobro: avisoCobro,
+            reglas_snapshot: JSON.stringify({
+                ...regla,
+                factura_origen_id: factura.id,
+                numero: n,
+                mora_con_iva: conIva === true,
+            }),
         })
         .onConflict('clave_unica')
         .ignore()
@@ -109,16 +152,7 @@ export async function crearMora(
     await t.trx
         .insertQuery()
         .table('billing.facturas_lineas')
-        .insert({
-            factura_id: moraId,
-            concepto,
-            tipo: 'mora',
-            cantidad: '1',
-            precio_unitario: aTexto(monto),
-            gravable: false,
-            iva: '0.00',
-            total: aTexto(monto),
-        })
+        .insert({ ...linea, factura_id: moraId })
     await new RegistrarAsiento().execute(
         {
             empresa_id: factura.empresa_id,
@@ -127,7 +161,8 @@ export async function crearMora(
             origen_id: moraId,
             movimientos: [
                 { cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(monto), cliente_id: factura.cliente_id },
-                { cuenta: CUENTAS.RECARGOS_MORA, haber: aTexto(monto) },
+                { cuenta: CUENTAS.RECARGOS_MORA, haber: aTexto(monto.minus(iva)) },
+                ...(iva.gt(0) ? [{ cuenta: cuentaIva(avisoCobro), haber: aTexto(iva) }] : []),
             ],
         },
         t.ctx,

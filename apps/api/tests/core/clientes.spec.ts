@@ -14,10 +14,11 @@ test.group('NIT y CUI', () => {
         assert.isFalse(nitValido('abc'))
     })
 
-    test('CUI de 13 dígitos con verificador y departamento', ({ assert }) => {
+    test('CUI de 13 dígitos con departamento y municipio', ({ assert }) => {
         assert.isTrue(cuiValido('1234567890101'))
         assert.isTrue(cuiValido('1234 56789 0101'))
-        assert.isFalse(cuiValido('1234567800101'), 'verificador')
+        // el verificador del CUI no se aplica: no hay fuente oficial (#core/nit_cui)
+        assert.isTrue(cuiValido('1234567800101'), 'verificador')
         assert.isFalse(cuiValido('1234567892301'), 'departamento 23')
         assert.isFalse(cuiValido('1234567890100'), 'municipio 00')
     })
@@ -100,7 +101,7 @@ test.group('Clientes', () => {
             client
                 .post('/api/v1/clientes')
                 .bearerToken(token)
-                .json({ nombre: 'Mal CUI', nit_cui: '1234567800101' }),
+                .json({ nombre: 'Mal CUI', nit_cui: '1234567892302' }),
             422,
         )
         await estado(
