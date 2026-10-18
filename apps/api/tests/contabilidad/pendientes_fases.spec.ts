@@ -76,18 +76,7 @@ const PENDIENTES: Pendiente[] = [
             'ledger.extractos, extractos_lineas y conciliaciones rechazan UPDATE/DELETE (trigger y REVOKE); deshacer una conciliación es una fila nueva; nunca se reescribe el asiento conciliado (a diferencia de Odoo); el bloqueo duro exige cero líneas sin conciliar.',
     },
     // Lealtad
-    {
-        titulo: 'lealtad: 2.1.10 = valor de los lotes vivos cuando diferimiento = true',
-        fase: 'lealtad, fase 1',
-        criterio:
-            'Contrato de lealtad §6: por empresa, saldo acreedor de 2.1.10 = Σ valor de los lotes no consumidos ni vencidos; con diferimiento = false no hay asientos de lealtad; acumulación 4.1.05 / 2.1.10, canje y vencimiento 2.1.10 / 4.1.06.',
-    },
-    {
-        titulo: 'lealtad: un evento repetido no da puntos (ni asientos) dos veces',
-        fase: 'lealtad, fase 1',
-        criterio:
-            'Contrato de lealtad §9: procesar dos veces el mismo pago.registrado deja un solo movimiento de puntos y un solo asiento; el cron de vencimiento repetido no duplica (clave vencimiento:lote:<id>).',
-    },
+    // lealtad, fase 1: activados en `lealtad.spec.ts` (2.1.10 = lotes vivos; evento repetido)
     {
         titulo: 'lealtad: el canje como descuento deja la factura con el IVA del neto',
         fase: 'lealtad, fase 2',
