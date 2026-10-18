@@ -250,30 +250,94 @@ export const PortalCuenta = definirEsquema(
     }),
 )
 
+/** DTE certificado de un documento (contrato `localizacion-fiscal.md` §8). */
+export const PortalDte = definirEsquema(
+    'PortalDte',
+    objeto({
+        tipo_dte: { ...texto, description: 'Tipo de DTE de la SAT: FACT, FCAM, NDEB, NCRE…' },
+        estado: {
+            ...enumerado(['certificado', 'anulacion_pendiente', 'anulado']),
+            description:
+                'certificado; anulacion_pendiente (sigue vigente hasta que la SAT confirme); anulado ante la SAT',
+        },
+        autorizacion: { ...texto, description: 'Número de autorización (UUID de la SAT)' },
+        serie: nulable(texto),
+        numero: nulable(texto),
+        certificado_en: nulable(instante),
+        xml_disponible: { ...booleano, description: 'Se puede descargar el XML certificado' },
+    }),
+)
+
+const ReferenciaFactura = objeto({
+    id,
+    numero: { ...texto, description: 'Serie-número FEL o número del aviso' },
+})
+
 export const PortalFactura = definirEsquema(
     'PortalFactura',
     objeto({
         id,
         numero: { ...texto, description: 'Serie-número FEL si está certificada; si no, número del aviso' },
         documento: {
-            ...enumerado(['aviso_cobro', 'factura']),
-            description: 'factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto',
+            ...enumerado(['aviso_cobro', 'factura', 'nota_debito']),
+            description:
+                'factura (nota_debito para la mora) solo cuando su DTE está certificado; aviso_cobro mientras tanto',
         },
         tipo: enumerado(['servicio', 'mora']),
         servicio_id: nulable(id),
         periodo: fecha,
         emitida_en: instante,
         vence_en: fecha,
-        estado: enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+        estado: {
+            ...enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+            description: 'Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal',
+        },
         subtotal: Dinero,
         iva: Dinero,
         total: Dinero,
-        pagado: Dinero,
+        pagado: { ...Dinero, description: 'Cubierto: pagos, saldos a favor y notas de crédito' },
+        acreditado: { ...Dinero, description: 'Parte de pagado que viene de notas de crédito vigentes' },
         saldo: { ...Dinero, description: 'total - pagado (0.00 si está anulada)' },
-        fel_uuid: nulable(texto),
+        fel_uuid: {
+            ...nulable(texto),
+            description: 'Autorización del DTE certificado (igual a dte.autorizacion)',
+        },
         fel_serie: nulable(texto),
         fel_numero: nulable(texto),
+        dte: { ...nulable(PortalDte), description: 'DTE certificado; null mientras es aviso de cobro' },
+        sustituida: { ...booleano, description: 'Otra factura la reemplazó (billing.sustituciones)' },
+        sustituida_por: {
+            ...nulable(ReferenciaFactura),
+            description: 'La factura que la reemplaza, si ya es visible en el portal',
+        },
+        sustituye_a: { ...nulable(ReferenciaFactura), description: 'La factura a la que reemplaza' },
         empresa: { ...PortalMarcaEmpresa, description: 'Empresa que emite la factura' },
+    }),
+)
+
+export const PortalNotaCredito = definirEsquema(
+    'PortalNotaCredito',
+    objeto({
+        id,
+        numero: { ...texto, description: 'Serie-número de la NCRE certificada; si no, número interno' },
+        documento: {
+            ...enumerado(['nota_credito', 'ncre']),
+            description: 'ncre cuando su DTE está certificado; nota_credito (interna) mientras tanto',
+        },
+        factura_id: id,
+        factura_numero: texto,
+        servicio_id: nulable(id),
+        fecha,
+        subtotal: Dinero,
+        iva: Dinero,
+        monto: { ...Dinero, description: 'Lo que la nota acredita a la factura' },
+        motivo: texto,
+        estado: {
+            ...enumerado(['vigente', 'anulada']),
+            description: 'anulada: la SAT rechazó su NCRE y el monto volvió al saldo de la factura',
+        },
+        dte: nulable(PortalDte),
+        empresa: { ...PortalMarcaEmpresa, description: 'Empresa de la factura acreditada' },
     }),
 )
 
@@ -473,10 +537,24 @@ export const VariableDocumento = definirEsquema(
     objeto({ nombre: texto, descripcion: texto }),
 )
 
+const TipoDocumento = {
+    ...enumerado(['aviso_cobro', 'nota_credito']),
+    description: 'aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)',
+}
+
+export const PlantillaDocumentoFabrica = definirEsquema(
+    'PlantillaDocumentoFabrica',
+    objeto({
+        tipo: TipoDocumento,
+        html: { ...texto, description: 'HTML de fábrica de la versión instalada (con el bloque FEL)' },
+        variables: lista(VariableDocumento),
+    }),
+)
+
 export const PlantillaDocumento = definirEsquema(
     'PlantillaDocumento',
     objeto({
-        tipo: enumerado(['aviso_cobro']),
+        tipo: TipoDocumento,
         html: { ...texto, description: 'HTML con variables Mustache (`{{factura.total}}`)' },
         version: {
             ...entero,

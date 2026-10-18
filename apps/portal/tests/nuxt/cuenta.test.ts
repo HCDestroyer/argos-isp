@@ -53,7 +53,7 @@ describe('portal autenticado /cuenta', () => {
         const wrapper = await montarCuenta('/cuenta?seccion=facturas')
         expect(wrapper.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
         const facturas = wrapper.findAll('[data-testid="factura"]')
-        expect(facturas).toHaveLength(5)
+        expect(facturas).toHaveLength(7)
         expect(facturas[0]!.text()).toContain('Servicio de octubre 2026')
         expect(facturas[0]!.text()).toContain('Aviso de cobro 1203')
         expect(facturas[0]!.text()).toContain('Vencida')
