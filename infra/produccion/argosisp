@@ -215,10 +215,10 @@ limpiar_versiones() {
 # ---------------------------------------------------------------------------
 # Salud
 # ---------------------------------------------------------------------------
-# Una línea por contenedor: servicio estado salud código reinicios fin
+# Una línea por contenedor: servicio estado salud código reinicios fin inicio
 inspeccionar() {
     [ $# -gt 0 ] || return 0
-    docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}} {{.RestartCount}} {{.State.FinishedAt}}' "$@"
+    docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}} {{.RestartCount}} {{.State.FinishedAt}} {{.State.StartedAt}}' "$@"
 }
 
 # esperar_sano <versión> <instante UTC en que empezó el `up`>
@@ -234,11 +234,18 @@ esperar_sano() {
         [ "${#ids[@]}" -gt 0 ] || pendientes=" (sin contenedores todavía)"
         while read -r linea; do
             [ -n "$linea" ] || continue
-            local servicio estado salud codigo reinicios fin reciente=false
-            read -r servicio estado salud codigo reinicios fin <<< "$linea"
+            local servicio estado salud codigo reinicios fin inicio reciente=false
+            read -r servicio estado salud codigo reinicios fin inicio <<< "$linea"
             [ "$salud" = "-" ] && salud=""
             # Por segundos: Docker recorta los ceros finales de los nanosegundos
             [[ "${fin:0:19}" < "${t0:0:19}" ]] || reciente=true
+            # Detenido y arrancado por última vez antes de este `up`: es de la corrida anterior (p. ej.
+            # la versión rota que se está revirtiendo) y compose lo va a recrear. Sus reinicios,
+            # código y salud no son de esta versión.
+            if [ "$estado" != running ] && [[ "${inicio:0:19}" < "${t0:0:19}" ]]; then
+                pendientes="$pendientes $servicio"
+                continue
+            fi
             case "$UNA_VEZ" in
                 *" $servicio "*)
                     if [ "$estado" = exited ] && $reciente; then
