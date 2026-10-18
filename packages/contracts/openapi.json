@@ -1672,6 +1672,140 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bancos/llegadas/reatribuir": {
+      "post": {
+        "operationId": "bancosReatribuirLlegada",
+        "summary": "Corregir la llegada al banco atribuida al depósito o traslado equivocado",
+        "description": "Solo inserción: deshace la conciliación de la línea, revierte el asiento de llegada (el documento original vuelve a 1.1.11) y registra la llegada del documento correcto con la misma línea. 404 sin llegada vigente; 422 conciliacion_descuadrada si el monto no coincide.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "traslado"
+                    ]
+                  },
+                  "documento_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Depósito o traslado al que se atribuyó la llegada por error"
+                  },
+                  "nuevo_tipo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "traslado"
+                    ]
+                  },
+                  "nuevo_documento_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Depósito o traslado en tránsito que en verdad llegó"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "documento_id",
+                  "nuevo_tipo",
+                  "nuevo_documento_id",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conciliación nueva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.reatribuir_llegada; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.reatribuir_llegada",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bancos/movimientos-sin-conciliar": {
       "get": {
         "operationId": "bancosMovimientosSinConciliar",
@@ -5849,10 +5983,10 @@
                   },
                   "bruto": {
                     "type": "string",
-                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
                     "examples": [
-                      "150.00"
+                      "-15.00"
                     ]
                   },
                   "comision": {
@@ -5868,10 +6002,10 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Si se manda, debe ser bruto − comisión",
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
                     "examples": [
-                      "150.00"
+                      "-15.00"
                     ]
                   },
                   "pagos": {
@@ -5880,7 +6014,6 @@
                       "type": "integer",
                       "minimum": 1
                     },
-                    "minItems": 1,
                     "maxItems": 5000
                   },
                   "contracargos": {
@@ -27461,6 +27594,7 @@
                       "enum": [
                         "bancos.conciliar",
                         "bancos.importar_extracto",
+                        "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
                         "bitacora.ver",
@@ -27715,6 +27849,7 @@
                       "enum": [
                         "bancos.conciliar",
                         "bancos.importar_extracto",
+                        "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
                         "bitacora.ver",
@@ -32438,6 +32573,7 @@
                           "enum": [
                             "bancos.conciliar",
                             "bancos.importar_extracto",
+                            "bancos.reatribuir_llegada",
                             "bancos.trasladar",
                             "bancos.ver",
                             "bitacora.ver",

@@ -67,7 +67,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         )
         assert.equal(p2.monto, '0.00', 'al 30-sep la reserva ya estaba en el tope')
         assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
-    }).fails('H12: la segunda provisión con el mismo corte registra otros Q30.00')
+    })
 
     test('H13 · anular el pago deja viva la diferencia de cobro que ese pago cerró', async ({ assert }) => {
         // Producto: app/billing/actions/anular_pago.ts no toca billing.diferencias_cobro ni su nota. La diferencia se
@@ -88,7 +88,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
         await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
         assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
-    }).fails('H13: la nota de la diferencia sigue viva con el pago anulado')
+    })
     test('H14 · una liquidación con solo contracargos (el proveedor debita el banco) no se puede registrar', async ({
         assert,
     }) => {
@@ -143,5 +143,5 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         )
         assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
         assert.deepEqual(await verificarLibro(e.B), [])
-    }).fails('H14: bruto ≤ 0 se rechaza (422) y 1.1.10.NN queda en −100.00')
+    })
 })

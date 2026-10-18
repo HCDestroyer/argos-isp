@@ -14,6 +14,7 @@ import {
     type FacturaPendiente,
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 
@@ -144,6 +145,33 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
+
+        // H13: la diferencia de cobro que este pago cerró se justificaba con él; su nota interna se anula
+        // (reverso espejo). Una NCRE ya enviada a la SAT no se deshace aquí (contrato §18)
+        const diferencias = (await t.trx
+            .from('billing.diferencias_cobro as d')
+            .where('d.pago_id', pago.id)
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = d.nota_credito_id'),
+            )
+            .whereNotExists((q) =>
+                q
+                    .from('fiscal.dte as e')
+                    .whereRaw("e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id"),
+            )
+            .orderBy('d.id')
+            .select('d.nota_credito_id')) as Array<{ nota_credito_id: number }>
+        for (const d of diferencias) {
+            await new AnularNotaCredito().execute(
+                {
+                    nota_id: Number(d.nota_credito_id),
+                    motivo: `anulación del pago ${pago.id}: ${input.motivo}`,
+                    pago_id: pago.id,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
 
         await t.emit('pago.anulado', {
             pago_id: pago.id,

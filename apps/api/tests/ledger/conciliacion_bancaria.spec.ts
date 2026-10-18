@@ -1,3 +1,4 @@
+import type { Assert } from '@japa/assert'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
@@ -10,12 +11,13 @@ import TrasladarFondos from '#ledger/actions/trasladar_fondos'
 import ImportarExtracto from '#ledger/actions/importar_extracto'
 import ConciliarLinea from '#ledger/actions/conciliar_linea'
 import AnularConciliacion from '#ledger/actions/anular_conciliacion'
+import ReatribuirLlegada from '#ledger/actions/reatribuir_llegada'
 import RegistrarDesdeExtracto from '#ledger/actions/registrar_desde_extracto'
 import CrearReglaConciliacion from '#ledger/actions/crear_regla_conciliacion'
 import EditarReglaConciliacion from '#ledger/actions/editar_regla_conciliacion'
 import AplicarReglasConciliacion from '#ledger/actions/aplicar_reglas_conciliacion'
 import { lineasDeExtracto, movimientosSinConciliar, reporteConciliacion } from '#ledger/conciliacion'
-import { resumenFondosEnTransito } from '#ledger/transitos'
+import { listarDepositos, resumenFondosEnTransito } from '#ledger/transitos'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { errorDe, lineas, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
@@ -343,4 +345,79 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         assert.isTrue(reporte!.cuadra)
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    test('reatribuir una llegada: reverso de la llegada equivocada y llegada nueva del documento correcto', async ({
+        assert,
+    }) => {
+        await reatribuirEscenario(assert)
+    })
+
+    test('reatribuir una llegada: el auditor completo en verde', async ({ assert }) => {
+        const e = await reatribuirEscenario(assert)
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails(
+        'Esperando al auditor: 4.saldo_de_caja_o_banco y 13.fondos_en_transito cuentan como acreditado un depósito cuya llegada se reatribuyó (ledger.transitos_reatribuciones)',
+    )
 })
+
+async function reatribuirEscenario(assert: Assert) {
+    const e = await prepararEmpresasGt()
+    const hoy = hoyGuatemala()
+    const banco = e.banco.get(e.B)!
+    const cajaId = e.cajas.get(e.B)!
+    const d1 = await new DepositarCaja().execute(
+        { caja_id: cajaId, monto: '40.00', boleta: 'R-1', cuenta_bancaria_id: banco.id },
+        e.ctx,
+    )
+    const d2 = await new DepositarCaja().execute(
+        { caja_id: cajaId, monto: '40.00', boleta: 'R-2', cuenta_bancaria_id: banco.id },
+        e.ctx,
+    )
+    const extracto = await new ImportarExtracto().execute(
+        {
+            cuenta_bancaria_id: banco.id,
+            desde: hoy,
+            hasta: hoy,
+            saldo_inicial: '0.00',
+            saldo_final: '40.00',
+            lineas: [{ fecha: hoy, descripcion: 'DEPOSITO', referencia: 'R-2', monto: '40.00' }],
+        },
+        e.ctx,
+    )
+    const [linea] = await lineasDeExtracto(extracto.id)
+    await new ConciliarLinea().execute({ linea_id: linea!.id, depositos: [d1.id] }, e.ctx)
+    const nueva = await new ReatribuirLlegada().execute(
+        {
+            tipo: 'deposito',
+            documento_id: d1.id,
+            nuevo_tipo: 'deposito',
+            nuevo_documento_id: d2.id,
+            motivo: 'la boleta del extracto es R-2',
+        },
+        e.ctx,
+    )
+    assert.equal(nueva.linea_id, linea!.id)
+    assert.equal(nueva.movimientos[0]!.origen_id, d2.id)
+    const depositos = await listarDepositos({}, [e.B])
+    const estado = new Map(depositos.data.map((d) => [d.id, d.estado]))
+    assert.equal(estado.get(d1.id), 'en_transito')
+    assert.equal(estado.get(d2.id), 'acreditado')
+    assert.equal(await saldoCuenta(e.B, CUENTAS_GT.FONDOS_EN_TRANSITO), '40.00')
+    assert.equal(await saldoCuenta(e.B, banco.codigo), '40.00')
+    const [transito] = await resumenFondosEnTransito([e.B])
+    assert.isTrue(transito!.cuadra)
+    const sinLlegada = await errorDe(
+        new ReatribuirLlegada().execute(
+            {
+                tipo: 'deposito',
+                documento_id: d1.id,
+                nuevo_tipo: 'deposito',
+                nuevo_documento_id: d2.id,
+                motivo: 'otra vez',
+            },
+            e.ctx,
+        ),
+    )
+    assert.equal(sinLlegada.status, 404)
+    return e
+}

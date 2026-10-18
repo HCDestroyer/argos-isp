@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import RegistrarPago from '#billing/actions/registrar_pago'
+import AnularPago from '#billing/actions/anular_pago'
 import CerrarDiferenciaPago from '#billing/actions/cerrar_diferencia_pago'
 import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
@@ -28,7 +29,7 @@ const IVA_POR_CERTIFICAR = CUENTAS_GT.IVA_POR_CERTIFICAR
 test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('cerrar diferencia: la base a 5.3.05 y el IVA proporcional; tope y una sola vez', async ({
+    test('cerrar diferencia sin documento fiscal: todo a 5.3.05; tope y una sola vez; anular el pago la deshace (H13)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -49,9 +50,9 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         assert.equal(cerrada.tope, '1.00')
         const [nota] = cerrada.notas
         assert.isFalse(nota!.ncre)
+        // FEL desactivada (sin documento fiscal): no rebaja 2.1.02, todo a 5.3.05
         assert.deepEqual(await lineas('nota_credito', nota!.nota_credito_id), [
-            [CUENTAS_GT.DIFERENCIAS_COBRO, '0.45', '0.00'],
-            [CUENTAS.IVA_DEBITO, '0.05', '0.00'],
+            [CUENTAS_GT.DIFERENCIAS_COBRO, '0.50', '0.00'],
             [CUENTAS.CXC_CLIENTES, '0.00', '0.50'],
         ])
         const [despues] = await facturasDelServicio(s.servicioId)
@@ -73,6 +74,17 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         )
         const sobre = await errorDe(new CerrarDiferenciaPago().execute({ pago_id: corto.id }, e.ctx))
         assert.equal(sobre.codigo, 'diferencia_sobre_tope')
+
+        // H13: anular el pago anula la nota de su diferencia (reverso espejo) y la factura vuelve a deber todo
+        await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
+        const anulada = await db
+            .from('billing.notas_credito_anulaciones')
+            .where('nota_id', nota!.nota_credito_id)
+            .first()
+        assert.equal(anulada.pago_id, pago.id)
+        assert.isNull(anulada.dte_id)
+        const [reabierta] = await facturasDelServicio(s.servicioId)
+        assert.equal(reabierta!.pagado, '0.00')
         await afirmarLibro(assert, [e.B, e.C])
     })
 

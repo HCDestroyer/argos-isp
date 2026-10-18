@@ -148,16 +148,17 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 
 | Acción (permiso) | Ruta | Asiento |
 | --- | --- | --- |
-| `cobros.crear_proveedor`, `cobros.editar_proveedor` (`cobros.configurar`) | `GET/POST /cobros/proveedores`, `PUT /cobros/proveedores/:id` | Crea la subcuenta `1.1.10.NN`; `desde` = fecha de corte (no se edita) |
-| `cobros.liquidar` | `POST /cobros/liquidaciones` | `Banco (neto) + 5.1.02 (comisión) / 1.1.10.NN (bruto)`; bruto = Σ pagos − contracargos |
+| `cobros.crear_proveedor`, `cobros.editar_proveedor` (`cobros.configurar`) | `GET/POST /cobros/proveedores`, `PUT /cobros/proveedores/:id` | Crea la subcuenta `1.1.10.NN`; `desde` = fecha de corte. Se activa por empresa; con pagos, `desde` y la desactivación responden 409 `proveedor_con_pagos` |
+| `cobros.liquidar` | `POST /cobros/liquidaciones` | `Banco (neto) + 5.1.02 (comisión) / 1.1.10.NN (bruto)`; bruto = Σ pagos − contracargos; con solo contracargos (bruto ≤ 0) el proveedor debita el banco |
 | `cajas.depositar` | `POST /cajas/:id/depositar` | `1.1.11 / Caja`; baja el esperado del turno |
 | `bancos.trasladar` | `POST /bancos/trasladar` | `1.1.11 / Banco A` (misma empresa) |
 | `bancos.importar_extracto` | `POST /bancos/extractos` | Ninguno (neutral al origen; huella única por cuenta) |
 | `bancos.conciliar` | `POST /bancos/conciliaciones` | Ninguno sobre lo existente; la llegada de un depósito o traslado es un asiento nuevo `Banco / 1.1.11` |
 | `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Ninguno (fila de anulación por fila del grupo) |
+| `bancos.reatribuir_llegada` | `POST /bancos/llegadas/reatribuir` | Reverso de la llegada equivocada y llegada nueva del documento correcto (`ledger.transitos_reatribuciones`) |
 | `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
 | `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
-| `cartera.provisionar` | `POST /cartera/provisionar` | `5.3.02 / 1.1.12` hasta el tope (`reserva_incobrables_max` de los saldos deudores) |
+| `cartera.provisionar` | `POST /cartera/provisionar` | `5.3.02 / 1.1.12` hasta el tope (`reserva_incobrables_max` de los saldos deudores); la reserva se mide al corte y un corte anterior al último responde 422 `provision_fuera_de_orden` |
 | `cartera.castigar` | `POST /cartera/castigos` | `2.1.11 (IVA de avisos sin DTE) + 1.1.12 (o 5.3.02) / CxC` |
 
 - `registrarPago`: pasarela, agente o débito de un proveedor activo (desde su fecha de corte) → su `1.1.10.NN` por el bruto, sin comisión (`pagos.proveedor_cobro_id`); sin proveedor, al banco como antes.
