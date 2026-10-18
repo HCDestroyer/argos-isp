@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
 import { vistaPreviaControl } from './vistaPrevia'
 
@@ -62,7 +62,12 @@ function capacidadValida(valor: unknown): boolean {
 export const rutasRouters: RutasFixture = {
     'GET /api/v1/routers': conPermiso('routers.ver', (solicitud) => {
         const activo = solicitud.query.get('activo')
-        const filas = bd.routers.filter(router => activo === null || String(router.activo) === activo)
+        // Multiempresa (A1): sin empresa sugerida, sugeridos para la empresa o con servicios de ella.
+        const empresas = empresasDeLista(solicitud)
+        const filas = bd.routers
+            .filter(router => activo === null || String(router.activo) === activo)
+            .filter(router => empresas === null || router.empresa_sugerida_id === null || empresas.includes(router.empresa_sugerida_id)
+                || bd.servicios.some(s => s.router_id === router.id && empresas.includes(s.empresa_id)))
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
 
@@ -101,6 +106,8 @@ export const rutasRouters: RutasFixture = {
             api_ca: conexion('api_ca'),
             dhcp_servidor: conexion('dhcp_servidor'),
             interfaz_clientes: conexion('interfaz_clientes'),
+            // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
+            empresa_sugerida_id: 'empresa_sugerida_id' in cuerpo ? (cuerpo.empresa_sugerida_id as number | null) : router.empresa_sugerida_id,
             version: router.version + 1,
             updated_at: ahora(),
         })

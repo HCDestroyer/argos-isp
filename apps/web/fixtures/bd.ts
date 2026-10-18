@@ -11,6 +11,9 @@ import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
+import { empresas } from './empresas/datos'
+import { configuracionGlobal } from './notificaciones/datos'
+import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
@@ -22,6 +25,17 @@ import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
+
+/** Un cobro guardado: el recibo (`GET /cobros/:id`) se arma con sus pagos. */
+export interface CobroFixture {
+    id: number
+    cliente_id: number
+    metodo: Schema<'Pago'>['metodo']
+    monto: string
+    registrado_por: number | null
+    created_at: string
+    pagos: number[]
+}
 
 /** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
 export interface SesionSimulada {
@@ -57,6 +71,16 @@ interface BaseFixtures {
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
+    /** Multiempresa: las empresas (NIT) de la instalación. */
+    empresas: Schema<'EmpresaGrupo'>[]
+    /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
+    usuarios: Schema<'Usuario'>[]
+    /** Configuración de canales de notificación: la global y la de cada empresa con fila propia. */
+    notificaciones: { global: Schema<'ConfiguracionNotificaciones'>, empresas: Record<number, Schema<'ConfiguracionNotificaciones'>> }
+    /** Envíos de prueba hechos (para el `envio_id`). */
+    enviosPrueba: number
+    /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
+    cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
@@ -114,6 +138,11 @@ function inicial(): BaseFixtures {
         bancos,
         cuentasBancarias,
         empresa,
+        empresas,
+        usuarios,
+        notificaciones: { global: configuracionGlobal, empresas: {} },
+        enviosPrueba: 0,
+        cobros: [],
         plantillaAvisoCobro,
         clavesPpp: {},
         idempotencia: {},

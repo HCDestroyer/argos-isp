@@ -71,7 +71,7 @@ onMounted(cargar)
 <template>
     <PanelPagina
         id="empresa"
-        titulo="Empresa"
+        titulo="Contacto y pagos"
         icono="i-lucide-building-2"
     >
         <div class="mx-auto flex w-full max-w-3xl flex-col gap-4">

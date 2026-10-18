@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, registrarAccion, sinSesion, usuariosPorToken, versionCambiada } from '../comun'
+import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, registrarAccion, sinSesion, usuariosPorToken, versionCambiada } from '../comun'
 
 type CuentaBancaria = Schema<'CuentaBancaria'>
 type Errores = NonNullable<Problem['errors']>
@@ -56,7 +56,7 @@ export const rutasBancos: RutasFixture = {
         if (activa !== null && activa !== 'true' && activa !== 'false') {
             return datosInvalidos([{ field: 'activa', message: 'Debe ser true o false', rule: 'boolean' }])
         }
-        const filas = bd.cuentasBancarias.filter(c => activa === null || c.activa === (activa === 'true'))
+        const filas = deLaEmpresa(bd.cuentasBancarias, solicitud).filter(c => activa === null || c.activa === (activa === 'true'))
         return { status: 200, cuerpo: filas }
     }),
 
@@ -81,6 +81,8 @@ export const rutasBancos: RutasFixture = {
         const id = siguienteId(bd.cuentasBancarias)
         const cuenta: CuentaBancaria = {
             id,
+            // Multiempresa (A3): `empresa_id` del cuerpo o la empresa activa.
+            empresa_id: typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : (empresaActivaDe(solicitud) ?? 1),
             banco_id: bancoId,
             banco_nombre: banco?.nombre ?? '',
             numero,

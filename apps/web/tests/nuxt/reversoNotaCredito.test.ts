@@ -14,6 +14,7 @@ function ajusteManual(): Asiento {
     const id = Math.max(...bd.asientos.map(a => a.id)) + 1
     const asiento: Asiento = {
         id,
+        empresa_id: 1,
         fecha: '2026-10-15',
         descripcion: 'Ajuste manual: redondeo de caja',
         origen_tipo: 'ajuste',
@@ -43,7 +44,7 @@ describe('reverso de asiento y nota de crédito', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-        document.body.innerHTML = ''
+        // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).
     })
 
     it('API: solo se revierte un asiento sin documento, una vez; los demás dicen qué anular', async () => {

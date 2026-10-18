@@ -59,10 +59,19 @@ test('contraseña mala: el error se ve en la ventana y sigue bloqueada', async (
 })
 
 test('"No soy yo / Salir" va al login completo sin los datos de la sesión', async ({ page }) => {
+    // El login no debe volver a montarse a media carga al salir (clave de página en `app.vue`):
+    // ese error de render dejaba abierto el panel de errores de Nuxt dev y colgaba otras pruebas.
+    const erroresVue: string[] = []
+    page.on('console', (mensaje) => {
+        if (mensaje.text().includes('Unhandled error')) {
+            erroresVue.push(mensaje.text().split('\n')[0] ?? '')
+        }
+    })
     const ventana = await altaAMediasYBloqueo(page, 'Uriel No Soy Yo')
     await ventana.getByRole('button', { name: 'No soy yo / Salir' }).click()
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByLabel('Correo')).toBeVisible()
+    expect(erroresVue).toEqual([])
     await expect(page.getByText('Uriel No Soy Yo')).toHaveCount(0)
     await expect(page.getByRole('dialog', { name: 'Sesión bloqueada' })).toHaveCount(0)
 })

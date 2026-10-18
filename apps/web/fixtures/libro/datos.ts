@@ -8,6 +8,12 @@ type Movimiento = Schema<'Movimiento'>
 
 const CREADA = '2026-08-01T12:00:00.000Z'
 
+/**
+ * Subcuentas de una empresa (`ledger.cuentas.empresa_id`, A3): las de cajas y cuentas bancarias.
+ * El resto del catálogo es común (`null`).
+ */
+const EMPRESA_DE_CUENTA: Record<number, number> = { 3: 1, 4: 1, 5: 1, 16: 1, 17: 1, 18: 1, 19: 2 }
+
 function cuenta(id: number, codigo: string, nombre: string, tipo: Cuenta['tipo'], padre: number | null, imputable: boolean, auxiliar = false): Cuenta {
     return {
         id,
@@ -17,6 +23,7 @@ function cuenta(id: number, codigo: string, nombre: string, tipo: Cuenta['tipo']
         padre_id: padre,
         imputable,
         auxiliar_cliente: auxiliar,
+        empresa_id: EMPRESA_DE_CUENTA[id] ?? null,
         activa: true,
         version: 1,
         created_at: CREADA,
@@ -48,6 +55,8 @@ export const cuentas: Cuenta[] = [
     cuenta(16, '1.1.02.02', 'Banco Industrial · Monetaria (****3456)', 'activo', 1, true),
     cuenta(17, '1.1.02.03', 'Banco Industrial · Dólares (****7651)', 'activo', 1, true),
     cuenta(18, '1.1.02.04', 'Banco G&T Continental · Cuenta anterior (****5678)', 'activo', 1, true),
+    // Caja de Fibra del Sur (empresa 2).
+    cuenta(19, '1.1.01.04', 'Caja Sur', 'activo', 2, true),
 ]
 
 export const CUENTA_CXC = 7
@@ -56,7 +65,7 @@ export const CUENTA_INGRESOS = 12
 export const CUENTA_BANCO = 6
 
 /** Cuenta de cada caja (`Caja.cuenta_id`). */
-const CUENTA_DE_CAJA: Record<number, number> = { 1: 3, 2: 4, 3: 5 }
+const CUENTA_DE_CAJA: Record<number, number> = { 1: 3, 2: 4, 3: 5, 4: 19 }
 
 let siguienteMovimiento = 1
 
@@ -91,6 +100,7 @@ export function cuentaDePago(pago: Schema<'Pago'>): number {
 export function asientoFactura(id: number, factura: Schema<'Factura'>): Asiento {
     return {
         id,
+        empresa_id: factura.empresa_id,
         fecha: fechaGuatemala(factura.emitida_en),
         descripcion: `Factura ${factura.id} · servicio ${factura.servicio_id ?? '—'} · periodo ${factura.periodo}`,
         origen_tipo: 'factura',
@@ -110,6 +120,7 @@ export function asientoFactura(id: number, factura: Schema<'Factura'>): Asiento 
 export function asientoPago(id: number, pago: Schema<'Pago'>): Asiento {
     return {
         id,
+        empresa_id: pago.empresa_id,
         fecha: fechaGuatemala(pago.created_at),
         descripcion: `Pago ${pago.id} · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''} · facturas ${pago.aplicaciones.map(a => a.factura_id).join(', ')}`,
         origen_tipo: 'pago',
@@ -128,6 +139,8 @@ export function asientoPago(id: number, pago: Schema<'Pago'>): Asiento {
 export function asientoReverso(id: number, original: Asiento, descripcion: string, instante: string, usuario: number | null): Asiento {
     return {
         id,
+        // Un reverso va al libro del original.
+        empresa_id: original.empresa_id,
         fecha: fechaGuatemala(instante),
         descripcion,
         origen_tipo: original.origen_tipo,
@@ -164,6 +177,6 @@ export function cuadra(asiento: Asiento): boolean {
  * cuenta 1.1.02.01 (la de los egresos con `banco` sin `banco_id`); el número va enmascarado.
  */
 export const bancosLibro: Schema<'BancoLibro'>[] = [
-    { id: 1, nombre: 'Banco principal', banco_id: null, banco: null, numero_enmascarado: null, cuenta_id: 6, cuenta_codigo: '1.1.02.01', cuenta_nombre: 'Banco principal' },
-    { id: 2, nombre: 'Banco Industrial · Monetaria', banco_id: 2, banco: 'Banco Industrial', numero_enmascarado: '******3456', cuenta_id: 16, cuenta_codigo: '1.1.02.02', cuenta_nombre: 'Banco Industrial · Monetaria (****3456)' },
+    { id: 1, empresa_id: 1, nombre: 'Banco principal', banco_id: null, banco: null, numero_enmascarado: null, cuenta_id: 6, cuenta_codigo: '1.1.02.01', cuenta_nombre: 'Banco principal' },
+    { id: 2, empresa_id: 1, nombre: 'Banco Industrial · Monetaria', banco_id: 2, banco: 'Banco Industrial', numero_enmascarado: '******3456', cuenta_id: 16, cuenta_codigo: '1.1.02.02', cuenta_nombre: 'Banco Industrial · Monetaria (****3456)' },
 ]

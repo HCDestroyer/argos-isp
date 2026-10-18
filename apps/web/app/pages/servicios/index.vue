@@ -8,6 +8,7 @@ useHead({ title: 'Servicios · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const { puede, enlace } = usePermisos()
+const { conSelector: variasEmpresas, nombre: nombreEmpresa } = useEmpresaActiva()
 const serviciosApi = useServicios()
 
 /** Valor de los `USelect` para "sin filtro" (Reka UI no admite `''` como valor de un ítem). */
@@ -378,7 +379,7 @@ onMounted(async () => {
                                 {{ etiquetaServicio(row.original) }}
                             </ULink>
                             <span class="text-xs text-muted">
-                                #{{ row.original.id }} · {{ nombrePlan(row.original) }}
+                                #{{ row.original.id }} · {{ nombrePlan(row.original) }}<template v-if="variasEmpresas"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
                                 <template v-if="!esPppoe(row.original)"> · {{ TIPOS_CONEXION[tipoConexionDe(row.original)].corta }}</template>
                                 <template v-if="row.original.costo_override"> · {{ formatearQuetzales(row.original.costo_override) }} precio especial</template>
                             </span>

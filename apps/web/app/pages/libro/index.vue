@@ -28,10 +28,15 @@ function idQuery(valor: unknown): number {
 const pestanas: TabsItem[] = [
     { label: 'Diario', value: 'diario', icon: 'i-lucide-book-open' },
     { label: 'Mayor', value: 'mayor', icon: 'i-lucide-library' },
+    { label: 'Balance', value: 'balance', icon: 'i-lucide-scale' },
+    { label: 'Resultados', value: 'resultados', icon: 'i-lucide-trending-up' },
     { label: 'Cierres', value: 'cierres', icon: 'i-lucide-lock' },
 ]
 
-const pestana = ref(['mayor', 'cierres'].includes(textoQuery(route.query.tab)) ? textoQuery(route.query.tab) : 'diario')
+/** Pestañas con su propio filtro (balance, resultados y cierres no usan los del diario y el mayor). */
+const PROPIAS = ['balance', 'resultados', 'cierres']
+
+const pestana = ref(['mayor', ...PROPIAS].includes(textoQuery(route.query.tab)) ? textoQuery(route.query.tab) : 'diario')
 const desde = ref(FECHA.test(textoQuery(route.query.desde)) ? textoQuery(route.query.desde) : '')
 const hasta = ref(FECHA.test(textoQuery(route.query.hasta)) ? textoQuery(route.query.hasta) : '')
 const origen = ref<OrigenAsiento | typeof TODOS>(textoQuery(route.query.origen) in ORIGENES_ASIENTO ? (textoQuery(route.query.origen) as OrigenAsiento) : TODOS)
@@ -139,7 +144,7 @@ async function aplicarFiltros() {
     if (pestana.value !== 'diario') {
         query.tab = pestana.value
     }
-    if (pestana.value === 'cierres') {
+    if (PROPIAS.includes(pestana.value)) {
         await router.replace({ query })
         return
     }
@@ -219,9 +224,14 @@ onMounted(async () => {
             />
 
             <LibroCierres v-if="pestana === 'cierres'" />
+            <LibroEstadoFinanciero
+                v-else-if="pestana === 'balance' || pestana === 'resultados'"
+                :key="pestana"
+                :tipo="pestana"
+            />
 
             <div
-                v-if="pestana !== 'cierres'"
+                v-if="!PROPIAS.includes(pestana)"
                 class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
             >
                 <USelectMenu
@@ -267,7 +277,7 @@ onMounted(async () => {
             </div>
 
             <div
-                v-if="pestana !== 'cierres'"
+                v-if="!PROPIAS.includes(pestana)"
                 class="flex flex-col gap-3 sm:flex-row sm:items-center"
             >
                 <ClienteSelector
@@ -453,7 +463,7 @@ onMounted(async () => {
             </template>
 
             <p
-                v-if="puede('egresos.ver') && pestana !== 'cierres'"
+                v-if="puede('egresos.ver') && !PROPIAS.includes(pestana)"
                 class="text-xs text-muted"
             >
                 Los gastos se registran y anulan en

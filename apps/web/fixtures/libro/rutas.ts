@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { asientoReverso, bancosLibro } from './datos'
 
 type Cuenta = Schema<'Cuenta'>
@@ -77,7 +77,7 @@ export const rutasLibro: RutasFixture = {
             return datosInvalidos(errores)
         }
         // Como `libroDiario`: id descendente (lo más reciente primero).
-        const filas = bd.asientos
+        const filas = deLaEmpresa(bd.asientos, solicitud)
             .filter(a => !desde || a.fecha >= desde)
             .filter(a => !hasta || a.fecha <= hasta)
             .filter(a => !origen || a.origen_tipo === origen)
@@ -147,6 +147,7 @@ export const rutasLibro: RutasFixture = {
             }
             acumulado = acumulado.plus(efecto)
             enRango.push({
+                empresa_id: asiento.empresa_id,
                 movimiento_id: movimiento.id,
                 asiento_id: asiento.id,
                 fecha: asiento.fecha,

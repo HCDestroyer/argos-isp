@@ -361,6 +361,7 @@ onMounted(cargar)
             <ClienteEstadoCuenta
                 v-else-if="pestana === 'cuenta'"
                 :cliente-id="cliente.id"
+                :servicios="servicios"
             />
 
             <LineaTiempoBitacora
