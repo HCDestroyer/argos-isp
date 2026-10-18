@@ -41,6 +41,8 @@ export interface VistaConfiguracion {
         password: string | null
         remitente: string | null
         nombre_visible: string | null
+        /** avisos fiscales a contabilidad: direcciones separadas por coma */
+        contabilidad: string | null
     }
     telegram: {
         clientes_activo: boolean
@@ -84,6 +86,7 @@ export function vistaDeFila(fila: FilaConfiguracion): VistaConfiguracion {
             password: oculto(fila.smtp_password_cifrada),
             remitente: fila.correo_remitente,
             nombre_visible: fila.correo_nombre,
+            contabilidad: fila.correo_contabilidad ?? null,
         },
         telegram: {
             clientes_activo: fila.telegram_clientes_activo,
@@ -119,6 +122,7 @@ export function vistaDeEntorno(config: ConfigCanales = desdeEntorno()): VistaCon
             password: oculto(config.correo.password),
             remitente: config.correo.remitente,
             nombre_visible: config.correo.nombre,
+            contabilidad: config.correo.contabilidad,
         },
         telegram: {
             clientes_activo: config.telegram.clientesActivo,
@@ -154,6 +158,7 @@ export function vistaEmpresaSinFila(empresaId: number): VistaConfiguracion {
             password: null,
             remitente: null,
             nombre_visible: null,
+            contabilidad: null,
         },
         telegram: {
             clientes_activo: true,

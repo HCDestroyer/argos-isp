@@ -32,6 +32,8 @@ export interface EntradaConfigurar {
         password?: string | null
         remitente?: string | null
         nombre_visible?: string | null
+        /** avisos fiscales a contabilidad: direcciones separadas por coma */
+        contabilidad?: string | null
     }
     telegram?: {
         clientes_activo?: boolean
@@ -144,6 +146,15 @@ async function validarEmpresa(trx: TransactionClientContract, empresaId: number,
     }
 }
 
+/** `a@x.gt ,b@y.gt,` → `a@x.gt, b@y.gt`; vacío → null. */
+function normalizarCorreos(valor: string | null): string | null {
+    const lista = (valor ?? '')
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean)
+    return lista.length > 0 ? [...new Set(lista)].join(', ') : null
+}
+
 /** Columnas a escribir según la entrada (solo lo que vino). */
 function columnasDe(input: EntradaConfigurar, antes: FilaConfiguracion | null): Record<string, unknown> {
     const columnas: Record<string, unknown> = {}
@@ -161,6 +172,9 @@ function columnasDe(input: EntradaConfigurar, antes: FilaConfiguracion | null): 
         }
         if (correo.remitente !== undefined) columnas.correo_remitente = vacioANulo(correo.remitente)
         if (correo.nombre_visible !== undefined) columnas.correo_nombre = vacioANulo(correo.nombre_visible)
+        if (correo.contabilidad !== undefined) {
+            columnas.correo_contabilidad = normalizarCorreos(correo.contabilidad)
+        }
     }
 
     const telegram = input.telegram
