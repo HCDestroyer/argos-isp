@@ -99,7 +99,7 @@ x-api-env: &api-env
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
   COMPROBANTES_DIR: /comprobantes
 
-# Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, routeros-worker,
+# Procesos de fondo con la imagen de api (relay, billing-worker, fiscal-worker, sesiones-worker, routeros-worker,
 # aaa-vigia, worker).
 x-proceso-fondo: &proceso-fondo
   image: argosisp/api:${IMAGE_TAG:-dev}
@@ -314,6 +314,20 @@ services:
     healthcheck:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js billing:worker'"]
+
+  # FEL (A3, contrato de localización fiscal §8.3): cola `fel-cron` cada minuto con lock; pide la
+  # certificación de los avisos cubiertos, envía los DTE pendientes, reintenta los de error temporal
+  # y envía las anulaciones al certificador (INFILE por HTTPS saliente). Las credenciales están en
+  # fiscal.fel_credenciales, cifradas con AAA_PPP_KEY (sin variables nuevas); el XML y el PDF del DTE
+  # se guardan en Postgres (fiscal.dte), así que no lleva volumen. Una réplica: el lock evita dobles.
+  fiscal-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, fiscal:worker]
+    deploy:
+      replicas: 1
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js fiscal:worker'"]
 
   # Sesiones (A2): cola de accounting de aaa → network.sesiones y eventos sesion.*.
   sesiones-worker:
