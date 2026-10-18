@@ -10731,7 +10731,8 @@
                 "parcial",
                 "pagada",
                 "vencida",
-                "anulada"
+                "anulada",
+                "castigada"
               ]
             }
           },
@@ -39298,7 +39299,8 @@
           "parcial",
           "pagada",
           "vencida",
-          "anulada"
+          "anulada",
+          "castigada"
         ]
       },
       "EstadoPortal": {

@@ -15,7 +15,15 @@ import { emisorDeFactura } from '#billing/empresa'
 export const TASA_IVA = new D('0.12')
 const DIVISOR_IVA = new D('1.12')
 
-export type EstadoFactura = 'por_certificar' | 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada'
+export type EstadoFactura =
+    | 'por_certificar'
+    | 'emitida'
+    | 'parcial'
+    | 'pagada'
+    | 'vencida'
+    | 'anulada'
+    /** fase 4 (decisión g): castigo de cartera; `pagado` + castigado = total */
+    | 'castigada'
 export type TipoFactura = 'servicio' | 'mora'
 
 export interface LineaCalculada {

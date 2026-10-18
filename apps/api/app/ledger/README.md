@@ -159,7 +159,7 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 | `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
 | `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
 | `cartera.provisionar` | `POST /cartera/provisionar` | `5.3.02 / 1.1.12` hasta el tope (`reserva_incobrables_max` de los saldos deudores); la reserva se mide al corte y un corte anterior al último responde 422 `provision_fuera_de_orden` |
-| `cartera.castigar` | `POST /cartera/castigos` | `2.1.11 (IVA de avisos sin DTE) + 1.1.12 (o 5.3.02) / CxC` |
+| `cartera.castigar` | `POST /cartera/castigos` | `2.1.11 (IVA de avisos sin DTE) + 1.1.12 (o 5.3.02) / CxC`; la factura queda `castigada` (pagado intacto). Lo cobrado después es recuperación: `Caja/Banco / 4.2.03` hasta lo castigado |
 
 - `registrarPago`: pasarela, agente o débito de un proveedor activo (desde su fecha de corte) → su `1.1.10.NN` por el bruto, sin comisión (`pagos.proveedor_cobro_id`); sin proveedor, al banco como antes.
 - Lecturas (`bancos.ver`): `GET /cobros/por-liquidar` (puente = pagos sin liquidar − contracargos, antigüedad sobre `cobros_liquidar_dias`), `/cobros/liquidaciones[/:id]`, `/bancos/depositos`, `/bancos/traslados`, `/bancos/fondos-en-transito` (`1.1.11` = sin acreditar), `/bancos/extractos[/:id][/lineas]`, `/bancos/movimientos-sin-conciliar`, `/bancos/reglas`. `reportes.ver`: `GET /reportes/conciliacion-bancaria`, `/cartera/provisiones`, `/cartera/castigos`.
