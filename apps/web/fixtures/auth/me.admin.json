@@ -113,7 +113,15 @@
     "fel.anular",
     "fel.contingencia",
     "facturas.sustituir",
-    "facturas.anular_nota_credito"
+    "facturas.anular_nota_credito",
+    "horus.ver",
+    "horus.configurar",
+    "horus.probar",
+    "horus.abrir",
+    "horus.generar_token",
+    "horus.revocar_token",
+    "sso.emitir",
+    "vinculaciones.revocar"
   ],
   "alcance_global": true,
   "empresas": [

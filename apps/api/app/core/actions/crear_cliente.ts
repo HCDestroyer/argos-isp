@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
-import { validarDocumentoFiscal, type TipoDocumentoFiscal } from '#core/nit_cui'
+import { limpiarDocumento, validarDocumentoFiscal, type TipoDocumentoFiscal } from '#core/nit_cui'
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 
@@ -45,13 +45,17 @@ export interface DocumentoAnterior {
  * Documento fiscal validado (`validarDocumentoFiscal`). En el alta siempre; al editar, solo si
  * llega alguno de `tipo_documento_fiscal`, `nit_cui` o `pais_fiscal`, combinado con lo guardado:
  * así un cliente migrado con `nit_cui_invalido` se puede editar en lo demás sin corregirlo, y al
- * corregirlo la marca se apaga. Sin tipo explícito se deduce del número, salvo en un pasaporte
- * (su número no tiene forma propia).
+ * corregirlo la marca se apaga.
+ *
+ * Al editar el número sin tipo explícito, el tipo se **reclasifica** con la misma regla del alta
+ * (`deducirTipoDocumento`, la de `core.clasificar_documento` en la base): CF → NIT, NIT → CUI,
+ * NIT → CF. Excepción: un pasaporte conserva su tipo (su número no tiene forma propia) salvo que
+ * el número quede vacío o `CF`. Un tipo explícito se respeta y se valida contra el número.
  */
 function columnasDocumento(datos: DatosCliente, antes?: DocumentoAnterior): Record<string, unknown> {
     if (antes && CAMPOS_DOCUMENTO.every((campo) => datos[campo] === undefined)) return {}
     let tipo = datos.tipo_documento_fiscal
-    if (!tipo && antes && (datos.nit_cui === undefined || antes.tipo_documento_fiscal === 'pasaporte')) {
+    if (!tipo && antes && (datos.nit_cui === undefined || conservaPasaporte(antes, datos.nit_cui))) {
         tipo = antes.tipo_documento_fiscal
     }
     const documento = validarDocumentoFiscal({
@@ -60,6 +64,12 @@ function columnasDocumento(datos: DatosCliente, antes?: DocumentoAnterior): Reco
         pais: datos.pais_fiscal ?? antes?.pais_fiscal,
     })
     return { ...documento, nit_cui_invalido: false }
+}
+
+function conservaPasaporte(antes: DocumentoAnterior, nitCui: string | null): boolean {
+    if (antes.tipo_documento_fiscal !== 'pasaporte') return false
+    const limpio = nitCui === null ? '' : limpiarDocumento(nitCui)
+    return limpio !== '' && limpio !== 'CF'
 }
 
 /** Columnas de `core.clientes` que se escriben a partir de la entrada (documento fiscal validado). */

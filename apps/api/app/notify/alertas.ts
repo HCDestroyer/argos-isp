@@ -198,12 +198,22 @@ export async function incidentesAbiertos(trx: TransactionClientContract, tipo: s
         .select(COLUMNAS)) as Incidente[]
 }
 
+/** Canales de una alerta: `telegram` (chat del equipo) y `correo` (contabilidad). */
+export type CanalAlerta = 'telegram' | 'correo'
+
 export interface DatosAlerta {
     incidente: Incidente
     fase: FaseAlerta
     evento: string
     alerta: Variables
     requestId: string
+    /**
+     * Empresa del incidente (alertas de Horus sobre un servicio, avisos fiscales): usa su
+     * configuración de canales y su chat del equipo (o la global si hereda). Sin ella, la global.
+     */
+    empresaId?: number | null
+    /** Por defecto solo `telegram` (alertas al equipo); los fiscales agregan `correo` (contabilidad). */
+    canales?: CanalAlerta[]
 }
 
 /**
@@ -214,36 +224,35 @@ export interface DatosAlerta {
  */
 export async function crearAlerta(
     trx: TransactionClientContract,
-    datos: DatosAlerta,
+    datos: Omit<DatosAlerta, 'canales'>,
 ): Promise<EnvioCreado | null> {
-    const [envio] = await crearAlertas(trx, { ...datos, empresaId: null, canales: ['telegram'] })
+    const [envio] = await crearAlertas(trx, { ...datos, canales: ['telegram'] })
     return envio ?? null
 }
 
-/** Canales de una alerta: `telegram` (chat del equipo) y `correo` (contabilidad). */
-export type CanalAlerta = 'telegram' | 'correo'
-
 /**
- * Alerta por varios canales con la configuración de canales de `empresaId` (la de la empresa si
- * tiene la suya con `hereda = false`; si no, la global): Telegram al chat del equipo de esa
- * configuración y correo a su `correo.contabilidad`. Un envío por canal con el mismo origen
+ * Alerta por uno o varios canales con la configuración de canales de `empresaId` (la de la
+ * empresa si tiene la suya con `hereda = false`; si no, la global): Telegram al chat del equipo de
+ * esa configuración y correo a su `correo.contabilidad`. Un envío por canal con el mismo origen
  * `alerta:<incidente>:<fase>` (único por canal). Por canal: plantilla desactivada → sin envío;
  * canal apagado → `omitido`; sin destino o sin canal configurado → `fallido` con el motivo.
  * `notify.envios.empresa_id` guarda la empresa: el envío sale con su configuración y su marca.
  */
 export async function crearAlertas(
     trx: TransactionClientContract,
-    datos: DatosAlerta & { empresaId: number | null; canales: CanalAlerta[] },
+    datos: DatosAlerta,
 ): Promise<EnvioCreado[]> {
+    const empresaId = datos.empresaId ?? null
+    const canales = datos.canales ?? ['telegram']
     // Las alertas al equipo usan el interruptor de alertas de la configuración que aplica.
-    const config = await configPara(datos.empresaId)
+    const config = await configPara(empresaId)
     const variables: Variables = {
         evento: datos.evento,
-        empresa: await variablesEmpresa(trx, datos.empresaId ?? undefined),
+        empresa: await variablesEmpresa(trx, empresaId ?? undefined),
         alerta: datos.alerta,
     }
     const envios: EnvioCreado[] = []
-    for (const canal of datos.canales) {
+    for (const canal of canales) {
         const enBase = (await trx
             .from('notify.plantillas')
             .where('evento', datos.evento)
@@ -276,7 +285,7 @@ export async function crearAlertas(
                 requestId: datos.requestId,
                 error,
                 omitido,
-                empresaId: datos.empresaId,
+                empresaId,
             }),
         )
     }

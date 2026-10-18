@@ -228,7 +228,7 @@ test.group('Horus · A5 usuario técnico y token', (group) => {
         // auditoría con actor
         const accion = await db
             .from('audit.acciones')
-            .where('accion', 'integraciones.generar_token')
+            .where('accion', 'horus.generar_token')
             .where('entidad_id', primero.datos.id)
             .firstOrFail()
         assert.equal(accion.actor_id, admin.usuario.id)

@@ -14,6 +14,8 @@ import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos
 import { empresas } from './empresas/datos'
 import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
+import { horusInicial } from './horus/datos'
+import type { HorusFixtures } from './horus/datos'
 import { configuracionGlobal } from './notificaciones/datos'
 import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -117,6 +119,8 @@ interface BaseFixtures {
     fiscal: FiscalFixtures
     /** FEL por empresa: configuración, credenciales sin secretos, DTE y sustituciones (A3, fase 3). */
     fel: FelFixtures
+    /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
+    horus: HorusFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -165,6 +169,7 @@ function inicial(): BaseFixtures {
         notasCredito: [],
         fiscal: fiscalInicial(),
         fel: felInicial(),
+        horus: horusInicial(),
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)

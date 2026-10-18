@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { Decimal } from 'decimal.js'
+import { CERO, D, type Dec } from '#ledger/dinero'
 import { leerDumpMysql } from '#importacion/mysql_dump'
 import {
     normalizarFuente,
@@ -12,7 +12,7 @@ import {
 import {
     agrupar,
     filasCanonicas,
-    montoSeguro,
+    montoOrigen,
     normalizarId,
     ProblemasOrigen,
     tablasDelEsquema,
@@ -208,19 +208,27 @@ export function filasDesdeDumpSmartisp(
     const pagosVigentes = t.pagos.filas
         .map((fila, i) => ({ fila, linea: i + 1 }))
         .filter(({ fila, linea }) => {
-            if (!texto(fila.deleted_at)) return true
-            traza.soloArchivo(
-                ESQUEMA.pagos.tabla,
-                linea,
-                `borrado en el origen (deleted_at ${texto(fila.deleted_at)})`,
-            )
-            return false
+            if (texto(fila.deleted_at)) {
+                traza.soloArchivo(
+                    ESQUEMA.pagos.tabla,
+                    linea,
+                    `borrado en el origen (deleted_at ${texto(fila.deleted_at)})`,
+                )
+                return false
+            }
+            const monto = montoOrigen(fila, 'amount')
+            if (!monto.ok) {
+                problemas.omitir(ESQUEMA.pagos.tabla, linea, normalizarId(fila.id), monto.motivo)
+                return false
+            }
+            return true
         })
-    const pagadoPorNumero = new Map<string, Decimal>()
+    const pagadoPorNumero = new Map<string, Dec>()
     for (const { fila } of pagosVigentes) {
         const num = texto(fila.num_bill)
         if (!num) continue
-        pagadoPorNumero.set(num, (pagadoPorNumero.get(num) ?? new Decimal(0)).plus(montoSeguro(fila.amount)))
+        const monto = montoOrigen(fila, 'amount')
+        if (monto.ok) pagadoPorNumero.set(num, (pagadoPorNumero.get(num) ?? CERO).plus(monto.valor))
     }
     const facturaPorNumero = new Map<string, string>()
     for (const b of t.facturas.filas) {
@@ -230,7 +238,7 @@ export function filasDesdeDumpSmartisp(
     const conceptos = agrupar(t.items.filas, 'bill_customer_id')
 
     const duenosFacturas = new Map<string, string>()
-    const pendientePorCliente = new Map<string, Decimal>()
+    const pendientePorCliente = new Map<string, Dec>()
     const facturas: FilaOrigen[] = []
     t.facturas.filas.forEach((b, i) => {
         const id = normalizarId(b.id)
@@ -264,11 +272,20 @@ export function filasDesdeDumpSmartisp(
                 `status ${texto(b.status)} (pendiente) con paid_on ${pagadaEl}: revisar el significado del estado`,
             )
         }
-        const calculado =
-            b.total_pay === null || texto(b.total_pay) === ''
-                ? montoSeguro(b.cost).plus(montoSeguro(b.iva))
-                : montoSeguro(b.total_pay)
-        if (estado === 'sin_cargo' && !calculado.isZero()) {
+        const sinTotalPay = b.total_pay === null || b.total_pay === undefined || texto(b.total_pay) === ''
+        const leidos = sinTotalPay
+            ? [montoOrigen(b, 'cost'), montoOrigen(b, 'iva')]
+            : [montoOrigen(b, 'total_pay')]
+        const ilegible = leidos.find((x) => !x.ok)
+        if (ilegible && !ilegible.ok) {
+            if (estado !== 'sin_cargo') {
+                problemas.omitir(tabla, i + 1, id, ilegible.motivo)
+                return
+            }
+            problemas.avisar(tabla, i + 1, id, `${ilegible.motivo}; sin cargo (status 2): entra con total 0`)
+        }
+        const calculado = leidos.reduce((suma, x) => (x.ok ? suma.plus(x.valor) : suma), CERO)
+        if (estado === 'sin_cargo' && !ilegible && !calculado.isZero()) {
             problemas.avisar(
                 tabla,
                 i + 1,
@@ -276,11 +293,9 @@ export function filasDesdeDumpSmartisp(
                 `status 2 (sin cargo) con total ${calculado.toFixed(2)}: entra con total 0`,
             )
         }
-        const total = estado === 'sin_cargo' ? new Decimal(0) : calculado
+        const total = estado === 'sin_cargo' ? CERO : calculado
         const pagado =
-            estado === 'pagada'
-                ? total
-                : Decimal.min(total, pagadoPorNumero.get(texto(b.num_bill)) ?? new Decimal(0))
+            estado === 'pagada' ? total : D.min(total, pagadoPorNumero.get(texto(b.num_bill)) ?? CERO)
         const items = (conceptos.get(id) ?? []).map((x) => texto(x.description)).filter(Boolean)
         facturas.push({
             __linea: String(i + 1),
@@ -299,10 +314,7 @@ export function filasDesdeDumpSmartisp(
         traza.vincular(tabla, i + 1, 'facturas', id)
         const pendiente = total.minus(pagado)
         if (pendiente.gt(0)) {
-            pendientePorCliente.set(
-                cliente,
-                (pendientePorCliente.get(cliente) ?? new Decimal(0)).plus(pendiente),
-            )
+            pendientePorCliente.set(cliente, (pendientePorCliente.get(cliente) ?? CERO).plus(pendiente))
         }
     })
 
@@ -311,19 +323,39 @@ export function filasDesdeDumpSmartisp(
     const saldos: FilaOrigen[] = []
     t.clientes.filas.forEach((c, i) => {
         const id = normalizarId(c.id)
-        const pendiente = pendientePorCliente.get(id) ?? new Decimal(0)
-        if (texto(c.balance) !== '' && !montoSeguro(c.balance).eq(pendiente)) {
-            problemas.avisar(
-                `${ESQUEMA.clientes.tabla}.balance`,
+        const pendiente = pendientePorCliente.get(id) ?? CERO
+        if (texto(c.balance) !== '') {
+            const balance = montoOrigen(c, 'balance')
+            if (!balance.ok) {
+                problemas.avisar(
+                    `${ESQUEMA.clientes.tabla}.balance`,
+                    i + 1,
+                    id,
+                    `${balance.motivo}; no se compara: se importa lo de las facturas`,
+                )
+            } else if (!balance.valor.eq(pendiente)) {
+                problemas.avisar(
+                    `${ESQUEMA.clientes.tabla}.balance`,
+                    i + 1,
+                    id,
+                    `balance del origen ${balance.valor.toFixed(2)} y lo pendiente de sus facturas ` +
+                        `${pendiente.toFixed(2)} no coinciden; se importa lo de las facturas`,
+                )
+            }
+        }
+        const favor = montoOrigen(c, 'wallet_balance')
+        if (!favor.ok) {
+            // el saldo a favor no se puede leer: no se inventa; queda omitido en el reporte
+            problemas.omitir(
+                `${ESQUEMA.clientes.tabla}.wallet_balance`,
                 i + 1,
                 id,
-                `balance del origen ${montoSeguro(c.balance).toFixed(2)} y lo pendiente de sus facturas ` +
-                    `${pendiente.toFixed(2)} no coinciden; se importa lo de las facturas`,
+                `saldo a favor: ${favor.motivo}`,
             )
+            return
         }
-        const favor = montoSeguro(c.wallet_balance)
-        if (favor.isZero()) return
-        saldos.push({ cliente_id: id, saldo: pendiente.minus(favor).toFixed(2) })
+        if (favor.valor.isZero()) return
+        saldos.push({ cliente_id: id, saldo: pendiente.minus(favor.valor).toFixed(2) })
     })
 
     const control = new Map(t.control.filas.map((c) => [normalizarId(c.router_id), c]))
@@ -331,7 +363,15 @@ export function filasDesdeDumpSmartisp(
     const zonas = new Map(t.zonas.filas.map((z) => [normalizarId(z.id), texto(z.name)]))
 
     t.planes.filas.forEach((p, i) => {
-        if (montoSeguro(p.iva).gt(0)) {
+        const iva = montoOrigen(p, 'iva')
+        if (!iva.ok) {
+            problemas.avisar(
+                ESQUEMA.planes.tabla,
+                i + 1,
+                normalizarId(p.id),
+                `${iva.motivo}; el precio entra como cost`,
+            )
+        } else if (iva.valor.gt(0)) {
             problemas.avisar(
                 ESQUEMA.planes.tabla,
                 i + 1,

@@ -13,7 +13,7 @@ export interface EntradaRevocarTokenHorus {
  * demás tokens se revocan con `tokens.revocar`). Repetirla no cambia la fecha de revocación.
  */
 export default class RevocarTokenHorus extends DomainAction<EntradaRevocarTokenHorus, TokenApiVista> {
-    readonly nombre = 'integraciones.revocar_token'
+    readonly nombre = 'horus.revocar_token'
 
     protected async handle(input: EntradaRevocarTokenHorus, t: Transaccion): Promise<TokenApiVista> {
         t.fijarEntidad('token_api', input.id)

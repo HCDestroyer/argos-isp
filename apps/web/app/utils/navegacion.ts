@@ -90,6 +90,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },
             { id: 'empresa', etiqueta: 'Contacto y pagos', descripcion: 'Contacto, horario e instrucciones de pago del aviso y el portal (empresa principal).', icono: 'i-lucide-contact', ruta: '/configuracion/empresa', permiso: 'empresa.ver' },
             { id: 'notificaciones', etiqueta: 'Notificaciones', descripcion: 'Correo y Telegram: servidor, bot, interruptores por canal y por aviso, global y por empresa.', icono: 'i-lucide-bell-ring', ruta: '/configuracion/notificaciones', permiso: 'notificaciones.ver' },
+            { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow: conexión, token, enlace de conexión y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: 'horus.ver' },
             { id: 'aviso-cobro', etiqueta: 'Plantillas de documentos', descripcion: 'HTML con variables del PDF del aviso de cobro, la factura FEL y la nota de crédito.', icono: 'i-lucide-file-code-2', ruta: '/configuracion/aviso-cobro', permiso: 'documentos.ver' },
         ],
     },

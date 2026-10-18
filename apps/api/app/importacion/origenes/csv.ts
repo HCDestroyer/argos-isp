@@ -12,6 +12,7 @@ import {
     type FuenteCanonica,
     type ProblemaFila,
 } from '#importacion/canonico'
+import { FORMATO_PUNTO, type FormatoDecimal } from '#importacion/montos'
 
 /**
  * Adaptador de origen `csv`: un directorio con un CSV por entidad en el formato canónico
@@ -35,8 +36,23 @@ export const ARCHIVOS: Record<Entidad, string> = {
     promesas: 'promesas.csv',
 }
 
-/** Lee y valida el directorio. `redes`, `facturas`, `saldos` y `pagos` son opcionales. */
-export async function leerDirectorio(directorio: string): Promise<FuenteCanonica> {
+/**
+ * Lee y valida el directorio. `redes`, `facturas`, `saldos` y `pagos` son opcionales.
+ * `decimal`: separador decimal de los montos (por defecto punto en todos los archivos; con
+ * `--decimal=coma` o `--decimal=facturas.csv:coma`, coma en todos o en esos).
+ */
+export async function leerDirectorio(
+    directorio: string,
+    opciones: { decimal?: FormatoDecimal } = {},
+): Promise<FuenteCanonica> {
+    const decimal = opciones.decimal ?? FORMATO_PUNTO
+    const conocidos = Object.values(ARCHIVOS)
+    const ajenos = Object.keys(decimal.archivos).filter((a) => !conocidos.includes(a))
+    if (ajenos.length > 0) {
+        throw new Error(
+            `--decimal: ${ajenos.join(', ')} no es un archivo del formato (archivos: ${conocidos.join(', ')})`,
+        )
+    }
     const filas = {} as FilasPorEntidad
     const avisos: ProblemaFila[] = []
     for (const entidad of ENTIDADES) {
@@ -74,7 +90,7 @@ export async function leerDirectorio(directorio: string): Promise<FuenteCanonica
             })
         }
     }
-    const fuente = normalizarFuente(filas)
+    const fuente = normalizarFuente(filas, { decimal })
     fuente.problemas.unshift(...avisos)
     fuente.archivo = archivoCsv(filas)
     return fuente
@@ -152,7 +168,7 @@ export function leemePlantillas(): string {
         '- La primera fila es el encabezado; los nombres de columna no distinguen mayúsculas y el orden no importa. Una columna que no está en esta lista se ignora con un aviso.',
         '- Los `id` y las referencias (`cliente_id`, `router_id`, `plan_id`, `factura_id`) son los ids del sistema de origen, tal cual: con `--sistema` forman la clave para no importar dos veces lo mismo.',
         '- `routers`, `planes`, `clientes` y `servicios` son obligatorios; `redes`, `facturas`, `saldos` y `pagos` pueden faltar.',
-        '- Dinero con punto decimal y hasta 2 decimales (`1250.50`, `Q 1,250.50`). Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.',
+        '- Dinero con punto decimal y hasta 2 decimales (`1250.50`, `Q 1,250.50`). Una sola coma sin punto (`1,50`, `1,250`) es ambigua: la fila se omite. Con coma decimal (`1250,50`, `1.250,50`), importar con `--decimal=coma` (o `--decimal=facturas.csv:coma` para un archivo). Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.',
         '- Saldo de cada cliente: el de `saldos.csv`; si el cliente no está ahí, la suma de lo pendiente de sus facturas.',
         '',
         'Obligatoria: **sí** siempre; *condicional* según otra columna; vacío = puede ir vacía o faltar.',

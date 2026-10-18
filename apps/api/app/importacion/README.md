@@ -16,12 +16,16 @@ pnpm importar:plantillas plantillas/                                            
 pnpm importar --origen=<origen> --fuente=<ruta>                                       # real
 pnpm importar ... --empresa=<id|nit>                                                  # varias empresas: a cuál va todo
 pnpm importar ... --excluir-tablas=radacct,logs                                       # tablas enormes fuera del archivo
+pnpm importar --origen=csv ... --decimal=coma                                         # CSV con coma decimal (o facturas.csv:coma)
 ```
 
 ## Multiempresa y tablas excluidas
 
 - **`--empresa=<id|nit>`** (`resolverEmpresaImportacion`): todo lo importado va a esa empresa. Los servicios se crean con `empresa_id`; las facturas, pagos históricos, promesas y saldos iniciales reciben `empresa_id` **explícito** en cada acción de A3 (`contratos/importacion.md` § Multiempresa): el de `--empresa`, salvo lo que cuelga de un servicio ya importado en otra empresa (`servicios_otra_empresa`): sus facturas van con la empresa de su servicio (A3 rechaza otra con `empresa_servicio`) y los pagos y promesas de esas facturas las siguen; las zonas y routers nuevos con `empresa_sugerida_id`, el contexto de la corrida lleva `empresaId` (lo registra `audit.acciones.empresa_id` y lo usan las acciones que no dependen de un servicio) y el archivo del origen guarda `importacion.filas_origen.empresa_id`. Se busca primero por id y después por NIT (sin guion ni espacios). Sin `--empresa`: la única empresa activa; con varias, falla antes de tocar la base (`EmpresaImportacionRequerida`, con la lista de empresas); desactivada o inexistente, también. Un servicio ya importado en otra empresa no se mueve: sale en `servicios_otra_empresa`. El reporte lleva `empresa { id, nombre, nit }`.
 - **`--excluir-tablas=a,b`** (`tablasExcluidas`): por defecto se archiva todo. Las tablas indicadas no se guardan en el archivo ni se cuentan en el cuadre; el reporte las lista en `tablas_excluidas` con sus filas. Solo tablas sin filas vinculadas a una entidad de ArgosIsp; una tabla que se importa, o que no está en el volcado, hace fallar la corrida. Pensado para `radacct` y los logs (runbook).
+- **`--decimal=punto|coma`** (solo `--origen=csv`): separador decimal de los montos, para todo el directorio (`coma`) o por archivo (`facturas.csv:coma,pagos.csv:coma`; `coma,planes.csv:punto`). Por defecto punto. Los volcados MySQL siempre usan punto y rechazan la opción.
+
+**Montos** (`montos.ts`, `leerMonto`): un monto ilegible o ambiguo **nunca entra como 0**: la fila se omite con su motivo (problema del reporte, `formato` y `diferencias.csv`) y cuenta como omitida en el cuadre por tabla. Con punto decimal: `1250.50`, `1,250.50`, `1,234,567`, `Q 150`, `-20` bien; `1,50` o `1,250` (una sola coma, sin punto) son ambiguos y se reportan; `1.250,50`, `1e3`, `abc` o vacío, ilegibles. Con coma decimal, lo simétrico (`1.250,50` bien; `1.250` y `150.00` ambiguos). En los volcados (`montoOrigen` de `esquema_sql.ts`) un `total`, `cobrado`, `amount`, `cost`/`iva`/`total_pay` o saldo a favor ilegible omite su factura, pago o saldo; si el monto solo se usa para comparar (`tblservicios.costo`, `clients.balance`, `plans.iva`) queda un aviso. Se calcula con `D` de `#ledger/dinero` (precisión 40), como el resto del sistema.
 
 Paso a paso para operar (en seco, leer el reporte, corregir el origen, importación real): `docs/runbooks/importacion.md`.
 
@@ -215,6 +219,7 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | `origenes/smartisp.ts`                 | Adaptador SmartISP: tablas y columnas reales y su traducción al formato canónico                     |
 | `origenes/csv.ts`                      | Adaptador CSV: lee el directorio, avisa de columnas desconocidas, genera plantillas y LEEME          |
 | `origenes/esquema_sql.ts`              | Comprobación del esquema de un volcado (`EsquemaIncompleto`), ids, montos, problemas del origen      |
+| `montos.ts`                            | Lectura de montos sin ambigüedad (`leerMonto`) y `--decimal` (`parsearFormatoDecimal`)               |
 | `csv.ts`                               | Lector y escritor de CSV (RFC 4180, coma o punto y coma)                                             |
 | `mysql_dump.ts`                        | Lector de volcados MySQL (CREATE TABLE e INSERT), sin MySQL                                          |
 | `carga_financiera.ts`                  | Puerto hacia las acciones de carga histórica de A3                                                   |
@@ -226,6 +231,7 @@ No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.c
 | `reporte_salidas.ts`                   | Reporte en Markdown y CSV, una línea por diferencia                                                  |
 | `commands/importar.ts`                 | `node ace importar --origen --fuente` (`pnpm importar` desde la raíz)                                |
 | `commands/importar_plantillas.ts`      | `node ace importar:plantillas <dir>` (`pnpm importar:plantillas`)                                    |
+| `tests/importacion/montos.spec.ts`     | Montos en todos los formatos y en cada adaptador (CSV, Mikrowisp, SmartISP)                          |
 | `tests/importacion/importador.spec.ts` | Pruebas con el ejemplo CSV (`scripts/importacion/ejemplo/`)                                          |
 | `tests/importacion/mikrowisp.spec.ts`  | Volcado sintético sobre el esquema real: dos en seco iguales, real dos veces sin duplicar, saldos    |
 | `tests/importacion/smartisp.spec.ts`   | Lo mismo con el volcado sintético de SmartISP sobre su esquema real                                  |
