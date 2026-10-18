@@ -61,6 +61,7 @@ export interface OpcionesVerificacion {
 export const HALLAZGOS_ABIERTOS: Record<string, string> = {
     '12.reclasificacion_distinta_del_iva_del_dte': 'H5',
     '12.dte_distinto_del_neto': 'H5 y H11',
+    '12.aplicacion_durante_anulacion_pendiente': 'H6',
 }
 
 type Fila = Record<string, unknown>
@@ -311,6 +312,11 @@ async function verificarLibroCon(
                 sum(f.total - f.pagado)::text AS pendiente, array_agg(f.id ORDER BY f.id) AS facturas
            FROM ant JOIN billing.facturas f ON f.empresa_id = ant.empresa_id AND f.cliente_id = ant.cliente_id
           WHERE f.estado IN ${ESTADOS_PENDIENTES} AND f.total > f.pagado
+            -- decisión del líder (H6): mientras su DTE vigente está en anulacion_pendiente, la factura no
+            -- recibe pagos ni aplicaciones; solo esa deuda queda fuera (la demás sigue contando)
+            AND NOT EXISTS (SELECT 1 FROM fiscal.dte d
+                             WHERE d.documento_id = f.id AND d.estado = 'anulacion_pendiente'
+                               AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END)
           GROUP BY 1, 2, 3`,
     )
 
@@ -969,6 +975,46 @@ async function verificarLibroCon(
                      AND coalesce(c.modo, 'desactivada') = 'obligatoria')`,
         )
     }
+
+    await revisar(
+        '12.aplicacion_durante_anulacion_pendiente (H6: entre el inicio de la anulación del DTE y la respuesta del certificador la factura no recibe pagos ni aplicaciones)',
+        `WITH ventana AS (
+             SELECT d.id AS dte_id, d.documento_id AS factura_id, ini.created_at AS desde,
+                    (SELECT min(i.enviado_en) FROM fiscal.dte_intentos i
+                      WHERE i.dte_id = d.id AND i.operacion = 'anular' AND i.resultado IN ('anulado', 'rechazado')
+                        AND i.enviado_en >= ini.created_at) AS hasta
+               FROM fiscal.dte d
+               JOIN audit.cambios ini ON ini.entidad_tipo = 'dte' AND ini.entidad_id = d.id AND ini.campo = 'estado'
+                    AND ini.despues = '"anulacion_pendiente"'::jsonb
+              WHERE d.documento_tipo IN ('factura', 'nota_debito') AND ${E('d.empresa_id')}
+         )
+         SELECT v.dte_id, v.factura_id, a.id AS aplicacion_id, a.pago_id, a.monto::text,
+                to_char(v.desde, 'YYYY-MM-DD HH24:MI:SS.US') AS desde, to_char(a.created_at, 'YYYY-MM-DD HH24:MI:SS.US') AS aplicada
+           FROM ventana v JOIN billing.pagos_aplicaciones a ON a.factura_id = v.factura_id
+          -- la respuesta del certificador cierra la ventana: lo que se aplica en esa misma transacción (al
+          -- rechazarse la anulación) ya no está en la pendiente
+          WHERE a.created_at >= v.desde AND (v.hasta IS NULL OR a.created_at < v.hasta)`,
+    )
+    await revisar(
+        '12.anulacion_rechazada_con_anticipo_sin_aplicar (el DTE volvió de anulacion_pendiente a certificado y el anticipo del cliente no se aplicó a esa deuda)',
+        `WITH ant AS (
+             SELECT a.empresa_id, m.cliente_id, sum(m.haber - m.debe) AS saldo
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${ANTICIPOS}' AND ${E('a.empresa_id')}
+              GROUP BY 1, 2 HAVING sum(m.haber - m.debe) > 0
+         )
+         SELECT d.id AS dte_id, f.id AS factura_id, f.cliente_id, (f.total - f.pagado)::text AS pendiente,
+                ant.saldo::text AS anticipo
+           FROM fiscal.dte d
+           JOIN billing.facturas f ON f.id = d.documento_id
+                AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+           JOIN ant ON ant.empresa_id = f.empresa_id AND ant.cliente_id = f.cliente_id
+          WHERE d.estado = 'certificado' AND ${E('d.empresa_id')}
+            AND f.estado IN ${ESTADOS_PENDIENTES} AND f.total > f.pagado
+            AND EXISTS (SELECT 1 FROM fiscal.dte_intentos i
+                         WHERE i.dte_id = d.id AND i.operacion = 'anular' AND i.resultado = 'rechazado')`,
+    )
 
     /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
