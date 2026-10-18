@@ -16,6 +16,9 @@ import login401 from './auth/login.401.json'
 import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
+import { rutasCartera } from './cartera/rutas'
+import { rutasCobros } from './cobros/rutas'
+import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
 import { rutasDocumentos } from './documentos/rutas'
@@ -362,6 +365,11 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return { status: 200, cuerpo: me }
     },
 
+    // Fase 4 primero: `GET /cobros/por-liquidar` antes que el recibo `GET /cobros/:id`, y
+    // `GET /reportes/conciliacion-bancaria` antes que los reportes genéricos.
+    ...rutasCobros,
+    ...rutasConciliacion,
+    ...rutasCartera,
     ...rutasEmpresas,
     ...rutasNotificaciones,
     ...rutasZonas,

@@ -16,16 +16,20 @@ function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFi
 
 /**
  * Lo que la caja debería tener al cerrar, como `CerrarCaja` (A3): fondo inicial + cobros en
- * efectivo del turno (método `caja`, no anulados) − egresos en efectivo vigentes del turno.
+ * efectivo del turno (método `caja`, no anulados) − egresos en efectivo vigentes del turno −
+ * depósitos al banco del turno (fase 4, `cajas.depositar`).
  */
 export function esperadoDelTurno(turno: Turno): Decimal {
     const cobrado = bd.pagos
         .filter(p => p.caja_id === turno.caja_id && p.metodo === 'caja' && p.estado !== 'anulado')
         .filter(p => p.created_at >= turno.abierto_en && (turno.cerrado_en === null || p.created_at <= turno.cerrado_en))
         .reduce((suma, p) => suma.plus(p.monto), new Decimal(turno.fondo_inicial))
-    return bd.egresos
+    const sinEgresos = bd.egresos
         .filter(e => e.turno_id === turno.id && e.metodo === 'caja' && e.estado === 'registrado')
         .reduce((suma, e) => suma.minus(e.monto), cobrado)
+    return bd.depositos
+        .filter(d => d.turno_id === turno.id)
+        .reduce((suma, d) => suma.minus(d.monto), sinEgresos)
 }
 
 /** Cajas y turnos (hoy 501 en la API: A3 los implementa el día 4). */

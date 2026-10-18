@@ -121,6 +121,16 @@ function rutasDePaginas(): Map<string, string> {
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
+    'CajaDepositoModal.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/index.vue'] },
+    'CarteraCastigoModal.vue': { permisos: ['cartera.castigar', 'facturas.ver'], desde: ['pages/cartera/index.vue'] },
+    'CarteraProvisionModal.vue': { permisos: ['cartera.provisionar'], desde: ['pages/cartera/index.vue'] },
+    'ConciliarLineaSlideover.vue': { permisos: ['bancos.conciliar', 'bancos.ver'], desde: ['pages/bancos/extractos/[id].vue'] },
+    'ExtractoImportarModal.vue': { permisos: ['bancos.importar_extracto'], desde: ['pages/bancos/extractos/index.vue'] },
+    'LineaRegistrarModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/extractos/[id].vue'] },
+    'LiquidacionRegistrarModal.vue': { permisos: ['cobros.liquidar'], desde: ['pages/cobros/por-liquidar.vue'] },
+    'ProveedorCobroModal.vue': { permisos: ['cobros.configurar'], desde: ['pages/configuracion/proveedores-cobro.vue'] },
+    'ReglaConciliacionModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/reglas.vue'] },
+    'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
     'CajaCrearModal.vue': { permisos: ['cajas.crear'], desde: ['pages/caja/index.vue'] },
     'ClienteEstadoCuenta.vue': { permisos: ['clientes.estado_cuenta'], desde: ['pages/clientes/[id]/index.vue'] },

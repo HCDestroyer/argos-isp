@@ -100,7 +100,17 @@
     "empresas.editar",
     "empresas.desactivar",
     "empresas.cambiar_logo",
-    "usuarios.asignar_empresas"
+    "usuarios.asignar_empresas",
+    "cobros.configurar",
+    "cobros.liquidar",
+    "cajas.depositar",
+    "bancos.ver",
+    "bancos.trasladar",
+    "bancos.importar_extracto",
+    "bancos.conciliar",
+    "cartera.provisionar",
+    "cartera.castigar",
+    "pagos.cerrar_diferencia"
   ],
   "alcance_global": true,
   "empresas": [

@@ -26,7 +26,8 @@
       "promesas.crear",
       "comprobantes.ver",
       "comprobantes.aprobar",
-      "comprobantes.rechazar"
+      "comprobantes.rechazar",
+      "cajas.depositar"
     ],
     "alcance_global": false,
     "empresas": [

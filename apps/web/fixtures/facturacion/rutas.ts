@@ -464,6 +464,9 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
             banco_origen_nombre: banco?.nombre ?? null,
             cuenta_bancaria_id: cuenta?.id ?? null,
             cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
+            // Fase 4: agente o débito de un proveedor activo desde su fecha de corte va al puente 1.1.10.NN.
+            proveedor_cobro_id: bd.proveedoresCobro.find(p => p.empresa_id === parte.empresaId && p.metodo === metodo && p.metodo !== 'pasarela' && p.activo && p.desde <= momento.slice(0, 10))?.id ?? null,
+            liquidacion_id: null,
             version: 1,
             created_at: momento,
             updated_at: momento,
