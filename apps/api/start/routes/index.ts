@@ -14,5 +14,14 @@ import billing from '#start/routes/billing'
 import ledger from '#start/routes/ledger'
 import portal from '#start/routes/portal'
 import notify from '#start/routes/notify'
+import integraciones from '#start/routes/integraciones'
 
-export const registroRutas: Ruta[] = [...core, ...network, ...billing, ...ledger, ...portal, ...notify]
+export const registroRutas: Ruta[] = [
+    ...core,
+    ...network,
+    ...billing,
+    ...ledger,
+    ...portal,
+    ...notify,
+    ...integraciones,
+]

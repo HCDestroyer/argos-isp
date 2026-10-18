@@ -106,6 +106,13 @@ export default await Env.create(new URL('../', import.meta.url), {
     NOTIFY_API_URL: Env.schema.string.optional(),
     TELEGRAM_CHAT_EQUIPO: Env.schema.string.optional(),
     NOTIFY_CRON_TOLERANCIA_MIN: Env.schema.number.optional(),
+    /**
+     * Conector Horus (A6): se configura desde el panel. Solo este flag de laboratorio es de
+     * entorno: permite `http://` en la URL de Horus y sus receptores (por defecto solo https).
+     */
+    HORUS_PERMITIR_HTTP: Env.schema.boolean.optional(),
+    /** URL pública de la API (sin `/api/v1`): receptor de webhooks y enlace de conexión de Horus. */
+    API_PUBLIC_URL: Env.schema.string.optional(),
     /** Bearer de GET /metrics (Prometheus). Vacío = /metrics responde 404. */
     METRICS_TOKEN: Env.schema.string.optional(),
 
@@ -163,6 +170,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_COOKIE_SEGURA: Env.schema.enum.optional(['auto', 'siempre'] as const),
     /** URL pública del portal para el retorno de la pasarela (`app/portal/pagos_en_linea.ts`). */
     PORTAL_URL_PUBLICA: Env.schema.string.optional(),
+    /** URL pública del panel: los tickets de autologin de Horus abren `<PANEL_URL_PUBLICA>/sso/entrar#…` (`app/core/sso.ts`). */
+    PANEL_URL_PUBLICA: Env.schema.string.optional(),
 
     /*
     |----------------------------------------------------------

@@ -11,7 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { empresasDeLaLista, exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
-import { pagina } from '#shared/openapi/esquemas'
+import { lista, pagina } from '#shared/openapi/esquemas'
 import { listarAcciones, listarCambios } from '#shared/bitacora'
 import { construirMe } from '#core/acl'
 import IniciarSesion from '#core/actions/iniciar_sesion'
@@ -60,7 +60,7 @@ import {
     listarZonas,
     verCliente,
 } from '#core/consultas/clientes'
-import { NoEncontrado, Problema, ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, Problema, Prohibido, ValidacionFallida } from '#shared/errores'
 import {
     construirRegistroAaa,
     paginaRegistrosAaa,
@@ -69,6 +69,17 @@ import {
 } from '#core/aaa'
 import { LIMITE_POR_DEFECTO } from '#shared/paginacion'
 import { resolverIp } from '#network/consultas/ip'
+import ResolverIps from '#core/actions/resolver_ips'
+import GenerarTokenHorus from '#core/actions/generar_token_horus'
+import RevocarTokenHorus from '#core/actions/revocar_token_horus'
+import { listarTokensHorus } from '#core/integraciones_horus'
+import EmitirTicketSso from '#core/actions/emitir_ticket_sso'
+import CanjearTicketSso from '#core/actions/canjear_ticket_sso'
+import VincularCuentaSso from '#core/actions/vincular_cuenta_sso'
+import QuitarVinculacion from '#core/actions/quitar_vinculacion'
+import RevocarVinculaciones from '#core/actions/revocar_vinculaciones'
+import type { SalidaIniciarSesion } from '#core/actions/iniciar_sesion'
+import { vinculacionesDeUsuario } from '#core/sso'
 import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
@@ -81,6 +92,10 @@ import { TAMANO_MAXIMO_LOGO, leerArchivoLogo } from '#core/logos'
 import {
     AaaServicio,
     AccionAuditoria,
+    CanjeSso,
+    RevocacionVinculaciones,
+    TicketSsoEmitido,
+    VinculacionExterna,
     CambioAuditoria,
     Cliente,
     ConfiguracionEfectivaServicio,
@@ -90,15 +105,128 @@ import {
     Me,
     Permiso,
     ResolucionIp,
+    ResolucionIpsHorus,
     Rol,
     Servicio,
     Sesion,
     SesionPanel,
     TokenApi,
     TokenApiCreado,
+    TokenHorusCreado,
     Usuario,
     Zona,
 } from '#core/esquemas'
+
+/** Pone la cookie del panel y arma `SesionPanel` (mismo cuerpo que `POST /auth/sesion`). */
+function sesionPanel(ctx: HttpContext, sesion: SalidaIniciarSesion) {
+    ponerCookieSesionPanel(ctx, sesion.token, sesion.expiraMaxEn)
+    const csrf = csrfDeSesion(sesion.token)
+    return {
+        usuario: { ...sesion.usuario, csrf },
+        csrf,
+        expira_en: sesion.expiraEn?.toISOString() ?? null,
+        expira_max_en: sesion.expiraMaxEn?.toISOString() ?? null,
+    }
+}
+
+/** Autologin desde Horus (contrato Horus §1.5, lado receptor). */
+const sso: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/auth/sso/canjear',
+        operacion: 'authSsoCanjear',
+        resumen: 'Canjear un ticket de autologin (panel, /sso/entrar#<ticket>)',
+        etiqueta: 'auth',
+        seguridad: 'publico',
+        permiso: null,
+        descripcion:
+            'Un uso, 60 s, ligado al conector que lo pidió (410 `ticket_invalido` si venció, se usó o el ' +
+            'conector ya no está conectado). Con vinculación: cookie del panel como `POST /auth/sesion` ' +
+            '(permisos, alcance y límites del usuario local) y `ruta` del destino. Sin vinculación: ' +
+            '`vinculacion_requerida` y un token de vinculación para `POST /auth/sso/vincular`. Nunca vincula ' +
+            'por correo. Mismo control de `Origin` y límite por IP que el login.',
+        cuerpo: v.canjearTicketSsoValidator,
+        limitada: true,
+        antes: contarIpLogin(),
+        respuesta: { status: 200, descripcion: 'Sesión abierta o vinculación requerida', esquema: CanjeSso },
+        handler: async (ctx, { cuerpo }) => {
+            verificarOrigenLogin(ctx)
+            const salida = await new CanjearTicketSso().execute(cuerpo, ctx.contextoAccion('panel'))
+            if (salida.resultado === 'sesion') {
+                return {
+                    resultado: salida.resultado,
+                    ruta: salida.ruta,
+                    conector: salida.conector,
+                    sesion: sesionPanel(ctx, salida.sesion),
+                    vinculacion: null,
+                }
+            }
+            return { ...salida, sesion: null }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/auth/sso/vincular',
+        operacion: 'authSsoVincular',
+        resumen: 'Iniciar sesión y vincular la cuenta del otro sistema (autologin)',
+        etiqueta: 'auth',
+        seguridad: 'publico',
+        permiso: null,
+        descripcion:
+            'Login normal (mismas credenciales, límite de intentos y cookie que `POST /auth/sesion`) con el ' +
+            'token de `vinculacion_requerida` (10 min, un uso; 410 `vinculacion_invalida`). Si entra, guarda ' +
+            'la vinculación y devuelve la `ruta` del destino.',
+        cuerpo: v.vincularCuentaSsoValidator,
+        limitada: true,
+        antes: contarIpLogin(),
+        respuesta: { status: 200, descripcion: 'Sesión abierta y cuenta vinculada', esquema: CanjeSso },
+        handler: async (ctx, { cuerpo }) => {
+            verificarOrigenLogin(ctx)
+            const salida = await conLimiteLogin(ctx, cuerpo.email, () =>
+                new VincularCuentaSso().execute(cuerpo, ctx.contextoAccion('panel')),
+            )
+            return {
+                resultado: salida.resultado,
+                ruta: salida.ruta,
+                conector: salida.conector,
+                sesion: sesionPanel(ctx, salida.sesion),
+                vinculacion: null,
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/me/vinculaciones',
+        operacion: 'meVinculaciones',
+        resumen: 'Mis vinculaciones de autologin con otros sistemas',
+        etiqueta: 'auth',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Vinculaciones vigentes', esquema: lista(VinculacionExterna) },
+        handler: (ctx) => vinculacionesDeUsuario(ctx.auth.getUserOrFail().id),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/me/vinculaciones/:id/quitar',
+        operacion: 'meVinculacionesQuitar',
+        resumen: 'Quitar una de mis vinculaciones de autologin',
+        etiqueta: 'auth',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Vinculación revocada', esquema: VinculacionExterna },
+        handler: (ctx, { params }) =>
+            new QuitarVinculacion().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/vinculaciones/revocar',
+        operacion: 'vinculacionesRevocar',
+        resumen: 'Revocar vinculaciones de autologin (todas, de un usuario o de un conector)',
+        etiqueta: 'acl',
+        permiso: 'vinculaciones.revocar',
+        cuerpo: v.revocarVinculacionesValidator,
+        respuesta: { status: 200, descripcion: 'Cuántas se revocaron', esquema: RevocacionVinculaciones },
+        handler: (ctx, { cuerpo }) => new RevocarVinculaciones().execute(cuerpo, ctx.contextoAccion()),
+    }),
+]
 
 const auth: Ruta[] = [
     definirRuta({
@@ -976,6 +1104,88 @@ const ip: Ruta[] = [
     }),
 ]
 
+/** Integración con Horus Flow (contrato `.claude/integration/contratos/horus.md`). */
+const integraciones: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/horus/resolver',
+        operacion: 'integracionesHorusResolver',
+        resumen: 'Resolver un lote de IPs a servicio, cliente y empresa (Horus)',
+        etiqueta: 'integraciones',
+        permiso: 'ip.resolver',
+        descripcion:
+            'De 1 a 500 IPv4 o IPv6 en el cuerpo (nunca en la URL), en una sola consulta. Misma regla que ' +
+            '`GET /ip/:ip` (prefijo más largo; la sesión activa sobre la asignación). Una IP de nadie o de ' +
+            'un servicio fuera del alcance del token (router, zona, empresas) responde ' +
+            '`{ ip, error: "no_encontrada" }`. Cada llamada queda en la bitácora (`ip.resolver`) con los ' +
+            'servicios y clientes devueltos.',
+        cuerpo: v.resolverIpsValidator,
+        respuesta: { status: 200, descripcion: 'Un resultado por IP, en orden', esquema: ResolucionIpsHorus },
+        handler: (ctx, { cuerpo }) => new ResolverIps(ctx.alcance).execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/horus/tokens',
+        operacion: 'integracionesHorusTokens',
+        resumen: 'Tokens de la integración Horus (sin su valor)',
+        etiqueta: 'integraciones',
+        permiso: 'horus.ver',
+        respuesta: { status: 200, descripcion: 'Tokens, los más nuevos primero', esquema: lista(TokenApi) },
+        handler: () => listarTokensHorus(),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/horus/tokens',
+        operacion: 'integracionesHorusGenerarToken',
+        resumen: 'Generar el token atk_ de Horus (se muestra una sola vez)',
+        etiqueta: 'integraciones',
+        permiso: 'horus.generar_token',
+        descripcion:
+            'Crea, la primera vez, el usuario técnico "Horus" y su rol `integracion_horus`. El token solo ' +
+            'lleva `ip.resolver`, `clientes.ver` y `servicios.ver`, y opcionalmente routers o zonas. No ' +
+            'revoca los anteriores.',
+        cuerpo: v.generarTokenHorusValidator,
+        respuesta: { status: 201, descripcion: 'Token generado', esquema: TokenHorusCreado },
+        handler: (ctx, { cuerpo }) => new GenerarTokenHorus().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/horus/tokens/:id/revocar',
+        operacion: 'integracionesHorusRevocarToken',
+        resumen: 'Revocar un token de la integración Horus',
+        etiqueta: 'integraciones',
+        permiso: 'horus.revocar_token',
+        respuesta: { status: 200, descripcion: 'Token revocado', esquema: TokenApi },
+        handler: (ctx, { params }) =>
+            new RevocarTokenHorus().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
+integraciones.push(
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/horus/sso/tickets',
+        operacion: 'integracionesHorusSsoTicket',
+        resumen: 'Pedir un ticket de autologin para un usuario de Horus (servidor a servidor)',
+        etiqueta: 'integraciones',
+        permiso: 'sso.emitir',
+        descripcion:
+            'Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve ' +
+            'la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje ' +
+            'abre la sesión del usuario local vinculado, o pide su login.',
+        cuerpo: v.emitirTicketSsoValidator,
+        respuesta: { status: 201, descripcion: 'Ticket emitido', esquema: TicketSsoEmitido },
+        handler: (ctx, { cuerpo }) => {
+            const tokenId =
+                ctx.auth.authenticatedViaGuard === 'tokens' ? ctx.auth.use('tokens').token?.id : undefined
+            if (!tokenId) {
+                throw new Prohibido('Solo el token de la integración Horus puede pedir tickets de autologin')
+            }
+            return new EmitirTicketSso().execute({ ...cuerpo, atk_id: tokenId }, ctx.contextoAccion())
+        },
+    }),
+)
+
 const interno: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -1041,4 +1251,15 @@ const interno: Ruta[] = [
     }),
 ]
 
-export default [...auth, ...usuarios, ...empresas, ...clientes, ...servicios, ...bitacora, ...ip, ...interno]
+export default [
+    ...auth,
+    ...sso,
+    ...usuarios,
+    ...empresas,
+    ...clientes,
+    ...servicios,
+    ...bitacora,
+    ...ip,
+    ...integraciones,
+    ...interno,
+]

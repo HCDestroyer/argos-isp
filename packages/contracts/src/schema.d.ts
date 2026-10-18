@@ -64,6 +64,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/sso/canjear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canjear un ticket de autologin (panel, /sso/entrar#<ticket>)
+         * @description Un uso, 60 s, ligado al conector que lo pidió (410 `ticket_invalido` si venció, se usó o el conector ya no está conectado). Con vinculación: cookie del panel como `POST /auth/sesion` (permisos, alcance y límites del usuario local) y `ruta` del destino. Sin vinculación: `vinculacion_requerida` y un token de vinculación para `POST /auth/sso/vincular`. Nunca vincula por correo. Mismo control de `Origin` y límite por IP que el login.
+         */
+        post: operations["authSsoCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sso/vincular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Iniciar sesión y vincular la cuenta del otro sistema (autologin)
+         * @description Login normal (mismas credenciales, límite de intentos y cookie que `POST /auth/sesion`) con el token de `vinculacion_requerida` (10 min, un uso; 410 `vinculacion_invalida`). Si entra, guarda la vinculación y devuelve la `ruta` del destino.
+         */
+        post: operations["authSsoVincular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bancos": {
         parameters: {
             query?: never;
@@ -887,6 +927,325 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/horus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conector con Horus Flow: configuración (secretos como ***) y salud de la conexión
+         * @description Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`.
+         */
+        get: operations["horusConectorVer"];
+        /**
+         * Guardar el conector con Horus: URL, código hf_pat_, receptor de Horus e interruptor
+         * @description Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`. `version: 0` lo crea. El primer guardado (o `regenerar_secreto_entrada`) genera el secreto del receptor de Argos y lo devuelve **una sola vez** en `webhook_entrada_secreto_nuevo`. Emite `horus.config_cambiada`.
+         */
+        put: operations["horusConectorGuardar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/abrir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ver en Horus: URL de autologin con ticket de un solo uso
+         * @description §1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla; si está en pausa por la espera exponencial, el problem+json trae `reintentar_en` (ISO UTC) y `detail` la hora de Guatemala. Para `servicio` y `cliente` se revisa el acceso del usuario.
+         */
+        post: operations["horusAbrir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/conexion/canjear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canje del enlace de conexión de Argos (lo llama Horus, servidor a servidor)
+         * @description §1.4. Sin sesión: lo autentica el código del enlace. Guarda cifrados el `hf_pat_`, la URL de Horus y su receptor; emite el token `atk_` del usuario técnico Horus y genera el secreto del receptor de Argos. El conector queda apagado. 410 si el código venció, se usó o no existe.
+         */
+        post: operations["horusEnlaceCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/conexion/conectar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conectar con un enlace de conexión generado en Horus
+         * @description §1.4 (Argos canjea el enlace de Horus). Emite el token `atk_` y el secreto del receptor de Argos, llama a `POST <horus>/api/v1/integrations/argosisp/conexion/canjear` y guarda lo que devuelve. El conector queda apagado. 422 `enlace_vencido` si Horus responde 410; 502 `horus_error` con el error real si Horus falla (no queda nada guardado).
+         */
+        post: operations["horusEnlaceConectar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/consumo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consumo mensual de varios servicios (hasta 500) según Horus
+         * @description Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Es una lectura (POST por el tamaño de la lista).
+         */
+        post: operations["horusConsumoLotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/enlace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar enlace de conexión para pegar en Horus (15 min, un solo uso)
+         * @description §1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear` del mismo host (la URL pública de la API). Si alguien abre el enlace en el navegador, `GET /conectar` de la API lo redirige (302, el fragmento se conserva) a `<PANEL_URL_PUBLICA>/conectar`, que explica que se pega en Horus.
+         */
+        post: operations["horusEnlaceGenerar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/envios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Webhooks enviados a Horus: estado, intentos y próximo reintento
+         * @description Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`.
+         */
+        get: operations["horusEnviosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/estado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado del conector para "Ver en Horus": encendido o no, y pausa (sin secretos)
+         * @description Con `horus.abrir` (no hace falta `horus.ver`): el panel deshabilita "Ver en Horus" con el conector apagado o sin URL o código, y avisa hasta cuándo está en pausa si Horus no respondió. No llama a Horus. El conector es uno por instalación: igual para toda empresa.
+         */
+        get: operations["horusConectorEstado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/probar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probar la conexión con Horus (lectura autenticada y ping firmado al receptor)
+         * @description Con la configuración guardada, encendida o no. Responde 200 aunque falle: `ok: false` y el error real (`ECONNREFUSED`, `Horus respondió 401: …`).
+         */
+        post: operations["horusConectorProbar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/recibidos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Webhooks recibidos de Horus */
+        get: operations["horusRecibidosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/resolver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver un lote de IPs a servicio, cliente y empresa (Horus)
+         * @description De 1 a 500 IPv4 o IPv6 en el cuerpo (nunca en la URL), en una sola consulta. Misma regla que `GET /ip/:ip` (prefijo más largo; la sesión activa sobre la asignación). Una IP de nadie o de un servicio fuera del alcance del token (router, zona, empresas) responde `{ ip, error: "no_encontrada" }`. Cada llamada queda en la bitácora (`ip.resolver`) con los servicios y clientes devueltos.
+         */
+        post: operations["integracionesHorusResolver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/seguridad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estado de seguridad de varios servicios (hasta 500) para la columna "Seguridad"
+         * @description Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Usa §3.5 de Horus; mientras Horus no lo tenga (H9) responde `modo: alternativa` con el último dato de la consulta 360 o de los webhooks, sin una llamada por servicio.
+         */
+        post: operations["horusSeguridadLotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/sso/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir un ticket de autologin para un usuario de Horus (servidor a servidor)
+         * @description Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje abre la sesión del usuario local vinculado, o pide su login.
+         */
+        post: operations["integracionesHorusSsoTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tokens de la integración Horus (sin su valor) */
+        get: operations["integracionesHorusTokens"];
+        put?: never;
+        /**
+         * Generar el token atk_ de Horus (se muestra una sola vez)
+         * @description Crea, la primera vez, el usuario técnico "Horus" y su rol `integracion_horus`. El token solo lleva `ip.resolver`, `clientes.ver` y `servicios.ver`, y opcionalmente routers o zonas. No revoca los anteriores.
+         */
+        post: operations["integracionesHorusGenerarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/tokens/{id}/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar un token de la integración Horus */
+        post: operations["integracionesHorusRevocarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/horus/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receptor de webhooks de Horus (firmados con HMAC, lo llama Horus)
+         * @description §1.3 y §3.4. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>` con el secreto que generó Argos (401 `firma_invalida`), `X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `horus_apagado` con el conector apagado. Cuerpo `{ id, event, occurred_at, tenant, data }`. Deduplica por `id`; responde 202 y lo demás pasa por el bus (`horus.*`). `ping` y `test` solo se registran; eventos y campos desconocidos se ignoran.
+         */
+        post: operations["horusWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -1181,6 +1540,40 @@ export interface paths {
         get: operations["me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/vinculaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mis vinculaciones de autologin con otros sistemas */
+        get: operations["meVinculaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/vinculaciones/{id}/quitar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quitar una de mis vinculaciones de autologin */
+        post: operations["meVinculacionesQuitar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2867,6 +3260,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/horus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consumo, salud y seguridad del servicio según Horus (consulta 360)
+         * @description Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Pregunta por `external_service_id` (1.2.0); si Horus no lo acepta o no conoce el servicio, por la IP actual (`consulta: address`). Incluye los últimos webhooks de Horus del servicio (`eventos_recientes`).
+         */
+        get: operations["horusServicio360"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/horus/consumo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consumo mensual del servicio según Horus (por día o total)
+         * @description Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus.
+         */
+        get: operations["horusServicioConsumo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/limitar": {
         parameters: {
             query?: never;
@@ -3117,6 +3550,23 @@ export interface paths {
          */
         put: operations["usuariosAsignarEmpresas"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vinculaciones/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar vinculaciones de autologin (todas, de un usuario o de un conector) */
+        post: operations["vinculacionesRevocar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3428,6 +3878,40 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        CanjeConexionHorus: {
+            /** @description Token `atk_` de Argos para Horus (§1.2) */
+            token: string;
+            webhook: {
+                url: string;
+                secreto: string;
+            };
+            conector_id: string;
+        };
+        CanjeSso: {
+            /**
+             * @description `sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`
+             * @enum {string}
+             */
+            resultado: "sesion" | "vinculacion_requerida";
+            /** @description Ruta local del panel del destino, p. ej. `/servicios/812` */
+            ruta: string;
+            /** @description Sistema que pidió el autologin (`horus`) */
+            conector: string;
+            /** @description Solo con `resultado: sesion` */
+            sesion: components["schemas"]["SesionPanel"] | null;
+            /** @description Solo con `resultado: vinculacion_requerida` */
+            vinculacion: {
+                /** @description Token de vinculación: 10 min, un solo uso */
+                token: string;
+                /** Format: date-time */
+                expira_en: string;
+                usuario_externo: {
+                    id_externo: string;
+                    correo: string | null;
+                    nombre: string | null;
+                };
+            } | null;
+        };
         CategoriaEgreso: {
             id: number;
             /** @enum {string} */
@@ -3475,6 +3959,10 @@ export interface components {
         };
         Cliente: {
             id: number;
+            /** @description Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan */
+            codigo?: string;
+            /** @description Código en el sistema anterior (importador); no reemplaza a `codigo` */
+            codigo_externo?: string | null;
             nombre: string;
             /** @enum {string} */
             tipo: "persona" | "empresa";
@@ -3637,6 +4125,122 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
         };
+        ConectorHorus: {
+            /** @description Apagado por defecto: sin él no hay llamadas ni webhooks */
+            activo: boolean;
+            /** @description URL base de Horus (https), sin `/api/v1` */
+            url_base: string | null;
+            /**
+             * @description Código de conexión `hf_pat_` de Horus (`***`)
+             * @enum {string|null}
+             */
+            token: "***" | null;
+            /** @description Receptor de Horus (lo genera Horus) */
+            webhook_salida_url: string | null;
+            /**
+             * @description Secreto del receptor de Horus (`***`)
+             * @enum {string|null}
+             */
+            webhook_salida_secreto: "***" | null;
+            /** @description URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública) */
+            webhook_entrada_url: string | null;
+            /** @description Ruta del receptor de Argos */
+            webhook_entrada_ruta: string;
+            /**
+             * @description Secreto del receptor de Argos (`***`)
+             * @enum {string|null}
+             */
+            webhook_entrada_secreto: "***" | null;
+            /** @description Id opaco del conector en Argos (§1.4) */
+            conector_id: string | null;
+            /**
+             * Format: date-time
+             * @description Último canje de un enlace de conexión
+             */
+            conectado_por_enlace_en: string | null;
+            ultima_prueba: {
+                /** Format: date-time */
+                en: string | null;
+                ok: boolean | null;
+                error: string | null;
+            };
+            salud: {
+                fallos_seguidos: number;
+                /**
+                 * Format: date-time
+                 * @description Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)
+                 */
+                pausa_hasta: string | null;
+                ultimo_error: string | null;
+                /** Format: date-time */
+                ultimo_error_en: string | null;
+                /** Format: date-time */
+                ultimo_exito_en: string | null;
+            };
+            /** @description Secretos que no se pudieron descifrar (cambió la clave) */
+            errores_cifrado: string[];
+            /** @description 0 = nunca se guardó. Envíala al guardar */
+            version: number;
+        };
+        ConectorHorusGuardado: {
+            /** @description Apagado por defecto: sin él no hay llamadas ni webhooks */
+            activo: boolean;
+            /** @description URL base de Horus (https), sin `/api/v1` */
+            url_base: string | null;
+            /**
+             * @description Código de conexión `hf_pat_` de Horus (`***`)
+             * @enum {string|null}
+             */
+            token: "***" | null;
+            /** @description Receptor de Horus (lo genera Horus) */
+            webhook_salida_url: string | null;
+            /**
+             * @description Secreto del receptor de Horus (`***`)
+             * @enum {string|null}
+             */
+            webhook_salida_secreto: "***" | null;
+            /** @description URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública) */
+            webhook_entrada_url: string | null;
+            /** @description Ruta del receptor de Argos */
+            webhook_entrada_ruta: string;
+            /**
+             * @description Secreto del receptor de Argos (`***`)
+             * @enum {string|null}
+             */
+            webhook_entrada_secreto: "***" | null;
+            /** @description Id opaco del conector en Argos (§1.4) */
+            conector_id: string | null;
+            /**
+             * Format: date-time
+             * @description Último canje de un enlace de conexión
+             */
+            conectado_por_enlace_en: string | null;
+            ultima_prueba: {
+                /** Format: date-time */
+                en: string | null;
+                ok: boolean | null;
+                error: string | null;
+            };
+            salud: {
+                fallos_seguidos: number;
+                /**
+                 * Format: date-time
+                 * @description Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)
+                 */
+                pausa_hasta: string | null;
+                ultimo_error: string | null;
+                /** Format: date-time */
+                ultimo_error_en: string | null;
+                /** Format: date-time */
+                ultimo_exito_en: string | null;
+            };
+            /** @description Secretos que no se pudieron descifrar (cambió la clave) */
+            errores_cifrado: string[];
+            /** @description 0 = nunca se guardó. Envíala al guardar */
+            version: number;
+            /** @description Secreto del receptor de Argos en claro, solo cuando se acaba de generar: copiarlo a Horus */
+            webhook_entrada_secreto_nuevo: string | null;
+        };
         ConfiguracionEfectivaServicio: {
             servicio_id: number;
             plantilla_facturacion_id: number | null;
@@ -3729,6 +4333,45 @@ export interface components {
             created_at: string | null;
             /** Format: date-time */
             updated_at: string | null;
+        };
+        ConsumoHorus: {
+            /** @enum {string} */
+            conector: "activo" | "apagado";
+            /** @description true = Horus no respondió y se muestra el último dato conocido */
+            stale: boolean;
+            /**
+             * Format: date-time
+             * @description Cuándo se obtuvo de Horus el dato mostrado
+             */
+            actualizado_en: string | null;
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
+            error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
+            /** Format: date-time */
+            desde: string;
+            /** Format: date-time */
+            hasta: string;
+            /** @enum {string} */
+            granularidad: "day" | "total";
+            items: {
+                servicio_id: number;
+                stale: boolean;
+                /** Format: date-time */
+                actualizado_en: string | null;
+                error: string | null;
+                subida_bytes: number | null;
+                bajada_bytes: number | null;
+                series: {
+                    dia: string;
+                    subida_bytes: number;
+                    bajada_bytes: number;
+                }[];
+                direcciones: string[];
+            }[];
         };
         CredencialesPpp: {
             servicio_id: number;
@@ -3959,6 +4602,32 @@ export interface components {
             nit: string | null;
             logo_url: string | null;
         };
+        EnlaceConexionHorus: {
+            /** @description `https://<argos>/conectar#<codigo>`: se muestra una sola vez */
+            enlace: string;
+            /** Format: date-time */
+            vence_en: string;
+        };
+        EnvioHorus: {
+            id: number;
+            /** @description `id` del webhook (estable entre reintentos) */
+            evento_id: string;
+            evento: string;
+            empresa_id: number | null;
+            /** @enum {string} */
+            estado: "pendiente" | "enviado" | "fallido" | "descartado";
+            intentos: number;
+            /** Format: date-time */
+            proximo_intento_en: string | null;
+            ultimo_status: number | null;
+            ultimo_error: string | null;
+            /** Format: date-time */
+            enviado_en: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         EnvioNotificacion: {
             id: number;
             cliente_id: number | null;
@@ -3986,6 +4655,15 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        EstadoConectorHorus: {
+            /** @description Encendido y con URL y código de Horus: "Ver en Horus" puede funcionar */
+            activo: boolean;
+            /**
+             * Format: date-time
+             * @description Horus no respondió y está en pausa hasta este instante (UTC); null si no
+             */
+            reintentar_en: string | null;
         };
         EstadoCuenta: {
             cliente_id: number;
@@ -4211,6 +4889,120 @@ export interface components {
             resueltas: number;
             cumplidas: number;
             cumplimiento_pct: number | null;
+        };
+        Horus360Servicio: {
+            servicio_id: number;
+            /** @enum {string} */
+            conector: "activo" | "apagado";
+            /** @description true = Horus no respondió y se muestra el último dato conocido */
+            stale: boolean;
+            /**
+             * Format: date-time
+             * @description Cuándo se obtuvo de Horus el dato mostrado
+             */
+            actualizado_en: string | null;
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
+            error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
+            /** @enum {string|null} */
+            consulta: "external_service_id" | "address" | null;
+            /** @description IP actual del servicio en Argos */
+            ip: string | null;
+            /** @description Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta). Se declaran `security` y `meta`, que lee el panel; lo demás llega sin tipar. Cualquier bloque puede faltar (ver `meta.omitted`) */
+            datos: ({
+                security?: {
+                    /** @description `clean`, `suspected`, `compromised` */
+                    state?: string;
+                    open_findings?: number;
+                    findings?: ({
+                        id?: string | number;
+                        /** @description p. ej. `outbound_scanning` */
+                        kind?: string;
+                        /** @description `info`, `low`, `medium`, `high`, `critical` */
+                        severity?: string;
+                        /** Format: date-time */
+                        opened_at?: string;
+                        summary?: string;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                } & {
+                    [key: string]: unknown;
+                };
+                meta?: {
+                    /**
+                     * Format: date-time
+                     * @description Instante del dato en Horus
+                     */
+                    at?: string;
+                    /** @description Bloques que Horus no devolvió y por qué (lista vacía si no omitió nada) */
+                    omitted?: ({
+                        /** @enum {string} */
+                        block: "consumption" | "health" | "security";
+                        /** @description `permission`, `unavailable`, `not_requested`, `not_configured` */
+                        reason: string;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                } & {
+                    [key: string]: unknown;
+                };
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            eventos_recientes: {
+                id: number;
+                evento: string;
+                evento_interno: string | null;
+                /** Format: date-time */
+                ocurrido_en: string | null;
+                /** Format: date-time */
+                recibido_en: string;
+                resumen: string | null;
+            }[];
+        };
+        IpNoEncontradaHorus: {
+            ip: string;
+            /** @enum {string} */
+            error: "no_encontrada";
+        };
+        IpResueltaHorus: {
+            /** @description La IP tal como se pidió */
+            ip: string;
+            servicio_id: number;
+            cliente_id: number;
+            /** @description Asignación o sesión que contiene la IP (prefijo más largo) */
+            prefijo: string;
+            cliente: {
+                nombre: string;
+                /** @description Código estable del cliente (`C-000455`) */
+                codigo: string;
+                /** @enum {string} */
+                tipo: "persona" | "empresa";
+            };
+            servicio: {
+                user_ppp: string | null;
+                /** @description Nombre del plan */
+                plan: string;
+                /** @enum {string} */
+                estado: "activo" | "limitado" | "suspendido" | "retirado";
+                router_id: number;
+            };
+            empresa: {
+                id: number;
+                /** @description Nombre comercial de la empresa (NIT) del servicio */
+                nombre: string;
+                nit: string | null;
+            };
+            /**
+             * Format: date-time
+             * @description Inicio de la sesión o asignación vigente que contiene la IP
+             */
+            desde: string;
         };
         Ipv6Bloque: {
             id: number;
@@ -4890,6 +5682,11 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
+            /**
+             * Format: date-time
+             * @description Extensión: cuándo se reintenta (UTC) si el servicio externo está en pausa por la espera exponencial (p. ej. `horus_error`). `detail` lo dice en hora de Guatemala
+             */
+            reintentar_en?: string;
             errors?: {
                 field: string;
                 message: string;
@@ -5407,6 +6204,10 @@ export interface components {
             /** @description Asignación que contiene la IP (prefijo más largo) */
             prefijo: string;
         };
+        ResolucionIpsHorus: {
+            /** @description Uno por IP pedida, en el mismo orden */
+            resultados: (components["schemas"]["IpResueltaHorus"] | components["schemas"]["IpNoEncontradaHorus"])[];
+        };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
             horas: string[];
@@ -5439,6 +6240,23 @@ export interface components {
             origen: "global" | "empresa" | "entorno";
             envio_id: number;
         };
+        ResultadoPruebaHorus: {
+            ok: boolean;
+            /** Format: date-time */
+            probado_en: string;
+            api: {
+                ok: boolean;
+                status: number | null;
+                latencia_ms: number | null;
+                /** @description Error real (red, HTTP de Horus) */
+                error: string | null;
+            };
+            webhook: {
+                ok: boolean;
+                status: number | null;
+                error: string | null;
+            } | null;
+        };
         ResultadoVencimiento: {
             /** @description Facturas que pasaron a vencida */
             vencidas: number;
@@ -5446,6 +6264,13 @@ export interface components {
             moras: number;
             /** @description Facturas que no se pudieron procesar (ver log) */
             errores: number;
+        };
+        ResultadoWebhookHorus: {
+            recibido: boolean;
+            duplicado: boolean;
+            /** @enum {string} */
+            estado: "procesado" | "ignorado";
+            evento_interno: string | null;
         };
         ResultadoWebhookPasarela: {
             recibido: boolean;
@@ -5548,6 +6373,9 @@ export interface components {
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
         };
+        RevocacionVinculaciones: {
+            revocadas: number;
+        };
         Rol: {
             id: number;
             nombre: string;
@@ -5618,6 +6446,44 @@ export interface components {
             facturas_pendientes: components["schemas"]["Factura"][];
             /** @description Saldo acumulado dentro de la empresa */
             movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
+        };
+        SeguridadHorus: {
+            /** @enum {string} */
+            conector: "activo" | "apagado";
+            /** @description true = Horus no respondió y se muestra el último dato conocido */
+            stale: boolean;
+            /**
+             * Format: date-time
+             * @description Cuándo se obtuvo de Horus el dato mostrado
+             */
+            actualizado_en: string | null;
+            /** @description Por qué no hay dato fresco (las horas, en hora de Guatemala) */
+            error: string | null;
+            /**
+             * Format: date-time
+             * @description Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa
+             */
+            reintentar_en: string | null;
+            /**
+             * @description `alternativa` = Horus aún no tiene §3.5: último dato de la consulta 360 o de los webhooks
+             * @enum {string|null}
+             */
+            modo: "lotes" | "alternativa" | null;
+            items: {
+                servicio_id: number;
+                /** @description `clean`, `suspected`, `compromised` */
+                estado: string | null;
+                hallazgos_abiertos: number | null;
+                severidad_maxima: string | null;
+                /** Format: date-time */
+                desde: string | null;
+                /** @enum {string|null} */
+                fuente: "horus" | "consulta_360" | "webhook" | null;
+                stale: boolean;
+                /** Format: date-time */
+                actualizado_en: string | null;
+                error: string | null;
+            }[];
         };
         Servicio: {
             id: number;
@@ -5801,6 +6667,18 @@ export interface components {
         TelegramWebhookRespuesta: {
             ok: boolean;
         };
+        TicketHorus: {
+            /** @description URL de Horus con el ticket (un solo uso, 60 s); el panel la abre */
+            url: string;
+            /** Format: date-time */
+            expira_en: string | null;
+        };
+        TicketSsoEmitido: {
+            /** @description `https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso */
+            url: string;
+            /** Format: date-time */
+            expira_en: string;
+        };
         TokenApi: {
             id: number;
             usuario_id: number;
@@ -5819,6 +6697,13 @@ export interface components {
             /** @description Se muestra una sola vez */
             token: string;
             datos: components["schemas"]["TokenApi"];
+        };
+        TokenHorusCreado: {
+            /** @description Valor `atk_…`; se muestra una sola vez */
+            token: string;
+            datos: components["schemas"]["TokenApi"];
+            /** @description Usuario técnico Horus */
+            usuario_id: number;
         };
         TramoAsignacion: {
             id: number;
@@ -5861,6 +6746,19 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VinculacionExterna: {
+            id: number;
+            conector: string;
+            /** @description Usuario en el otro sistema */
+            id_externo: string;
+            usuario_id: number;
+            correo_externo: string | null;
+            nombre_externo: string | null;
+            /** Format: date-time */
+            revocada_en: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         VistaPreviaControl: {
             router_id: number;
@@ -5927,6 +6825,20 @@ export interface components {
                 /** @description Con 0 se calcula como 1 */
                 activos: number;
             };
+        };
+        WebhookHorusRecibido: {
+            id: number;
+            webhook_id: string;
+            evento: string;
+            /** Format: date-time */
+            ocurrido_en: string | null;
+            /** @enum {string} */
+            estado: "procesado" | "ignorado";
+            evento_interno: string | null;
+            empresa_id: number | null;
+            servicio_id: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         Zona: {
             id: number;
@@ -6055,6 +6967,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SesionPanel"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    authSsoCanjear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ticket: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta o vinculación requerida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeSso"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    authSsoVincular: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token_vinculacion: string;
+                    /** Format: email */
+                    email: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sesión abierta y cuenta vinculada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeSso"];
                 };
             };
             /** @description Datos inválidos */
@@ -6589,7 +7592,7 @@ export interface operations {
                 limit?: number;
                 /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
                 empresas?: "todas";
-                /** @description Busca por nombre, NIT/CUI, teléfono, user_ppp o IP */
+                /** @description Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
                 zona_id?: number;
                 /** @description Clientes con al menos un servicio en este estado */
@@ -6685,6 +7688,8 @@ export interface operations {
                     };
                     /** @enum {string} */
                     canal_preferido?: "correo" | "telegram" | "whatsapp";
+                    /** @description Código del cliente en el sistema anterior (importador); no reemplaza a `codigo` */
+                    codigo_externo?: string | null;
                 };
             };
         };
@@ -6817,6 +7822,8 @@ export interface operations {
                     };
                     /** @enum {string} */
                     canal_preferido?: "correo" | "telegram" | "whatsapp";
+                    /** @description Código del cliente en el sistema anterior (importador); no reemplaza a `codigo` */
+                    codigo_externo?: string | null;
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                 };
@@ -9590,6 +10597,892 @@ export interface operations {
             };
         };
     };
+    horusConectorVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConectorHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusConectorGuardar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; 0 si nunca se guardó. 409 si cambió */
+                    version: number;
+                    activo?: boolean;
+                    /** @description URL base de Horus, solo https (http solo en laboratorio) */
+                    url_base?: string | null;
+                    /** @description Código de conexión `hf_pat_…`. Omitido se conserva; null lo borra */
+                    token?: string | null;
+                    /** @description URL completa del receptor de Horus (la muestra Horus) */
+                    webhook_salida_url?: string | null;
+                    /** @description Secreto del receptor de Horus. Omitido se conserva; null lo borra */
+                    webhook_salida_secreto?: string | null;
+                    /** @description Genera otro secreto para el receptor de Argos (se muestra una vez) */
+                    regenerar_secreto_entrada?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Conector guardado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConectorHorusGuardado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusAbrir: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    destino: {
+                        /** @enum {string} */
+                        tipo: "cliente" | "servicio" | "router" | "hallazgo";
+                        id_externo: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description URL de Horus */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusEnlaceCanjear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    codigo: string;
+                    sistema: string;
+                    base_url: string;
+                    token: string;
+                    webhook: {
+                        url: string;
+                        secreto: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Credenciales de Argos para Horus */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeConexionHorus"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusEnlaceConectar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Enlace de conexión de Horus: `https://<horus>/conectar#<codigo>` */
+                    enlace: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConectorHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusConsumoLotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    servicio_ids: number[];
+                    /** @description Mes `YYYY-MM` (hora de Guatemala); por defecto el actual */
+                    mes?: string;
+                    /** @enum {string} */
+                    granularidad?: "day" | "total";
+                };
+            };
+        };
+        responses: {
+            /** @description Consumo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumoHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusEnlaceGenerar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enlace */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnlaceConexionHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusEnviosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "pendiente" | "enviado" | "fallido" | "descartado";
+                evento?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de envíos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EnvioHorus"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusConectorEstado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado del conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoConectorHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.abrir */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusConectorProbar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoPruebaHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusRecibidosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                servicio_id?: number;
+                evento?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de webhooks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["WebhookHorusRecibido"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusResolver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden */
+                    ips: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Un resultado por IP, en orden */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolucionIpsHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusSeguridadLotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    servicio_ids: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Seguridad */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeguridadHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusSsoTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    usuario: {
+                        /** @description Id del usuario en Horus; con el conector forma la vinculación */
+                        id_externo: string;
+                        /** @description Solo informativo: nunca se vincula por correo */
+                        correo?: string | null;
+                        nombre?: string | null;
+                    };
+                    destino: {
+                        /** @enum {string} */
+                        tipo: "cliente" | "servicio" | "router";
+                        /** @description Id del recurso en ArgosIsp (cliente, servicio o router) */
+                        id_externo: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Ticket emitido */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketSsoEmitido"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens, los más nuevos primero */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusGenerarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre?: string;
+                    /** @description Restringe el token a servicios de estos routers */
+                    routers?: number[];
+                    /** @description Restringe el token a clientes de estas zonas */
+                    zonas?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Token generado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenHorusCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    integracionesHorusRevocarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revocado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook recibido */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoWebhookHorus"];
+                };
+            };
+        };
+    };
     internoAaaServicio: {
         parameters: {
             query: {
@@ -10524,6 +12417,84 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    meVinculaciones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vinculaciones vigentes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VinculacionExterna"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    meVinculacionesQuitar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vinculación revocada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VinculacionExterna"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15333,7 +17304,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -15391,7 +17362,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -17037,6 +19008,117 @@ export interface operations {
             };
         };
     };
+    horusServicio360: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consulta 360 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Horus360Servicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    horusServicioConsumo: {
+        parameters: {
+            query?: {
+                /** @description Mes `YYYY-MM` (hora de Guatemala); por defecto el actual */
+                mes?: string;
+                granularidad?: "day" | "total";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consumo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumoHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso horus.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     serviciosLimitar: {
         parameters: {
             query?: never;
@@ -17722,7 +19804,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.generar" | "facturas.nota_credito" | "facturas.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "libro.cerrar_periodo" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
@@ -18128,6 +20210,62 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    vinculacionesRevocar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo las de este usuario; sin él, todas */
+                    usuario_id?: number;
+                    /** @enum {string} */
+                    conector?: "horus";
+                };
+            };
+        };
+        responses: {
+            /** @description Cuántas se revocaron */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevocacionVinculaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso vinculaciones.revocar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

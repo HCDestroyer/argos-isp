@@ -25,6 +25,14 @@ function exigirCampos(assert: any, esquema: Esquema, valor: Record<string, unkno
     }
 }
 
+/**
+ * Campos nuevos que la API ya envía siempre pero quedan opcionales en el esquema mientras los
+ * fixtures tipados del panel (A4) no los tengan (`a1.md`). Se vuelven obligatorios después.
+ */
+const OPCIONALES_PENDIENTES: Record<string, string[]> = {
+    Cliente: ['codigo', 'codigo_externo'],
+}
+
 test.group('OpenAPI estricto · núcleo', () => {
     test('los esquemas del núcleo no tienen propiedades opcionales', async ({ assert }) => {
         const todos = await esquemas()
@@ -39,7 +47,12 @@ test.group('OpenAPI estricto · núcleo', () => {
             'CambioAuditoria',
         ]) {
             const e = todos[nombre]!
-            assert.sameMembers(e.required!, Object.keys(e.properties!), `${nombre}: required = properties`)
+            const pendientes = OPCIONALES_PENDIENTES[nombre] ?? []
+            assert.sameMembers(
+                e.required!,
+                Object.keys(e.properties!).filter((p) => !pendientes.includes(p)),
+                `${nombre}: required = properties`,
+            )
         }
         assert.include(todos.Servicio!.required, 'cliente_nombre')
         assert.include(todos.Servicio!.required, 'tipo_conexion')
