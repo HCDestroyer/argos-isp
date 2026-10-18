@@ -33,7 +33,7 @@ test.group('Auditor contable · factura con la anulación del DTE pendiente', (g
         await new AnularFactura().execute({ factura_id: f.id, motivo: 'error de plan' }, e.ctx)
         assert.equal(await dtesDe('factura', f.id).then((r) => r[0]!.estado), 'anulacion_pendiente')
 
-        // pedirla en el pago: 422; sin pedirla, el pago queda como anticipo
+        // pedirla en el pago: 409 anulacion_en_proceso; sin pedirla, el pago queda como anticipo
         const pedida = await errorDe(
             new RegistrarPago().execute(
                 {
@@ -46,7 +46,8 @@ test.group('Auditor contable · factura con la anulación del DTE pendiente', (g
                 e.ctx,
             ),
         )
-        assert.equal(pedida.status, 422)
+        assert.equal(pedida.status, 409)
+        assert.equal(pedida.codigo, 'anulacion_en_proceso')
         await new RegistrarPago().execute(
             { cliente_id: s.clienteId, metodo: 'caja', monto: '150.00', empresa_id: e.B },
             e.ctx,
