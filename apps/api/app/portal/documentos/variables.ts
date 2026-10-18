@@ -4,7 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { D, dec } from '#ledger/dinero'
 import { ZONA, fechaCalendario, fechaCorta, fechaHora, mesAnio, quetzales } from '#notify/formato'
-import { numeroFactura } from '#portal/cuenta'
+import { COLUMNAS_DTE, dteDeFila, joinDteFactura, numeroDocumento, type ColumnasDte } from '#portal/fel'
 import { leerEmpresa, type DatosEmpresa } from '#portal/empresa'
 import { SQL_EMPRESA_FACTURA } from '#portal/marca'
 import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
@@ -64,6 +64,12 @@ export interface VistaAvisoCobro {
         fel_uuid: string | null
         fel_serie: string | null
         fel_numero: string | null
+        /** fecha y hora de certificación (Guatemala) */
+        fel_fecha: string | null
+        /** «Factura», «Factura cambiaria», «Nota de débito»… (tipo de DTE en palabras) */
+        fel_tipo: string | null
+        /** el DTE fue anulado ante la SAT */
+        fel_anulado: boolean
     }
     lineas: LineaVista[]
     generado: string
@@ -90,7 +96,11 @@ export const VARIABLES_AVISO_COBRO: ReadonlyArray<{ nombre: string; descripcion:
     { nombre: 'cliente.email', descripcion: 'Correo del cliente' },
     { nombre: 'servicio.plan', descripcion: 'Plan del servicio facturado' },
     { nombre: 'servicio.direccion', descripcion: 'Dirección de instalación' },
-    { nombre: 'factura.documento', descripcion: '"Aviso de cobro" o "Factura" si tiene FEL' },
+    {
+        nombre: 'factura.documento',
+        descripcion:
+            '"Aviso de cobro"; "Factura" (o "Nota de débito" en la mora) cuando su DTE está certificado',
+    },
     { nombre: 'factura.numero', descripcion: 'Serie-número FEL o número del aviso' },
     { nombre: 'factura.periodo', descripcion: 'Mes facturado: "octubre 2026"' },
     { nombre: 'factura.emitida', descripcion: 'Fecha de emisión: 01/10/2026' },
@@ -103,16 +113,32 @@ export const VARIABLES_AVISO_COBRO: ReadonlyArray<{ nombre: string; descripcion:
     { nombre: 'factura.saldo', descripcion: 'Saldo a pagar' },
     { nombre: 'factura.lineas', descripcion: 'Tabla de líneas (concepto, cantidad, precio, total)' },
     { nombre: 'factura.tiene_pagos', descripcion: 'Sección: hay abonos' },
-    { nombre: 'factura.fel', descripcion: 'Sección: la factura está certificada (FEL, semana 5)' },
+    { nombre: 'factura.fel', descripcion: 'Sección: el DTE de la factura está certificado (FEL)' },
     { nombre: 'factura.fel_uuid', descripcion: 'Número de autorización FEL' },
     { nombre: 'factura.fel_serie', descripcion: 'Serie FEL' },
     { nombre: 'factura.fel_numero', descripcion: 'Número FEL' },
+    { nombre: 'factura.fel_fecha', descripcion: 'Fecha y hora de certificación (Guatemala)' },
+    {
+        nombre: 'factura.fel_tipo',
+        descripcion: 'Tipo de DTE en palabras: Factura, Factura cambiaria, Nota de débito',
+    },
+    { nombre: 'factura.fel_anulado', descripcion: 'Sección: el DTE fue anulado ante la SAT' },
     {
         nombre: 'lineas',
         descripcion: 'Lista para {{#lineas}}: concepto, cantidad, precio_unitario, iva, total',
     },
     { nombre: 'generado', descripcion: 'Fecha y hora de generación (Guatemala)' },
 ]
+
+/** Tipos de DTE de la SAT en palabras (contrato §5). */
+const TIPOS_DTE: Record<string, string> = {
+    FACT: 'Factura',
+    FCAM: 'Factura cambiaria',
+    FPEQ: 'Factura pequeño contribuyente',
+    FESP: 'Factura especial',
+    NDEB: 'Nota de débito',
+    NCRE: 'Nota de crédito',
+}
 
 const ESTADOS: Record<string, string> = {
     emitida: 'Pendiente',
@@ -122,7 +148,10 @@ const ESTADOS: Record<string, string> = {
     anulada: 'Anulada',
 }
 
-/** Variables de una factura real. Si se pasa `clienteId`, la factura debe ser suya (404 si no). */
+/**
+ * Variables de una factura real. Si se pasa `clienteId` (portal), la factura debe ser suya y
+ * visible: una ajena o `por_certificar` responde 404.
+ */
 export async function variablesAvisoCobro(
     facturaId: number,
     opciones: { clienteId?: number; cliente?: QueryClientContract; ahora?: Date } = {},
@@ -133,8 +162,11 @@ export async function variablesAvisoCobro(
         .join('core.clientes as c', 'c.id', 'f.cliente_id')
         .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
         .leftJoin('network.planes as p', 'p.id', 's.plan_id')
+        .joinRaw(joinDteFactura('f'))
         .where('f.id', facturaId)
-        .if(opciones.clienteId !== undefined, (q) => q.where('f.cliente_id', opciones.clienteId!))
+        .if(opciones.clienteId !== undefined, (q) =>
+            q.where('f.cliente_id', opciones.clienteId!).whereNot('f.estado', 'por_certificar'),
+        )
         .select(
             'f.id',
             'f.tipo',
@@ -146,9 +178,7 @@ export async function variablesAvisoCobro(
             'f.iva',
             'f.total',
             'f.pagado',
-            'f.fel_uuid',
-            'f.fel_serie',
-            'f.fel_numero',
+            ...COLUMNAS_DTE,
             'c.nombre as cliente_nombre',
             'c.nombre_fiscal',
             'c.nit_cui',
@@ -178,6 +208,8 @@ export async function variablesAvisoCobro(
     const pagado = dec(fila.pagado)
     const saldo = fila.estado === 'anulada' ? new D(0) : D.max(total.minus(pagado), 0)
     const id = Number(fila.id)
+    const dte = dteDeFila(fila as ColumnasDte)
+    const documento = dte ? (TIPOS_DTE[dte.tipo_dte] ?? 'Factura') : 'Aviso de cobro'
 
     // Multiempresa: la empresa que emitió la factura (`billing.facturas.empresa_id`).
     const empresaId = Number(fila.empresa_id)
@@ -193,8 +225,8 @@ export async function variablesAvisoCobro(
         servicio: { plan: fila.plan ?? null, direccion: fila.servicio_direccion ?? null },
         factura: {
             id,
-            numero: numeroFactura({ id, fel_serie: fila.fel_serie, fel_numero: fila.fel_numero }),
-            documento: fila.fel_uuid ? 'Factura' : 'Aviso de cobro',
+            numero: numeroDocumento(id, dte),
+            documento,
             periodo: fila.tipo === 'mora' ? `Recargo por mora` : mesAnio(fechaCalendario(fila.periodo)),
             // dd/mm/aaaa en hora de Guatemala; nunca ISO ni "Invalid DateTime" si aún no se emitió.
             emitida: fila.emitida_en ? fechaCorta(DateTime.fromJSDate(fila.emitida_en as Date)) : '—',
@@ -206,10 +238,13 @@ export async function variablesAvisoCobro(
             pagado: quetzales(pagado.toString()),
             saldo: quetzales(saldo.toString()),
             tiene_pagos: pagado.greaterThan(0),
-            fel: Boolean(fila.fel_uuid),
-            fel_uuid: fila.fel_uuid ?? null,
-            fel_serie: fila.fel_serie ?? null,
-            fel_numero: fila.fel_numero ?? null,
+            fel: dte !== null,
+            fel_uuid: dte?.autorizacion ?? null,
+            fel_serie: dte?.serie ?? null,
+            fel_numero: dte?.numero ?? null,
+            fel_fecha: dte?.certificado_en ? fechaHora(dte.certificado_en) : null,
+            fel_tipo: dte ? documento : null,
+            fel_anulado: dte?.estado === 'anulado',
         },
         lineas: lineas.map((l) => ({
             concepto: l.concepto!,
@@ -250,7 +285,10 @@ export async function empresaDocumento(
  * Logo de la empresa del documento para `htmlAPdf` (`imagenes['empresa:logo']`), o nada si no
  * tiene o el archivo no se puede leer (el PDF sale igual, con el nombre en texto).
  */
-export async function imagenesDocumento(vista: VistaAvisoCobro): Promise<Record<string, ImagenDocumento>> {
+export async function imagenesDocumento(vista: {
+    empresa: Pick<EmpresaDocumento, 'logo'>
+    empresa_id?: number
+}): Promise<Record<string, ImagenDocumento>> {
     if (!vista.empresa.logo || vista.empresa_id === undefined) return {}
     try {
         const fila = await filaEmpresa(vista.empresa_id)
@@ -298,6 +336,9 @@ export async function vistaDeEjemplo(
             fel_uuid: null,
             fel_serie: null,
             fel_numero: null,
+            fel_fecha: null,
+            fel_tipo: null,
+            fel_anulado: false,
         },
         lineas: [
             {
