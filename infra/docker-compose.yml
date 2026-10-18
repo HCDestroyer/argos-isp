@@ -60,6 +60,8 @@ x-api-env: &api-env
   TELEGRAM_CODIGO_VIGENCIA_S: ${TELEGRAM_CODIGO_VIGENCIA_S:-900}
   # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
   TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+  # Avisos fiscales a contabilidad (valor inicial; después en el panel, correo.contabilidad)
+  NOTIFY_CORREO_CONTABILIDAD: ${NOTIFY_CORREO_CONTABILIDAD:-}
   NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}

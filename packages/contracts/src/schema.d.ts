@@ -4533,6 +4533,8 @@ export interface components {
                 password: "***" | null;
                 remitente: string | null;
                 nombre_visible: string | null;
+                /** @description Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve */
+                contabilidad?: string | null;
             };
             telegram: {
                 clientes_activo: boolean;
@@ -14805,6 +14807,8 @@ export interface operations {
                         remitente?: string | null;
                         /** @description Nombre visible del remitente */
                         nombre_visible?: string | null;
+                        /** @description Correo de contabilidad para los avisos fiscales; varias direcciones separadas por coma. Vacío o null lo quita */
+                        contabilidad?: string | null;
                     };
                     telegram?: {
                         /** @description Interruptor de Telegram a clientes */
@@ -15004,6 +15008,8 @@ export interface operations {
                         remitente?: string | null;
                         /** @description Nombre visible del remitente */
                         nombre_visible?: string | null;
+                        /** @description Correo de contabilidad para los avisos fiscales; varias direcciones separadas por coma. Vacío o null lo quita */
+                        contabilidad?: string | null;
                     };
                     telegram?: {
                         /** @description Interruptor de Telegram a clientes */
