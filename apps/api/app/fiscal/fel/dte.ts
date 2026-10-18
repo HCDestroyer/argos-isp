@@ -187,7 +187,9 @@ export async function ultimoDte(
 }
 
 export interface FiltrosDte extends OpcionesPaginacion {
-    estado?: EstadoDte
+    estado?: EstadoDte[]
+    desde?: string
+    hasta?: string
     documento_tipo?: DocumentoTipo
     documento_id?: number
 }
@@ -196,7 +198,17 @@ export async function listarDte(filtros: FiltrosDte, empresas: number[] | null) 
     const consulta = db
         .from('fiscal.dte as d')
         .select(COLUMNAS.map((c) => `d.${c}`))
-        .if(filtros.estado, (q) => q.where('d.estado', filtros.estado!))
+        .if(filtros.estado && filtros.estado.length > 0, (q) => q.whereIn('d.estado', filtros.estado!))
+        .if(filtros.desde, (q) =>
+            q.whereRaw(`(d.fecha_emision AT TIME ZONE 'America/Guatemala')::date >= ?::date`, [
+                filtros.desde!,
+            ]),
+        )
+        .if(filtros.hasta, (q) =>
+            q.whereRaw(`(d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= ?::date`, [
+                filtros.hasta!,
+            ]),
+        )
         .if(filtros.documento_tipo, (q) => q.where('d.documento_tipo', filtros.documento_tipo!))
         .if(filtros.documento_id, (q) => q.where('d.documento_id', filtros.documento_id!))
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('d.empresa_id', ids))
@@ -220,6 +232,56 @@ export async function pdfDeDte(id: number): Promise<{ empresa_id: number; pdf: s
     } | null
     if (!fila) throw new NoEncontrado(`El DTE ${id} no existe`)
     return { empresa_id: Number(fila.empresa_id), pdf: fila.pdf }
+}
+
+export interface IntentoDte {
+    id: number
+    dte_id: number
+    operacion: 'certificar' | 'anular' | 'consultar' | 'validar'
+    enviado_en: Date
+    resultado: string
+    duracion_ms: number
+    respuesta: Record<string, unknown>
+}
+
+/** Bitácora del DTE ante el certificador (`fiscal.dte_intentos`), del más antiguo al más reciente. */
+export async function intentosDeDte(dteId: number): Promise<IntentoDte[]> {
+    const filas = (await db
+        .from('fiscal.dte_intentos')
+        .where('dte_id', dteId)
+        .orderBy('id', 'asc')
+        .select(
+            'id',
+            'dte_id',
+            'operacion',
+            'enviado_en',
+            'resultado',
+            'duracion_ms',
+            'respuesta',
+        )) as IntentoDte[]
+    return filas.map((f) => ({ ...f, id: Number(f.id), dte_id: Number(f.dte_id) }))
+}
+
+/**
+ * El DTE del documento con valor fiscal (para portal, notify y PDF): el más reciente con
+ * autorización en `certificado`, `anulacion_pendiente` o `anulado`. Para una mora se pide su
+ * `nota_debito`. null si el documento no tiene DTE certificado. Solo lectura.
+ */
+export async function dteVigenteDe(
+    documentoTipo: DocumentoTipo,
+    documentoId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<DteFila | null> {
+    const fila = (await cliente
+        .from('fiscal.dte')
+        .where('documento_tipo', documentoTipo)
+        .where('documento_id', documentoId)
+        .whereIn('estado', ['certificado', 'anulacion_pendiente', 'anulado'])
+        .whereNotNull('autorizacion')
+        .orderBy('id', 'desc')
+        .select(COLUMNAS)
+        .first()) as DteFila | null
+    return fila ? normalizar(fila) : null
 }
 
 /** Bitácora ante el certificador (sin credenciales). */

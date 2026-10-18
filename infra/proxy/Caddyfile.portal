@@ -16,6 +16,9 @@
 	auto_https disable_redirects
 	http_port {$PORTAL_PROXY_HTTP_PUERTO:80}
 	https_port {$PORTAL_PROXY_HTTPS_PUERTO:443}
+	# 24h es el valor por defecto de Caddy; probar-portal.sh la apaga (`off`) por la carrera de la
+	# limpieza con la emisión interna sobre almacenamiento vacío (ver infra/proxy/Caddyfile).
+	storage_clean_interval {$PORTAL_PROXY_LIMPIEZA_ALMACEN:24h}
 }
 
 (portal) {

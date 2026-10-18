@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ReglaNegocio } from '#shared/errores'
+import { Conflicto, Problema, ReglaNegocio, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
@@ -68,7 +68,7 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
         // FEL (condición del líder a la NCRE inmediata, contrato §17): ninguna NCRE del mes o anterior
         // sin certificar; una rechazada en definitivo se anula antes (facturas.anular_nota_credito)
         const { rows: ncre } = (await t.trx.rawQuery(
-            `SELECT d.id AS dte_id, d.documento_id AS nota_id, d.estado
+            `SELECT d.id AS dte_id, d.documento_id AS nota_id, n.factura_id, d.estado
                FROM fiscal.dte d JOIN billing.notas_credito n ON n.id = d.documento_id
               WHERE d.documento_tipo = 'nota_credito' AND d.empresa_id = ?
                 AND n.fecha < (?::date + interval '1 month')
@@ -79,15 +79,32 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
                              WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id)
               ORDER BY d.id`,
             [empresaId, periodo],
-        )) as { rows: Array<{ dte_id: number; nota_id: number; estado: string }> }
+        )) as { rows: Array<{ dte_id: number; nota_id: number; factura_id: number; estado: string }> }
         if (ncre.length > 0) {
-            throw new Conflicto(
+            // errors[]: una entrada por nota, field nota_id, message = estado del DTE, rule = dte_id
+            // (además nota_id, factura_id, dte_id y estado como números y texto)
+            const errores = ncre.map(
+                (
+                    x,
+                ): ErrorCampo & { nota_id: number; factura_id: number; dte_id: number; estado: string } => ({
+                    field: 'nota_id',
+                    message: x.estado,
+                    rule: String(x.dte_id),
+                    nota_id: Number(x.nota_id),
+                    factura_id: Number(x.factura_id),
+                    dte_id: Number(x.dte_id),
+                    estado: x.estado,
+                }),
+            )
+            throw new Problema(
+                409,
+                'ncre_sin_certificar',
+                'NCRE sin certificar',
                 `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre
                     .slice(0, 20)
                     .map((x) => `nota ${x.nota_id}: ${x.estado}`)
                     .join(', ')}): certifícalas o anula las rechazadas antes de cerrar el mes`,
-                'ncre_sin_certificar',
-                'NCRE sin certificar',
+                errores,
             )
         }
 

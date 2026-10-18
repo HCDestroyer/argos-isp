@@ -49,11 +49,14 @@ import {
     ConfiguracionFel,
     CredencialesFel,
     Dte,
+    DteIntento,
+    ProveedorFelCatalogo,
     LoteCertificacion,
     SolicitudCertificacion,
 } from '#fiscal/esquemas'
 import { configuracionFel, vistaCredenciales } from '#fiscal/fel/configuracion'
-import { listarDte, pdfDeDte, verDte, xmlDeDte } from '#fiscal/fel/dte'
+import { intentosDeDte, listarDte, pdfDeDte, verDte, xmlDeDte } from '#fiscal/fel/dte'
+import { catalogoProveedores } from '#fiscal/fel/proveedor'
 import ConfigurarFel from '#fiscal/actions/configurar_fel'
 import GuardarCredencialesFel from '#fiscal/actions/guardar_credenciales_fel'
 import ProbarCredencialesFel from '#fiscal/actions/probar_credenciales_fel'
@@ -370,6 +373,18 @@ function fel(): Ruta[] {
     return [
         definirRuta({
             metodo: 'get',
+            ruta: '/fel/proveedores',
+            operacion: 'felProveedores',
+            resumen: 'Catálogo de certificadores FEL (campos de credenciales y ambientes)',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            descripcion:
+                'Los certificadores registrados en la instalación: código, nombre, campos obligatorios, opcionales y visibles de PUT /fel/credenciales/:ambiente, ambientes que admite (solo_pruebas = no admite produccion) y capacidades (contingencia, consulta de NIT, PDF).',
+            respuesta: { status: 200, descripcion: 'Certificadores', esquema: lista(ProveedorFelCatalogo) },
+            handler: async () => catalogoProveedores(),
+        }),
+        definirRuta({
+            metodo: 'get',
             ruta: '/fel/configuracion',
             operacion: 'felConfiguracion',
             resumen: 'Configuración FEL de la empresa (sin secretos)',
@@ -481,7 +496,7 @@ function fel(): Ruta[] {
             permiso: 'fel.ver',
             query: v.listarDteValidator,
             descripcion:
-                'De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo.',
+                'De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo. estado se repite para pedir varios (?estado=pendiente&estado=error_temporal); desde/hasta filtran por la fecha de emisión en Guatemala.',
             respuesta: { status: 200, descripcion: 'Página de DTE', esquema: pagina(Dte) },
             handler: (ctx, { query }) => listarDte(query, empresasDeLaLista(ctx.empresa, query.empresas)),
         }),
@@ -494,6 +509,22 @@ function fel(): Ruta[] {
             permiso: 'fel.ver',
             respuesta: { status: 200, descripcion: 'DTE', esquema: Dte },
             handler: (ctx, { params }) => dteConAcceso(ctx, Number(params.id)),
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/dte/:id/intentos',
+            operacion: 'dteIntentos',
+            resumen: 'Bitácora del DTE ante el certificador',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            descripcion:
+                'Cada envío, anulación y consulta (fiscal.dte_intentos), del más antiguo al más reciente, con su resultado, duración y la respuesta del certificador (nunca credenciales).',
+            respuesta: { status: 200, descripcion: 'Intentos', esquema: lista(DteIntento) },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                await dteConAcceso(ctx, id)
+                return intentosDeDte(id)
+            },
         }),
         definirRuta({
             metodo: 'get',

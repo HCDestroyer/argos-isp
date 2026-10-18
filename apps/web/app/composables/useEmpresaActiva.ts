@@ -26,6 +26,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/libro/bancos',
     '/api/v1/libro/cuentas',
     '/api/v1/libro/diario',
+    '/api/v1/libro/diarios',
     '/api/v1/libro/estado-resultados',
     '/api/v1/libro/integridad',
     '/api/v1/libro/mayor',

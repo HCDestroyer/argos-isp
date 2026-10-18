@@ -8,7 +8,7 @@ import {
     type ModoFel,
 } from '#fiscal/fel/configuracion'
 import { AvisosPorCertificar, CertificarAlIncompatible } from '#fiscal/fel/errores'
-import type { AmbienteFel } from '#fiscal/fel/proveedor'
+import { camposProveedor, type AmbienteFel } from '#fiscal/fel/proveedor'
 
 /**
  * `fel.configurar` (`PUT /fel/configuracion`, solo admin): proveedor, ambiente y modo de emisión
@@ -56,11 +56,12 @@ export default class ConfigurarFel extends DomainAction<EntradaConfigurarFel, Co
                 { field: 'proveedor', message: `Certificador desconocido: ${input.proveedor}`, rule: 'enum' },
             ])
         }
-        if (input.proveedor === 'falso' && input.ambiente === 'produccion') {
+        const admitidos = input.proveedor ? camposProveedor(input.proveedor)?.ambientes : undefined
+        if (input.ambiente && admitidos && !admitidos.includes(input.ambiente)) {
             throw new ValidacionFallida([
                 {
                     field: 'ambiente',
-                    message: 'El proveedor falso es solo para pruebas y laboratorio',
+                    message: `El proveedor ${input.proveedor} es solo para pruebas y laboratorio`,
                     rule: 'proveedor_de_pruebas',
                 },
             ])

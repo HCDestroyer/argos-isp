@@ -1173,7 +1173,7 @@ const integraciones: Ruta[] = [
         operacion: 'integracionesHorusTokens',
         resumen: 'Tokens de la integración Horus (sin su valor)',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.ver',
+        permiso: 'horus.ver',
         respuesta: { status: 200, descripcion: 'Tokens, los más nuevos primero', esquema: lista(TokenApi) },
         handler: () => listarTokensHorus(),
     }),
@@ -1183,7 +1183,7 @@ const integraciones: Ruta[] = [
         operacion: 'integracionesHorusGenerarToken',
         resumen: 'Generar el token atk_ de Horus (se muestra una sola vez)',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.generar_token',
+        permiso: 'horus.generar_token',
         descripcion:
             'Crea, la primera vez, el usuario técnico "Horus" y su rol `integracion_horus`. El token solo ' +
             'lleva `ip.resolver`, `clientes.ver` y `servicios.ver`, y opcionalmente routers o zonas. No ' +
@@ -1198,7 +1198,7 @@ const integraciones: Ruta[] = [
         operacion: 'integracionesHorusRevocarToken',
         resumen: 'Revocar un token de la integración Horus',
         etiqueta: 'integraciones',
-        permiso: 'integraciones.revocar_token',
+        permiso: 'horus.revocar_token',
         respuesta: { status: 200, descripcion: 'Token revocado', esquema: TokenApi },
         handler: (ctx, { params }) =>
             new RevocarTokenHorus().execute({ id: Number(params.id) }, ctx.contextoAccion()),

@@ -36,14 +36,14 @@ export interface SalidaGenerarTokenHorus extends SalidaCrearTokenApi {
  *   opcionalmente, `routers`/`zonas`. Las empresas son las del usuario Horus: alcance global si
  *   lo crea alguien con alcance global; se ajustan con `PUT /usuarios/:id/empresas`.
  * - El valor se devuelve una sola vez. Generar otro no revoca los anteriores (rotación sin
- *   cortar a Horus); se revocan con `integraciones.revocar_token`.
+ *   cortar a Horus); se revocan con `horus.revocar_token`.
  * - 409 `usuario_horus_inactivo` si alguien desactivó al usuario técnico.
  */
 export default class GenerarTokenHorus extends DomainAction<
     EntradaGenerarTokenHorus,
     SalidaGenerarTokenHorus
 > {
-    readonly nombre = 'integraciones.generar_token'
+    readonly nombre = 'horus.generar_token'
 
     protected async handle(
         input: EntradaGenerarTokenHorus,
