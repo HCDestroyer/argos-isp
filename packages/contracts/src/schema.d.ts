@@ -579,6 +579,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documentos/nota-credito/{notaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF de una nota de crédito (panel)
+         * @description Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Responde application/pdf.
+         */
+        get: operations["documentosNotaCreditoPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documentos/plantillas/{tipo}": {
         parameters: {
             query?: never;
@@ -593,6 +613,26 @@ export interface paths {
          * @description Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.
          */
         put: operations["documentosPlantillaEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documentos/plantillas/{tipo}/fabrica": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)
+         * @description La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` con la `version` vigente.
+         */
+        get: operations["documentosPlantillaFabrica"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2804,9 +2844,89 @@ export interface paths {
         };
         /**
          * PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión
-         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404. Responde application/pdf.
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Con la marca de la empresa que emite la factura y, si su DTE está certificado, serie, número y autorización. Una factura de otro cliente o por certificar responde 404. Responde application/pdf.
          */
         get: operations["portalFacturaPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/facturas/{id}/xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * XML certificado (FEL) de una factura del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). 404 si la factura es de otro cliente, está por certificar o su DTE no está certificado. Responde application/xml como descarga.
+         */
+        get: operations["portalFacturaXml"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notas-credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Notas de crédito (internas y NCRE) del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Solo las de sus facturas visibles en el portal; una nota anulada sale como anulada.
+         */
+        get: operations["portalNotasCredito"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notas-credito/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF de una nota de crédito (NCRE) del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Representación gráfica con la plantilla `nota_credito` y la marca de la empresa de su factura: datos de la NCRE (autorización, serie, número, fecha) y la factura de origen; «ANULADA» si se anuló. Una nota de otro cliente responde 404. Responde application/pdf.
+         */
+        get: operations["portalNotaCreditoPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notas-credito/{id}/xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * XML certificado (NCRE) de una nota de crédito del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). 404 si la nota es de otro cliente o su NCRE no está certificada.
+         */
+        get: operations["portalNotaCreditoXml"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5934,12 +6054,25 @@ export interface components {
             updated_at: string;
         };
         PlantillaDocumento: {
-            /** @enum {string} */
-            tipo: "aviso_cobro";
+            /**
+             * @description aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)
+             * @enum {string}
+             */
+            tipo: "aviso_cobro" | "nota_credito";
             /** @description HTML con variables Mustache (`{{factura.total}}`) */
             html: string;
             /** @description 0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar */
             version: number;
+            variables: components["schemas"]["VariableDocumento"][];
+        };
+        PlantillaDocumentoFabrica: {
+            /**
+             * @description aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)
+             * @enum {string}
+             */
+            tipo: "aviso_cobro" | "nota_credito";
+            /** @description HTML de fábrica de la versión instalada (con el bloque FEL) */
+            html: string;
             variables: components["schemas"]["VariableDocumento"][];
         };
         PlantillaFacturacion: {
@@ -6093,15 +6226,32 @@ export interface components {
             /** @description Emitidas, parciales y vencidas de esta empresa, la más antigua primero */
             facturas_pendientes: components["schemas"]["PortalFacturaPendiente"][];
         };
+        PortalDte: {
+            /** @description Tipo de DTE de la SAT: FACT, FCAM, NDEB, NCRE… */
+            tipo_dte: string;
+            /**
+             * @description certificado; anulacion_pendiente (sigue vigente hasta que la SAT confirme); anulado ante la SAT
+             * @enum {string}
+             */
+            estado: "certificado" | "anulacion_pendiente" | "anulado";
+            /** @description Número de autorización (UUID de la SAT) */
+            autorizacion: string;
+            serie: string | null;
+            numero: string | null;
+            /** Format: date-time */
+            certificado_en: string | null;
+            /** @description Se puede descargar el XML certificado */
+            xml_disponible: boolean;
+        };
         PortalFactura: {
             id: number;
             /** @description Serie-número FEL si está certificada; si no, número del aviso */
             numero: string;
             /**
-             * @description factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto
+             * @description factura (nota_debito para la mora) solo cuando su DTE está certificado; aviso_cobro mientras tanto
              * @enum {string}
              */
-            documento: "aviso_cobro" | "factura";
+            documento: "aviso_cobro" | "factura" | "nota_debito";
             /** @enum {string} */
             tipo: "servicio" | "mora";
             servicio_id: number | null;
@@ -6111,17 +6261,40 @@ export interface components {
             emitida_en: string;
             /** Format: date */
             vence_en: string;
-            /** @enum {string} */
+            /**
+             * @description Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal
+             * @enum {string}
+             */
             estado: "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
             subtotal: components["schemas"]["Dinero"];
             iva: components["schemas"]["Dinero"];
             total: components["schemas"]["Dinero"];
+            /** @description Cubierto: pagos, saldos a favor y notas de crédito */
             pagado: components["schemas"]["Dinero"];
+            /** @description Parte de pagado que viene de notas de crédito vigentes */
+            acreditado: components["schemas"]["Dinero"];
             /** @description total - pagado (0.00 si está anulada) */
             saldo: components["schemas"]["Dinero"];
+            /** @description Autorización del DTE certificado (igual a dte.autorizacion) */
             fel_uuid: string | null;
             fel_serie: string | null;
             fel_numero: string | null;
+            /** @description DTE certificado; null mientras es aviso de cobro */
+            dte: components["schemas"]["PortalDte"] | null;
+            /** @description Otra factura la reemplazó (billing.sustituciones) */
+            sustituida: boolean;
+            /** @description La factura que la reemplaza, si ya es visible en el portal */
+            sustituida_por: {
+                id: number;
+                /** @description Serie-número FEL o número del aviso */
+                numero: string;
+            } | null;
+            /** @description La factura a la que reemplaza */
+            sustituye_a: {
+                id: number;
+                /** @description Serie-número FEL o número del aviso */
+                numero: string;
+            } | null;
             /** @description Empresa que emite la factura */
             empresa: components["schemas"]["PortalMarcaEmpresa"];
         };
@@ -6162,6 +6335,34 @@ export interface components {
             telefono: string | null;
             /** @description WhatsApp de soporte */
             whatsapp: string | null;
+        };
+        PortalNotaCredito: {
+            id: number;
+            /** @description Serie-número de la NCRE certificada; si no, número interno */
+            numero: string;
+            /**
+             * @description ncre cuando su DTE está certificado; nota_credito (interna) mientras tanto
+             * @enum {string}
+             */
+            documento: "nota_credito" | "ncre";
+            factura_id: number;
+            factura_numero: string;
+            servicio_id: number | null;
+            /** Format: date */
+            fecha: string;
+            subtotal: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            /** @description Lo que la nota acredita a la factura */
+            monto: components["schemas"]["Dinero"];
+            motivo: string;
+            /**
+             * @description anulada: la SAT rechazó su NCRE y el monto volvió al saldo de la factura
+             * @enum {string}
+             */
+            estado: "vigente" | "anulada";
+            dte: components["schemas"]["PortalDte"] | null;
+            /** @description Empresa de la factura acreditada */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
         };
         PortalPago: {
             id: number;
@@ -9705,12 +9906,61 @@ export interface operations {
             };
         };
     };
+    documentosNotaCreditoPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     documentosPlantillaVer: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -9759,7 +10009,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -9829,12 +10079,61 @@ export interface operations {
             };
         };
     };
+    documentosPlantillaFabrica: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: "aviso_cobro" | "nota_credito";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plantilla de fábrica */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantillaDocumentoFabrica"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso documentos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     documentosPlantillaVistaPrevia: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -18101,6 +18400,208 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": string;
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalFacturaXml: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalNotasCredito: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de notas de crédito */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalNotaCredito"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalNotaCreditoPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalNotaCreditoXml: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
                 };
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */

@@ -5,7 +5,7 @@ export type FacturaPortal = Schema<'PortalFactura'>
 /** Tamaño de página de las listas del portal (móvil: pocas tarjetas por carga). */
 export const LIMITE_LISTA_PORTAL = 10
 
-/** Facturas (avisos de cobro) del cliente de la sesión, más recientes primero, y la URL de su PDF. */
+/** Facturas (avisos de cobro y facturas FEL) del cliente de la sesión, más recientes primero, y las URL de su PDF y XML. */
 export function useFacturas() {
     const api = useApi()
     const lista = useListaCursor<FacturaPortal>(cursor => resolver(api.GET('/api/v1/portal/facturas', {
@@ -17,5 +17,10 @@ export function useFacturas() {
         return `/api/v1/portal/facturas/${id}/pdf`
     }
 
-    return { ...lista, urlPdf }
+    /** XML certificado (FEL) de la factura; solo existe con su DTE certificado. */
+    function urlXml(id: number): string {
+        return `/api/v1/portal/facturas/${id}/xml`
+    }
+
+    return { ...lista, urlPdf, urlXml }
 }

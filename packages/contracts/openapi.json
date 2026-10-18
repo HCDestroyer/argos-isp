@@ -4050,6 +4050,80 @@
         "x-implementado": true
       }
     },
+    "/api/v1/documentos/nota-credito/{notaId}": {
+      "get": {
+        "operationId": "documentosNotaCreditoPdf",
+        "summary": "PDF de una nota de crédito (panel)",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "notaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/plantillas/{tipo}": {
       "get": {
         "operationId": "documentosPlantillaVer",
@@ -4073,7 +4147,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -4146,7 +4221,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -4244,6 +4320,82 @@
         "x-implementado": true
       }
     },
+    "/api/v1/documentos/plantillas/{tipo}/fabrica": {
+      "get": {
+        "operationId": "documentosPlantillaFabrica",
+        "summary": "Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)",
+        "description": "La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` con la `version` vigente.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro",
+                "nota_credito"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla de fábrica",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumentoFabrica"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/plantillas/{tipo}/vista-previa": {
       "post": {
         "operationId": "documentosPlantillaVistaPrevia",
@@ -4268,7 +4420,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -19304,7 +19457,7 @@
       "get": {
         "operationId": "portalFacturaPdf",
         "summary": "PDF del aviso de cobro (o factura, con FEL) de una factura del cliente de la sesión",
-        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Una factura de otro cliente responde 404. Responde application/pdf.",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Con la marca de la empresa que emite la factura y, si su DTE está certificado, serie, número y autorización. Una factura de otro cliente o por certificar responde 404. Responde application/pdf.",
         "tags": [
           "portal"
         ],
@@ -19329,6 +19482,315 @@
             "description": "PDF",
             "content": {
               "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/facturas/{id}/xml": {
+      "get": {
+        "operationId": "portalFacturaXml",
+        "summary": "XML certificado (FEL) de una factura del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). 404 si la factura es de otro cliente, está por certificar o su DTE no está certificado. Responde application/xml como descarga.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XML",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/notas-credito": {
+      "get": {
+        "operationId": "portalNotasCredito",
+        "summary": "Notas de crédito (internas y NCRE) del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Solo las de sus facturas visibles en el portal; una nota anulada sale como anulada.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de notas de crédito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalNotaCredito"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/notas-credito/{id}/pdf": {
+      "get": {
+        "operationId": "portalNotaCreditoPdf",
+        "summary": "PDF de una nota de crédito (NCRE) del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Representación gráfica con la plantilla `nota_credito` y la marca de la empresa de su factura: datos de la NCRE (autorización, serie, número, fecha) y la factura de origen; «ANULADA» si se anuló. Una nota de otro cliente responde 404. Responde application/pdf.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/notas-credito/{id}/xml": {
+      "get": {
+        "operationId": "portalNotaCreditoXml",
+        "summary": "XML certificado (NCRE) de una nota de crédito del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). 404 si la nota es de otro cliente o su NCRE no está certificada.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XML",
+            "content": {
+              "application/xml": {
                 "schema": {
                   "type": "string",
                   "format": "binary"
@@ -36226,8 +36688,10 @@
           "tipo": {
             "type": "string",
             "enum": [
-              "aviso_cobro"
-            ]
+              "aviso_cobro",
+              "nota_credito"
+            ],
+            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
           },
           "html": {
             "type": "string",
@@ -36237,6 +36701,34 @@
             "type": "integer",
             "minimum": 0,
             "description": "0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableDocumento"
+            }
+          }
+        }
+      },
+      "PlantillaDocumentoFabrica": {
+        "type": "object",
+        "required": [
+          "tipo",
+          "html",
+          "variables"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro",
+              "nota_credito"
+            ],
+            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML de fábrica de la versión instalada (con el bloque FEL)"
           },
           "variables": {
             "type": "array",
@@ -36819,6 +37311,60 @@
           }
         }
       },
+      "PortalDte": {
+        "type": "object",
+        "required": [
+          "tipo_dte",
+          "estado",
+          "autorizacion",
+          "serie",
+          "numero",
+          "certificado_en",
+          "xml_disponible"
+        ],
+        "properties": {
+          "tipo_dte": {
+            "type": "string",
+            "description": "Tipo de DTE de la SAT: FACT, FCAM, NDEB, NCRE…"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "certificado",
+              "anulacion_pendiente",
+              "anulado"
+            ],
+            "description": "certificado; anulacion_pendiente (sigue vigente hasta que la SAT confirme); anulado ante la SAT"
+          },
+          "autorizacion": {
+            "type": "string",
+            "description": "Número de autorización (UUID de la SAT)"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "certificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "xml_disponible": {
+            "type": "boolean",
+            "description": "Se puede descargar el XML certificado"
+          }
+        }
+      },
       "PortalFactura": {
         "type": "object",
         "required": [
@@ -36835,10 +37381,15 @@
           "iva",
           "total",
           "pagado",
+          "acreditado",
           "saldo",
           "fel_uuid",
           "fel_serie",
           "fel_numero",
+          "dte",
+          "sustituida",
+          "sustituida_por",
+          "sustituye_a",
           "empresa"
         ],
         "properties": {
@@ -36854,9 +37405,10 @@
             "type": "string",
             "enum": [
               "aviso_cobro",
-              "factura"
+              "factura",
+              "nota_debito"
             ],
-            "description": "factura cuando tiene fel_uuid (semana 5); aviso_cobro mientras tanto"
+            "description": "factura (nota_debito para la mora) solo cuando su DTE está certificado; aviso_cobro mientras tanto"
           },
           "tipo": {
             "type": "string",
@@ -36892,7 +37444,8 @@
               "pagada",
               "vencida",
               "anulada"
-            ]
+            ],
+            "description": "Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal"
           },
           "subtotal": {
             "$ref": "#/components/schemas/Dinero"
@@ -36904,7 +37457,12 @@
             "$ref": "#/components/schemas/Dinero"
           },
           "pagado": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cubierto: pagos, saldos a favor y notas de crédito"
+          },
+          "acreditado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Parte de pagado que viene de notas de crédito vigentes"
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero",
@@ -36914,7 +37472,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Autorización del DTE certificado (igual a dte.autorizacion)"
           },
           "fel_serie": {
             "type": [
@@ -36927,6 +37486,63 @@
               "string",
               "null"
             ]
+          },
+          "dte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalDte"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DTE certificado; null mientras es aviso de cobro"
+          },
+          "sustituida": {
+            "type": "boolean",
+            "description": "Otra factura la reemplazó (billing.sustituciones)"
+          },
+          "sustituida_por": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "numero"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "numero": {
+                "type": "string",
+                "description": "Serie-número FEL o número del aviso"
+              }
+            },
+            "description": "La factura que la reemplaza, si ya es visible en el portal"
+          },
+          "sustituye_a": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "numero"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "numero": {
+                "type": "string",
+                "description": "Serie-número FEL o número del aviso"
+              }
+            },
+            "description": "La factura a la que reemplaza"
           },
           "empresa": {
             "$ref": "#/components/schemas/PortalMarcaEmpresa",
@@ -37087,6 +37703,96 @@
               "null"
             ],
             "description": "WhatsApp de soporte"
+          }
+        }
+      },
+      "PortalNotaCredito": {
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "documento",
+          "factura_id",
+          "factura_numero",
+          "servicio_id",
+          "fecha",
+          "subtotal",
+          "iva",
+          "monto",
+          "motivo",
+          "estado",
+          "dte",
+          "empresa"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "numero": {
+            "type": "string",
+            "description": "Serie-número de la NCRE certificada; si no, número interno"
+          },
+          "documento": {
+            "type": "string",
+            "enum": [
+              "nota_credito",
+              "ncre"
+            ],
+            "description": "ncre cuando su DTE está certificado; nota_credito (interna) mientras tanto"
+          },
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "factura_numero": {
+            "type": "string"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que la nota acredita a la factura"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "anulada"
+            ],
+            "description": "anulada: la SAT rechazó su NCRE y el monto volvió al saldo de la factura"
+          },
+          "dte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalDte"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa de la factura acreditada"
           }
         }
       },
