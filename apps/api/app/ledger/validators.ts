@@ -59,6 +59,18 @@ export const integridadValidator = vine.compile(
             description: 'Recalcula el hash de los asientos con fecha desde este día (sin rango, todos)',
         }),
         hasta: fechaIso().optional().meta({ description: 'Hasta este día (inclusive)' }),
+        desde_sello: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .optional()
+            .meta({ description: 'Recalcula el hash de los sellos desde este número (inclusive)' }),
+        hasta_sello: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .optional()
+            .meta({ description: 'Hasta este sello' }),
     }),
 )
 
@@ -69,7 +81,16 @@ export const diarioValidator = vine.compile(
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
         origen_tipo: vine
-            .enum(['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste'] as const)
+            .enum([
+                'factura',
+                'pago',
+                'mora',
+                'nota_credito',
+                'egreso',
+                'cierre_caja',
+                'ajuste',
+                'reclasificacion',
+            ] as const)
             .optional(),
         origen_id: idEntidad()
             .optional()

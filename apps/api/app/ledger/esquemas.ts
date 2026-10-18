@@ -113,6 +113,7 @@ export const Asiento = definirEsquema(
                 'egreso',
                 'cierre_caja',
                 'ajuste',
+                'reclasificacion',
             ]),
             origen_id: nulable(id),
             reversa_de: {
@@ -446,6 +447,7 @@ export const IntegridadLibro = definirEsquema(
                     'sello_faltante',
                     'asiento_inexistente',
                     'cierre_distinto',
+                    'asiento_en_mes_cerrado',
                 ]),
                 esperado: { ...texto, description: 'Valor guardado (hash, sello o hash del cierre)' },
                 obtenido: { ...texto, description: 'Valor recalculado o encontrado' },

@@ -220,6 +220,15 @@ export interface CatalogoEventos {
     'pago.anulado': PayloadPago
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
+    /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
+    'nota_credito.anulada': {
+        nota_credito_id: number
+        empresa_id: number
+        factura_id: number
+        cliente_id: number
+        monto: Dinero
+        motivo: string
+    }
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
@@ -290,6 +299,47 @@ export interface CatalogoEventos {
         empresa_id: number
         campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
     }
+    // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
+    'dte.certificado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        tipo_dte: string
+        autorizacion: string
+        serie: string | null
+        numero: string | null
+        contingencia: boolean
+    }
+    /** `definitivo: false` = se agotaron los reintentos automáticos (sigue en error_temporal) */
+    'dte.rechazado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        error: string
+        definitivo: boolean
+    }
+    'dte.anulado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        motivo: string
+    }
+    'fel.contingencia_cambiada': {
+        empresa_id: number
+        activa: boolean
+        motivo: string
+    }
+    'factura.sustituida': {
+        factura_id: number
+        nueva_factura_id: number
+        empresa_id: number
+        servicio_id: number | null
+        cliente_id: number
+        motivo: string
+    }
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -317,6 +367,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'nota_credito.emitida',
+    'nota_credito.anulada',
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
@@ -330,6 +381,11 @@ export const EVENTOS = [
     'fiscal.localizacion_instalada',
     'fiscal.parametros_cambiados',
     'fiscal.config_cambiada',
+    'dte.certificado',
+    'dte.rechazado',
+    'dte.anulado',
+    'fel.contingencia_cambiada',
+    'factura.sustituida',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

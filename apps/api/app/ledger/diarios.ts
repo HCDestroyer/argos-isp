@@ -41,7 +41,7 @@ export const DIARIOS_BASE: Record<string, { nombre: string; tipo: TipoDiario }> 
 }
 
 /** Orígenes de venta: siempre al diario de ventas, aunque toquen otra cuenta. */
-const ORIGENES_VENTA = new Set(['factura', 'mora', 'nota_credito'])
+const ORIGENES_VENTA = new Set(['factura', 'mora', 'nota_credito', 'reclasificacion'])
 
 /** Diario por defecto de cada origen cuando el asiento no toca una caja ni una cuenta bancaria. */
 const DIARIO_POR_ORIGEN: Record<string, string> = {

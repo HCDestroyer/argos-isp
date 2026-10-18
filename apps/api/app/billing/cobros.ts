@@ -1,6 +1,6 @@
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
-import { ValidacionFallida } from '#shared/errores'
+import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
@@ -65,10 +65,35 @@ export async function facturasPendientes(
     preferidas: number[] = [],
     empresas: number[] | null = null,
 ): Promise<FacturaPendiente[]> {
+    // H6: un documento con la anulación de su DTE pendiente no recibe pagos (se anula en dos pasos)
+    if (preferidas.length > 0) {
+        const enAnulacion = (await trx
+            .from('fiscal.dte')
+            .whereIn('documento_tipo', ['factura', 'nota_debito'])
+            .whereIn('documento_id', preferidas)
+            .where('estado', 'anulacion_pendiente')
+            .select('documento_id')) as Array<{ documento_id: number }>
+        if (enAnulacion.length > 0) {
+            throw new Conflicto(
+                `La anulación del DTE de las facturas ${enAnulacion
+                    .map((d) => d.documento_id)
+                    .join(', ')} está pendiente con el certificador: no admiten pagos`,
+                'anulacion_en_proceso',
+                'Anulación en proceso',
+            )
+        }
+    }
     const filas = (await trx
         .from('billing.facturas')
         .where('cliente_id', clienteId)
         .whereIn('estado', ['emitida', 'parcial', 'vencida'])
+        .whereNotExists((q) =>
+            q
+                .from('fiscal.dte as d')
+                .whereRaw('d.documento_id = billing.facturas.id')
+                .whereIn('d.documento_tipo', ['factura', 'nota_debito'])
+                .where('d.estado', 'anulacion_pendiente'),
+        )
         .if(empresas !== null, (q) => q.whereIn('empresa_id', empresas!))
         .orderBy([
             { column: 'vence_en', order: 'asc' },

@@ -15,7 +15,7 @@ import { emisorDeFactura } from '#billing/empresa'
 export const TASA_IVA = new D('0.12')
 const DIVISOR_IVA = new D('1.12')
 
-export type EstadoFactura = 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada'
+export type EstadoFactura = 'por_certificar' | 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada'
 export type TipoFactura = 'servicio' | 'mora'
 
 export interface LineaCalculada {
@@ -103,10 +103,18 @@ export interface FacturaFila {
     pagado: string
     /** parte de `pagado` que viene de notas de crédito */
     acreditado: string
+    /** autorización, serie, número y estado del DTE (de `fiscal.dte`, contrato §12.4) */
     fel_uuid: string | null
     fel_serie: string | null
     fel_numero: string | null
     fel_estado: string | null
+    /** DTE vigente (o el último rechazado) y su error visible */
+    dte_id?: number | null
+    fel_error?: string | null
+    /** aviso de cobro: su IVA está en 2.1.11 hasta certificarse (§10.1) */
+    aviso_cobro?: boolean
+    certificar_al?: 'emitir' | 'pagar' | 'nunca' | null
+    tipo_dte?: string | null
     anulada_en?: Date | null
     motivo_anulacion?: string | null
     /** factura importada: sistema de origen e id allí */
@@ -143,12 +151,13 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('total'),
         c('pagado'),
         cliente.raw(
-            `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = ${alias}.id) as acreditado`,
+            `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = ${alias}.id
+               and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = n.id)) as acreditado`,
         ),
-        c('fel_uuid'),
-        c('fel_serie'),
-        c('fel_numero'),
-        c('fel_estado'),
+        ...columnasDte(cliente, alias),
+        c('aviso_cobro'),
+        c('certificar_al'),
+        c('tipo_dte'),
         c('anulada_en'),
         c('motivo_anulacion'),
         c('origen'),
@@ -156,6 +165,27 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('version'),
         c('created_at'),
         c('updated_at'),
+    ]
+}
+
+/**
+ * Datos FEL de la factura desde `fiscal.dte`: el DTE vigente (no rechazado) o, si no hay, el último
+ * rechazado (con su error). Para una mora, su NDEB. Las columnas `billing.facturas.fel_*` son del
+ * sistema anterior y ya no se escriben.
+ */
+function columnasDte(cliente: QueryClientContract, alias: string) {
+    const dte = `(select d.%s from fiscal.dte d
+        where d.documento_id = ${alias}.id
+          and d.documento_tipo = case when ${alias}.tipo = 'mora' then 'nota_debito' else 'factura' end
+        order by (d.estado = 'rechazado'), d.id desc limit 1)`
+    const col = (campo: string, como: string) => cliente.raw(`${dte.replace('%s', campo)} as ${como}`)
+    return [
+        col('autorizacion', 'fel_uuid'),
+        col('serie', 'fel_serie'),
+        col('numero', 'fel_numero'),
+        col('estado', 'fel_estado'),
+        col('id', 'dte_id'),
+        col('ultimo_error', 'fel_error'),
     ]
 }
 

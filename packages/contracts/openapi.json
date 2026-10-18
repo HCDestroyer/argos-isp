@@ -42,6 +42,9 @@
       "name": "facturacion"
     },
     {
+      "name": "fel"
+    },
+    {
       "name": "fiscal"
     },
     {
@@ -4348,6 +4351,485 @@
         "x-implementado": true
       }
     },
+    "/api/v1/dte": {
+      "get": {
+        "operationId": "dteListar",
+        "summary": "Listar DTE (certificaciones FEL)",
+        "description": "De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviando",
+                "certificado",
+                "error_temporal",
+                "rechazado",
+                "contingencia",
+                "anulacion_pendiente",
+                "anulado"
+              ]
+            }
+          },
+          {
+            "name": "documento_tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "factura",
+                "nota_credito",
+                "nota_debito"
+              ]
+            }
+          },
+          {
+            "name": "documento_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de DTE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Dte"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/dte/{id}": {
+      "get": {
+        "operationId": "dteVer",
+        "summary": "Ver un DTE",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DTE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/dte/{id}/pdf": {
+      "get": {
+        "operationId": "dtePdf",
+        "summary": "PDF del DTE que devolvió el certificador",
+        "description": "Solo si el certificador devolvió PDF (404 si no). El PDF con la marca de la empresa lo genera el portal (A5) con los datos del DTE.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/dte/{id}/reintentar": {
+      "post": {
+        "operationId": "dteReintentar",
+        "summary": "Reintentar un DTE rechazado o con error temporal",
+        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DTE en cola",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.certificar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/dte/{id}/xml": {
+      "get": {
+        "operationId": "dteXml",
+        "summary": "XML certificado del DTE",
+        "description": "404 si el DTE aún no tiene XML (no se ha certificado).",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XML",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/egresos": {
       "get": {
         "operationId": "egresosListar",
@@ -6357,6 +6839,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "por_certificar",
                 "emitida",
                 "parcial",
                 "pagada",
@@ -6529,7 +7012,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
-        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba. FEL: con DTE certificado exige además el permiso fel.anular; dentro del plazo (dte_anulacion_plazo) el DTE queda anulacion_pendiente (fel_estado) y la factura se anula cuando el certificador lo confirma; fuera de plazo 422 anulacion_fuera_de_plazo (emite una nota de crédito). 409 anulacion_en_proceso, dte_en_proceso.",
         "tags": [
           "facturacion"
         ],
@@ -6586,7 +7069,7 @@
         },
         "responses": {
           "200": {
-            "description": "Factura anulada",
+            "description": "Factura anulada (o con su DTE en anulación)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6650,11 +7133,115 @@
         "x-implementado": true
       }
     },
+    "/api/v1/facturas/{id}/certificar": {
+      "post": {
+        "operationId": "facturasCertificar",
+        "summary": "Pedir la certificación FEL de una factura",
+        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Solicitud",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolicitudCertificacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.certificar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/{id}/notas-credito": {
       "post": {
         "operationId": "facturasNotaCredito",
         "summary": "Emitir nota de crédito interna (parcial o total)",
-        "description": "Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.",
+        "description": "Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura, o por línea con lineas[]; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). FEL: sobre una factura certificada es una NCRE (IVA a 2.1.02, su DTE en cola; 422 nota_fuera_de_plazo); sobre un aviso sin DTE, nota interna (IVA de 2.1.11). 422 monto si excede el saldo; 409 factura_anulada, factura_sin_saldo, dte_en_proceso, nota_por_linea_no_disponible.",
         "tags": [
           "facturacion"
         ],
@@ -6698,7 +7285,7 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Obligatorio sin lineas; con lineas, si viene debe ser su suma",
                     "examples": [
                       "150.00"
                     ]
@@ -6707,10 +7294,37 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 500
+                  },
+                  "lineas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "linea_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "monto": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "linea_id",
+                        "monto"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Nota por línea: acredita conceptos concretos de la factura con su IVA"
                   }
                 },
                 "required": [
-                  "monto",
                   "motivo"
                 ],
                 "additionalProperties": false
@@ -6781,6 +7395,174 @@
           }
         },
         "x-permiso": "facturas.nota_credito",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/facturas/{id}/sustituir": {
+      "post": {
+        "operationId": "facturasSustituir",
+        "summary": "Sustituir una factura mal emitida (mismo periodo)",
+        "description": "Anula la original (sin DTE certificado) o la acredita con una NCRE por todo su saldo (con DTE certificado) y emite una nueva con las mismas líneas, periodo y vencimiento y el receptor corregido (cliente_fiscal). Emite factura.sustituida. 409 sustitucion_no_permitida (pagos, mora, ya sustituida), factura_anulada; 422 nota_fuera_de_plazo.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "cliente_fiscal": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "tipo_documento_fiscal": {
+                        "type": "string",
+                        "enum": [
+                          "nit",
+                          "cui",
+                          "pasaporte",
+                          "cf"
+                        ]
+                      },
+                      "nit_cui": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 20
+                      },
+                      "nombre_fiscal": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      },
+                      "direccion_fiscal": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 300
+                      }
+                    },
+                    "required": [
+                      "tipo_documento_fiscal"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Receptor corregido para la factura nueva (el del cliente se corrige aparte en PUT /clientes/:id)"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Original y nueva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SustitucionFactura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.sustituir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.sustituir",
         "x-implementado": true
       }
     },
@@ -7106,6 +7888,829 @@
           }
         },
         "x-permiso": "facturas.generar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/activar-contingencia": {
+      "post": {
+        "operationId": "felActivarContingencia",
+        "summary": "Declarar contingencia FEL",
+        "description": "Con contingencia activa y FEL obligatoria, las facturas nuevas se emiten y su DTE queda en contingencia, en cola hasta levantarla. Emite fel.contingencia_cambiada. 409 contingencia_sin_cambio. Procedimiento y plazo oficiales: confirmar con contador.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración FEL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.contingencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.contingencia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/configuracion": {
+      "get": {
+        "operationId": "felConfiguracion",
+        "summary": "Configuración FEL de la empresa (sin secretos)",
+        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa; por defecto la activa (X-Empresa-Id)",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración FEL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "felConfigurar",
+        "summary": "Configurar proveedor, ambiente y modo FEL",
+        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "proveedor": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "infile",
+                          "falso"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Certificador; falso solo en pruebas. Obligatorio salvo con modo desactivada"
+                  },
+                  "ambiente": {
+                    "type": "string",
+                    "enum": [
+                      "pruebas",
+                      "produccion"
+                    ]
+                  },
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "obligatoria",
+                      "opcional",
+                      "desactivada"
+                    ]
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si la empresa nunca se configuró); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "ambiente",
+                  "modo",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración FEL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/credenciales/{ambiente}": {
+      "put": {
+        "operationId": "felGuardarCredenciales",
+        "summary": "Guardar (o reemplazar) las credenciales del certificador",
+        "description": "Se guardan cifradas con la clave de la instalación; la respuesta y la auditoría nunca las incluyen (***). 422 por campo si falta uno obligatorio del proveedor.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ambiente",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pruebas",
+                "produccion"
+              ],
+              "description": "Ambiente del certificador"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "proveedor": {
+                    "type": "string",
+                    "enum": [
+                      "infile",
+                      "falso"
+                    ]
+                  },
+                  "credenciales": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "Campos del certificador (infile: usuario_firma, llave_firma, usuario_api, llave_api, correo_copia; falso: usuario, llave). Nunca se devuelven ni se auditan"
+                  }
+                },
+                "required": [
+                  "credenciales"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credenciales guardadas (sin secretos)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredencialesFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/credenciales/{ambiente}/probar": {
+      "post": {
+        "operationId": "felProbarCredenciales",
+        "summary": "Probar las credenciales contra el certificador",
+        "description": "No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ambiente",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pruebas",
+                "produccion"
+              ],
+              "description": "Ambiente del certificador"
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa; por defecto la activa (X-Empresa-Id)",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredencialesFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/desactivar-contingencia": {
+      "post": {
+        "operationId": "felDesactivarContingencia",
+        "summary": "Levantar la contingencia FEL",
+        "description": "Con contingencia activa y FEL obligatoria, las facturas nuevas se emiten y su DTE queda en contingencia, en cola hasta levantarla. Emite fel.contingencia_cambiada. 409 contingencia_sin_cambio. Procedimiento y plazo oficiales: confirmar con contador.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración FEL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.contingencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.contingencia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fel/lotes": {
+      "post": {
+        "operationId": "felLote",
+        "summary": "Pedir la certificación de varias facturas",
+        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.",
+        "tags": [
+          "fel"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "description": "Facturas a certificar; o desde/hasta (fecha de emisión, Guatemala)"
+                  },
+                  "desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoteCertificacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fel.certificar",
         "x-implementado": true
       }
     },
@@ -8662,10 +10267,12 @@
                         "type": "boolean"
                       },
                       {
-                        "type": "array"
+                        "type": "array",
+                        "items": {}
                       },
                       {
-                        "type": "object"
+                        "type": "object",
+                        "additionalProperties": true
                       }
                     ],
                     "description": "Valor según el tipo del parámetro: porcentaje y monto como string decimal (\"12.00\", \"2500.00\"), entero, bool, fecha YYYY-MM-DD, texto, una de las opciones (enum) u objeto/lista con la forma del valor del paquete (json)"
@@ -10343,7 +11950,8 @@
                 "nota_credito",
                 "egreso",
                 "cierre_caja",
-                "ajuste"
+                "ajuste",
+                "reclasificacion"
               ]
             }
           },
@@ -10523,7 +12131,7 @@
       "get": {
         "operationId": "libroIntegridad",
         "summary": "Verificar la cadena de hash del libro (una sección por empresa)",
-        "description": "Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` (sin rango, todos). Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.",
+        "description": "Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` y número de sello en `desde_sello`–`hasta_sello` (sin rango, todos). Un sello posterior al cierre de un mes con un asiento de ese mes es una ruptura `asiento_en_mes_cerrado`. Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.",
         "tags": [
           "libro"
         ],
@@ -10568,6 +12176,26 @@
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
               "format": "date"
+            }
+          },
+          {
+            "name": "desde_sello",
+            "in": "query",
+            "required": false,
+            "description": "Recalcula el hash de los sellos desde este número (inclusive)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "hasta_sello",
+            "in": "query",
+            "required": false,
+            "description": "Hasta este sello",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         ],
@@ -11512,6 +13140,131 @@
           }
         },
         "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notas-credito/{id}/anular": {
+      "post": {
+        "operationId": "notasCreditoAnular",
+        "summary": "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo",
+        "description": "Reverso espejo del asiento de la nota; el monto vuelve al saldo de la factura y el servicio se reevalúa. Emite nota_credito.anulada. 409 nota_anulada, ncre_certificada, dte_en_proceso (la NCRE sigue en cola), nota_sin_ncre_rechazada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nota anulada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaCredito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.anular_nota_credito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.anular_nota_credito",
         "x-implementado": true
       }
     },
@@ -15583,7 +17336,8 @@
                       "emitir",
                       "pagar",
                       "nunca"
-                    ]
+                    ],
+                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)"
                   },
                   "reglas_promesa": {
                     "type": "object",
@@ -20489,8 +22243,10 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
+                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
+                        "facturas.sustituir",
                         "facturas.ver",
                         "fel.anular",
                         "fel.certificar",
@@ -20728,8 +22484,10 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
+                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
+                        "facturas.sustituir",
                         "facturas.ver",
                         "fel.anular",
                         "fel.certificar",
@@ -25258,8 +27016,10 @@
                             "empresas.editar",
                             "empresas.ver",
                             "facturas.anular",
+                            "facturas.anular_nota_credito",
                             "facturas.generar",
                             "facturas.nota_credito",
+                            "facturas.sustituir",
                             "facturas.ver",
                             "fel.anular",
                             "fel.certificar",
@@ -26911,7 +28671,8 @@
               "nota_credito",
               "egreso",
               "cierre_caja",
-              "ajuste"
+              "ajuste",
+              "reclasificacion"
             ]
           },
           "origen_id": {
@@ -28800,6 +30561,85 @@
           }
         }
       },
+      "ConfiguracionFel": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "proveedor",
+          "ambiente",
+          "modo",
+          "contingencia_activa",
+          "contingencia_motivo",
+          "contingencia_desde",
+          "version",
+          "updated_at",
+          "credenciales"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "infile",
+              "falso"
+            ]
+          },
+          "ambiente": {
+            "type": "string",
+            "enum": [
+              "pruebas",
+              "produccion"
+            ]
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "obligatoria",
+              "opcional",
+              "desactivada"
+            ]
+          },
+          "contingencia_activa": {
+            "type": "boolean"
+          },
+          "contingencia_motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contingencia_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "description": "0 si la empresa nunca se configuró (está desactivada)"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "credenciales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredencialesFel"
+            }
+          }
+        }
+      },
       "ConfiguracionNotificaciones": {
         "type": "object",
         "required": [
@@ -29037,6 +30877,79 @@
               "string",
               "null"
             ],
+            "format": "date-time"
+          }
+        }
+      },
+      "CredencialesFel": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "proveedor",
+          "ambiente",
+          "campos_visibles",
+          "probada_en",
+          "resultado_prueba",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "ambiente": {
+            "type": "string",
+            "enum": [
+              "pruebas",
+              "produccion"
+            ]
+          },
+          "campos_visibles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Solo lo que se puede mostrar (usuario); las llaves nunca salen de la API"
+          },
+          "probada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "resultado_prueba": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ok",
+              "detalle"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "detalle": {
+                "type": "string"
+              }
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string",
             "format": "date-time"
           }
         }
@@ -29363,6 +31276,271 @@
         "examples": [
           "150.00"
         ]
+      },
+      "Dte": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "establecimiento_id",
+          "documento_tipo",
+          "documento_id",
+          "tipo_dte",
+          "estado",
+          "proveedor",
+          "ambiente",
+          "identificador",
+          "autorizacion",
+          "serie",
+          "numero",
+          "fecha_emision",
+          "certificado_en",
+          "receptor",
+          "referencia",
+          "total",
+          "iva",
+          "contingencia",
+          "intentos",
+          "proximo_intento",
+          "ultimo_error",
+          "definitivo",
+          "solicitud",
+          "anulado_en",
+          "motivo_anulacion",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "establecimiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "documento_tipo": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "nota_credito",
+              "nota_debito"
+            ]
+          },
+          "documento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo_dte": {
+            "type": "string",
+            "description": "FACT, FPEQ, NCRE, NDEB…"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviando",
+              "certificado",
+              "error_temporal",
+              "rechazado",
+              "contingencia",
+              "anulacion_pendiente",
+              "anulado"
+            ]
+          },
+          "proveedor": {
+            "type": "string"
+          },
+          "ambiente": {
+            "type": "string",
+            "enum": [
+              "pruebas",
+              "produccion"
+            ]
+          },
+          "identificador": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Clave de idempotencia ante el certificador"
+          },
+          "autorizacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UUID de autorización de la SAT"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha_emision": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "certificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "receptor": {
+            "type": "object",
+            "required": [
+              "tipo",
+              "id",
+              "nombre",
+              "direccion",
+              "correo"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "nit",
+                  "cui",
+                  "pasaporte",
+                  "cf"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "nombre": {
+                "type": "string"
+              },
+              "direccion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "correo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "referencia": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "autorizacion",
+              "serie",
+              "numero",
+              "fecha",
+              "motivo"
+            ],
+            "properties": {
+              "autorizacion": {
+                "type": "string"
+              },
+              "serie": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "numero": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              },
+              "motivo": {
+                "type": "string"
+              }
+            }
+          },
+          "total": {
+            "type": "string",
+            "description": "Monto con 2 decimales"
+          },
+          "iva": {
+            "type": "string",
+            "description": "Monto con 2 decimales"
+          },
+          "contingencia": {
+            "type": "boolean"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proximo_intento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error visible (SAT, receptor_requerido, aviso_sin_cubrir…)"
+          },
+          "definitivo": {
+            "type": "boolean",
+            "description": "Rechazo definitivo: se corrige el dato y se reintenta a mano"
+          },
+          "solicitud": {
+            "type": "string",
+            "enum": [
+              "automatico",
+              "manual"
+            ]
+          },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "Egreso": {
         "type": "object",
@@ -30334,6 +32512,7 @@
       "EstadoFactura": {
         "type": "string",
         "enum": [
+          "por_certificar",
           "emitida",
           "parcial",
           "pagada",
@@ -30905,7 +33084,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Autorización (UUID SAT) del DTE vigente"
           },
           "fel_serie": {
             "type": [
@@ -30923,7 +33103,45 @@
             "type": [
               "string",
               "null"
+            ],
+            "description": "Estado del DTE vigente (o del último rechazado): pendiente, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado"
+          },
+          "dte_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "DTE vigente (GET /dte/:id)"
+          },
+          "fel_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error visible del DTE (SAT, receptor_requerido…)"
+          },
+          "aviso_cobro": {
+            "type": "boolean",
+            "description": "Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse"
+          },
+          "certificar_al": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "emitir",
+              "pagar",
+              "nunca"
             ]
+          },
+          "tipo_dte": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FACT, FPEQ… (null sin FEL)"
           },
           "tipo": {
             "type": "string",
@@ -31635,7 +33853,8 @@
                   "encadenamiento",
                   "sello_faltante",
                   "asiento_inexistente",
-                  "cierre_distinto"
+                  "cierre_distinto",
+                  "asiento_en_mes_cerrado"
                 ]
               },
               "esperado": {
@@ -31945,7 +34164,8 @@
           "version",
           "disponible",
           "actualizacion_disponible",
-          "instalaciones"
+          "instalaciones",
+          "tipos_dte"
         ],
         "properties": {
           "empresa_id": {
@@ -32036,6 +34256,38 @@
               }
             },
             "description": "La vigente primero"
+          },
+          "tipos_dte": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "nombre",
+                "regimenes",
+                "fuente"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "description": "FACT, FCAM, FPEQ, FCAP, NCRE, NDEB…"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "regimenes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Regímenes que lo emiten"
+                },
+                "fuente": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Catálogo de tipos de DTE de la localización vigente (vacío sin localización)"
           }
         }
       },
@@ -32072,6 +34324,44 @@
           "mas_reciente": {
             "type": "boolean",
             "description": "La que instala actualizar-localizacion sin codigo"
+          }
+        }
+      },
+      "LoteCertificacion": {
+        "type": "object",
+        "required": [
+          "solicitadas",
+          "errores"
+        ],
+        "properties": {
+          "solicitadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SolicitudCertificacion"
+            }
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "tipo",
+                "detalle"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string"
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -32430,6 +34720,14 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "anulada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente"
           }
         }
       },
@@ -37272,6 +39570,7 @@
           "disponible",
           "actualizacion_disponible",
           "instalaciones",
+          "tipos_dte",
           "resumen"
         ],
         "properties": {
@@ -37363,6 +39662,38 @@
               }
             },
             "description": "La vigente primero"
+          },
+          "tipos_dte": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "nombre",
+                "regimenes",
+                "fuente"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "description": "FACT, FCAM, FPEQ, FCAP, NCRE, NDEB…"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "regimenes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Regímenes que lo emiten"
+                },
+                "fuente": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Catálogo de tipos de DTE de la localización vigente (vacío sin localización)"
           },
           "resumen": {
             "type": "object",
@@ -38820,6 +41151,74 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
+          }
+        }
+      },
+      "SolicitudCertificacion": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "dte",
+          "creado",
+          "motivo"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dte"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "creado": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SustitucionFactura": {
+        "type": "object",
+        "required": [
+          "original",
+          "nueva",
+          "tipo",
+          "nota_credito_id"
+        ],
+        "properties": {
+          "original": {
+            "$ref": "#/components/schemas/FacturaDetalle",
+            "description": "La factura sustituida (anulada o acreditada por completo)"
+          },
+          "nueva": {
+            "$ref": "#/components/schemas/FacturaDetalle",
+            "description": "La factura nueva del mismo periodo"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "anulacion",
+              "nota_credito"
+            ]
+          },
+          "nota_credito_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "La nota (NCRE) que acreditó la original"
           }
         }
       },

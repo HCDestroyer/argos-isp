@@ -3,6 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal } from '#tests/ayudas'
 import RegistrarAsiento, { type EntradaAsiento } from '#ledger/actions/registrar_asiento'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 import VerificarIntegridad from '#ledger/actions/verificar_integridad'
 import { HASH_INICIAL, asientosCanonicos, calcularHash, jsonCanonico, verificarCadena } from '#ledger/sellos'
@@ -299,5 +300,71 @@ test.group('ledger · cadena de hash', (group) => {
         )
         assert.equal(pendientes.rows[0].n, 0)
         assert.isTrue(await verificarCadena(e.C).then((r) => r.verificado))
+    })
+
+    test('H10: un asiento insertado como dueño en un mes cerrado se sella después y rompe la cadena (asiento_en_mes_cerrado); reabrir y volver a cerrar es legítimo', async ({
+        assert,
+        client,
+    }) => {
+        const e = await prepararEmpresas()
+        await new RegistrarAsiento().execute(ajuste(e.B, '2026-05-10', 'mayo'), e.ctx)
+        const cierre = await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 5 }, e.ctx)
+        await new RegistrarAsiento().execute(ajuste(e.B, '2026-10-02', 'octubre'), e.ctx)
+
+        // como dueño de las tablas: un asiento de mayo (cerrado), saltándose los triggers del periodo
+        const trx = await db.transaction()
+        try {
+            await trx.rawQuery(`ALTER TABLE ledger.asientos DISABLE TRIGGER asientos_validar`)
+            await trx.rawQuery(`ALTER TABLE ledger.movimientos DISABLE TRIGGER movimientos_validar`)
+            const { rows } = (await trx.rawQuery(
+                `INSERT INTO ledger.asientos (empresa_id, fecha, descripcion, origen_tipo)
+                 VALUES (?, '2026-05-20', 'inventado en mayo', 'ajuste') RETURNING id`,
+                [e.B],
+            )) as { rows: Array<{ id: number }> }
+            const cuentas = (await trx
+                .from('ledger.cuentas')
+                .whereIn('codigo', [CUENTAS.GASTO_OTROS, CUENTAS.BANCO_PRINCIPAL])
+                .where('pais', 'GT')
+                .orderBy('codigo')
+                .select('id', 'codigo')) as Array<{ id: number; codigo: string }>
+            await trx.rawQuery(
+                `INSERT INTO ledger.movimientos (asiento_id, cuenta_id, debe, haber) VALUES (?, ?, 7, 0), (?, ?, 0, 7)`,
+                [rows[0]!.id, cuentas[0]!.id, rows[0]!.id, cuentas[1]!.id],
+            )
+            const sellado = await new SellarAsientos().execute({ empresa_id: e.B }, e.ctx, { trx })
+            assert.containSubset(sellado.rupturas, [
+                { empresa_id: e.B, asiento_id: rows[0]!.id, motivo: 'asiento_en_mes_cerrado' },
+            ])
+            const rota = await verificarCadena(e.B, {}, trx)
+            assert.isFalse(rota.verificado)
+            assert.containSubset(rota.ruptura, { asiento_id: rows[0]!.id, motivo: 'asiento_en_mes_cerrado' })
+            const aviso = await trx
+                .from('audit.outbox')
+                .where('evento', 'libro.integridad_rota')
+                .whereRaw(`(payload->>'asiento_id')::bigint = ?`, [rows[0]!.id])
+            assert.lengthOf(aviso, 1)
+            // el rango por sello: hasta el último sello del cierre la cadena verifica
+            const hastaCierre = await verificarCadena(e.B, { hasta_sello: cierre.ultimo_sello }, trx)
+            assert.isTrue(hastaCierre.verificado)
+            assert.equal(hastaCierre.ultimo_sello, cierre.ultimo_sello)
+        } finally {
+            await trx.rollback()
+        }
+
+        // reabrir mayo, agregar un asiento y volver a cerrar: no es una inserción en el pasado
+        await new ReabrirPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 5, motivo: 'ajuste' }, e.ctx)
+        await new RegistrarAsiento().execute(ajuste(e.B, '2026-05-25', 'mayo reabierto'), e.ctx)
+        await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 5 }, e.ctx)
+        assert.isTrue(await verificarCadena(e.B).then((r) => r.verificado))
+
+        const porSello = await estado(
+            client
+                .get('/api/v1/libro/integridad')
+                .qs({ desde_sello: 2, hasta_sello: 3 })
+                .bearerToken(e.token)
+                .header('X-Empresa-Id', String(e.B)),
+            200,
+        )
+        assert.containSubset(porSello.body().data[0], { verificado: true, primer_sello: 2, ultimo_sello: 3 })
     })
 })

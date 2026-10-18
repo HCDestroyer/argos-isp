@@ -41,6 +41,26 @@ import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import CrearEstablecimiento from '#fiscal/actions/crear_establecimiento'
 import EditarEstablecimiento from '#fiscal/actions/editar_establecimiento'
 import AgregarFrase from '#fiscal/actions/agregar_frase'
+import { pagina } from '#shared/openapi/esquemas'
+import { NoEncontrado } from '#shared/errores'
+import { exigirAcceso } from '#billing/empresa'
+import { dimensionesDeFactura } from '#billing/facturas'
+import {
+    ConfiguracionFel,
+    CredencialesFel,
+    Dte,
+    LoteCertificacion,
+    SolicitudCertificacion,
+} from '#fiscal/esquemas'
+import { configuracionFel, vistaCredenciales } from '#fiscal/fel/configuracion'
+import { listarDte, pdfDeDte, verDte, xmlDeDte } from '#fiscal/fel/dte'
+import ConfigurarFel from '#fiscal/actions/configurar_fel'
+import GuardarCredencialesFel from '#fiscal/actions/guardar_credenciales_fel'
+import ProbarCredencialesFel from '#fiscal/actions/probar_credenciales_fel'
+import CambiarContingenciaFel from '#fiscal/actions/cambiar_contingencia_fel'
+import ReintentarDte from '#fiscal/actions/reintentar_dte'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
+import CertificarLote from '#fiscal/actions/certificar_lote'
 
 /** Empresa de una consulta: `empresa_id` (con acceso) o la activa (o la única activa). */
 async function empresaConsulta(ctx: HttpContext, empresaId?: number | null): Promise<number> {
@@ -320,6 +340,251 @@ const fiscal: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Frase agregada o retirada', esquema: FraseFiscal },
         handler: (ctx, { cuerpo }) => new AgregarFrase().execute(cuerpo, ctx.contextoAccion()),
     }),
+    ...fel(),
 ]
+
+/*
+|--------------------------------------------------------------------------
+| FEL (fase 3, contrato §8 y §11.1)
+|--------------------------------------------------------------------------
+*/
+
+async function vistaConfiguracion(empresaId: number) {
+    return { ...(await configuracionFel(empresaId)), credenciales: await vistaCredenciales(empresaId) }
+}
+
+async function dteConAcceso(ctx: HttpContext, id: number) {
+    const dte = await verDte(id)
+    exigirEmpresaPeticion(ctx.empresa, dte.empresa_id)
+    return dte
+}
+
+function fel(): Ruta[] {
+    const AMBIENTE = {
+        ambiente: {
+            type: 'string',
+            enum: ['pruebas', 'produccion'],
+            description: 'Ambiente del certificador',
+        },
+    }
+    return [
+        definirRuta({
+            metodo: 'get',
+            ruta: '/fel/configuracion',
+            operacion: 'felConfiguracion',
+            resumen: 'Configuración FEL de la empresa (sin secretos)',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            query: v.consultaEmpresaValidator,
+            descripcion:
+                'Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.',
+            respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
+            handler: async (ctx, { query }) =>
+                vistaConfiguracion(await empresaConsulta(ctx, query.empresa_id)),
+        }),
+        definirRuta({
+            metodo: 'put',
+            ruta: '/fel/configuracion',
+            operacion: 'felConfigurar',
+            resumen: 'Configurar proveedor, ambiente y modo FEL',
+            etiqueta: 'fel',
+            permiso: 'fel.configurar',
+            cuerpo: v.configurarFelValidator,
+            versionada: true,
+            idempotente: true,
+            descripcion:
+                '409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).',
+            respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
+            handler: async (ctx, { cuerpo }) => {
+                const config = await new ConfigurarFel().execute(cuerpo, ctx.contextoAccion())
+                return vistaConfiguracion(config.empresa_id)
+            },
+        }),
+        definirRuta({
+            metodo: 'put',
+            ruta: '/fel/credenciales/:ambiente',
+            operacion: 'felGuardarCredenciales',
+            resumen: 'Guardar (o reemplazar) las credenciales del certificador',
+            etiqueta: 'fel',
+            permiso: 'fel.configurar',
+            parametros: AMBIENTE,
+            cuerpo: v.credencialesFelValidator,
+            idempotente: true,
+            descripcion:
+                'Se guardan cifradas con la clave de la instalación; la respuesta y la auditoría nunca las incluyen (***). 422 por campo si falta uno obligatorio del proveedor.',
+            respuesta: {
+                status: 200,
+                descripcion: 'Credenciales guardadas (sin secretos)',
+                esquema: CredencialesFel,
+            },
+            handler: (ctx, { cuerpo, params }) =>
+                new GuardarCredencialesFel().execute(
+                    {
+                        empresa_id: cuerpo.empresa_id,
+                        proveedor: cuerpo.proveedor,
+                        ambiente: params.ambiente as 'pruebas' | 'produccion',
+                        secreto: cuerpo.credenciales,
+                    },
+                    ctx.contextoAccion(),
+                ),
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/fel/credenciales/:ambiente/probar',
+            operacion: 'felProbarCredenciales',
+            resumen: 'Probar las credenciales contra el certificador',
+            etiqueta: 'fel',
+            permiso: 'fel.configurar',
+            parametros: AMBIENTE,
+            query: v.consultaEmpresaValidator,
+            descripcion:
+                'No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.',
+            respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: CredencialesFel },
+            handler: (ctx, { query, params }) =>
+                new ProbarCredencialesFel().execute(
+                    { empresa_id: query.empresa_id, ambiente: params.ambiente as 'pruebas' | 'produccion' },
+                    ctx.contextoAccion(),
+                ),
+        }),
+        ...(['activar', 'desactivar'] as const).map((accion) =>
+            definirRuta({
+                metodo: 'post',
+                ruta: `/fel/${accion}-contingencia`,
+                operacion: accion === 'activar' ? 'felActivarContingencia' : 'felDesactivarContingencia',
+                resumen: accion === 'activar' ? 'Declarar contingencia FEL' : 'Levantar la contingencia FEL',
+                etiqueta: 'fel',
+                permiso: 'fel.contingencia',
+                cuerpo: v.contingenciaFelValidator,
+                idempotente: true,
+                descripcion:
+                    'Con contingencia activa y FEL obligatoria, las facturas nuevas se emiten y su DTE queda en contingencia, en cola hasta levantarla. Emite fel.contingencia_cambiada. 409 contingencia_sin_cambio. Procedimiento y plazo oficiales: confirmar con contador.',
+                respuesta: { status: 200, descripcion: 'Configuración FEL', esquema: ConfiguracionFel },
+                handler: async (ctx, { cuerpo }) => {
+                    const config = await new CambiarContingenciaFel().execute(
+                        {
+                            empresa_id: cuerpo.empresa_id,
+                            motivo: cuerpo.motivo,
+                            activa: accion === 'activar',
+                        },
+                        ctx.contextoAccion(),
+                    )
+                    return vistaConfiguracion(config.empresa_id)
+                },
+            }),
+        ),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/dte',
+            operacion: 'dteListar',
+            resumen: 'Listar DTE (certificaciones FEL)',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            query: v.listarDteValidator,
+            descripcion:
+                'De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo.',
+            respuesta: { status: 200, descripcion: 'Página de DTE', esquema: pagina(Dte) },
+            handler: (ctx, { query }) => listarDte(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/dte/:id',
+            operacion: 'dteVer',
+            resumen: 'Ver un DTE',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            respuesta: { status: 200, descripcion: 'DTE', esquema: Dte },
+            handler: (ctx, { params }) => dteConAcceso(ctx, Number(params.id)),
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/dte/:id/xml',
+            operacion: 'dteXml',
+            resumen: 'XML certificado del DTE',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            descripcion: '404 si el DTE aún no tiene XML (no se ha certificado).',
+            respuesta: { status: 200, descripcion: 'XML', contenido: 'application/xml' },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                await dteConAcceso(ctx, id)
+                const { xml } = await xmlDeDte(id)
+                if (!xml) throw new NoEncontrado(`El DTE ${id} no tiene XML certificado`)
+                ctx.response.header('Content-Type', 'application/xml; charset=utf-8')
+                ctx.response.header('Content-Disposition', `inline; filename="dte-${id}.xml"`)
+                ctx.response.header('Cache-Control', 'private, no-store')
+                ctx.response.send(xml)
+            },
+        }),
+        definirRuta({
+            metodo: 'get',
+            ruta: '/dte/:id/pdf',
+            operacion: 'dtePdf',
+            resumen: 'PDF del DTE que devolvió el certificador',
+            etiqueta: 'fel',
+            permiso: 'fel.ver',
+            descripcion:
+                'Solo si el certificador devolvió PDF (404 si no). El PDF con la marca de la empresa lo genera el portal (A5) con los datos del DTE.',
+            respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                await dteConAcceso(ctx, id)
+                const { pdf } = await pdfDeDte(id)
+                if (!pdf) throw new NoEncontrado(`El certificador no devolvió PDF del DTE ${id}`)
+                ctx.response.header('Content-Type', 'application/pdf')
+                ctx.response.header('Content-Disposition', `inline; filename="dte-${id}.pdf"`)
+                ctx.response.header('Cache-Control', 'private, no-store')
+                ctx.response.send(Buffer.from(pdf, 'base64'))
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/dte/:id/reintentar',
+            operacion: 'dteReintentar',
+            resumen: 'Reintentar un DTE rechazado o con error temporal',
+            etiqueta: 'fel',
+            permiso: 'fel.certificar',
+            idempotente: true,
+            descripcion:
+                'Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.',
+            respuesta: { status: 200, descripcion: 'DTE en cola', esquema: Dte },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                await dteConAcceso(ctx, id)
+                return new ReintentarDte().execute({ dte_id: id }, ctx.contextoAccion())
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/facturas/:id/certificar',
+            operacion: 'facturasCertificar',
+            resumen: 'Pedir la certificación FEL de una factura',
+            etiqueta: 'fel',
+            permiso: 'fel.certificar',
+            idempotente: true,
+            descripcion:
+                'Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.',
+            respuesta: { status: 200, descripcion: 'Solicitud', esquema: SolicitudCertificacion },
+            handler: async (ctx, { params }) => {
+                const id = Number(params.id)
+                exigirAcceso(ctx, await dimensionesDeFactura(id))
+                return new SolicitarCertificacion().execute({ factura_id: id }, ctx.contextoAccion())
+            },
+        }),
+        definirRuta({
+            metodo: 'post',
+            ruta: '/fel/lotes',
+            operacion: 'felLote',
+            resumen: 'Pedir la certificación de varias facturas',
+            etiqueta: 'fel',
+            permiso: 'fel.certificar',
+            cuerpo: v.loteFelValidator,
+            idempotente: true,
+            descripcion:
+                'facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.',
+            respuesta: { status: 200, descripcion: 'Lote', esquema: LoteCertificacion },
+            handler: (ctx, { cuerpo }) => new CertificarLote().execute(cuerpo, ctx.contextoAccion()),
+        }),
+    ]
+}
 
 export default fiscal
