@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
@@ -186,10 +187,24 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
         const nit = nitAleatorio()
         const s = await crearServicio({ nit })
         const facturaId = await facturaConLinea(s.clienteId)
-        await db.from('billing.facturas').where('id', facturaId).update({
-            fel_uuid: 'ABCD1234-5678-90EF-1234-567890ABCDEF',
-            fel_serie: 'ABCD1234',
-            fel_numero: '1449658872',
+        // FEL fase 3: los datos salen del DTE certificado (`fiscal.dte`), no de `billing.facturas.fel_*`
+        const factura = await db.from('billing.facturas').where('id', facturaId).firstOrFail()
+        await db.table('fiscal.dte').insert({
+            empresa_id: factura.empresa_id,
+            documento_tipo: 'factura',
+            documento_id: facturaId,
+            tipo_dte: 'FACT',
+            estado: 'certificado',
+            proveedor: 'falso',
+            ambiente: 'pruebas',
+            identificador: randomUUID(),
+            autorizacion: `ABCD1234-5678-90EF-1234-${String(facturaId).padStart(12, '0')}`,
+            serie: 'ABCD1234',
+            numero: `1449${facturaId}`,
+            certificado_en: new Date(),
+            receptor: JSON.stringify({ tipo: 'nit', id: nit, nombre: 'Prueba' }),
+            total: factura.total,
+            iva: factura.iva,
         })
         const cookie = await entrar(client, nit)
         const respuesta = await estado(
@@ -198,13 +213,13 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
         )
         assert.equal(
             respuesta.header('content-disposition'),
-            'inline; filename="factura-ABCD1234-1449658872.pdf"',
+            `inline; filename="factura-ABCD1234-1449${facturaId}.pdf"`,
         )
         const texto = textoDePdf(Buffer.from(respuesta.body() as Buffer))
         guardar('factura-fel', Buffer.from(respuesta.body() as Buffer))
         assert.include(texto, 'Factura')
-        assert.include(texto, 'ABCD1234-1449658872')
-        assert.include(texto, 'Autorización ABCD1234-5678-90EF-1234-567890ABCDEF')
+        assert.include(texto, `ABCD1234-1449${facturaId}`)
+        assert.include(texto, `Autorización ABCD1234-5678-90EF-1234-${String(facturaId).padStart(12, '0')}`)
         assert.notInclude(texto, 'no es una factura electrónica')
     })
 

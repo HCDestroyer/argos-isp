@@ -15,6 +15,7 @@ import {
     CUENTA_DOS_EMPRESAS_FIXTURE,
     CUENTA_FIXTURE,
     FACTURAS_FIXTURE,
+    NOTAS_CREDITO_FIXTURE,
     PAGOS_FIXTURE,
     PROMESAS_FIXTURE,
     SESION_FIXTURE,
@@ -384,6 +385,7 @@ const rutasBase: RutasFixture = {
                 } satisfies Schema<'PortalCuenta'>,
             }),
     'GET /api/v1/portal/facturas': conSesion(() => pagina(FACTURAS_FIXTURE)),
+    'GET /api/v1/portal/notas-credito': conSesion(() => pagina(NOTAS_CREDITO_FIXTURE)),
     'GET /api/v1/portal/pagos': conSesion(() => pagina(PAGOS_FIXTURE)),
     'GET /api/v1/portal/promesas': conSesion(() => pagina(PROMESAS_FIXTURE)),
     'GET /api/v1/portal/promesas/condiciones': ({ query }) => {
