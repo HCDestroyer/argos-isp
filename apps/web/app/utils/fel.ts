@@ -15,6 +15,11 @@ export type CredencialesFel = Schema<'CredencialesFel'>
 export type ModoFel = ConfiguracionFel['modo']
 export type AmbienteFel = ConfiguracionFel['ambiente']
 export type ProveedorFel = NonNullable<paths['/api/v1/fel/configuracion']['put']['requestBody']['content']['application/json']['proveedor']>
+
+/** El código del catálogo es uno de los que acepta `PUT /fel/configuracion`. */
+export function esProveedorFel(codigo: string | null | undefined): codigo is ProveedorFel {
+    return codigo === 'infile' || codigo === 'falso'
+}
 export type CertificarAl = Schema<'PlantillaFacturacion'>['certificar_al']
 
 export const ESTADOS_DTE: Record<EstadoDte, { etiqueta: string, color: BadgeColor, icono: string, ayuda: string }> = {
@@ -75,42 +80,25 @@ export const AMBIENTES_FEL: Record<AmbienteFel, string> = {
     produccion: 'Producción',
 }
 
-/**
- * Proveedores que acepta `PUT /fel/configuracion` y los campos de sus credenciales (espejo de
- * `credencialesFelValidator` y de los registros de `fel/configuracion.ts`, A3). `falso` solo en
- * pruebas (la API responde 422 en producción). Los campos `secreto` nunca se muestran.
- */
-export const PROVEEDORES_FEL: Record<ProveedorFel, {
-    etiqueta: string
-    soloPruebas: boolean
-    campos: { clave: string, etiqueta: string, secreto: boolean, obligatorio: boolean }[]
-}> = {
-    infile: {
-        etiqueta: 'INFILE',
-        soloPruebas: false,
-        campos: [
-            { clave: 'usuario_firma', etiqueta: 'Usuario de firma', secreto: false, obligatorio: true },
-            { clave: 'llave_firma', etiqueta: 'Llave de firma', secreto: true, obligatorio: true },
-            { clave: 'usuario_api', etiqueta: 'Usuario de la API', secreto: false, obligatorio: true },
-            { clave: 'llave_api', etiqueta: 'Llave de la API', secreto: true, obligatorio: true },
-            { clave: 'correo_copia', etiqueta: 'Correo de copia', secreto: false, obligatorio: false },
-        ],
-    },
-    falso: {
-        etiqueta: 'Certificador de pruebas (falso)',
-        soloPruebas: true,
-        campos: [
-            { clave: 'usuario', etiqueta: 'Usuario', secreto: false, obligatorio: true },
-            { clave: 'llave', etiqueta: 'Llave', secreto: true, obligatorio: true },
-        ],
-    },
-}
+export type ProveedorFelCatalogo = Schema<'ProveedorFelCatalogo'>
 
-export function etiquetaProveedor(codigo: string | null | undefined): string {
+/** Nombre del certificador según `GET /fel/proveedores`; sin catálogo, su código. */
+export function etiquetaProveedor(codigo: string | null | undefined, catalogo: readonly ProveedorFelCatalogo[] = []): string {
     if (!codigo) {
         return 'Sin proveedor'
     }
-    return codigo in PROVEEDORES_FEL ? PROVEEDORES_FEL[codigo as ProveedorFel].etiqueta : codigo
+    return catalogo.find(p => p.codigo === codigo)?.nombre ?? codigo
+}
+
+/** Etiqueta legible de un campo de credenciales (`usuario_firma` → «Usuario firma»). */
+export function etiquetaCampo(campo: string): string {
+    const texto = campo.replace(/_/g, ' ')
+    return texto.charAt(0).toUpperCase() + texto.slice(1)
+}
+
+/** Un campo de credenciales es secreto si la API no lo devuelve (`campos_visibles`). */
+export function campoSecreto(proveedor: ProveedorFelCatalogo, campo: string): boolean {
+    return !proveedor.campos_visibles.includes(campo)
 }
 
 export const CERTIFICAR_AL: Record<CertificarAl, { etiqueta: string, descripcion: string }> = {
@@ -189,6 +177,24 @@ export function problemaFelLegible(problema: Problem): Problem {
     const sugerencia = SUGERENCIAS_FEL[codigo]
     const detalle = sugerencia && !(problema.detail ?? '').includes(sugerencia) ? `${problema.detail ?? ''} ${sugerencia}`.trim() : problema.detail
     return { ...problema, title: titulo, ...(detalle ? { detail: detalle } : {}) }
+}
+
+/**
+ * Las NCRE de un 409 `ncre_sin_certificar` (A3): `errors[] { field: 'nota_id', message: <estado>,
+ * rule: <dte_id> }` más `nota_id` como dato extra (fuera del esquema `Problem`, se lee con cuidado).
+ */
+export function ncreDeProblema(problema: Problem | null): { notaId: number | null, dteId: number, estado: EstadoDte | null }[] {
+    return (problema?.errors ?? [])
+        .filter(e => e.field === 'nota_id')
+        .map((e) => {
+            const extra: unknown = 'nota_id' in e ? e.nota_id : null
+            return {
+                notaId: typeof extra === 'number' ? extra : null,
+                dteId: Number(e.rule),
+                estado: estadoDteDe(e.message),
+            }
+        })
+        .filter(n => Number.isInteger(n.dteId) && n.dteId > 0)
 }
 
 /** La cuenta de un 422 `avisos_por_certificar` (`errors[0].message` = `6 avisos por certificar`), o `null`. */

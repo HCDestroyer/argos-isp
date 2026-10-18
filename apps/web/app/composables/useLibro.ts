@@ -13,6 +13,7 @@ export type BancoLibro = Schema<'BancoLibro'>
 export type BalanceSaldos = Schema<'BalanceSaldos'>
 export type EstadoResultados = Schema<'EstadoResultados'>
 export type IntegridadLibro = Schema<'IntegridadLibro'>
+export type Diario = Schema<'Diario'>
 export type FiltrosIntegridad = Omit<NonNullable<paths['/api/v1/libro/integridad']['get']['parameters']['query']>, 'empresas'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
@@ -139,5 +140,15 @@ export function useLibro() {
         return resolver(api.GET('/api/v1/libro/integridad', { params: { query: filtros } })).then(r => (r.ok ? { ok: true, data: r.data.data } : r))
     }
 
-    return { integridad, cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
+    /** `GET /libro/diarios` (`libro.ver`, consolidable): diarios con su numeración por año. */
+    function diarios(): Promise<Resultado<Diario[]>> {
+        return resolver(api.GET('/api/v1/libro/diarios'))
+    }
+
+    /** `GET /libro/diarios/:id` (`libro.ver`): un diario con `secuencias[] { anio, ultimo }`. */
+    function verDiario(id: number): Promise<Resultado<Diario>> {
+        return resolver(api.GET('/api/v1/libro/diarios/{id}', { params: { path: { id } } }))
+    }
+
+    return { integridad, diarios, verDiario, cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
 }

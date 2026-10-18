@@ -82,6 +82,11 @@ export function useFel() {
             : api.POST('/api/v1/fel/desactivar-contingencia', opciones)))
     }
 
+    /** `GET /fel/proveedores` (`fel.ver`): certificadores con sus campos de credenciales y ambientes. */
+    function proveedores(): Promise<Resultado<ProveedorFelCatalogo[]>> {
+        return resolver(api.GET('/api/v1/fel/proveedores'))
+    }
+
     /** Estado FEL de la empresa activa para el aviso global; lo vuelve a leer si cambió de empresa. */
     async function estadoDe(empresaId: number): Promise<EstadoFelEmpresa | null> {
         if (estado.value?.empresaId === empresaId) {
@@ -91,5 +96,5 @@ export function useFel() {
         return resultado.ok ? estado.value : null
     }
 
-    return { estado, configuracion, configurar, guardarCredenciales, probarCredenciales, cambiarContingencia, estadoDe }
+    return { estado, proveedores, configuracion, configurar, guardarCredenciales, probarCredenciales, cambiarContingencia, estadoDe }
 }

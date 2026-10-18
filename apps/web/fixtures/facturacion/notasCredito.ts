@@ -4,7 +4,7 @@ import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { aplicarNotaCredito } from './aplicarNotaCredito'
-import { reglasNotaFel, solicitarNcre } from '../fel/rutas'
+import { reglasNotaFel, solicitarNcre, vistaNota } from '../fel/rutas'
 
 type NotaCredito = Schema<'NotaCredito'>
 
@@ -17,7 +17,7 @@ function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFi
 
 /** Notas de crédito de una factura, para `FacturaDetalle.notas_credito`. */
 export function notasDeFactura(facturaId: number): NotaCredito[] {
-    return bd.notasCredito.filter(n => n.factura_id === facturaId).sort((a, b) => a.id - b.id)
+    return bd.notasCredito.filter(n => n.factura_id === facturaId).sort((a, b) => a.id - b.id).map(vistaNota)
 }
 
 /**
@@ -95,7 +95,7 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
             }
             const servicios = evaluar(factura.servicio_id === null ? [] : [factura.servicio_id])
             registrarAccion(solicitud, 'facturas.nota_credito', { tipo: 'factura', id: factura.id }, { monto: nota.monto, motivo })
-            const emitida: Schema<'NotaCreditoEmitida'> = { ...nota, factura: detalle(factura), servicios }
+            const emitida: Schema<'NotaCreditoEmitida'> = { ...vistaNota(nota), factura: detalle(factura), servicios }
             return { status: 201, cuerpo: emitida }
         })),
 
@@ -110,12 +110,13 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
                 .filter(n => !desde || n.fecha >= desde)
                 .filter(n => !hasta || n.fecha <= hasta)
                 .sort((a, b) => b.id - a.id)
+                .map(vistaNota)
             return { status: 200, cuerpo: paginar(filas, solicitud) }
         }),
 
         'GET /api/v1/notas-credito/:id': conPermiso('facturas.ver', (solicitud) => {
             const nota = bd.notasCredito.find(n => n.id === idDe(solicitud))
-            return nota ? { status: 200, cuerpo: nota } : noEncontrado('la nota de crédito')
+            return nota ? { status: 200, cuerpo: vistaNota(nota) } : noEncontrado('la nota de crédito')
         }),
     }
 }

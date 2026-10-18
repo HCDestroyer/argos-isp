@@ -10,7 +10,7 @@ import { comprobantes } from './comprobantes/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
-import { empresa, plantillaAvisoCobro } from './documentos/datos'
+import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
 import { empresas } from './empresas/datos'
 import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
@@ -84,6 +84,8 @@ interface BaseFixtures {
     /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
     cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
+    /** Plantilla del PDF de la nota de crédito (A5, fase 3). */
+    plantillaNotaCredito: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -150,6 +152,7 @@ function inicial(): BaseFixtures {
         enviosPrueba: 0,
         cobros: [],
         plantillaAvisoCobro,
+        plantillaNotaCredito,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},

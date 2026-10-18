@@ -10,7 +10,22 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'documentos.ver' })
 
-useHead({ title: 'Plantilla del aviso · ArgosIsp' })
+useHead({ title: 'Plantillas de documentos · ArgosIsp' })
+
+const route = useRoute()
+const router = useRouter()
+
+/** Plantilla que se edita: el aviso de cobro (y la factura FEL) o la nota de crédito (y la NCRE). */
+const TIPOS: { label: string, value: TipoDocumento, icon: string }[] = [
+    { label: 'Aviso de cobro y factura', value: 'aviso_cobro', icon: 'i-lucide-receipt-text' },
+    { label: 'Nota de crédito', value: 'nota_credito', icon: 'i-lucide-file-minus' },
+]
+const tipo = computed<TipoDocumento>({
+    get: () => (route.query.tipo === 'nota_credito' ? 'nota_credito' : 'aviso_cobro'),
+    set: (valor) => {
+        void router.replace({ query: { ...route.query, tipo: valor === 'aviso_cobro' ? undefined : valor } })
+    },
+})
 
 const { puede } = usePermisos()
 const toast = useToast()
@@ -53,32 +68,65 @@ const gruposVariables = computed(() => {
     return [...grupos.entries()].map(([etiqueta, variables]) => ({ etiqueta, variables }))
 })
 
-/**
- * Variables del PDF FEL (A5, fase 3) que una plantilla ya guardada no recibe sola: la API solo da
- * la de fábrica mientras nadie la guarde (`version` 0). Si la guardada no las usa y la API sí las
- * ofrece, se avisa y se puede insertar el bloque FEL donde está el cursor.
+/*
+ * Bloque FEL (A5, fase 3): una plantilla ya guardada no recibe sola las variables nuevas del PDF
+ * FEL. La de fábrica (`GET /documentos/plantillas/:tipo/fabrica`) las trae: si la guardada no usa
+ * alguna `…fel…` que la de fábrica sí usa, se avisa; el bloque se toma de la de fábrica (nunca se
+ * copia en el panel) para insertarlo, y se puede restaurar toda la plantilla o compararla.
  */
-const VARIABLES_BLOQUE_FEL = ['factura.fel_tipo', 'factura.fel_fecha', 'factura.fel_anulado'] as const
+const fabrica = shallowRef<PlantillaDocumentoFabrica | null>(null)
+const problemaFabrica = ref<Problem | null>(null)
+const comparando = ref(false)
+
+const prefijoFel = computed(() => (tipo.value === 'aviso_cobro' ? 'factura' : 'nota'))
+
+/** Variables FEL que la de fábrica usa y la del editor no. */
 const faltanFel = computed(() => {
-    if (!plantilla.value || plantilla.value.version === 0) {
+    if (!plantilla.value || plantilla.value.version === 0 || !fabrica.value) {
         return []
     }
-    const ofrecidas = new Set(plantilla.value.variables.map(v => v.nombre))
-    return VARIABLES_BLOQUE_FEL.filter(nombre => ofrecidas.has(nombre) && !estado.html.includes(nombre))
+    const base = fabrica.value.html
+    return fabrica.value.variables
+        .map(v => v.nombre)
+        .filter(nombre => nombre.startsWith(`${prefijoFel.value}.fel`) && base.includes(nombre) && !estado.html.includes(nombre))
 })
 
-/** El bloque FEL de la plantilla de fábrica (A5): tipo, serie, número, autorización, fecha y anulación. */
-const BLOQUE_FEL = `{{#factura.fel}}
-<p class="tenue"><small>Documento Tributario Electrónico (FEL) · {{factura.fel_tipo}} · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
-{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}
-{{/factura.fel}}
-`
+/** El bloque `{{#<prefijo>.fel}}…{{/<prefijo>.fel}}` de la plantilla de fábrica, o `null`. */
+const bloqueFel = computed(() => {
+    const marca = `${prefijoFel.value}.fel`
+    const html = fabrica.value?.html ?? ''
+    const desde = html.indexOf(`{{#${marca}}}`)
+    const cierre = `{{/${marca}}}`
+    const hasta = desde < 0 ? -1 : html.indexOf(cierre, desde)
+    return desde < 0 || hasta < 0 ? null : `${html.slice(desde, hasta + cierre.length)}\n`
+})
+
+/** Líneas de una y otra plantilla que la otra no tiene (para comparar sin herramientas externas). */
+const diferencias = computed(() => {
+    const propias = estado.html.split('\n').map(l => l.trim()).filter(Boolean)
+    const deFabrica = (fabrica.value?.html ?? '').split('\n').map(l => l.trim()).filter(Boolean)
+    return {
+        soloFabrica: deFabrica.filter(l => !propias.includes(l)),
+        soloPropia: propias.filter(l => !deFabrica.includes(l)),
+    }
+})
 
 function insertarBloqueFel() {
+    if (!bloqueFel.value) {
+        return
+    }
     const area = editor.value?.textareaRef
     const inicio = area?.selectionStart ?? estado.html.length
     const fin = area?.selectionEnd ?? estado.html.length
-    estado.html = `${estado.html.slice(0, inicio)}${BLOQUE_FEL}${estado.html.slice(fin)}`
+    estado.html = `${estado.html.slice(0, inicio)}${bloqueFel.value}${estado.html.slice(fin)}`
+}
+
+/** Pone la plantilla de fábrica en el editor; se guarda con «Guardar» (con la `version` vigente). */
+function restaurarFabrica() {
+    if (fabrica.value) {
+        estado.html = fabrica.value.html
+        comparando.value = false
+    }
 }
 
 function rellenar(datos: PlantillaDocumento) {
@@ -87,9 +135,17 @@ function rellenar(datos: PlantillaDocumento) {
     formulario.value?.clear()
 }
 
+async function cargarFabrica() {
+    problemaFabrica.value = null
+    const resultado = await useDocumentos().fabrica(tipo.value)
+    fabrica.value = resultado.ok ? resultado.data : null
+    problemaFabrica.value = resultado.ok ? null : resultado.problema
+}
+
 async function cargar() {
     cargando.value = true
-    const resultado = await useDocumentos().plantilla()
+    void cargarFabrica()
+    const resultado = await useDocumentos().plantilla(tipo.value)
     cargando.value = false
     problema.value = resultado.ok ? null : resultado.problema
     if (resultado.ok) {
@@ -128,7 +184,7 @@ async function generarVista() {
     }
     generando.value = true
     problemaVista.value = null
-    const resultado = await useDocumentos().vistaPrevia(estado.html)
+    const resultado = await useDocumentos().vistaPrevia(estado.html, tipo.value)
     generando.value = false
     if (!resultado.ok) {
         problemaVista.value = resultado.problema
@@ -148,7 +204,7 @@ async function guardar(evento: FormSubmitEvent<SalidaPlantillaDocumento>) {
     }
     enviando.value = true
     problemaGuardar.value = null
-    const resultado = await useDocumentos().guardarPlantilla(evento.data.html, plantilla.value.version)
+    const resultado = await useDocumentos().guardarPlantilla(evento.data.html, plantilla.value.version, tipo.value)
     enviando.value = false
     if (!resultado.ok) {
         problemaGuardar.value = resultado.problema
@@ -167,6 +223,12 @@ watch(() => estado.html, () => {
     }
 })
 
+watch(tipo, () => {
+    plantilla.value = null
+    fabrica.value = null
+    liberarVista()
+    void cargar()
+})
 onMounted(cargar)
 onBeforeUnmount(liberarVista)
 </script>
@@ -174,9 +236,20 @@ onBeforeUnmount(liberarVista)
 <template>
     <PanelPagina
         id="aviso-cobro"
-        titulo="Plantilla del aviso de cobro"
+        titulo="Plantillas de documentos"
         icono="i-lucide-file-code-2"
     >
+        <div class="mb-4 flex shrink-0 flex-col">
+            <UTabs
+                v-model="tipo"
+                :items="TIPOS"
+                :content="false"
+                variant="link"
+                class="w-full overflow-x-auto"
+                :ui="{ list: 'w-max sm:w-full', label: 'whitespace-nowrap' }"
+                data-prueba="tipo-plantilla"
+            />
+        </div>
         <ProblemaAlerta
             v-if="problema"
             :problema="problema"
@@ -217,10 +290,29 @@ onBeforeUnmount(liberarVista)
                     variant="subtle"
                     icon="i-lucide-badge-check"
                     title="Tu plantilla guardada no tiene el bloque FEL nuevo"
-                    :description="`Una plantilla ya guardada no recibe sola las variables nuevas del PDF FEL: falta ${faltanFel.join(', ')}. Inserta el bloque donde está el cursor (o reemplaza el anterior) y guarda.`"
-                    :actions="editable ? [{ label: 'Insertar bloque FEL', icon: 'i-lucide-text-cursor-input', color: 'warning', variant: 'outline', onClick: insertarBloqueFel }] : undefined"
+                    :description="`Una plantilla ya guardada no recibe sola las variables nuevas del PDF FEL: falta ${faltanFel.join(', ')}. Inserta el bloque de la plantilla de fábrica donde está el cursor (quita el anterior si lo tenías) o compárala, y guarda.`"
+                    :actions="editable && bloqueFel ? [{ label: 'Insertar bloque FEL', icon: 'i-lucide-text-cursor-input', color: 'warning', variant: 'outline', onClick: insertarBloqueFel }] : undefined"
                     data-prueba="falta-bloque-fel"
                 />
+                <ProblemaAlerta
+                    v-if="problemaFabrica"
+                    :problema="problemaFabrica"
+                    :reintentar="cargarFabrica"
+                />
+                <div
+                    v-if="fabrica && plantilla.version > 0"
+                    class="flex flex-wrap gap-2"
+                >
+                    <UButton
+                        label="Comparar con la de fábrica"
+                        icon="i-lucide-git-compare"
+                        color="neutral"
+                        variant="outline"
+                        size="sm"
+                        data-prueba="comparar-fabrica"
+                        @click="comparando = true"
+                    />
+                </div>
 
                 <UFormField
                     name="html"
@@ -371,7 +463,7 @@ onBeforeUnmount(liberarVista)
                 <iframe
                     v-if="urlVista"
                     :src="urlVista"
-                    title="Vista previa del aviso de cobro"
+                    :title="`Vista previa de ${tipo === 'aviso_cobro' ? 'el aviso de cobro' : 'la nota de crédito'}`"
                     class="h-[70vh] w-full rounded-md border border-default bg-default"
                     data-prueba="vista-previa"
                 />
@@ -385,5 +477,51 @@ onBeforeUnmount(liberarVista)
                 />
             </section>
         </div>
+
+        <UModal
+            v-model:open="comparando"
+            title="Tu plantilla y la de fábrica"
+            description="Líneas que solo están en una de las dos (sin espacios al inicio)."
+            :ui="{ content: 'sm:max-w-4xl' }"
+        >
+            <template #body>
+                <div
+                    class="grid gap-4 lg:grid-cols-2"
+                    data-prueba="diferencias-fabrica"
+                >
+                    <section class="flex min-w-0 flex-col gap-2">
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Solo en la de fábrica ({{ diferencias.soloFabrica.length }})
+                        </h3>
+                        <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-elevated p-3 font-mono text-xs text-success">{{ diferencias.soloFabrica.join('\n') || 'Ninguna' }}</pre>
+                    </section>
+                    <section class="flex min-w-0 flex-col gap-2">
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Solo en la tuya ({{ diferencias.soloPropia.length }})
+                        </h3>
+                        <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-elevated p-3 font-mono text-xs text-warning">{{ diferencias.soloPropia.join('\n') || 'Ninguna' }}</pre>
+                    </section>
+                </div>
+            </template>
+            <template #footer>
+                <div class="flex w-full flex-wrap justify-end gap-2">
+                    <UButton
+                        label="Cerrar"
+                        color="neutral"
+                        variant="ghost"
+                        @click="comparando = false"
+                    />
+                    <UButton
+                        v-if="editable"
+                        label="Restaurar la de fábrica en el editor"
+                        icon="i-lucide-rotate-ccw"
+                        color="warning"
+                        variant="outline"
+                        data-prueba="restaurar-fabrica"
+                        @click="restaurarFabrica"
+                    />
+                </div>
+            </template>
+        </UModal>
     </PanelPagina>
 </template>

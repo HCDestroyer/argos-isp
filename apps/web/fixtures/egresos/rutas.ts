@@ -225,7 +225,9 @@ export const rutasEgresos: RutasFixture = {
         const empresaCierre = typeof cuerpoObjeto(solicitud).empresa_id === 'number' ? Number(cuerpoObjeto(solicitud).empresa_id) : (empresaActivaDe(solicitud) ?? 1)
         const ncre = ncreSinCertificar(empresaCierre, periodo)
         if (ncre.length) {
-            return problemaCodigo(409, 'ncre_sin_certificar', 'NCRE sin certificar', `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre.slice(0, 20).map(x => `nota ${x.nota_id}: ${x.estado}`).join(', ')}): certifícalas o anula las rechazadas antes de cerrar el mes`)
+            const respuesta = problemaCodigo(409, 'ncre_sin_certificar', 'NCRE sin certificar', `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre.slice(0, 20).map(x => `nota ${x.nota_id}: ${x.estado}`).join(', ')}): certifícalas o anula las rechazadas antes de cerrar el mes`)
+            // Como `CerrarPeriodo` (A3): una fila por nota; `nota_id`, `factura_id`, `dte_id` y `estado` van además del esquema.
+            return { ...respuesta, cuerpo: { ...(respuesta.cuerpo as Problem), errors: ncre.map(x => ({ field: 'nota_id', message: x.estado, rule: String(x.dte_id), ...x })) } }
         }
         const ruptura = rupturaDe(empresaCierre)
         if (ruptura) {

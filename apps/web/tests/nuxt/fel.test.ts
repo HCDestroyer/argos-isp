@@ -143,7 +143,7 @@ describe('FEL · composables y fixtures', () => {
     })
 
     it('la cola filtra por estado y documento; reintentar un rechazado crea otro DTE que se certifica', async () => {
-        const rechazados = await useDte().listar({ estado: 'rechazado' })
+        const rechazados = await useDte().listar({ estado: ['rechazado'] })
         expect(rechazados.ok && rechazados.data.data.length).toBeGreaterThanOrEqual(2)
         const ncre = await useDte().listar({ documento_tipo: 'nota_credito' })
         expect(ncre.ok && ncre.data.data.every(d => d.tipo_dte === 'NCRE')).toBe(true)

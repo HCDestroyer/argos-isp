@@ -228,7 +228,7 @@ watch(() => props.dte.id, () => {
             />
             <DatoFicha
                 etiqueta="Certificador"
-                :valor="`${etiquetaProveedor(dte.proveedor)} · ${AMBIENTES_FEL[dte.ambiente]} · solicitud ${dte.solicitud === 'manual' ? 'manual' : 'automática'}`"
+                :valor="`${dte.proveedor} · ${AMBIENTES_FEL[dte.ambiente]} · solicitud ${dte.solicitud === 'manual' ? 'manual' : 'automática'}`"
             />
             <DatoFicha
                 v-if="conDocumento"

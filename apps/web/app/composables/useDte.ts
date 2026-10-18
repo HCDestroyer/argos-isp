@@ -1,6 +1,7 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type SolicitudCertificacion = Schema<'SolicitudCertificacion'>
+export type DteIntento = Schema<'DteIntento'>
 export type FiltrosDte = Omit<NonNullable<paths['/api/v1/dte']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_DTE = 25
@@ -12,7 +13,10 @@ export const LIMITE_DTE = 25
 export function useDte() {
     const api = useApi()
 
-    /** `GET /dte` (`fel.ver`): del más reciente al más antiguo, con `?empresas=todas` desde «Todas». */
+    /**
+     * `GET /dte` (`fel.ver`): del más reciente al más antiguo, con `?empresas=todas` desde «Todas».
+     * `estado` admite varios (se repite el parámetro); `desde`/`hasta` por fecha de emisión.
+     */
     function listar(filtros: FiltrosDte = {}, cursor?: string): Promise<Resultado<Pagina<Dte>>> {
         const query: FiltrosDte & { cursor?: string } = { limit: LIMITE_DTE, ...filtros }
         if (cursor) {
@@ -29,6 +33,11 @@ export function useDte() {
     async function deDocumento(tipo: Dte['documento_tipo'], documentoId: number): Promise<Resultado<Dte | null>> {
         const resultado = await listar({ documento_tipo: tipo, documento_id: documentoId, limit: 1 })
         return resultado.ok ? { ok: true, data: resultado.data.data[0] ?? null } : resultado
+    }
+
+    /** `GET /dte/:id/intentos` (`fel.ver`): la bitácora ante el certificador (`fiscal.dte_intentos`). */
+    function intentos(id: number): Promise<Resultado<DteIntento[]>> {
+        return resolver(api.GET('/api/v1/dte/{id}/intentos', { params: { path: { id } } }))
     }
 
     /** `GET /dte/:id/xml`: 404 mientras no esté certificado. */
@@ -59,5 +68,5 @@ export function useDte() {
         return resolver(api.POST('/api/v1/facturas/{id}/certificar', { params: { path: { id: facturaId }, header: { 'Idempotency-Key': clave } } }))
     }
 
-    return { listar, ver, deDocumento, xml, pdf, reintentar, certificarFactura }
+    return { listar, ver, intentos, deDocumento, xml, pdf, reintentar, certificarFactura }
 }

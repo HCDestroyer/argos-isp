@@ -87,7 +87,8 @@ const puedeAnular = computed(() => puede('facturas.anular') && factura.value !==
 
 /** Sustituir (`facturas.sustituir`): una factura de servicio vigente. La API decide el resto (409). */
 const sustituirAbierto = ref(false)
-const puedeSustituir = computed(() => puede('facturas.sustituir') && factura.value !== null && factura.value.estado !== 'anulada' && factura.value.tipo !== 'mora')
+const puedeSustituir = computed(() => puede('facturas.sustituir') && factura.value !== null && factura.value.estado !== 'anulada'
+    && factura.value.tipo !== 'mora' && !factura.value.sustituida_por)
 
 function alSustituir(sustitucion: SustitucionFactura) {
     toast.add({
@@ -369,6 +370,25 @@ onMounted(cargar)
                 title="Por certificar: todavía no es deuda"
                 description="La FEL de la empresa es obligatoria y esta factura se certifica al emitirse: no tiene asiento, no se cobra ni cuenta para el corte hasta que la SAT la autorice."
                 data-prueba="factura-por-certificar"
+            />
+            <UAlert
+                v-if="factura.sustituida_por"
+                color="neutral"
+                variant="subtle"
+                icon="i-lucide-replace"
+                :title="`Sustituida por la factura #${factura.sustituida_por}`"
+                description="Esta factura se reemplazó por otra del mismo periodo (anulada o acreditada con una NCRE por su saldo)."
+                :actions="[{ label: `Ver factura #${factura.sustituida_por}`, to: `/facturas/${factura.sustituida_por}`, color: 'neutral', variant: 'outline', icon: 'i-lucide-arrow-right' }]"
+                data-prueba="factura-sustituida-por"
+            />
+            <UAlert
+                v-if="factura.sustituye_a"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-replace"
+                :title="`Sustituye a la factura #${factura.sustituye_a}`"
+                :actions="[{ label: `Ver factura #${factura.sustituye_a}`, to: `/facturas/${factura.sustituye_a}`, color: 'neutral', variant: 'outline', icon: 'i-lucide-arrow-left' }]"
+                data-prueba="factura-sustituye-a"
             />
             <UAlert
                 v-if="anulacionPendiente"

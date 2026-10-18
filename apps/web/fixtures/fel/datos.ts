@@ -37,6 +37,8 @@ export interface FelFixtures {
     /** XML certificado por DTE. */
     xml: Record<number, string>
     sustituciones: SustitucionFixture[]
+    /** Bitácora ante el certificador (`fiscal.dte_intentos`), solo inserción. */
+    intentos: Schema<'DteIntento'>[]
     /** Ruptura simulada de la cadena de hash por empresa (`romperCadenaFixture`). */
     rupturas: Record<number, NonNullable<Schema<'IntegridadLibro'>['ruptura']>>
 }
@@ -140,8 +142,46 @@ export function xmlDe(dte: Dte): string {
     return `<?xml version="1.0" encoding="UTF-8"?><dte:GTDocumento xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:dte="http://www.sat.gob.gt/dte/fel/0.2.0" Version="0.1"><dte:SAT ClaseDocumento="dte"><dte:DTE ID="DatosCertificados"><dte:DatosEmision ID="DatosEmision"><dte:DatosGenerales CodigoMoneda="GTQ" FechaHoraEmision="${dte.fecha_emision}" Tipo="${dte.tipo_dte}"/><dte:Receptor IDReceptor="${dte.receptor.id}" NombreReceptor="${dte.receptor.nombre}"/><dte:Items>${item}</dte:Items><dte:Totales><dte:TotalImpuestos><dte:TotalImpuesto NombreCorto="IVA" TotalMontoImpuesto="${dte.iva}"/></dte:TotalImpuestos><dte:GranTotal>${dte.total}</dte:GranTotal></dte:Totales></dte:DatosEmision></dte:DTE><dte:Certificacion><dte:NumeroAutorizacion Numero="${dte.numero ?? ''}" Serie="${dte.serie ?? ''}">${dte.autorizacion ?? ''}</dte:NumeroAutorizacion></dte:Certificacion></dte:SAT><ds:Signature>falsa</ds:Signature></dte:GTDocumento>`
 }
 
+/** `GET /fel/proveedores`, capturado de la API (`fel/configuracion.ts` de A3). */
+export const proveedoresFel: Schema<'ProveedorFelCatalogo'>[] = [
+    {
+        codigo: 'infile',
+        nombre: 'INFILE',
+        campos_obligatorios: ['usuario_firma', 'llave_firma', 'usuario_api', 'llave_api'],
+        campos_opcionales: ['correo_copia'],
+        campos_visibles: ['usuario_firma', 'usuario_api', 'correo_copia'],
+        ambientes: ['pruebas', 'produccion'],
+        solo_pruebas: false,
+        capacidades: { contingencia: false, consulta_nit: true, pdf: false },
+    },
+    {
+        codigo: 'falso',
+        nombre: 'Certificador de laboratorio (falso)',
+        campos_obligatorios: ['usuario', 'llave'],
+        campos_opcionales: [],
+        campos_visibles: ['usuario'],
+        ambientes: ['pruebas'],
+        solo_pruebas: true,
+        capacidades: { contingencia: true, consulta_nit: true, pdf: false },
+    },
+]
+
+/** Una fila de `fiscal.dte_intentos`, como la registra el worker antes y después de enviar. */
+export function registrarIntento(fel: FelFixtures, dte: Dte, operacion: Schema<'DteIntento'>['operacion'], resultado: string, momento: string, respuesta: Record<string, unknown> = {}): void {
+    fel.intentos.push({
+        id: fel.intentos.reduce((m, i) => Math.max(m, i.id), 0) + 1,
+        dte_id: dte.id,
+        operacion,
+        enviado_en: momento,
+        resultado,
+        duracion_ms: resultado === 'enviando' ? 0 : 49,
+        respuesta,
+    })
+}
+
 /** Pasa un DTE a `certificado` como el worker con el proveedor falso. */
 export function certificarDte(fel: FelFixtures, dte: Dte, momento: string): void {
+    registrarIntento(fel, dte, 'certificar', 'enviando', momento)
     Object.assign(dte, {
         ...autorizacionFalsa(dte.identificador),
         estado: 'certificado',
@@ -153,6 +193,7 @@ export function certificarDte(fel: FelFixtures, dte: Dte, momento: string): void
         updated_at: momento,
     })
     fel.xml[dte.id] = xmlDe(dte)
+    registrarIntento(fel, dte, 'certificar', 'certificado', momento, { uuid: dte.autorizacion, repetido: false, resultado: true })
 }
 
 /** Copia los datos del DTE vigente en la factura (`fel_*`, `dte_id`), como la vista de la API. */
@@ -240,6 +281,7 @@ export function sembrarFel(tablas: TablasFel): void {
         return dte
     }
     for (const factura of tablas.facturas) {
+        Object.assign(factura, { sustituida_por: null, sustituye_a: null })
         Object.assign(factura, { aviso_cobro: (factura.empresa_id ?? 1) === 1, certificar_al: (factura.empresa_id ?? 1) === 1 ? 'pagar' : 'nunca', tipo_dte: null, dte_id: null, fel_error: null })
     }
     for (const factura of tablas.facturas.filter(f => (f.empresa_id ?? 1) === 2)) {
@@ -271,6 +313,8 @@ export function sembrarFel(tablas: TablasFel): void {
             ultimo_error: `${ERROR_SAT_FALSO}: el receptor no coincide con el registro de la SAT (NIT). Límite de consumidor final ${limite}`,
             updated_at: '2026-10-05T15:00:30.000Z',
         })
+        registrarIntento(fel, dte, 'certificar', 'enviando', '2026-10-05T15:00:29.000Z')
+        registrarIntento(fel, dte, 'certificar', 'rechazado', '2026-10-05T15:00:30.000Z', { resultado: false, descripcion_errores: [ERROR_SAT_FALSO] })
         reflejarEnFactura(rechazada, dte)
     }
     const temporal = vencidas[1]
@@ -283,6 +327,9 @@ export function sembrarFel(tablas: TablasFel): void {
             ultimo_error: 'El certificador no respondió (tiempo agotado)',
             updated_at: '2026-10-14T13:15:00.000Z',
         })
+        for (const minuto of ['00', '01', '06']) {
+            registrarIntento(fel, dte, 'certificar', 'error_temporal', `2026-10-14T13:${minuto}:30.000Z`, { error: 'tiempo agotado' })
+        }
         reflejarEnFactura(temporal, dte)
     }
 
@@ -321,6 +368,7 @@ export function sembrarFel(tablas: TablasFel): void {
         })
         Object.assign(ncre, { estado: 'rechazado', definitivo: true, intentos: 1, proximo_intento: null, ultimo_error: `${ERROR_SAT_FALSO}: la referencia no coincide con el documento original`, updated_at: '2026-10-08T16:01:00.000Z' })
         fel.dte.push(ncre)
+        registrarIntento(fel, ncre, 'certificar', 'rechazado', '2026-10-08T16:01:00.000Z', { resultado: false, descripcion_errores: [ERROR_SAT_FALSO] })
     }
 }
 
@@ -331,6 +379,7 @@ export function felInicial(): FelFixtures {
         dte: [],
         xml: {},
         sustituciones: [],
+        intentos: [],
         rupturas: {},
     }
 }

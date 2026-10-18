@@ -237,6 +237,15 @@ onMounted(async () => {
                             </span>
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
                             <UBadge
+                                v-if="row.original.sustituida_por"
+                                :label="`Sustituida por #${row.original.sustituida_por}`"
+                                icon="i-lucide-replace"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                class="mt-1 self-start"
+                            />
+                            <UBadge
                                 v-if="row.original.tipo === 'mora'"
                                 label="Recargo por mora"
                                 icon="i-lucide-calendar-x"

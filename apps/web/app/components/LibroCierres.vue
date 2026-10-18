@@ -30,17 +30,12 @@ const problemaCierre = ref<Problem | null>(null)
 let claveCierre = nuevaClaveIdempotencia()
 
 /**
- * 409 `ncre_sin_certificar`: la API lista las notas en el `detail` («nota 12: rechazado»); se
- * enlazan a su ficha. 409 `integridad_rota`: se lleva a la pestaña de integridad.
+ * 409 `ncre_sin_certificar`: una fila de `errors[]` por nota (`field: 'nota_id'`, `message` = estado
+ * de su NCRE, `rule` = `dte_id`, y además `nota_id`); se enlazan a su ficha (o a su DTE).
+ * 409 `integridad_rota`: se lleva a la pestaña de integridad.
  */
 const codigoCierre = computed(() => (problemaCierre.value ? codigoProblema(problemaCierre.value) : null))
-const notasSinCertificar = computed(() => {
-    if (codigoCierre.value !== 'ncre_sin_certificar') {
-        return []
-    }
-    return [...(problemaCierre.value?.detail ?? '').matchAll(/nota (\d+): ([a-z_]+)/g)]
-        .map(m => ({ id: Number(m[1]), estado: estadoDteDe(m[2]) }))
-})
+const notasSinCertificar = computed(() => (codigoCierre.value === 'ncre_sin_certificar' ? ncreDeProblema(problemaCierre.value) : []))
 
 const itemsMes = computed<SelectItem[]>(() => cerrables.value.map(p => ({ label: etiquetaPeriodo(p), value: p })))
 
@@ -261,14 +256,22 @@ onMounted(() => void lista.recargar())
                     >
                         <li
                             v-for="nota in notasSinCertificar"
-                            :key="nota.id"
+                            :key="nota.dteId"
                             class="flex items-center justify-between gap-2 px-3 py-2"
                         >
                             <ULink
-                                :to="enlace(`/notas-credito/${nota.id}`)"
+                                v-if="nota.notaId !== null"
+                                :to="enlace(`/notas-credito/${nota.notaId}`)"
                                 class="text-sm font-medium text-highlighted hover:text-primary"
                             >
-                                Nota de crédito #{{ nota.id }}
+                                Nota de crédito #{{ nota.notaId }}
+                            </ULink>
+                            <ULink
+                                v-else
+                                :to="enlace(`/dte/${nota.dteId}`)"
+                                class="text-sm font-medium text-highlighted hover:text-primary"
+                            >
+                                NCRE · DTE #{{ nota.dteId }}
                             </ULink>
                             <EstadoDteBadge
                                 v-if="nota.estado"

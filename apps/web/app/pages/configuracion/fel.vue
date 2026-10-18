@@ -36,8 +36,23 @@ async function cargar() {
     }
 }
 
+/* Catálogo de certificadores (`GET /fel/proveedores`): campos, ambientes y `solo_pruebas`. */
+const catalogo = shallowRef<ProveedorFelCatalogo[]>([])
+const problemaCatalogo = ref<Problem | null>(null)
+
+async function cargarCatalogo() {
+    problemaCatalogo.value = null
+    const resultado = await useFel().proveedores()
+    catalogo.value = resultado.ok ? resultado.data : []
+    problemaCatalogo.value = resultado.ok ? null : resultado.problema
+}
+
+function delCatalogo(codigo: string | null | undefined): ProveedorFelCatalogo | null {
+    return catalogo.value.find(p => p.codigo === codigo) ?? null
+}
+
 /* Proveedor, ambiente y modo. */
-const PROVEEDORES = Object.keys(PROVEEDORES_FEL) as ProveedorFel[]
+const PROVEEDORES = ['infile', 'falso'] as const satisfies readonly ProveedorFel[]
 const AMBIENTES = Object.keys(AMBIENTES_FEL) as AmbienteFel[]
 const MODOS = Object.keys(MODOS_FEL) as ModoFel[]
 
@@ -50,8 +65,9 @@ const esquema = z.object({
     if (datos.modo !== 'desactivada' && !datos.proveedor) {
         ctx.addIssue({ code: 'custom', path: ['proveedor'], message: 'Elige el certificador' })
     }
-    if (datos.proveedor && PROVEEDORES_FEL[datos.proveedor].soloPruebas && datos.ambiente === 'produccion') {
-        ctx.addIssue({ code: 'custom', path: ['proveedor'], message: 'El certificador falso es solo para pruebas' })
+    const elegido = delCatalogo(datos.proveedor)
+    if (elegido && !elegido.ambientes.includes(datos.ambiente)) {
+        ctx.addIssue({ code: 'custom', path: ['proveedor'], message: `${elegido.nombre} no admite ${AMBIENTES_FEL[datos.ambiente].toLowerCase()}` })
     }
 })
 type Datos = z.output<typeof esquema>
@@ -72,9 +88,9 @@ function reiniciarFormulario(actual: ConfiguracionFel) {
     claveGuardar = nuevaClaveIdempotencia()
 }
 
-const itemsProveedor = computed<SelectItem[]>(() => PROVEEDORES
-    .filter(codigo => !PROVEEDORES_FEL[codigo].soloPruebas || estado.ambiente === 'pruebas')
-    .map(codigo => ({ label: PROVEEDORES_FEL[codigo].etiqueta, value: codigo })))
+const itemsProveedor = computed<SelectItem[]>(() => catalogo.value
+    .filter(p => esProveedorFel(p.codigo) && p.ambientes.includes(estado.ambiente))
+    .map(p => ({ label: p.nombre, value: p.codigo, description: p.solo_pruebas ? 'Solo pruebas' : undefined })))
 const itemsAmbiente: SelectItem[] = AMBIENTES.map(valor => ({ label: AMBIENTES_FEL[valor], value: valor }))
 const itemsModo: RadioGroupItem[] = MODOS.map(valor => ({ label: MODOS_FEL[valor].etiqueta, value: valor, description: MODOS_FEL[valor].descripcion }))
 
@@ -106,7 +122,7 @@ async function guardar(evento: FormSubmitEvent<Datos>) {
     }
     configuracion.value = resultado.data
     reiniciarFormulario(resultado.data)
-    toast.add({ title: 'FEL guardada', description: `${MODOS_FEL[resultado.data.modo].etiqueta} · ${etiquetaProveedor(resultado.data.proveedor)} · ${AMBIENTES_FEL[resultado.data.ambiente]}`, icon: 'i-lucide-shield-check', color: 'success' })
+    toast.add({ title: 'FEL guardada', description: `${MODOS_FEL[resultado.data.modo].etiqueta} · ${etiquetaProveedor(resultado.data.proveedor, catalogo.value)} · ${AMBIENTES_FEL[resultado.data.ambiente]}`, icon: 'i-lucide-shield-check', color: 'success' })
 }
 
 /* Credenciales por ambiente. */
@@ -119,8 +135,8 @@ function credencialesDe(ambiente: AmbienteFel): CredencialesFel | null {
     return configuracion.value?.credenciales.find(c => c.ambiente === ambiente) ?? null
 }
 
-/** Proveedor con el que se guardan las credenciales: el elegido (aunque no esté guardado aún). */
-const proveedorCredenciales = computed<ProveedorFel | null>(() => estado.proveedor ?? configuracion.value?.proveedor ?? null)
+/** Certificador con el que se guardan las credenciales: el elegido (aunque no esté guardado aún). */
+const proveedorCredenciales = computed(() => delCatalogo(estado.proveedor ?? configuracion.value?.proveedor ?? null))
 
 function abrirCredenciales(ambiente: AmbienteFel) {
     ambienteCredenciales.value = ambiente
@@ -178,7 +194,10 @@ function alCambiarContingencia(actual: ConfiguracionFel) {
     })
 }
 
-onMounted(cargar)
+onMounted(() => {
+    void cargarCatalogo()
+    void cargar()
+})
 </script>
 
 <template>
@@ -248,7 +267,7 @@ onMounted(cargar)
                                 data-prueba="fel-modo"
                             />
                             <UBadge
-                                :label="etiquetaProveedor(configuracion.proveedor)"
+                                :label="etiquetaProveedor(configuracion.proveedor, catalogo)"
                                 color="neutral"
                                 variant="outline"
                             />
@@ -350,6 +369,12 @@ onMounted(cargar)
                         </UForm>
                     </UPageCard>
 
+                    <ProblemaAlerta
+                        v-if="problemaCatalogo"
+                        :problema="problemaCatalogo"
+                        :reintentar="cargarCatalogo"
+                        data-prueba="fel-catalogo-error"
+                    />
                     <UPageCard
                         title="Credenciales"
                         description="De solo escritura: la API nunca las devuelve. Aquí solo se ve si están guardadas, el usuario y la última prueba."
@@ -380,7 +405,7 @@ onMounted(cargar)
                                 >
                                     <DatoFicha
                                         etiqueta="Certificador"
-                                        :valor="etiquetaProveedor(credencialesDe(ambiente)?.proveedor)"
+                                        :valor="etiquetaProveedor(credencialesDe(ambiente)?.proveedor, catalogo)"
                                     />
                                     <DatoFicha
                                         v-for="(valor, campo) in credencialesDe(ambiente)?.campos_visibles"
@@ -417,7 +442,7 @@ onMounted(cargar)
                                         color="neutral"
                                         variant="outline"
                                         size="sm"
-                                        :disabled="!proveedorCredenciales || (PROVEEDORES_FEL[proveedorCredenciales].soloPruebas && ambiente === 'produccion')"
+                                        :disabled="!proveedorCredenciales || !proveedorCredenciales.ambientes.includes(ambiente)"
                                         :data-prueba="`credenciales-abrir-${ambiente}`"
                                         @click="abrirCredenciales(ambiente)"
                                     />

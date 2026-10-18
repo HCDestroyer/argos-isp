@@ -21,7 +21,7 @@ import {
 import { aplicarNotaCredito } from '../facturacion/aplicarNotaCredito'
 import { dinero, estadoFactura } from '../facturacion/datos'
 import { asientoFactura, asientoReverso, fechaGuatemala } from '../libro/datos'
-import { certificarDte, hexDe, nuevoDte, receptorDe, reflejarEnFactura } from './datos'
+import { certificarDte, hexDe, nuevoDte, proveedoresFel, receptorDe, reflejarEnFactura, registrarIntento } from './datos'
 
 /**
  * Rutas de la FEL (A3, fase 3; README de `apps/api/app/fiscal`, contrato §8, §10.9 y §17). El
@@ -93,6 +93,20 @@ export function configuracionFel(empresaId: number): ConfiguracionFel {
     return {
         ...guardada,
         credenciales: bd.fel.credenciales.filter(c => c.vista.empresa_id === empresaId).map(c => structuredClone(c.vista)),
+    }
+}
+
+/** La nota como la ve la API: con su NCRE (`dte_id`, `fel_*`), o `null` en una nota interna. */
+export function vistaNota(nota: Schema<'NotaCredito'>): Schema<'NotaCredito'> {
+    const ncre = dteDe('nota_credito', nota.id)
+    return {
+        ...nota,
+        dte_id: ncre?.id ?? null,
+        fel_estado: ncre?.estado ?? null,
+        fel_uuid: ncre?.autorizacion ?? null,
+        fel_serie: ncre?.serie ?? null,
+        fel_numero: ncre?.numero ?? null,
+        fel_error: ncre?.ultimo_error ?? null,
     }
 }
 
@@ -212,14 +226,14 @@ function avisosVivos(empresaId: number): number {
 }
 
 /** NCRE de la empresa del mes o anteriores sin certificar, de notas no anuladas (cierre del mes). */
-export function ncreSinCertificar(empresaId: number, periodo: string): { nota_id: number, estado: string }[] {
+export function ncreSinCertificar(empresaId: number, periodo: string): { nota_id: number, factura_id: number, dte_id: number, estado: string }[] {
     const [anio = 0, mes = 0] = periodo.split('-').map(Number)
     const limite = `${mes === 12 ? anio + 1 : anio}-${String(mes === 12 ? 1 : mes + 1).padStart(2, '0')}-01`
     return bd.notasCredito
         .filter(n => (n.empresa_id ?? 1) === empresaId && n.fecha < limite && !n.anulada_en)
         .flatMap((nota) => {
             const ncre = dteDe('nota_credito', nota.id)
-            return ncre && ncre.estado !== 'certificado' ? [{ nota_id: nota.id, estado: ncre.estado }] : []
+            return ncre && ncre.estado !== 'certificado' ? [{ nota_id: nota.id, factura_id: nota.factura_id, dte_id: ncre.id, estado: ncre.estado }] : []
         })
 }
 
@@ -296,6 +310,16 @@ function esAmbiente(valor: unknown): valor is ConfiguracionFel['ambiente'] {
 
 export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>): RutasFixture {
     return {
+        'GET /api/v1/fel/proveedores': conPermiso('fel.ver', () => ({ status: 200, cuerpo: structuredClone(proveedoresFel) })),
+
+        'GET /api/v1/dte/:id/intentos': conPermiso('fel.ver', (solicitud) => {
+            const id = idDe(solicitud)
+            if (!bd.fel.dte.some(d => d.id === id)) {
+                return noEncontrado('el DTE')
+            }
+            return { status: 200, cuerpo: bd.fel.intentos.filter(i => i.dte_id === id).sort((a, b) => a.id - b.id).map(i => structuredClone(i)) }
+        }),
+
         'GET /api/v1/fel/configuracion': conPermiso('fel.ver', (solicitud) => {
             const empresa = empresaDe(solicitud)
             return typeof empresa === 'number' ? { status: 200, cuerpo: configuracionFel(empresa) } : empresa
@@ -471,11 +495,13 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
         ])),
 
         'GET /api/v1/dte': conPermiso('fel.ver', (solicitud) => {
-            const estado = solicitud.query.get('estado')
+            const estados = solicitud.query.getAll('estado').flatMap(e => e.split(',')).filter(Boolean)
             const tipo = solicitud.query.get('documento_tipo')
             const documento = numeroQuery(solicitud, 'documento_id')
+            const desde = solicitud.query.get('desde') ?? ''
+            const hasta = solicitud.query.get('hasta') ?? ''
             const errores: Errores = []
-            if (estado && !(ESTADOS_DTE as readonly string[]).includes(estado)) {
+            if (estados.some(e => !(ESTADOS_DTE as readonly string[]).includes(e))) {
                 errores.push({ field: 'estado', message: 'El valor de estado no es válido', rule: 'enum' })
             }
             if (tipo && !(DOCUMENTOS as readonly string[]).includes(tipo)) {
@@ -487,7 +513,9 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
             const empresas = empresasDeLista(solicitud)
             const filas = bd.fel.dte
                 .filter(d => empresas === null || empresas.includes(d.empresa_id))
-                .filter(d => !estado || d.estado === estado)
+                .filter(d => !estados.length || estados.includes(d.estado))
+                .filter(d => !desde || fechaGuatemala(d.fecha_emision) >= desde)
+                .filter(d => !hasta || fechaGuatemala(d.fecha_emision) <= hasta)
                 .filter(d => !tipo || d.documento_tipo === tipo)
                 .filter(d => documento === undefined || d.documento_id === documento)
                 .sort((a, b) => b.id - a.id)
@@ -651,6 +679,9 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
                 updated_at: momento,
             }
             reflejarEnFactura(nueva, null)
+            nueva.sustituye_a = original.id
+            nueva.sustituida_por = null
+            original.sustituida_por = nueva.id
             bd.facturas.push(nueva)
             bd.asientos.push(asientoFactura(siguienteId(bd.asientos), nueva))
             bd.fel.sustituciones.push({ original_id: original.id, nueva_id: nueva.id, tipo, motivo })
@@ -700,7 +731,7 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
                 bd.asientos.push(asientoReverso(siguienteId(bd.asientos), asiento, `Anulación de la nota de crédito ${nota.id} · ${motivo}`, momento, usuarioDe(solicitud)?.id ?? null))
             }
             registrarAccion(solicitud, 'facturas.anular_nota_credito', { tipo: 'nota_credito', id: nota.id }, { motivo })
-            return { status: 200, cuerpo: structuredClone(nota) }
+            return { status: 200, cuerpo: vistaNota(nota) }
         })),
 
         'GET /api/v1/libro/integridad': conPermiso('libro.ver', (solicitud) => {
@@ -745,6 +776,7 @@ export function anularConFel(factura: Factura, motivo: string, solicitud: Solici
             return
         }
         const confirmada = ahora()
+        registrarIntento(bd.fel, dte, 'anular', 'anulado', confirmada, { resultado: true })
         Object.assign(dte, { estado: 'anulado', anulado_en: confirmada, version: dte.version + 1, updated_at: confirmada })
         Object.assign(factura, { estado: 'anulada', anulada_en: confirmada, motivo_anulacion: motivo, version: factura.version + 1, updated_at: confirmada })
         reflejarEnFactura(factura, dte)

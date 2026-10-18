@@ -57,13 +57,42 @@ async function cargar() {
  * (`POST /notas-credito/:id/anular`, `facturas.anular_nota_credito`): reverso espejo y el monto
  * vuelve al saldo de la factura. La API decide (409 si la NCRE sigue en cola o ya se certificó).
  */
-const ncre = shallowRef<Dte | null>(null)
 const anularAbierto = ref(false)
-const puedeAnular = computed(() => puede('facturas.anular_nota_credito') && nota.value !== null && !nota.value.anulada_en
-    && ncre.value?.estado === 'rechazado')
+const ncreRechazada = computed(() => nota.value?.fel_estado === 'rechazado' && !nota.value.anulada_en)
+const puedeAnular = computed(() => puede('facturas.anular_nota_credito') && ncreRechazada.value)
 
-function alCambiarNcre(dte: Dte | null) {
-    ncre.value = dte
+/** La NCRE cambió de estado (reintentada, certificada…): se relee la nota. */
+function alCambiarNcre() {
+    void cargar()
+}
+
+/* PDF de la nota (`GET /documentos/nota-credito/:notaId`, el mismo del portal). */
+const generandoPdf = ref(false)
+
+async function abrirPdf() {
+    if (!nota.value || generandoPdf.value) {
+        return
+    }
+    const ventana = window.open('', '_blank')
+    generandoPdf.value = true
+    const resultado = await useDocumentos().notaCredito(nota.value.id)
+    generandoPdf.value = false
+    if (!resultado.ok) {
+        ventana?.close()
+        toast.add({ title: 'No se pudo generar el PDF', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    const url = URL.createObjectURL(resultado.data)
+    if (ventana) {
+        ventana.location.href = url
+    }
+    else {
+        const enlace = document.createElement('a')
+        enlace.href = url
+        enlace.download = `nota-credito-${nota.value.id}.pdf`
+        enlace.click()
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 function anular(motivo: string, clave: string) {
@@ -153,19 +182,30 @@ onMounted(cargar)
                         </ULink>
                     </p>
                 </div>
-                <UButton
-                    v-if="puedeAnular"
-                    label="Anular nota"
-                    icon="i-lucide-ban"
-                    color="error"
-                    variant="outline"
-                    data-prueba="abrir-anular-nota"
-                    @click="anularAbierto = true"
-                />
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        :label="nota.fel_estado === 'certificado' ? 'NCRE (PDF)' : 'Nota (PDF)'"
+                        icon="i-lucide-file-down"
+                        color="neutral"
+                        variant="outline"
+                        :loading="generandoPdf"
+                        data-prueba="nota-pdf"
+                        @click="abrirPdf"
+                    />
+                    <UButton
+                        v-if="puedeAnular"
+                        label="Anular nota"
+                        icon="i-lucide-ban"
+                        color="error"
+                        variant="outline"
+                        data-prueba="abrir-anular-nota"
+                        @click="anularAbierto = true"
+                    />
+                </div>
             </div>
 
             <UAlert
-                v-if="ncre?.estado === 'rechazado' && !nota.anulada_en"
+                v-if="ncreRechazada"
                 color="error"
                 variant="subtle"
                 icon="i-lucide-octagon-x"
@@ -238,7 +278,9 @@ onMounted(cargar)
                 <DteDocumento
                     tipo="nota_credito"
                     :documento-id="nota.id"
-                    @cargado="alCambiarNcre"
+                    :dte-id="nota.dte_id ?? null"
+                    :refrescar="`${nota.fel_estado ?? ''}-${nota.anulada_en ?? ''}`"
+                    @cambiado="alCambiarNcre"
                 />
             </UPageCard>
 

@@ -87,6 +87,7 @@ export const GRUPOS_VARIABLES: Record<string, string> = {
     cliente: 'Cliente',
     servicio: 'Servicio',
     factura: 'Factura',
+    nota: 'Nota de crédito',
 }
 
 /**

@@ -11,7 +11,7 @@ import type { Problem } from '@argosisp/contracts'
 const props = withDefaults(defineProps<{
     tipo: 'factura' | 'nota_credito'
     documentoId: number
-    /** `Factura.dte_id`: el DTE vigente (o el último rechazado); sin él se busca por documento. */
+    /** `dte_id` de la factura o la nota: el DTE vigente (o el último rechazado); `null` = sin DTE; sin él se busca por documento. */
     dteId?: number | null
     /** La factura admite pedir su certificación (no anulada). */
     certificable?: boolean
@@ -54,7 +54,7 @@ async function leer(): Promise<Resultado<Dte | null>> {
     if (props.dteId) {
         return useDte().ver(props.dteId)
     }
-    if (props.dteId === null && props.tipo === 'factura') {
+    if (props.dteId === null) {
         return { ok: true, data: null }
     }
     return useDte().deDocumento(props.tipo, props.documentoId)

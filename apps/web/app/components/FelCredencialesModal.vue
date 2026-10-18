@@ -12,7 +12,8 @@ import * as z from 'zod'
 const props = defineProps<{
     empresaId: number
     ambiente: AmbienteFel
-    proveedor: ProveedorFel
+    /** El certificador del catálogo (`GET /fel/proveedores`). */
+    proveedor: ProveedorFelCatalogo
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -21,9 +22,12 @@ const emit = defineEmits<{
     hecho: [credenciales: CredencialesFel]
 }>()
 
-const campos = computed(() => PROVEEDORES_FEL[props.proveedor].campos)
+const campos = computed(() => [
+    ...props.proveedor.campos_obligatorios.map(clave => ({ clave, obligatorio: true })),
+    ...props.proveedor.campos_opcionales.map(clave => ({ clave, obligatorio: false })),
+].map(campo => ({ ...campo, etiqueta: etiquetaCampo(campo.clave), secreto: campoSecreto(props.proveedor, campo.clave) })))
 
-/** Espejo de `credencialesFelValidator` y de los obligatorios del proveedor (A3): texto de hasta 500. */
+/** Espejo de `credencialesFelValidator` con los campos del catálogo (A3): texto de hasta 500. */
 const esquema = computed(() => z.object(Object.fromEntries(campos.value.map(campo => [
     campo.clave,
     campo.obligatorio
@@ -50,7 +54,10 @@ async function enviar(evento: FormSubmitEvent<Record<string, string>>) {
     const credenciales = Object.fromEntries(Object.entries(evento.data).filter(([, valor]) => typeof valor === 'string' && valor.trim() !== ''))
     enviando.value = true
     problema.value = null
-    const resultado = await useFel().guardarCredenciales(props.ambiente, { empresa_id: props.empresaId, proveedor: props.proveedor, credenciales }, clave)
+    if (!esProveedorFel(props.proveedor.codigo)) {
+        return
+    }
+    const resultado = await useFel().guardarCredenciales(props.ambiente, { empresa_id: props.empresaId, proveedor: props.proveedor.codigo, credenciales }, clave)
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
@@ -71,7 +78,7 @@ async function enviar(evento: FormSubmitEvent<Record<string, string>>) {
     <UModal
         v-model:open="abierto"
         :title="`Credenciales de ${AMBIENTES_FEL[ambiente].toLowerCase()}`"
-        :description="PROVEEDORES_FEL[proveedor].etiqueta"
+        :description="proveedor.nombre"
         :dismissible="!enviando"
     >
         <template #body>
