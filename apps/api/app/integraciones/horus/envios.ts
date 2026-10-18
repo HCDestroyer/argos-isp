@@ -213,7 +213,13 @@ export async function entregarPendientes(
         .from('integraciones.horus_envios')
         .where('estado', 'pendiente')
         .if(opciones.soloId !== undefined, (q) => q.where('id', opciones.soloId!))
-        .if(opciones.soloId === undefined, (q) => q.where('proximo_intento_en', '<=', hasta))
+        // Con `ahora` explícito (milisegundos) se trunca la hora de la base a milisegundos para que
+        // un envío registrado en ese mismo milisegundo sí entre.
+        .if(opciones.soloId === undefined, (q) =>
+            opciones.ahora
+                ? q.whereRaw(`date_trunc('milliseconds', proximo_intento_en) <= ?`, [opciones.ahora])
+                : q.where('proximo_intento_en', '<=', hasta),
+        )
         .orderBy('proximo_intento_en')
         .orderBy('id')
         .limit(opciones.limite ?? 50)
