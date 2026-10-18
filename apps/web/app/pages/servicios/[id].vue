@@ -222,6 +222,11 @@ onMounted(cargar)
         icono="i-lucide-wifi"
     >
         <template #acciones>
+            <VerEnHorusBoton
+                v-if="servicio"
+                tipo="servicio"
+                :id-externo="servicio.id"
+            />
             <UButton
                 v-if="puedeEditar"
                 label="Editar"
@@ -574,6 +579,11 @@ onMounted(cargar)
                     </dl>
                 </UPageCard>
             </div>
+
+            <ServicioHorus
+                v-if="puede('horus.ver')"
+                :servicio-id="servicio.id"
+            />
 
             <section
                 class="flex flex-col gap-3"

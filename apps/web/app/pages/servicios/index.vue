@@ -103,6 +103,8 @@ function filtros(): FiltrosServicios {
 }
 
 const lista = usePaginacionCursor(cursor => serviciosApi.listar(filtros(), cursor))
+/** Insignia "Seguridad" de Horus por fila (solo con `horus.ver` y el conector activo). */
+const seguridad = useSeguridadServicios(lista.filas)
 
 const columnas = computed<TableColumn<Servicio>[]>(() => {
     // El plan va dentro de la celda "Servicio" para que el estado quepa a 1280 px. Los nombres
@@ -360,6 +362,23 @@ onMounted(async () => {
             />
 
             <template v-else>
+                <ProblemaAlerta
+                    v-if="seguridad.problema.value"
+                    :problema="{ ...seguridad.problema.value, title: `Seguridad de Horus: ${seguridad.problema.value.title}` }"
+                    :reintentar="seguridad.recargar"
+                    :reintentando="seguridad.cargando.value"
+                />
+                <p
+                    v-else-if="seguridad.pausa.value"
+                    class="flex items-center gap-1.5 text-sm text-muted"
+                    data-prueba="seguridad-pausa"
+                >
+                    <UIcon
+                        name="i-lucide-timer"
+                        class="size-4"
+                    />
+                    Seguridad: {{ seguridad.pausa.value }}; se muestra el último dato conocido.
+                </p>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
@@ -438,6 +457,13 @@ onMounted(async () => {
                                 :servicio="row.original"
                                 size="sm"
                                 con-motivo
+                            />
+                            <SeguridadHorusBadge
+                                v-if="seguridad.de(row.original.id)"
+                                :estado="seguridad.de(row.original.id)?.estado ?? null"
+                                :hallazgos-abiertos="seguridad.de(row.original.id)?.hallazgos"
+                                :marca="seguridad.de(row.original.id)?.marca"
+                                size="sm"
                             />
                         </div>
                     </template>

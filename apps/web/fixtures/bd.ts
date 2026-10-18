@@ -12,6 +12,8 @@ import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
 import { empresas } from './empresas/datos'
+import { horusInicial } from './horus/datos'
+import type { HorusFixtures } from './horus/datos'
 import { configuracionGlobal } from './notificaciones/datos'
 import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -109,6 +111,8 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
+    horus: HorusFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -154,6 +158,7 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        horus: horusInicial(),
     })
     sembrarNotasCredito(datos)
     return datos
