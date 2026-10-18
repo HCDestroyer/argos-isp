@@ -7,24 +7,31 @@
  * esperan Android, Apple, Windows o Firefox.
  */
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { setup, startServer } from '@nuxt/test-utils/e2e'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { setup, url, useTestContext } from '@nuxt/test-utils/e2e'
 import { SONDAS } from '../../server/utils/portalCautivo'
 import { hashScript, scriptsEnLinea } from '../../server/utils/cabecerasSeguridad'
-import { BUILD_PRUEBAS, RAIZ_PORTAL, levantarApiFalsa, pedir, type Respuesta } from './ayudas'
+import { BUILD_PRUEBAS, RAIZ_PORTAL, levantarApiFalsa, pedir, servidorCon, type Respuesta } from './ayudas'
 
 const api = await levantarApiFalsa()
 const URL_PUBLICA = 'http://portal.argosisp.example'
 
+/** Entornos del servidor de cada bloque (`servidorCon` lo reinicia sin recompilar al cambiar). */
+const CON_URL_PUBLICA = {
+    NUXT_API_BASE_INTERNAL: api.url,
+    NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA,
+    NUXT_PORTAL_HOSTS: '192.0.2.20,2001:db8:ffff::20',
+}
+
+// `server: false`: `setup()` solo compila; cada bloque levanta el servidor con `servidorCon`, que
+// reintenta con otro puerto si otro proceso lo tomó (`tests/servidor/ayudas.ts`).
 await setup({
     rootDir: RAIZ_PORTAL,
     buildDir: BUILD_PRUEBAS,
-    server: true,
+    server: false,
     build: true,
-    env: {
-        NUXT_API_BASE_INTERNAL: api.url,
-        NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA,
-        NUXT_PORTAL_HOSTS: '192.0.2.20,2001:db8:ffff::20',
-    },
+    env: CON_URL_PUBLICA,
 })
 
 afterAll(() => api.cerrar())
@@ -45,6 +52,8 @@ function esperarSinExito(respuesta: Respuesta, sonda: (typeof SONDAS)[number]): 
 }
 
 describe('sondas de portal cautivo (con URL pública)', () => {
+    beforeEach(() => servidorCon(CON_URL_PUBLICA))
+
     it.each(SONDAS.map(sonda => [sonda.sistema, sonda] as const))('%s: 302 a /corte, nunca su respuesta de éxito', async (_sistema, sonda) => {
         for (const metodo of ['GET', 'HEAD']) {
             const respuesta = await pedir(sonda.ruta, { host: sonda.host, metodo })
@@ -81,19 +90,12 @@ describe('sondas de portal cautivo (con URL pública)', () => {
 
 describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () => {
     // El contexto de `setup()` solo existe dentro de cada prueba (su beforeEach), no en beforeAll:
-    // se reinicia el servidor (sin recompilar) antes de la primera prueba del bloque.
-    let reiniciado = false
-    beforeEach(async () => {
-        if (reiniciado) return
-        await startServer({
-            env: {
-                NUXT_API_BASE_INTERNAL: api.url,
-                NUXT_PORTAL_URL_PUBLICA: '',
-                NUXT_PORTAL_HOSTS: '',
-            },
-        })
-        reiniciado = true
-    })
+    // `servidorCon` reinicia el servidor (sin recompilar) solo antes de la primera prueba del bloque.
+    beforeEach(() => servidorCon({
+        NUXT_API_BASE_INTERNAL: api.url,
+        NUXT_PORTAL_URL_PUBLICA: '',
+        NUXT_PORTAL_HOSTS: '',
+    }))
 
     it.each(SONDAS.map(sonda => [sonda.sistema, sonda] as const))('%s: 302 relativo a /corte', async (_sistema, sonda) => {
         const respuesta = await pedir(sonda.ruta, { host: sonda.host })
@@ -135,14 +137,13 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
 })
 
 describe('seguridad (semana 3, tarea 3)', () => {
-    let reiniciado = false
+    let primera = true
     beforeEach(async () => {
-        if (reiniciado) return
-        await startServer({
-            env: { NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' },
-        })
-        api.rutas.length = 0
-        reiniciado = true
+        await servidorCon({ NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' })
+        if (primera) {
+            api.rutas.length = 0
+            primera = false
+        }
     })
 
     const HOST = 'portal.argosisp.example'
@@ -200,14 +201,32 @@ describe('seguridad (semana 3, tarea 3)', () => {
     })
 })
 
-describe('proxy a la API caída (piloto, tarea 2)', () => {
-    let reiniciado = false
-    beforeEach(async () => {
-        if (reiniciado) return
-        // Puerto 9 (discard) en 127.0.0.1: conexión rechazada, como una API caída.
-        await startServer({ env: { NUXT_API_BASE_INTERNAL: 'http://127.0.0.1:9' } })
-        reiniciado = true
+describe('arranque con el puerto ocupado (carrera de puertos del CI)', () => {
+    it('si otro proceso tomó el puerto y responde HTTP, arranca en otro y responde el portal', async () => {
+        // Un intruso que responde 200 a todo en el puerto que se le dará al servidor: el caso en que
+        // `startServer` lo daría por listo aunque el nuestro murió con EADDRINUSE.
+        const intruso = createServer((_peticion, respuesta) => respuesta.end('intruso'))
+        await new Promise<void>(resolver => intruso.listen(0, '127.0.0.1', resolver))
+        const { port } = intruso.address() as AddressInfo
+        try {
+            useTestContext().options.port = port
+            // Otra configuración para que `servidorCon` lo reinicie.
+            await servidorCon({ ...CON_URL_PUBLICA, NUXT_PORTAL_HOSTS: '192.0.2.21' })
+            expect(new URL(url('/')).port).not.toBe(String(port))
+            const respuesta = await pedir('/generate_204', { host: 'connectivitycheck.gstatic.com' })
+            expect(respuesta.status).toBe(302)
+            expect(respuesta.cuerpo).not.toContain('intruso')
+        }
+        finally {
+            useTestContext().options.port = undefined
+            await new Promise<void>(resolver => intruso.close(() => resolver()))
+        }
     })
+})
+
+describe('proxy a la API caída (piloto, tarea 2)', () => {
+    // Puerto 9 (discard) en 127.0.0.1: conexión rechazada, como una API caída.
+    beforeEach(() => servidorCon({ NUXT_API_BASE_INTERNAL: 'http://127.0.0.1:9' }))
 
     it('responde 502 problem+json en español, sin URLs internas, y la página sigue cargando', async () => {
         const respuesta = await pedir('/api/v1/portal/quien-soy', { host: 'portal.argosisp.example' })
