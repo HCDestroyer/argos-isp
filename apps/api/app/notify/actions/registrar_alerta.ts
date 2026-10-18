@@ -26,11 +26,21 @@ export const EVENTOS_ALERTA = [
     'dte.rechazado',
     'fel.contingencia_cambiada',
     'nota_credito.anulada',
+    'horus.hallazgo_abierto',
+    'horus.hallazgo_resuelto',
+    'horus.router_estado_cambiado',
+    'horus.servicio_infra_cambiado',
 ] as const
 
 /** Rechazos de DTE de la misma empresa y clase dentro de esta ventana son el mismo incidente. */
 export const VENTANA_DTE_MIN = 60
 export type EventoAlerta = (typeof EVENTOS_ALERTA)[number]
+
+/** Severidades de Horus que avisan al equipo; las demás solo quedan en la línea de tiempo. */
+export const SEVERIDADES_HORUS_ALERTA = ['high', 'critical'] as const
+
+/** Estados de Horus que significan "funciona" (cierran el incidente del router o servicio). */
+export const ESTADOS_HORUS_OK = ['online', 'up', 'ok', 'healthy', 'operational', 'exporting'] as const
 
 /** Fallos de CoA del mismo router dentro de esta ventana son el mismo incidente. */
 export const VENTANA_COA_MIN = 30
@@ -81,6 +91,9 @@ function texto(valor: unknown): string {
  *
  * Los fiscales usan la configuración de canales de la empresa del evento (`empresa_id`): Telegram
  * al chat del equipo y correo a `correo.contabilidad`.
+ * | `horus.hallazgo_abierto` (severidad high o critical) | `horus-hallazgo:<id>`, hasta `horus.hallazgo_resuelto` | al abrir y al resolver; con la configuración de la empresa del servicio |
+ * | `horus.router_estado_cambiado` | `horus-router:<id>`, abierto mientras no esté `online` | al abrir y al recuperar |
+ * | `horus.servicio_infra_cambiado` | `horus-infra:<id>`, abierto mientras no esté bien | al abrir y al recuperar |
  *
  * Idempotente por `origen`: un evento entregado dos veces no suma ni avisa otra vez (devuelve los
  * envíos de su incidente que sigan `encolado`, para reencolarlos; la cola deduplica).
@@ -136,6 +149,7 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             fase: 'abierto' | 'cerrado',
             evento: string,
             alerta: Record<string, unknown>,
+            empresaId: number | null = null,
         ): Promise<ResultadoAlerta> => {
             const envio = await crearAlerta(t.trx, {
                 incidente,
@@ -143,6 +157,7 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                 evento,
                 alerta,
                 requestId: t.ctx.requestId,
+                empresaId,
             })
             return {
                 duplicado: false,
@@ -379,6 +394,76 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                     ventana_min: VENTANA_ROUTEROS_MIN,
                 })
             }
+            case 'horus.hallazgo_abierto':
+            case 'horus.hallazgo_resuelto': {
+                const hallazgo = (p.hallazgo ?? {}) as Record<string, unknown>
+                const clave = `horus-hallazgo:${texto(hallazgo.id) || texto(p.webhook_id)}`
+                if (empresaId) t.fijarEmpresa(empresaId)
+                const variables = {
+                    tipo: texto(hallazgo.tipo) || 'hallazgo',
+                    severidad: texto(hallazgo.severidad),
+                    resumen: texto(hallazgo.resumen),
+                    ip: texto(p.ip),
+                    servicio: await nombreServicio(t, p.servicio_id),
+                }
+                if (input.evento === 'horus.hallazgo_resuelto') {
+                    const incidente = await cerrarIncidente(t.trx, clave, ahora)
+                    if (!incidente) return sinAlerta(null)
+                    return avisar(
+                        incidente,
+                        'cerrado',
+                        'alerta.horus.hallazgo_resuelto',
+                        {
+                            ...variables,
+                            desde: instanteLocal(incidente.abierto_en),
+                            duracion: duracion(incidente.abierto_en, ahora.toJSDate()),
+                        },
+                        empresaId,
+                    )
+                }
+                const severidad = texto(hallazgo.severidad).toLowerCase()
+                if (!(SEVERIDADES_HORUS_ALERTA as readonly string[]).includes(severidad)) {
+                    return sinAlerta(null)
+                }
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave,
+                    tipo: 'horus_hallazgo',
+                    detalle: { servicio_id: p.servicio_id ?? null, empresa_id: empresaId, ...variables },
+                    ahora,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisar(incidente, 'abierto', 'alerta.horus.hallazgo', variables, empresaId)
+            }
+            case 'horus.router_estado_cambiado':
+            case 'horus.servicio_infra_cambiado': {
+                const esRouter = input.evento === 'horus.router_estado_cambiado'
+                const objeto = ((esRouter ? p.router : p.servicio_infra) ?? {}) as Record<string, unknown>
+                const tipo = esRouter ? 'router' : 'infra'
+                const clave = `horus-${tipo}:${texto(objeto.id) || '?'}`
+                const estado = texto(objeto.estado) || 'desconocido'
+                const variables = {
+                    nombre: texto(objeto.nombre) || texto(objeto.id) || '?',
+                    estado,
+                    motivo: texto(objeto.motivo),
+                }
+                if ((ESTADOS_HORUS_OK as readonly string[]).includes(estado.toLowerCase())) {
+                    const incidente = await cerrarIncidente(t.trx, clave, ahora)
+                    if (!incidente) return sinAlerta(null)
+                    return avisar(incidente, 'cerrado', `alerta.horus.${tipo}_recuperado`, {
+                        ...variables,
+                        desde: instanteLocal(incidente.abierto_en),
+                        duracion: duracion(incidente.abierto_en, ahora.toJSDate()),
+                    })
+                }
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave,
+                    tipo: `horus_${tipo}`,
+                    detalle: { id: objeto.id ?? null, ...variables },
+                    ahora,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisar(incidente, 'abierto', `alerta.horus.${tipo}`, variables)
+            }
             case 'caja.cerrada': {
                 const diferencia = new Decimal(texto(p.diferencia) || '0')
                 if (diferencia.isZero()) return sinAlerta(null)
@@ -453,6 +538,16 @@ async function nombreCliente(t: Transaccion, clienteId: unknown): Promise<string
         nombre: string
     } | null
     return fila ? `${fila.nombre} (#${id})` : `#${id}`
+}
+
+/** "#812 (flopez)" o "" si no hay servicio. Solo para el texto de la alerta. */
+async function nombreServicio(t: Transaccion, servicioId: unknown): Promise<string> {
+    const id = Number(servicioId)
+    if (!Number.isInteger(id) || id <= 0) return ''
+    const fila = (await t.trx.from('core.servicios').where('id', id).select('user_ppp').first()) as {
+        user_ppp: string | null
+    } | null
+    return fila?.user_ppp ? `#${id} (${fila.user_ppp})` : `#${id}`
 }
 
 /** "Torre Norte (10.0.0.1)" o, si no existe, "#<id>". Solo para el texto de la alerta. */

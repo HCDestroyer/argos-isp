@@ -276,6 +276,24 @@ test.group('FEL · decisiones sobre los hallazgos del auditor', (group) => {
             )
             assert.equal(cierre.codigo, 'ncre_sin_certificar')
             assert.include(cierre.detalle, `nota ${nota.id}: rechazado`)
+            // errors[]: field nota_id, message = estado del DTE, rule = dte_id
+            assert.deepEqual(cierre.reglas, [String(ncre!.id)])
+            const json = await new CerrarPeriodo()
+                .execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx, { trx })
+                .catch((error: { toJSON: () => { errors?: unknown[] } }) => error.toJSON())
+            assert.containSubset(json, {
+                errors: [
+                    {
+                        field: 'nota_id',
+                        message: 'rechazado',
+                        rule: String(ncre!.id),
+                        nota_id: nota.id,
+                        factura_id: f.id,
+                        dte_id: Number(ncre!.id),
+                        estado: 'rechazado',
+                    },
+                ],
+            })
         } finally {
             await trx.rollback()
         }

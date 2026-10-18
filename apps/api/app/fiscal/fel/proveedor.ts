@@ -163,9 +163,27 @@ export interface ProveedorFel {
 
 /** Campos de las credenciales de cada proveedor: cuáles son secretos y cuáles se pueden mostrar. */
 export interface CamposCredenciales {
+    /** nombre para mostrar en el panel */
+    nombre: string
     obligatorios: readonly string[]
+    /** opcionales (p. ej. correo de copia) */
+    opcionales?: readonly string[]
     /** se muestran (sin secreto): usuario, prefijo, alias */
     visibles: readonly string[]
+    /** ambientes que admite: el falso, solo `pruebas` */
+    ambientes: readonly AmbienteFel[]
+}
+
+/** Entrada del catálogo `GET /fel/proveedores`. */
+export interface ProveedorCatalogo {
+    codigo: string
+    nombre: string
+    campos_obligatorios: string[]
+    campos_opcionales: string[]
+    campos_visibles: string[]
+    ambientes: AmbienteFel[]
+    solo_pruebas: boolean
+    capacidades: { contingencia: boolean; consulta_nit: boolean; pdf: boolean }
 }
 
 const proveedores = new Map<string, { proveedor: ProveedorFel; campos: CamposCredenciales }>()
@@ -184,4 +202,22 @@ export function camposProveedor(codigo: string): CamposCredenciales | null {
 
 export function codigosProveedores(): string[] {
     return [...proveedores.keys()]
+}
+
+/** Catálogo de certificadores registrados (para el panel: no repite el validador). */
+export function catalogoProveedores(): ProveedorCatalogo[] {
+    return [...proveedores.values()].map(({ proveedor, campos }) => ({
+        codigo: proveedor.codigo,
+        nombre: campos.nombre,
+        campos_obligatorios: [...campos.obligatorios],
+        campos_opcionales: [...(campos.opcionales ?? [])],
+        campos_visibles: [...campos.visibles],
+        ambientes: [...campos.ambientes],
+        solo_pruebas: !campos.ambientes.includes('produccion'),
+        capacidades: {
+            contingencia: proveedor.capacidades.contingencia,
+            consulta_nit: proveedor.capacidades.consultaNit,
+            pdf: proveedor.capacidades.pdf,
+        },
+    }))
 }

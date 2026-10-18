@@ -434,6 +434,40 @@ export const Dte = definirEsquema(
     }),
 )
 
+export const DteIntento = definirEsquema(
+    'DteIntento',
+    objeto({
+        id,
+        dte_id: id,
+        operacion: enumerado(['certificar', 'anular', 'consultar', 'validar']),
+        enviado_en: instante,
+        resultado: {
+            ...texto,
+            description:
+                'enviando, certificado, rechazado, error_temporal, anulado… (lo que respondió el certificador)',
+        },
+        duracion_ms: entero,
+        respuesta: { ...jsonLibre, description: 'Respuesta del certificador, sin credenciales' },
+    }),
+)
+
+export const ProveedorFelCatalogo = definirEsquema(
+    'ProveedorFelCatalogo',
+    objeto({
+        codigo: { ...texto, description: 'proveedor de PUT /fel/configuracion y /fel/credenciales' },
+        nombre: texto,
+        campos_obligatorios: { ...lista(texto), description: 'Campos de credenciales que exige' },
+        campos_opcionales: lista(texto),
+        campos_visibles: {
+            ...lista(texto),
+            description: 'Campos que la API devuelve guardados (los demás son secretos y nunca salen)',
+        },
+        ambientes: lista(ambienteFel),
+        solo_pruebas: { ...booleano, description: 'No admite produccion (laboratorio)' },
+        capacidades: objeto({ contingencia: booleano, consulta_nit: booleano, pdf: booleano }),
+    }),
+)
+
 export const SolicitudCertificacion = definirEsquema(
     'SolicitudCertificacion',
     objeto({

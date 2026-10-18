@@ -76,6 +76,7 @@ Dinero: `dinero.ts` (`dec`, `redondear`, `aTexto`) sobre decimal.js; fechas cont
 - **Partida** del Libro Diario: `ledger.asientos_partidas`, correlativo por empresa y año, se asigna en `cerrarPeriodo` a los asientos del mes que no la tienen, en orden `(fecha, numero, id)`, después de la última del año. Las partidas asignadas nunca cambian. El trigger rechaza una partida de un mes abierto.
 - **Reabrir** (decisión del líder, 2026-10-17): solo si ningún mes posterior **cerrado** del mismo año tiene partidas (409 `reapertura_fuera_de_orden`: se reabre del más reciente hacia atrás). Al volver a cerrar, los asientos nuevos del mes reciben las partidas siguientes. Libros emitidos o bloqueo duro impiden reabrir (fase fiscal). **Confirmar con contador**: si las partidas de asientos agregados tras una reapertura pueden ir al final de la secuencia (con el mes posterior también reabierto, quedan después de las de ese mes).
 - `GET /libro/diario` y `GET /libro/asientos/:id` traen `diario`, `numero` y `partida` (null con el mes abierto).
+- `GET /libro/diarios` (`?empresas=todas`) y `GET /libro/diarios/:id` (`libro.ver`): cada diario con `secuencias[] { anio, ultimo }`. Solo lectura: la edición (`libro.configurar_diarios`, §11.1) no está en el catálogo de permisos todavía.
 - Inmutables: `asientos_numeros` y `asientos_partidas` (trigger y `REVOKE`); `secuencias` solo admite `UPDATE (ultimo)`; `diarios` es configuración (`version`).
 
 ## Cadena de hash e integridad (`sellos.ts`, contrato de localización fiscal §10.10)
@@ -130,6 +131,7 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | Método | Ruta                                                                  | Permiso        |
 | ------ | --------------------------------------------------------------------- | -------------- |
 | GET    | `/api/v1/libro/cuentas`                                               | `libro.ver`    |
+| GET    | `/api/v1/libro/diarios`, `/api/v1/libro/diarios/:id`                  | `libro.ver`    |
 | GET    | `/api/v1/libro/diario?desde&hasta&origen_tipo&origen_id&cursor&limit` | `libro.ver`    |
 | GET    | `/api/v1/libro/mayor?cuenta_id&cliente_id&desde&hasta&cursor&limit`   | `libro.ver`    |
 | GET    | `/api/v1/libro/bancos` (origen `banco_id` de los egresos)             | `egresos.ver`  |

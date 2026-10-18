@@ -108,6 +108,13 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** Avisos fiscales a contabilidad (valor inicial; después se edita en el panel). */
     NOTIFY_CORREO_CONTABILIDAD: Env.schema.string.optional(),
     NOTIFY_CRON_TOLERANCIA_MIN: Env.schema.number.optional(),
+    /**
+     * Conector Horus (A6): se configura desde el panel. Solo este flag de laboratorio es de
+     * entorno: permite `http://` en la URL de Horus y sus receptores (por defecto solo https).
+     */
+    HORUS_PERMITIR_HTTP: Env.schema.boolean.optional(),
+    /** URL pública de la API (sin `/api/v1`): receptor de webhooks y enlace de conexión de Horus. */
+    API_PUBLIC_URL: Env.schema.string.optional(),
     /** Bearer de GET /metrics (Prometheus). Vacío = /metrics responde 404. */
     METRICS_TOKEN: Env.schema.string.optional(),
 

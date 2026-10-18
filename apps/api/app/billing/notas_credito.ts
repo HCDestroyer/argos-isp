@@ -37,6 +37,29 @@ export interface NotaCreditoFila {
     created_at: Date
     /** la NCRE la rechazó la SAT en definitivo y la nota se anuló (fase 3); null si sigue vigente */
     anulada_en?: Date | null
+    /** su NCRE (`fiscal.dte`): la vigente o, si no hay, la última rechazada; null en una nota interna */
+    dte_id?: number | null
+    fel_estado?: string | null
+    fel_uuid?: string | null
+    fel_serie?: string | null
+    fel_numero?: string | null
+    fel_error?: string | null
+}
+
+/** La NCRE de la nota: la vigente (no rechazada) o, si no hay, la última rechazada. */
+function columnasNcre(cliente: QueryClientContract) {
+    const dte = `(select d.%s from fiscal.dte d
+        where d.documento_tipo = 'nota_credito' and d.documento_id = n.id
+        order by (d.estado = 'rechazado'), d.id desc limit 1)`
+    const col = (campo: string, como: string) => cliente.raw(`${dte.replace('%s', campo)} as ${como}`)
+    return [
+        col('id', 'dte_id'),
+        col('estado', 'fel_estado'),
+        col('autorizacion', 'fel_uuid'),
+        col('serie', 'fel_serie'),
+        col('numero', 'fel_numero'),
+        col('ultimo_error', 'fel_error'),
+    ]
 }
 
 export function columnasNota(cliente: QueryClientContract) {
@@ -60,6 +83,7 @@ export function columnasNota(cliente: QueryClientContract) {
         cliente.raw(
             '(select x.anulado_en from billing.notas_credito_anulaciones x where x.nota_id = n.id) as anulada_en',
         ),
+        ...columnasNcre(cliente),
         'n.created_at',
     ]
 }

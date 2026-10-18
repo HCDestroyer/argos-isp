@@ -71,12 +71,19 @@ export default class Importar extends BaseCommand {
 
     @flags.string({
         description:
+            'Solo con --origen=csv: separador decimal de los montos. punto (por defecto), coma, o por archivo: facturas.csv:coma,pagos.csv:coma',
+    })
+    declare decimal?: string
+
+    @flags.string({
+        description:
             'Tablas del volcado que no se guardan en el archivo del origen, separadas por coma (p. ej. radacct,logs). Por defecto se archiva todo',
     })
     declare excluirTablas?: string
 
     async run() {
         const { esOrigen, leerOrigen, ORIGENES } = await import('#importacion/origenes/index')
+        const { parsearFormatoDecimal } = await import('#importacion/montos')
         const { reporteCsv, reporteMarkdown } = await import('#importacion/reporte_salidas')
         const { importar } = await import('#importacion/importador')
         const { formatearReporte } = await import('#importacion/reporte')
@@ -102,7 +109,7 @@ export default class Importar extends BaseCommand {
 
         let fuente
         try {
-            fuente = await leerOrigen(this.origen, ruta)
+            fuente = await leerOrigen(this.origen, ruta, { decimal: parsearFormatoDecimal(this.decimal) })
         } catch (error) {
             this.logger.error((error as Error).message)
             this.exitCode = 1

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { Decimal } from 'decimal.js'
+import { D, type Dec } from '#ledger/dinero'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { ContextoAccion } from '#shared/contexto'
@@ -326,11 +326,11 @@ class Importador {
     /** resultado de cada entidad canónica (`<entidad>:<id>`), para el archivo y el cuadre por tabla */
     readonly #resultados = new Map<string, ResultadoEntidad>()
     /** modo A: lo pendiente que entró como factura, por cliente del origen */
-    readonly #cargadoModoA = new Map<string, Decimal>()
+    readonly #cargadoModoA = new Map<string, Dec>()
     /** `servicio:periodo` ya facturados en esta corrida (la segunda entra como cargo único) */
     readonly #periodosUsados = new Set<string>()
     /** factura del origen → lo que la cubren los pagos del origen */
-    readonly #cubierto = new Map<string, Decimal>()
+    readonly #cubierto = new Map<string, Dec>()
 
     constructor(
         private readonly fuente: FuenteCanonica,
@@ -361,10 +361,7 @@ class Importador {
         }
         for (const p of fuente.pagos) {
             if (!p.factura_id) continue
-            this.#cubierto.set(
-                p.factura_id,
-                (this.#cubierto.get(p.factura_id) ?? new Decimal(0)).plus(p.monto),
-            )
+            this.#cubierto.set(p.factura_id, (this.#cubierto.get(p.factura_id) ?? new D(0)).plus(p.monto))
         }
         const zonas = new Set(fuente.clientes.map((c) => c.zona).filter(Boolean))
         this.reporte = {
@@ -1107,7 +1104,7 @@ class Importador {
         const hoy = hoyGuatemala()
         for (const f of this.fuente.facturas) {
             const modoB = this.#modoB.has(f.cliente_id)
-            const pendiente = new Decimal(f.pendiente).gt(0)
+            const pendiente = new D(f.pendiente).gt(0)
             const omitir = (motivo: string, estado: ResultadoEntidad['estado'] = 'omitido') => {
                 conteo.omitidos++
                 this.#marcar('facturas', f.id, { estado, motivo })
@@ -1155,7 +1152,7 @@ class Importador {
                     nota,
                 })
             }
-            const sinCargo = new Decimal(total).isZero()
+            const sinCargo = new D(total).isZero()
             if (sinCargo) {
                 d.facturas_sin_cargo.push({
                     factura_origen: f.id,
@@ -1165,7 +1162,7 @@ class Importador {
             }
             // Pagada en el origen sin ningún pago que la cubra: saldada en el origen (sin asiento).
             const saldada =
-                modoB && !pendiente && !sinCargo && (this.#cubierto.get(f.id) ?? new Decimal(0)).isZero()
+                modoB && !pendiente && !sinCargo && (this.#cubierto.get(f.id) ?? new D(0)).isZero()
             if (saldada) {
                 d.facturas_saldadas_en_origen.push({
                     factura_origen: f.id,
@@ -1242,7 +1239,7 @@ class Importador {
     #sumarModoA(f: FacturaOrigen) {
         this.#cargadoModoA.set(
             f.cliente_id,
-            (this.#cargadoModoA.get(f.cliente_id) ?? new Decimal(0)).plus(f.pendiente),
+            (this.#cargadoModoA.get(f.cliente_id) ?? new D(0)).plus(f.pendiente),
         )
     }
 
@@ -1548,7 +1545,7 @@ class Importador {
             }
             const cargado = this.#modoB.has(clienteOrigen)
                 ? await this.#saldoArgos(clienteId)
-                : (this.#cargadoModoA.get(clienteOrigen) ?? new Decimal(0))
+                : (this.#cargadoModoA.get(clienteOrigen) ?? new D(0))
             const monto = origen.minus(cargado)
             if (monto.isZero()) continue
             conteo.origen++
@@ -1574,7 +1571,7 @@ class Importador {
     }
 
     /** Saldo del cliente en ArgosIsp dentro de la corrida: CxC − anticipos. */
-    async #saldoArgos(clienteId: number): Promise<Decimal> {
+    async #saldoArgos(clienteId: number): Promise<Dec> {
         const cxc = await saldoCliente(clienteId, this.trx)
         return cxc.minus(await saldoAnticipos(this.trx, clienteId))
     }
@@ -1583,16 +1580,16 @@ class Importador {
      * cliente_origen → saldo en el origen (`saldos` o suma de facturas pendientes). Los clientes
      * en modo B entran aunque no deban nada (0): sus pagos mueven el libro y hay que comprobarlo.
      */
-    #saldosOrigen(): Map<string, Decimal> {
-        const saldos = new Map<string, Decimal>()
+    #saldosOrigen(): Map<string, Dec> {
+        const saldos = new Map<string, Dec>()
         for (const c of this.#modoB) {
-            if (this.#clientes.has(c)) saldos.set(c, new Decimal(0))
+            if (this.#clientes.has(c)) saldos.set(c, new D(0))
         }
         for (const f of this.fuente.facturas) {
-            if (new Decimal(f.pendiente).lte(0)) continue
-            saldos.set(f.cliente_id, (saldos.get(f.cliente_id) ?? new Decimal(0)).plus(f.pendiente))
+            if (new D(f.pendiente).lte(0)) continue
+            saldos.set(f.cliente_id, (saldos.get(f.cliente_id) ?? new D(0)).plus(f.pendiente))
         }
-        for (const fila of this.fuente.saldos) saldos.set(fila.cliente_id, new Decimal(fila.saldo))
+        for (const fila of this.fuente.saldos) saldos.set(fila.cliente_id, new D(fila.saldo))
         return saldos
     }
 
@@ -1603,15 +1600,15 @@ class Importador {
      */
     async cuadrarDinero() {
         const origen = {
-            facturado: new Decimal(0),
-            cobrado: new Decimal(0),
-            pendiente: new Decimal(0),
-            pagos: new Decimal(0),
+            facturado: new D(0),
+            cobrado: new D(0),
+            pendiente: new D(0),
+            pagos: new D(0),
         }
         for (const f of this.fuente.facturas) {
             origen.facturado = origen.facturado.plus(f.total)
             origen.pendiente = origen.pendiente.plus(f.pendiente)
-            origen.cobrado = origen.cobrado.plus(new Decimal(f.total).minus(f.pendiente))
+            origen.cobrado = origen.cobrado.plus(new D(f.total).minus(f.pendiente))
         }
         for (const p of this.fuente.pagos) origen.pagos = origen.pagos.plus(p.monto)
 
@@ -1629,8 +1626,8 @@ class Importador {
                 )
                 .first()) as { total: string; pagado: string }
             facturas = {
-                total: new Decimal(facturas.total).plus(parte.total).toString(),
-                pagado: new Decimal(facturas.pagado).plus(parte.pagado).toString(),
+                total: new D(facturas.total).plus(parte.total).toString(),
+                pagado: new D(facturas.pagado).plus(parte.pagado).toString(),
             }
         }
         const pagos = (await this.trx
@@ -1648,12 +1645,12 @@ class Importador {
             .first()) as { monto: string }
 
         const argos = {
-            facturado: new Decimal(facturas.total),
-            cobrado: new Decimal(facturas.pagado),
-            pendiente: new Decimal(facturas.total).minus(facturas.pagado),
-            pagos: new Decimal(pagos.monto),
+            facturado: new D(facturas.total),
+            cobrado: new D(facturas.pagado),
+            pendiente: new D(facturas.total).minus(facturas.pagado),
+            pagos: new D(pagos.monto),
         }
-        const texto = (m: Record<'facturado' | 'cobrado' | 'pendiente' | 'pagos', Decimal>) => ({
+        const texto = (m: Record<'facturado' | 'cobrado' | 'pendiente' | 'pagos', Dec>) => ({
             facturado: m.facturado.toFixed(2),
             cobrado: m.cobrado.toFixed(2),
             pendiente: m.pendiente.toFixed(2),
@@ -1663,31 +1660,31 @@ class Importador {
         const aSaldo = d.facturas_a_saldo.reduce((s, x) => {
             const f = this.fuente.facturas.find((y) => y.id === x.factura_origen)
             return s.plus(f ? (this.#modoB.has(f.cliente_id) ? f.total : f.pendiente) : 0)
-        }, new Decimal(0))
+        }, new D(0))
         const explicacion: string[] = []
         if (!aSaldo.isZero()) {
             explicacion.push(
                 `Q ${aSaldo.toFixed(2)} de ${d.facturas_a_saldo.length} facturas no entraron como factura: van en el saldo inicial`,
             )
         }
-        const saldadas = d.facturas_saldadas_en_origen.reduce((x, y) => x.plus(y.total), new Decimal(0))
+        const saldadas = d.facturas_saldadas_en_origen.reduce((x, y) => x.plus(y.total), new D(0))
         if (!saldadas.isZero()) {
             explicacion.push(
                 `Q ${saldadas.toFixed(2)} de ${d.facturas_saldadas_en_origen.length} facturas saldadas en el origen sin pago: cuentan como cobradas, no están en pagos`,
             )
         }
-        const noImportados = d.pagos_no_importados.reduce((s, x) => s.plus(x.monto), new Decimal(0))
+        const noImportados = d.pagos_no_importados.reduce((s, x) => s.plus(x.monto), new D(0))
         if (!noImportados.isZero()) {
             explicacion.push(
                 `Q ${noImportados.toFixed(2)} en pagos del origen que no se importaron (ver pagos)`,
             )
         }
         explicacion.push(
-            `Saldos iniciales: Q ${new Decimal(saldos.monto).toFixed(2)} (cubren la diferencia por cliente)`,
+            `Saldos iniciales: Q ${new D(saldos.monto).toFixed(2)} (cubren la diferencia por cliente)`,
         )
         this.reporte.dinero = {
             origen: texto(origen),
-            argosisp: { ...texto(argos), saldos_iniciales: new Decimal(saldos.monto).toFixed(2) },
+            argosisp: { ...texto(argos), saldos_iniciales: new D(saldos.monto).toFixed(2) },
             diferencia: texto({
                 facturado: argos.facturado.minus(origen.facturado),
                 cobrado: argos.cobrado.minus(origen.cobrado),
@@ -1700,12 +1697,12 @@ class Importador {
 
     /** Compara, cliente por cliente, el saldo del origen con CxC − anticipos en ArgosIsp. */
     async compararSaldos() {
-        let sumaOrigen = new Decimal(0)
-        let sumaImportada = new Decimal(0)
+        let sumaOrigen = new D(0)
+        let sumaImportada = new D(0)
         const saldos = this.#saldosOrigen()
         for (const [clienteOrigen, origen] of saldos) {
             const clienteId = this.#clientes.get(clienteOrigen)
-            let importado = new Decimal(0)
+            let importado = new D(0)
             if (clienteId) {
                 const cxc = await saldoCliente(clienteId, this.trx)
                 importado = cxc.minus(await saldoAnticipos(this.trx, clienteId))
@@ -1815,21 +1812,21 @@ class Importador {
         }
 
         // Suma de saldos por empresa: los mismos clientes que compararSaldos.
-        const saldos = new Map<number, Decimal>()
+        const saldos = new Map<number, Dec>()
         for (const clienteOrigen of this.#saldosOrigen().keys()) {
             const clienteId = this.#clientes.get(clienteOrigen)
             if (!clienteId) continue
             const cxc = await saldoClientePorEmpresa(clienteId, this.trx)
             const empresas = new Set<number>([...filas.keys(), ...cxc.keys()])
             for (const empresaId of empresas) {
-                const saldo = (cxc.get(empresaId) ?? new Decimal(0)).minus(
+                const saldo = (cxc.get(empresaId) ?? new D(0)).minus(
                     await saldoAnticipos(this.trx, clienteId, empresaId),
                 )
                 if (saldo.isZero()) continue
-                saldos.set(empresaId, (saldos.get(empresaId) ?? new Decimal(0)).plus(saldo))
+                saldos.set(empresaId, (saldos.get(empresaId) ?? new D(0)).plus(saldo))
             }
         }
-        let suma = new Decimal(0)
+        let suma = new D(0)
         for (const [empresaId, saldo] of saldos) {
             fila(empresaId).saldo = saldo.toFixed(2)
             suma = suma.plus(saldo)

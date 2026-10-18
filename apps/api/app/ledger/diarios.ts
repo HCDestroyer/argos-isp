@@ -1,5 +1,6 @@
+import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { ReglaNegocio } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 
 /**
  * Diarios y numeración guardada del libro (contrato de localización fiscal §10.7).
@@ -38,6 +39,81 @@ export const DIARIOS_BASE: Record<string, { nombre: string; tipo: TipoDiario }> 
     IMP: { nombre: 'Impuestos', tipo: 'impuestos' },
     CIE: { nombre: 'Cierre', tipo: 'cierre' },
     VAR: { nombre: 'Varios', tipo: 'varios' },
+}
+
+/*
+|--------------------------------------------------------------------------
+| Lectura (GET /libro/diarios)
+|--------------------------------------------------------------------------
+*/
+
+export interface DiarioVista {
+    id: number
+    empresa_id: number
+    codigo: string
+    nombre: string
+    tipo: TipoDiario
+    cuenta_por_defecto: number | null
+    cuenta_por_defecto_codigo: string | null
+    caja_id: number | null
+    cuenta_bancaria_id: number | null
+    activo: boolean
+    /** numeración guardada por año: el último número asignado (el siguiente es `ultimo + 1`) */
+    secuencias: Array<{ anio: number; ultimo: number }>
+    version: number
+    created_at: Date
+    updated_at: Date
+}
+
+async function vistasDiarios(filtro: { empresas?: number[] | null; id?: number }): Promise<DiarioVista[]> {
+    const filas = (await db
+        .from('ledger.diarios as d')
+        .leftJoin('ledger.cuentas as c', 'c.id', 'd.cuenta_por_defecto')
+        .if(filtro.empresas !== undefined && filtro.empresas !== null, (q) =>
+            q.whereIn('d.empresa_id', filtro.empresas!),
+        )
+        .if(filtro.id !== undefined, (q) => q.where('d.id', filtro.id!))
+        .select(
+            'd.id',
+            'd.empresa_id',
+            'd.codigo',
+            'd.nombre',
+            'd.tipo',
+            'd.cuenta_por_defecto',
+            'c.codigo as cuenta_por_defecto_codigo',
+            'd.caja_id',
+            'd.cuenta_bancaria_id',
+            'd.activo',
+            'd.version',
+            'd.created_at',
+            'd.updated_at',
+            db.raw(
+                `coalesce((select json_agg(json_build_object('anio', s.anio, 'ultimo', s.ultimo) order by s.anio)
+                             from ledger.secuencias s where s.diario_id = d.id), '[]'::json) as secuencias`,
+            ),
+        )
+        .orderBy('d.empresa_id')
+        .orderBy('d.codigo')) as DiarioVista[]
+    const n = (v: number | null) => (v === null ? null : Number(v))
+    return filas.map((f) => ({
+        ...f,
+        id: Number(f.id),
+        empresa_id: Number(f.empresa_id),
+        cuenta_por_defecto: n(f.cuenta_por_defecto),
+        caja_id: n(f.caja_id),
+        cuenta_bancaria_id: n(f.cuenta_bancaria_id),
+    }))
+}
+
+/** Diarios de las empresas (null = todas) con su numeración por año. */
+export function listarDiarios(empresas: number[] | null): Promise<DiarioVista[]> {
+    return vistasDiarios({ empresas })
+}
+
+export async function verDiario(id: number): Promise<DiarioVista> {
+    const [diario] = await vistasDiarios({ id })
+    if (!diario) throw new NoEncontrado(`El diario ${id} no existe`)
+    return diario
 }
 
 /** Orígenes de venta: siempre al diario de ventas, aunque toquen otra cuenta. */

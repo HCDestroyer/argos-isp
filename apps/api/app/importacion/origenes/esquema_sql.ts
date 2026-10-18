@@ -1,4 +1,5 @@
-import { Decimal } from 'decimal.js'
+import type { Dec } from '#ledger/dinero'
+import { leerMonto } from '#importacion/montos'
 import type { FilaCsv } from '#importacion/csv'
 import type { FilaSql, TablaSql } from '#importacion/mysql_dump'
 import {
@@ -120,13 +121,21 @@ export function normalizarId(v: string | null | undefined): string {
     return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, '') : t
 }
 
-/** Monto del origen para sumar (lo inválido cuenta 0; la validación de la fila lo reporta). */
-export function montoSeguro(v: string | null | undefined): Decimal {
-    try {
-        const d = new Decimal(texto(v).replace(/,/g, '') || '0')
-        return d.isFinite() ? d : new Decimal(0)
-    } catch {
-        return new Decimal(0)
+/**
+ * Monto de una columna `decimal` del volcado (MySQL siempre con punto decimal). Ilegible o vacío:
+ * `motivo` con la columna y el valor, para omitir la fila con `ProblemasOrigen.omitir` (o avisar,
+ * si el monto solo se usa para comparar). Nunca se convierte en 0.
+ */
+export function montoOrigen(
+    fila: FilaSql,
+    columna: string,
+): { ok: true; valor: Dec } | { ok: false; motivo: string } {
+    const crudo = fila[columna]
+    const lectura = leerMonto(crudo, 'punto')
+    if (lectura.ok) return lectura
+    return {
+        ok: false,
+        motivo: `${columna} ${crudo === null || crudo === undefined ? 'NULL' : `"${texto(crudo)}"`} ${lectura.motivo}`,
     }
 }
 

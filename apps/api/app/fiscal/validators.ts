@@ -203,17 +203,30 @@ export const listarDteValidator = vine.compile(
         empresas: empresasConsulta(),
         ...reglasPaginacion,
         estado: vine
-            .enum([
-                'pendiente',
-                'enviando',
-                'certificado',
-                'error_temporal',
-                'rechazado',
-                'contingencia',
-                'anulacion_pendiente',
-                'anulado',
-            ] as const)
-            .optional(),
+            .array(
+                vine.enum([
+                    'pendiente',
+                    'enviando',
+                    'certificado',
+                    'error_temporal',
+                    'rechazado',
+                    'contingencia',
+                    'anulacion_pendiente',
+                    'anulado',
+                ] as const),
+            )
+            // `?estado=x` (uno) o `?estado=x&estado=y` / `?estado[]=x&estado[]=y` (varios)
+            .parse((valor) =>
+                valor === undefined || valor === null || Array.isArray(valor) ? valor : [valor],
+            )
+            .optional()
+            .meta({ description: 'Uno o varios estados (se repite el parámetro): cualquiera de ellos' }),
+        desde: fechaIso()
+            .optional()
+            .meta({ description: 'Fecha de emisión desde (inclusive, en Guatemala)' }),
+        hasta: fechaIso()
+            .optional()
+            .meta({ description: 'Fecha de emisión hasta (inclusive, en Guatemala)' }),
         documento_tipo: vine.enum(['factura', 'nota_credito', 'nota_debito'] as const).optional(),
         documento_id: idEntidad().optional(),
     }),
