@@ -3,9 +3,10 @@
  * Notas de crédito del cliente (estado de cuenta): lo que se le acreditó a cada factura.
  *
  * - Con FEL, la nota certificada es una NCRE con su autorización y su XML.
+ * - El PDF (marca de la empresa, datos de la NCRE y la factura de origen) lo genera la API.
  * - Una nota anulada (la SAT rechazó su NCRE) se muestra como tal: su monto volvió al saldo.
  */
-const { items, cargando, cargado, problema, hayMas, recargar, cargarMas, urlXml } = useNotasCredito()
+const { items, cargando, cargado, problema, hayMas, recargar, cargarMas, urlXml, urlPdf } = useNotasCredito()
 
 onMounted(recargar)
 </script>
@@ -75,19 +76,31 @@ onMounted(recargar)
                 </p>
             </div>
 
-            <UButton
-                v-if="nota.dte?.xml_disponible"
-                data-testid="descargar-xml"
-                label="Descargar XML"
-                icon="i-lucide-file-code"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                :to="urlXml(nota.id)"
-                external
-                download
-                class="mt-3"
-            />
+            <div class="mt-3 flex flex-wrap gap-2">
+                <UButton
+                    data-testid="descargar-pdf"
+                    label="Ver nota de crédito (PDF)"
+                    icon="i-lucide-file-down"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    :to="urlPdf(nota.id)"
+                    target="_blank"
+                    external
+                />
+                <UButton
+                    v-if="nota.dte?.xml_disponible"
+                    data-testid="descargar-xml"
+                    label="Descargar XML"
+                    icon="i-lucide-file-code"
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    :to="urlXml(nota.id)"
+                    external
+                    download
+                />
+            </div>
         </UCard>
     </CuentaEstadoLista>
 </template>

@@ -13,6 +13,7 @@ import {
     EmpresaPublica,
     EstadoPortal,
     PlantillaDocumento,
+    PlantillaDocumentoFabrica,
     PortalContacto,
     PortalCondicionesPromesa,
     PortalBanco,
@@ -75,12 +76,17 @@ import { resolverServicio } from '#portal/consultas'
 import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
 import {
+    PLANTILLAS_BASE,
+    VARIABLES_DOCUMENTO,
     avisoCobroPdf,
+    esTipoDocumento,
+    notaCreditoPdf,
     pdfDesdePlantilla,
     plantillaVigente,
+    vistaEjemplo,
     type DocumentoPdf,
+    type TipoDocumento,
 } from '#portal/documentos/render'
-import { VARIABLES_AVISO_COBRO, vistaDeEjemplo } from '#portal/documentos/variables'
 import {
     condicionesPromesa,
     errorParaCliente,
@@ -128,10 +134,10 @@ function enviarXml(ctx: HttpContext, documento: XmlDte): void {
     ctx.response.send(documento.xml)
 }
 
-const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro'] } }
+const PARAMETRO_TIPO = { tipo: { type: 'string', enum: ['aviso_cobro', 'nota_credito'] } }
 
-function tipoDocumento(valor: unknown): 'aviso_cobro' {
-    if (valor !== 'aviso_cobro') throw new NoEncontrado(`No hay plantilla de documento "${String(valor)}"`)
+function tipoDocumento(valor: unknown): TipoDocumento {
+    if (!esTipoDocumento(valor)) throw new NoEncontrado(`No hay plantilla de documento "${String(valor)}"`)
     return valor
 }
 
@@ -551,6 +557,50 @@ const documentos: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/portal/notas-credito/:id/pdf',
+        operacion: 'portalNotaCreditoPdf',
+        resumen: 'PDF de una nota de crédito (NCRE) del cliente de la sesión',
+        descripcion:
+            `${SOBRE_LA_SESION} Representación gráfica con la plantilla \`nota_credito\` y la marca de la empresa ` +
+            'de su factura: datos de la NCRE (autorización, serie, número, fecha) y la factura de origen; ' +
+            '«ANULADA» si se anuló. Una nota de otro cliente responde 404. Responde application/pdf.',
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
+        handler: async (ctx, { params }) => {
+            const clienteId = await clienteDeLaSesionLimitada(ctx, 'nota-pdf')
+            enviarPdf(ctx, await notaCreditoPdf(Number(params.id), { clienteId }))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/documentos/nota-credito/:notaId',
+        operacion: 'documentosNotaCreditoPdf',
+        resumen: 'PDF de una nota de crédito (panel)',
+        descripcion:
+            'Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. ' +
+            'Responde application/pdf.',
+        etiqueta: 'documentos',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.notaId)
+            const nota = (await db
+                .from('billing.notas_credito')
+                .where('id', id)
+                .select('factura_id')
+                .first()) as {
+                factura_id: number
+            } | null
+            if (!nota) throw new NoEncontrado(`La nota de crédito ${id} no existe`)
+            exigirAlcance(ctx.alcance, await dimensionesDeFactura(Number(nota.factura_id)))
+            enviarPdf(ctx, await notaCreditoPdf(id))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/documentos/aviso-cobro/:facturaId',
         operacion: 'documentosAvisoCobroPdf',
         resumen: 'PDF del aviso de cobro de una factura (panel)',
@@ -574,10 +624,28 @@ const documentos: Ruta[] = [
         permiso: 'documentos.ver',
         parametros: PARAMETRO_TIPO,
         respuesta: { status: 200, descripcion: 'Plantilla', esquema: PlantillaDocumento },
-        handler: async (_ctx, { params }) => ({
-            ...(await plantillaVigente(tipoDocumento(params.tipo))),
-            variables: VARIABLES_AVISO_COBRO,
-        }),
+        handler: async (_ctx, { params }) => {
+            const tipo = tipoDocumento(params.tipo)
+            return { ...(await plantillaVigente(tipo)), variables: VARIABLES_DOCUMENTO[tipo] }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/documentos/plantillas/:tipo/fabrica',
+        operacion: 'documentosPlantillaFabrica',
+        resumen: 'Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)',
+        descripcion:
+            'La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado ' +
+            'otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` ' +
+            'con la `version` vigente.',
+        etiqueta: 'documentos',
+        permiso: 'documentos.ver',
+        parametros: PARAMETRO_TIPO,
+        respuesta: { status: 200, descripcion: 'Plantilla de fábrica', esquema: PlantillaDocumentoFabrica },
+        handler: async (_ctx, { params }) => {
+            const tipo = tipoDocumento(params.tipo)
+            return { tipo, html: PLANTILLAS_BASE[tipo], variables: VARIABLES_DOCUMENTO[tipo] }
+        },
     }),
     definirRuta({
         metodo: 'put',
@@ -594,11 +662,12 @@ const documentos: Ruta[] = [
         cuerpo: editarPlantillaDocumentoValidator,
         respuesta: { status: 200, descripcion: 'Plantilla guardada', esquema: PlantillaDocumento },
         handler: async (ctx, { cuerpo, params }) => {
+            const tipo = tipoDocumento(params.tipo)
             const plantilla = await new EditarPlantillaDocumento().execute(
-                { tipo: tipoDocumento(params.tipo), html: cuerpo.html, version: cuerpo.version },
+                { tipo, html: cuerpo.html, version: cuerpo.version },
                 ctx.contextoAccion(),
             )
-            return { ...plantilla, variables: VARIABLES_AVISO_COBRO }
+            return { ...plantilla, variables: VARIABLES_DOCUMENTO[tipo] }
         },
     }),
     definirRuta({
@@ -613,8 +682,7 @@ const documentos: Ruta[] = [
         cuerpo: vistaPreviaDocumentoValidator,
         respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf' },
         handler: async (ctx, { cuerpo, params }) => {
-            tipoDocumento(params.tipo)
-            const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaDeEjemplo())
+            const pdf = await pdfDesdePlantilla(cuerpo.html, await vistaEjemplo(tipoDocumento(params.tipo)))
             enviarPdf(ctx, { pdf, nombreArchivo: 'vista-previa.pdf' })
         },
     }),

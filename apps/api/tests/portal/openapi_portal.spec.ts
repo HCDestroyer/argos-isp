@@ -23,6 +23,7 @@ const SOLO_SESION = [
     'portalFacturaXml',
     'portalNotasCredito',
     'portalNotaCreditoXml',
+    'portalNotaCreditoPdf',
     'portalComprobantes',
 ]
 

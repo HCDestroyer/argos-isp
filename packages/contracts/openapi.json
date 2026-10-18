@@ -4050,6 +4050,80 @@
         "x-implementado": true
       }
     },
+    "/api/v1/documentos/nota-credito/{notaId}": {
+      "get": {
+        "operationId": "documentosNotaCreditoPdf",
+        "summary": "PDF de una nota de crédito (panel)",
+        "description": "Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Responde application/pdf.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "notaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/plantillas/{tipo}": {
       "get": {
         "operationId": "documentosPlantillaVer",
@@ -4073,7 +4147,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -4146,7 +4221,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -4244,6 +4320,82 @@
         "x-implementado": true
       }
     },
+    "/api/v1/documentos/plantillas/{tipo}/fabrica": {
+      "get": {
+        "operationId": "documentosPlantillaFabrica",
+        "summary": "Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)",
+        "description": "La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` con la `version` vigente.",
+        "tags": [
+          "documentos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "aviso_cobro",
+                "nota_credito"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plantilla de fábrica",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaDocumentoFabrica"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso documentos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "documentos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/documentos/plantillas/{tipo}/vista-previa": {
       "post": {
         "operationId": "documentosPlantillaVistaPrevia",
@@ -4268,7 +4420,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "aviso_cobro"
+                "aviso_cobro",
+                "nota_credito"
               ]
             }
           }
@@ -19191,6 +19344,76 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/notas-credito/{id}/pdf": {
+      "get": {
+        "operationId": "portalNotaCreditoPdf",
+        "summary": "PDF de una nota de crédito (NCRE) del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Representación gráfica con la plantilla `nota_credito` y la marca de la empresa de su factura: datos de la NCRE (autorización, serie, número, fecha) y la factura de origen; «ANULADA» si se anuló. Una nota de otro cliente responde 404. Responde application/pdf.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35919,8 +36142,10 @@
           "tipo": {
             "type": "string",
             "enum": [
-              "aviso_cobro"
-            ]
+              "aviso_cobro",
+              "nota_credito"
+            ],
+            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
           },
           "html": {
             "type": "string",
@@ -35930,6 +36155,34 @@
             "type": "integer",
             "minimum": 0,
             "description": "0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableDocumento"
+            }
+          }
+        }
+      },
+      "PlantillaDocumentoFabrica": {
+        "type": "object",
+        "required": [
+          "tipo",
+          "html",
+          "variables"
+        ],
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "aviso_cobro",
+              "nota_credito"
+            ],
+            "description": "aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)"
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML de fábrica de la versión instalada (con el bloque FEL)"
           },
           "variables": {
             "type": "array",

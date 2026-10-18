@@ -142,12 +142,13 @@ largas siguen en otra página.
 Contrato: `.claude/integration/contratos/localizacion-fiscal.md` §8 y §14 (fila de A5). Código:
 `fel.ts` (solo lectura de `fiscal.dte`, `billing.notas_credito` y `billing.sustituciones` de A3).
 
-| Endpoint                                   | Qué hace                                                                                             |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/portal/facturas`              | Cada factura con `documento`, `dte`, `acreditado`, `sustituida`, `sustituida_por`, `sustituye_a`     |
-| `GET /api/v1/portal/facturas/:id/xml`      | XML certificado (descarga). 404 si es ajena, `por_certificar` o sin DTE certificado                  |
-| `GET /api/v1/portal/notas-credito`         | Notas de crédito del cliente: internas (`nota_credito`) o certificadas (`ncre`), vigentes o anuladas |
-| `GET /api/v1/portal/notas-credito/:id/xml` | XML de la NCRE certificada (404 si es ajena o no está certificada)                                   |
+| Endpoint                                   | Qué hace                                                                                                                                           |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/facturas`              | Cada factura con `documento`, `dte`, `acreditado`, `sustituida`, `sustituida_por`, `sustituye_a`                                                   |
+| `GET /api/v1/portal/facturas/:id/xml`      | XML certificado (descarga). 404 si es ajena, `por_certificar` o sin DTE certificado                                                                |
+| `GET /api/v1/portal/notas-credito`         | Notas de crédito del cliente: internas (`nota_credito`) o certificadas (`ncre`), vigentes o anuladas                                               |
+| `GET /api/v1/portal/notas-credito/:id/xml` | XML de la NCRE certificada (404 si es ajena o no está certificada)                                                                                 |
+| `GET /api/v1/portal/notas-credito/:id/pdf` | PDF de la nota (plantilla `nota_credito`, marca de la empresa de su factura, datos de la NCRE, factura de origen, «ANULADA» si aplica). Ajena: 404 |
 
 - Las facturas `por_certificar` (FEL obligatoria con `emitir`) no salen en ninguna lectura del portal
   (lista, detalle, PDF, XML ni cuenta): todavía no son deuda ni documento.
@@ -157,6 +158,15 @@ Contrato: `.claude/integration/contratos/localizacion-fiscal.md` §8 y §14 (fil
 - Sustitución: la original dice `sustituida`; el enlace a la nueva aparece cuando la nueva es visible
   (no `por_certificar`).
 - Todas las lecturas filtran por el cliente de la sesión: lo ajeno responde 404, como lo inexistente.
+- Ningún certificador devuelve PDF (`capacidades.pdf = false`): la representación gráfica de la
+  factura y de la NCRE la genera el portal con sus plantillas (decisión del líder).
+
+Plantillas (editor de A4): `aviso_cobro` y `nota_credito` (`documentos/plantilla_base.ts`,
+variables en `documentos/variables.ts` y `documentos/variables_nota.ts`). `GET/PUT
+/documentos/plantillas/:tipo` y `POST …/vista-previa` aceptan los dos tipos;
+`GET /documentos/plantillas/:tipo/fabrica` (`documentos.ver`) devuelve la de fábrica de esta versión
+(con el bloque FEL) para restaurarla o compararla sin copiar HTML; restaurar = `PUT` con ese `html` y
+la `version` vigente. Panel: `GET /documentos/nota-credito/:notaId` (`facturas.ver`, con alcance).
 
 ### Multiempresa: la marca de la empresa de cada servicio
 

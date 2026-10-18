@@ -537,10 +537,24 @@ export const VariableDocumento = definirEsquema(
     objeto({ nombre: texto, descripcion: texto }),
 )
 
+const TipoDocumento = {
+    ...enumerado(['aviso_cobro', 'nota_credito']),
+    description: 'aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)',
+}
+
+export const PlantillaDocumentoFabrica = definirEsquema(
+    'PlantillaDocumentoFabrica',
+    objeto({
+        tipo: TipoDocumento,
+        html: { ...texto, description: 'HTML de fábrica de la versión instalada (con el bloque FEL)' },
+        variables: lista(VariableDocumento),
+    }),
+)
+
 export const PlantillaDocumento = definirEsquema(
     'PlantillaDocumento',
     objeto({
-        tipo: enumerado(['aviso_cobro']),
+        tipo: TipoDocumento,
         html: { ...texto, description: 'HTML con variables Mustache (`{{factura.total}}`)' },
         version: {
             ...entero,

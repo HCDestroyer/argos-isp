@@ -145,6 +145,7 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalFacturaXml: () => undefined,
     portalNotasCredito: () => undefined,
     portalNotaCreditoXml: () => undefined,
+    portalNotaCreditoPdf: () => undefined,
     portalPromesaCondiciones: () => undefined,
     portalSolicitarPromesa: () => ({ vence_el: dia(1), monto: '1.00' }),
     portalBancos: () => undefined,

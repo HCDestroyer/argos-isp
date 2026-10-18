@@ -579,6 +579,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documentos/nota-credito/{notaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF de una nota de crédito (panel)
+         * @description Mismo PDF que ve el cliente en el portal. Respeta el alcance del usuario sobre la factura de la nota. Responde application/pdf.
+         */
+        get: operations["documentosNotaCreditoPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documentos/plantillas/{tipo}": {
         parameters: {
             query?: never;
@@ -593,6 +613,26 @@ export interface paths {
          * @description Valida Mustache (sin `{{{ }}}`) y que genere el PDF con datos de ejemplo (422). `version` 0 edita la de fábrica. Diff en audit.cambios.
          */
         put: operations["documentosPlantillaEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documentos/plantillas/{tipo}/fabrica": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plantilla HTML de fábrica de un documento (para restaurar o comparar en el editor)
+         * @description La plantilla que trae esta versión de ArgosIsp, con el bloque FEL, aunque la empresa haya guardado otra. No guarda nada: para restaurarla se envía este `html` a `PUT /documentos/plantillas/:tipo` con la `version` vigente.
+         */
+        get: operations["documentosPlantillaFabrica"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2770,6 +2810,26 @@ export interface paths {
          * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Solo las de sus facturas visibles en el portal; una nota anulada sale como anulada.
          */
         get: operations["portalNotasCredito"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notas-credito/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF de una nota de crédito (NCRE) del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Representación gráfica con la plantilla `nota_credito` y la marca de la empresa de su factura: datos de la NCRE (autorización, serie, número, fecha) y la factura de origen; «ANULADA» si se anuló. Una nota de otro cliente responde 404. Responde application/pdf.
+         */
+        get: operations["portalNotaCreditoPdf"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5862,12 +5922,25 @@ export interface components {
             updated_at: string;
         };
         PlantillaDocumento: {
-            /** @enum {string} */
-            tipo: "aviso_cobro";
+            /**
+             * @description aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)
+             * @enum {string}
+             */
+            tipo: "aviso_cobro" | "nota_credito";
             /** @description HTML con variables Mustache (`{{factura.total}}`) */
             html: string;
             /** @description 0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar */
             version: number;
+            variables: components["schemas"]["VariableDocumento"][];
+        };
+        PlantillaDocumentoFabrica: {
+            /**
+             * @description aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)
+             * @enum {string}
+             */
+            tipo: "aviso_cobro" | "nota_credito";
+            /** @description HTML de fábrica de la versión instalada (con el bloque FEL) */
+            html: string;
             variables: components["schemas"]["VariableDocumento"][];
         };
         PlantillaFacturacion: {
@@ -9683,12 +9756,61 @@ export interface operations {
             };
         };
     };
+    documentosNotaCreditoPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notaId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     documentosPlantillaVer: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -9737,7 +9859,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -9807,12 +9929,61 @@ export interface operations {
             };
         };
     };
+    documentosPlantillaFabrica: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: "aviso_cobro" | "nota_credito";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plantilla de fábrica */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantillaDocumentoFabrica"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso documentos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     documentosPlantillaVistaPrevia: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                tipo: "aviso_cobro";
+                tipo: "aviso_cobro" | "nota_credito";
             };
             cookie?: never;
         };
@@ -18001,6 +18172,55 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalNotaCreditoPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

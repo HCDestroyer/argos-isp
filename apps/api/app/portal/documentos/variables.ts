@@ -285,7 +285,10 @@ export async function empresaDocumento(
  * Logo de la empresa del documento para `htmlAPdf` (`imagenes['empresa:logo']`), o nada si no
  * tiene o el archivo no se puede leer (el PDF sale igual, con el nombre en texto).
  */
-export async function imagenesDocumento(vista: VistaAvisoCobro): Promise<Record<string, ImagenDocumento>> {
+export async function imagenesDocumento(vista: {
+    empresa: Pick<EmpresaDocumento, 'logo'>
+    empresa_id?: number
+}): Promise<Record<string, ImagenDocumento>> {
     if (!vista.empresa.logo || vista.empresa_id === undefined) return {}
     try {
         const fila = await filaEmpresa(vista.empresa_id)

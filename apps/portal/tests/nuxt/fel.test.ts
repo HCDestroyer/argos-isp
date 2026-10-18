@@ -81,10 +81,12 @@ describe('FEL en /cuenta?seccion=facturas', () => {
         expect(ncre.text()).toContain('Aplicada')
         expect(ncre.text()).toContain('−Q 175.00')
         expect(ncre.find('[data-testid="descargar-xml"]').attributes('href')).toBe('/api/v1/portal/notas-credito/298/xml')
+        expect(ncre.find('[data-testid="descargar-pdf"]').attributes('href')).toBe('/api/v1/portal/notas-credito/298/pdf')
         const anulada = notas.find(n => n.text().includes('Nota de crédito 312'))!
         expect(anulada.text()).toContain('Anulada')
         expect(anulada.text()).toContain('volvió al saldo')
         expect(anulada.find('[data-testid="descargar-xml"]').exists()).toBe(false)
+        expect(anulada.find('[data-testid="descargar-pdf"]').attributes('href')).toBe('/api/v1/portal/notas-credito/312/pdf')
     })
 
     it('si las notas no se pueden leer: error con «Reintentar» y ningún monto', async () => {

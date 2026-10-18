@@ -32,39 +32,36 @@ export interface DtePortal {
     xml_disponible: boolean
 }
 
-/**
- * `LEFT JOIN LATERAL` con el último DTE certificado de cada fila de `billing.facturas as <alias>`
- * (para una mora, su NDEB). Expone las columnas `dte_*`.
- */
-export function joinDteFactura(alias = 'f'): string {
+function lateralDte(condicion: string, como: string): string {
+    const c = `${como}_`
     return `LEFT JOIN LATERAL (
-        SELECT d.id AS dte_id, d.tipo_dte AS dte_tipo, d.estado AS dte_estado, d.autorizacion AS dte_autorizacion,
-               d.serie AS dte_serie, d.numero AS dte_numero, d.certificado_en AS dte_certificado_en,
-               (d.xml IS NOT NULL) AS dte_xml
+        SELECT d.id AS ${c}id, d.tipo_dte AS ${c}tipo, d.estado AS ${c}estado, d.autorizacion AS ${c}autorizacion,
+               d.serie AS ${c}serie, d.numero AS ${c}numero, d.certificado_en AS ${c}certificado_en,
+               (d.xml IS NOT NULL) AS ${c}xml
           FROM fiscal.dte d
-         WHERE d.documento_id = ${alias}.id
-           AND d.documento_tipo = CASE WHEN ${alias}.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+         WHERE ${condicion}
            AND d.autorizacion IS NOT NULL
            AND d.estado IN (${LISTA_ESTADOS})
          ORDER BY d.id DESC
          LIMIT 1
-    ) dte ON true`
+    ) ${como} ON true`
+}
+
+/**
+ * `LEFT JOIN LATERAL` con el último DTE certificado de cada fila de `billing.facturas as <alias>`
+ * (para una mora, su NDEB). Se llama `<como>` y expone las columnas `<como>_*` (por defecto `dte_*`).
+ */
+export function joinDteFactura(alias = 'f', como = 'dte'): string {
+    return lateralDte(
+        `d.documento_id = ${alias}.id
+           AND d.documento_tipo = CASE WHEN ${alias}.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END`,
+        como,
+    )
 }
 
 /** Lo mismo para `billing.notas_credito as <alias>` (su NCRE). */
-export function joinDteNota(alias = 'n'): string {
-    return `LEFT JOIN LATERAL (
-        SELECT d.id AS dte_id, d.tipo_dte AS dte_tipo, d.estado AS dte_estado, d.autorizacion AS dte_autorizacion,
-               d.serie AS dte_serie, d.numero AS dte_numero, d.certificado_en AS dte_certificado_en,
-               (d.xml IS NOT NULL) AS dte_xml
-          FROM fiscal.dte d
-         WHERE d.documento_id = ${alias}.id
-           AND d.documento_tipo = 'nota_credito'
-           AND d.autorizacion IS NOT NULL
-           AND d.estado IN (${LISTA_ESTADOS})
-         ORDER BY d.id DESC
-         LIMIT 1
-    ) dte ON true`
+export function joinDteNota(alias = 'n', como = 'dte'): string {
+    return lateralDte(`d.documento_id = ${alias}.id AND d.documento_tipo = 'nota_credito'`, como)
 }
 
 export const COLUMNAS_DTE = [
@@ -143,8 +140,8 @@ type FilaNota = ColumnasDte & {
     motivo: string
     anulada: boolean
     empresa_id: number
-    factura_dte_serie: string | null
-    factura_dte_numero: string | null
+    fdte_serie: string | null
+    fdte_numero: string | null
 }
 
 /**
@@ -161,18 +158,7 @@ export async function notasCreditoPortal(
         .from('billing.notas_credito as n')
         .join('billing.facturas as f', 'f.id', 'n.factura_id')
         .joinRaw(joinDteNota('n'))
-        .joinRaw(
-            `LEFT JOIN LATERAL (
-                SELECT d.serie AS factura_dte_serie, d.numero AS factura_dte_numero
-                  FROM fiscal.dte d
-                 WHERE d.documento_id = f.id
-                   AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
-                   AND d.autorizacion IS NOT NULL
-                   AND d.estado IN (${LISTA_ESTADOS})
-                 ORDER BY d.id DESC
-                 LIMIT 1
-            ) fdte ON true`,
-        )
+        .joinRaw(joinDteFactura('f', 'fdte'))
         .where('n.cliente_id', clienteId)
         .where('f.cliente_id', clienteId)
         .whereNot('f.estado', 'por_certificar')
@@ -189,8 +175,8 @@ export async function notasCreditoPortal(
             conexion.raw(
                 'EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones x WHERE x.nota_id = n.id) AS anulada',
             ),
-            'fdte.factura_dte_serie',
-            'fdte.factura_dte_numero',
+            'fdte.fdte_serie',
+            'fdte.fdte_numero',
             ...COLUMNAS_DTE,
         )
     const pagina = await paginar<FilaNota>(consulta, opciones, { columna: 'n.id' })
@@ -207,8 +193,8 @@ export async function notasCreditoPortal(
             documento: dte ? 'ncre' : 'nota_credito',
             factura_id: facturaId,
             factura_numero: numeroDocumento(facturaId, {
-                serie: fila.factura_dte_serie,
-                numero: fila.factura_dte_numero,
+                serie: fila.fdte_serie,
+                numero: fila.fdte_numero,
             }),
             servicio_id: fila.servicio_id === null ? null : Number(fila.servicio_id),
             fecha: fila.fecha,

@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
 import { textoDePdf } from '#tests/portal/ayudas_pdf'
 import { sesionDirecta } from '#tests/portal/ayudas_portal'
@@ -20,6 +20,7 @@ import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import AnularFactura from '#billing/actions/anular_factura'
 import SustituirFactura from '#billing/actions/sustituir_factura'
 import { controlFelFalso } from '#fiscal/fel/falso'
+import { PLANTILLA_AVISO_COBRO, PLANTILLA_NOTA_CREDITO } from '#portal/documentos/plantilla_base'
 
 /**
  * FEL en el portal (contrato `localizacion-fiscal.md` §14, fila de A5), con el certificador falso:
@@ -364,5 +365,153 @@ test.group('Portal · FEL', (group) => {
             sustituida_por: { id: r2.nueva.id, numero: String(r2.nueva.id) },
             empresa: { id: e.C },
         })
+    })
+
+    test('PDF de la NCRE con la marca de la empresa y la factura de origen; anulada marcada; nunca de otro cliente', async ({
+        client,
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const marca = unico('Cable Occidente')
+        await db.from('core.empresas').where('id', e.B).update({ nombre_comercial: marca })
+        const clienteId = await crearClienteFila(datosNit())
+        const s = await servicioFel(e, 'emitir', '150.00', clienteId)
+        const f = s.facturas[0]!
+        await cola(e)
+        const [dteFactura] = await dtesDe('factura', f.id)
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '30.00', motivo: 'Descuento por falla de servicio' },
+            e.ctx,
+        )
+        await cola(e)
+        const [ncre] = await dtesDe('nota_credito', nota.id)
+        assert.equal(ncre!.estado, 'certificado')
+        const { cookie } = await sesionDirecta(clienteId)
+
+        const pdf = await estado(get(client, `/portal/notas-credito/${nota.id}/pdf`, cookie), 200)
+        assert.equal(pdf.header('content-type'), 'application/pdf')
+        assert.equal(
+            pdf.header('content-disposition'),
+            `inline; filename="ncre-${ncre!.serie}-${ncre!.numero}.pdf"`,
+        )
+        assert.equal(pdf.header('cache-control'), 'private, no-store')
+        const texto = textoDePdf(Buffer.from(pdf.body() as Buffer))
+        assert.include(texto, marca)
+        assert.include(texto, 'Nota de crédito')
+        assert.include(texto, `${ncre!.serie}-${ncre!.numero}`)
+        assert.include(texto, `Autorización ${ncre!.autorizacion}`)
+        assert.include(texto, 'Certificado el')
+        assert.include(texto, `Factura ${dteFactura!.serie}-${dteFactura!.numero}`)
+        assert.include(texto, 'Descuento por falla de servicio')
+        assert.include(texto, 'Q 30.00')
+        assert.notInclude(texto, 'ANULADA')
+
+        // otro cliente con su sesión: 404 (como una inexistente); sin sesión, 401
+        const otro = await servicioFel(e, 'emitir', '150.00', await crearClienteFila(datosNit()))
+        await cola(e)
+        const { cookie: ajena } = await sesionDirecta(otro.clienteId)
+        const respuesta = await estado(get(client, `/portal/notas-credito/${nota.id}/pdf`, ajena), 404)
+        assert.notInclude(respuesta.text(), String(ncre!.autorizacion))
+        await estado(get(client, `/portal/notas-credito/${nota.id}/pdf`), 401)
+        await estado(get(client, '/portal/notas-credito/999999999/pdf', cookie), 404)
+
+        // anulada (la SAT rechazó su NCRE): sale con la marca ANULADA y sin datos FEL
+        const rechazada = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '10.00', motivo: 'cargo duplicado' },
+            e.ctx,
+        )
+        controlFelFalso.siguiente.push('rechazado')
+        await cola(e)
+        await new AnularNotaCredito().execute({ nota_id: rechazada.id, motivo: 'La SAT la rechazó' }, e.ctx)
+        const anulada = await estado(get(client, `/portal/notas-credito/${rechazada.id}/pdf`, cookie), 200)
+        assert.equal(
+            anulada.header('content-disposition'),
+            `inline; filename="nota-credito-${rechazada.id}.pdf"`,
+        )
+        const textoAnulada = textoDePdf(Buffer.from(anulada.body() as Buffer))
+        assert.include(textoAnulada, 'ANULADA')
+        assert.include(textoAnulada, 'La SAT la rechazó')
+        assert.include(textoAnulada, 'no es un documento tributario electrónico')
+
+        // panel: con facturas.ver el mismo PDF; sin el permiso, 403
+        const panel = await estado(
+            client.get(`/api/v1/documentos/nota-credito/${nota.id}`).bearerToken(e.token),
+            200,
+        )
+        assert.equal(panel.header('content-type'), 'application/pdf')
+        const tecnico = await usuarioConRoles(['tecnico'])
+        await estado(client.get(`/api/v1/documentos/nota-credito/${nota.id}`).bearerToken(tecnico.token), 403)
+    })
+})
+
+test.group('Portal · plantillas de documentos FEL', (group) => {
+    group.each.teardown(async () => {
+        await db.from('core.plantillas_documentos').where('tipo', 'nota_credito').delete()
+    })
+
+    test('plantilla de la nota de crédito editable y plantillas de fábrica para restaurar el bloque FEL', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        for (const [tipo, html] of [
+            ['aviso_cobro', PLANTILLA_AVISO_COBRO],
+            ['nota_credito', PLANTILLA_NOTA_CREDITO],
+        ] as const) {
+            const fabrica = await estado(
+                client.get(`/api/v1/documentos/plantillas/${tipo}/fabrica`).bearerToken(token),
+                200,
+            )
+            assert.equal(fabrica.body().tipo, tipo)
+            assert.equal(fabrica.body().html, html)
+            assert.include(fabrica.body().html, 'Documento Tributario Electrónico (FEL)')
+            assert.isAbove(fabrica.body().variables.length, 10)
+        }
+
+        const leida = await estado(
+            client.get('/api/v1/documentos/plantillas/nota_credito').bearerToken(token),
+            200,
+        )
+        assert.equal(leida.body().version, 0)
+        assert.equal(leida.body().html, PLANTILLA_NOTA_CREDITO)
+        const nombres = leida.body().variables.map((v: { nombre: string }) => v.nombre)
+        for (const v of ['nota.numero', 'nota.fel_uuid', 'nota.anulada', 'factura.numero', 'nota.lineas']) {
+            assert.include(nombres, v)
+        }
+
+        const propia = '<h1>{{empresa.nombre}}</h1><p>{{nota.documento}} {{nota.numero}}</p>{{nota.lineas}}'
+        const guardada = await estado(
+            client
+                .put('/api/v1/documentos/plantillas/nota_credito')
+                .bearerToken(token)
+                .json({ html: propia, version: 0 }),
+            200,
+        )
+        assert.equal(guardada.body().version, 1)
+        assert.equal(guardada.body().tipo, 'nota_credito')
+        // la de fábrica sigue disponible para restaurar o comparar
+        const fabrica = await estado(
+            client.get('/api/v1/documentos/plantillas/nota_credito/fabrica').bearerToken(token),
+            200,
+        )
+        assert.equal(fabrica.body().html, PLANTILLA_NOTA_CREDITO)
+
+        const previa = await estado(
+            client
+                .post('/api/v1/documentos/plantillas/nota_credito/vista-previa')
+                .bearerToken(token)
+                .json({ html: PLANTILLA_NOTA_CREDITO }),
+            200,
+        )
+        const texto = textoDePdf(Buffer.from(previa.body() as Buffer))
+        assert.include(texto, 'Nota de crédito')
+        assert.include(texto, 'Autorización 5D41402A-BC4B-4A76-B971-9D911017C592')
+
+        await estado(client.get('/api/v1/documentos/plantillas/otra/fabrica').bearerToken(token), 404)
+        const tecnico = await usuarioConRoles(['tecnico'])
+        await estado(
+            client.get('/api/v1/documentos/plantillas/nota_credito/fabrica').bearerToken(tecnico.token),
+            403,
+        )
     })
 })

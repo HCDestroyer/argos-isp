@@ -2,7 +2,7 @@ import type { Schema } from '@argosisp/contracts'
 
 export type NotaCreditoPortal = Schema<'PortalNotaCredito'>
 
-/** Notas de crédito (internas y NCRE) del cliente de la sesión, más recientes primero, y su XML. */
+/** Notas de crédito (internas y NCRE) del cliente de la sesión, más recientes primero, y su PDF y XML. */
 export function useNotasCredito() {
     const api = useApi()
     const lista = useListaCursor<NotaCreditoPortal>(cursor => resolver(api.GET('/api/v1/portal/notas-credito', {
@@ -14,5 +14,10 @@ export function useNotasCredito() {
         return `/api/v1/portal/notas-credito/${id}/xml`
     }
 
-    return { ...lista, urlXml }
+    /** PDF de la nota (representación gráfica con la marca de la empresa), generado por la API. */
+    function urlPdf(id: number): string {
+        return `/api/v1/portal/notas-credito/${id}/pdf`
+    }
+
+    return { ...lista, urlXml, urlPdf }
 }
