@@ -4,6 +4,7 @@ import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { aplicarNotaCredito } from './aplicarNotaCredito'
+import { reglasNotaFel, solicitarNcre } from '../fel/rutas'
 
 type NotaCredito = Schema<'NotaCredito'>
 
@@ -34,7 +35,34 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
             const cuerpo = cuerpoObjeto(solicitud)
             const errores: NonNullable<Problem['errors']> = []
             const motivo = typeof cuerpo.motivo === 'string' ? cuerpo.motivo.trim() : ''
-            if (typeof cuerpo.monto !== 'string' || !MONTO.test(cuerpo.monto) || new Decimal(cuerpo.monto).lte(0)) {
+            // Nota por línea (`lineas[] { linea_id, monto }`): el monto, si viene, debe ser su suma.
+            const lineas = Array.isArray(cuerpo.lineas) ? cuerpo.lineas as unknown[] : null
+            let sumaLineas = new Decimal(0)
+            if (lineas) {
+                const lineaFactura = factura.id * 10 + 1
+                lineas.forEach((linea, indice) => {
+                    const datos = typeof linea === 'object' && linea !== null ? linea as Record<string, unknown> : {}
+                    if (datos.linea_id !== lineaFactura) {
+                        errores.push({ field: `lineas.${indice}.linea_id`, message: 'La línea no es de esta factura', rule: 'linea' })
+                    }
+                    if (typeof datos.monto !== 'string' || !MONTO.test(datos.monto) || new Decimal(datos.monto).lte(0)) {
+                        errores.push({ field: `lineas.${indice}.monto`, message: 'El monto debe ser mayor que cero, con hasta 2 decimales', rule: 'monto' })
+                    }
+                    else {
+                        sumaLineas = sumaLineas.plus(datos.monto)
+                        if (new Decimal(datos.monto).gt(factura.total)) {
+                            errores.push({ field: `lineas.${indice}.monto`, message: `Excede el total de la línea (Q${factura.total})`, rule: 'monto' })
+                        }
+                    }
+                })
+                if (!lineas.length) {
+                    errores.push({ field: 'lineas', message: 'Indica al menos una línea', rule: 'minLength' })
+                }
+                if (cuerpo.monto !== undefined && (typeof cuerpo.monto !== 'string' || !new Decimal(MONTO.test(cuerpo.monto) ? cuerpo.monto : '0').equals(sumaLineas))) {
+                    errores.push({ field: 'monto', message: 'Con líneas, el monto debe ser su suma', rule: 'monto' })
+                }
+            }
+            else if (typeof cuerpo.monto !== 'string' || !MONTO.test(cuerpo.monto) || new Decimal(cuerpo.monto).lte(0)) {
                 errores.push({ field: 'monto', message: 'El monto debe ser mayor que cero, con hasta 2 decimales', rule: 'monto' })
             }
             if (motivo.length < 3 || motivo.length > 500) {
@@ -50,13 +78,21 @@ export function rutasNotasCredito(evaluar: (servicioIds: number[]) => Schema<'Se
             if (saldo.lte(0)) {
                 return conflicto('factura_sin_saldo', 'Factura sin saldo', `La factura ${factura.id} no tiene saldo pendiente`)
             }
-            const monto = new Decimal(String(cuerpo.monto))
+            const monto = lineas ? sumaLineas : new Decimal(String(cuerpo.monto))
             if (monto.gt(saldo)) {
-                return datosInvalidos([{ field: 'monto', message: `El monto excede el saldo de la factura (Q${saldo.toFixed(2)})`, rule: 'monto' }])
+                return datosInvalidos([{ field: lineas ? 'lineas' : 'monto', message: `El monto excede el saldo de la factura (Q${saldo.toFixed(2)})`, rule: 'monto' }])
+            }
+            // FEL (§17): con el DTE en proceso, 409; con DTE certificado, la nota sale como NCRE.
+            const fel = reglasNotaFel(factura)
+            if ('status' in fel) {
+                return fel
             }
             const momento = ahora()
             const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
             const nota = aplicarNotaCredito(bd, factura, monto, motivo, usuario, momento)
+            if (fel.ncreDe) {
+                solicitarNcre(nota, fel.ncreDe)
+            }
             const servicios = evaluar(factura.servicio_id === null ? [] : [factura.servicio_id])
             registrarAccion(solicitud, 'facturas.nota_credito', { tipo: 'factura', id: factura.id }, { monto: nota.monto, motivo })
             const emitida: Schema<'NotaCreditoEmitida'> = { ...nota, factura: detalle(factura), servicios }

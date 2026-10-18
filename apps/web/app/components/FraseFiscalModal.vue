@@ -27,15 +27,27 @@ const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
 
-/** Tipos de DTE del paquete GT (`TIPOS_DTE_GT`, contrato §6.2; lista provisional, §15 #6). */
-const itemsDte = [
-    { label: 'FACT · Factura', value: 'FACT' },
-    { label: 'FCAM · Factura cambiaria', value: 'FCAM' },
-    { label: 'FPEQ · Pequeño contribuyente', value: 'FPEQ' },
-    { label: 'FCAP · Cambiaria de pequeño contribuyente', value: 'FCAP' },
-    { label: 'NCRE · Nota de crédito', value: 'NCRE' },
-    { label: 'NDEB · Nota de débito', value: 'NDEB' },
-]
+/**
+ * Tipos de DTE de la localización vigente de la empresa (`tipos_dte` de
+ * `GET /fiscal/empresas/:id/localizacion`, A3): el catálogo depende del paquete instalado.
+ */
+const catalogoDte = shallowRef<LocalizacionEmpresa['tipos_dte']>([])
+const cargandoCatalogo = ref(false)
+const problemaCatalogo = ref<Problem | null>(null)
+const itemsDte = computed(() => catalogoDte.value.map(t => ({ label: `${t.codigo} · ${t.nombre}`, value: t.codigo })))
+
+async function cargarCatalogo() {
+    const empresaId = useEmpresaActiva().empresaId.value
+    if (empresaId === null || !puede('fiscal.ver')) {
+        return
+    }
+    cargandoCatalogo.value = true
+    problemaCatalogo.value = null
+    const resultado = await useLocalizacionFiscal().deEmpresa(empresaId)
+    cargandoCatalogo.value = false
+    catalogoDte.value = resultado.ok ? resultado.data.tipos_dte : []
+    problemaCatalogo.value = resultado.ok ? null : resultado.problema
+}
 
 watch(abierto, (valor) => {
     if (!valor) {
@@ -46,6 +58,9 @@ watch(abierto, (valor) => {
     problema.value = null
     clave = nuevaClaveIdempotencia()
     formulario.value?.clear()
+    if (!props.retirar && !catalogoDte.value.length) {
+        void cargarCatalogo()
+    }
 })
 
 async function ejecutar(cuerpo: CuerpoFrase) {
@@ -182,9 +197,17 @@ function confirmarRetiro(evento: FormSubmitEvent<{ vigente_desde: string, motivo
                     name="tipos_dte"
                     required
                 >
+                    <ProblemaAlerta
+                        v-if="problemaCatalogo"
+                        :problema="problemaCatalogo"
+                        :reintentar="cargarCatalogo"
+                        :reintentando="cargandoCatalogo"
+                    />
                     <USelectMenu
+                        v-else
                         v-model="estado.tipos_dte"
                         :items="itemsDte"
+                        :loading="cargandoCatalogo"
                         value-key="value"
                         multiple
                         class="w-full"

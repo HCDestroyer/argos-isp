@@ -13,6 +13,7 @@ import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro } from './documentos/datos'
 import { empresas } from './empresas/datos'
 import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
+import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { configuracionGlobal } from './notificaciones/datos'
 import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -112,6 +113,8 @@ interface BaseFixtures {
     notasCredito: Schema<'NotaCredito'>[]
     /** Localización fiscal por empresa (A3, fase 2). */
     fiscal: FiscalFixtures
+    /** FEL por empresa: configuración, credenciales sin secretos, DTE y sustituciones (A3, fase 3). */
+    fel: FelFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -158,8 +161,10 @@ function inicial(): BaseFixtures {
         migracionesAaa: {},
         notasCredito: [],
         fiscal: fiscalInicial(),
+        fel: felInicial(),
     })
     sembrarNotasCredito(datos)
+    sembrarFel(datos)
     return datos
 }
 

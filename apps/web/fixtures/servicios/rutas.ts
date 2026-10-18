@@ -395,7 +395,7 @@ const cambiarEmpresa: ManejadorFixture = (solicitud) => {
         return problemaTipado(422, 'servicio_retirado', 'Regla de negocio', 'El servicio está retirado')
     }
     const saldo = bd.facturas
-        .filter(f => f.servicio_id === actual.id && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .filter(f => f.servicio_id === actual.id && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
         .reduce((total, f) => total.plus(f.total).minus(f.pagado), new Decimal(0))
     if (saldo.gt(0)) {
         return problemaTipado(422, 'servicio_con_saldo', 'Regla de negocio', `El servicio tiene Q ${saldo.toFixed(2)} pendientes: cóbralos o anúlalos antes de cambiar de empresa`)

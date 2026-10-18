@@ -23,6 +23,7 @@ import { asientoPago, asientoReverso } from '../libro/datos'
 import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
 import { notasDeFactura, rutasNotasCredito } from './notasCredito'
+import { anularConFel, rutasFel } from '../fel/rutas'
 
 type Factura = Schema<'Factura'>
 type FacturaDetalle = Schema<'FacturaDetalle'>
@@ -40,7 +41,7 @@ const DATOS_POR_METODO: Partial<Record<Pago['metodo'], readonly ('referencia' | 
     remesa: ['cuenta_bancaria_id', 'referencia'],
 }
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
-const ESTADOS_FACTURA: readonly Factura['estado'][] = ['emitida', 'parcial', 'pagada', 'vencida', 'anulada']
+const ESTADOS_FACTURA: readonly Factura['estado'][] = ['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']
 const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verificacion', 'anulado']
 
 function usuarioDe(solicitud: SolicitudFixture): number | null {
@@ -226,7 +227,7 @@ function referenciaRepetida(cuerpo: Record<string, unknown>): RespuestaFixture |
 /** Facturas con saldo del cliente en el orden de `facturasPendientes` (vencimiento, periodo, id). */
 function pendientesDe(clienteId: number) {
     return bd.facturas
-        .filter(f => f.cliente_id === clienteId && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .filter(f => f.cliente_id === clienteId && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
         .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
 }
 
@@ -500,6 +501,7 @@ function empresaRecibo(id: number): Schema<'EmpresaRecibo'> {
 
 export const rutasFacturacion: RutasFixture = {
     ...rutasNotasCredito(evaluarServicios, detalle),
+    ...rutasFel(detalle),
 
     'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia(procesarPago)),
 
@@ -588,15 +590,23 @@ export const rutasFacturacion: RutasFixture = {
         if (factura.estado === 'anulada') {
             return conflicto('factura_anulada', 'Factura anulada', `La factura ${factura.id} ya está anulada`)
         }
-        if (new Decimal(factura.pagado).gt(0)) {
+        if (new Decimal(factura.pagado).minus(factura.acreditado ?? '0').gt(0)) {
             return conflicto('factura_con_pagos', 'Factura con pagos', `La factura ${factura.id} tiene pagos aplicados (factura ${factura.id}: Q${factura.pagado}); anula primero el pago`)
+        }
+        const revertir = () => {
+            const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
+            if (original) {
+                bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, ahora(), usuarioDe(solicitud)))
+            }
+        }
+        // FEL: con DTE certificado la anulación espera al certificador (`anulacion_pendiente`).
+        const conFel = anularConFel(factura, motivo, solicitud, revertir)
+        if (conFel) {
+            return conFel
         }
         const momento = ahora()
         Object.assign(factura, { estado: 'anulada', anulada_en: momento, motivo_anulacion: motivo, version: factura.version + 1, updated_at: momento })
-        const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
-        if (original) {
-            bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, momento, usuarioDe(solicitud)))
-        }
+        revertir()
         registrarAccion(solicitud, 'facturas.anular', { tipo: 'factura', id: factura.id }, { motivo })
         return { status: 200, cuerpo: factura }
     })),

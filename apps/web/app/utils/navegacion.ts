@@ -45,6 +45,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'comprobantes', etiqueta: 'Comprobantes', descripcion: 'Depósitos y transferencias por verificar: aprobar registra el pago y reactiva.', icono: 'i-lucide-file-check-2', ruta: '/comprobantes', permiso: 'comprobantes.ver' },
             { id: 'promesas', etiqueta: 'Promesas', descripcion: 'Promesas de pago y su evaluación.', icono: 'i-lucide-calendar-clock', ruta: '/promesas', permiso: 'promesas.ver' },
+            { id: 'dte', etiqueta: 'Cola de DTE', descripcion: 'Certificación FEL: pendientes, rechazados, en contingencia y anulaciones.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },
             { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
         ],
     },
@@ -54,7 +55,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         icono: 'i-lucide-calculator',
         secciones: [
             { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
-            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor y cierre mensual.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
+            { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor, cierre mensual e integridad de la cadena.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
             { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
         ],
     },
@@ -83,6 +84,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         secciones: [
             { id: 'empresas', etiqueta: 'Empresas', descripcion: 'Empresas (NIT) con su logo y datos fiscales, y la empresa sugerida por zona y router.', icono: 'i-lucide-building-2', ruta: '/configuracion/empresas', permiso: 'empresas.ver' },
             { id: 'fiscal', etiqueta: 'Fiscal', descripcion: 'País, régimen, establecimientos, frases, parámetros con vigencia e impuestos de cada empresa.', icono: 'i-lucide-landmark', ruta: '/configuracion/fiscal', permiso: 'fiscal.ver' },
+            { id: 'fel', etiqueta: 'FEL', descripcion: 'Certificador, credenciales, modo de emisión, contingencia y momento de certificar de cada empresa.', icono: 'i-lucide-shield-check', ruta: '/configuracion/fel', permiso: 'fel.ver' },
             { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios, roles, permisos y tokens de API.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
             { id: 'plantillas', etiqueta: 'Plantillas', descripcion: 'Ciclos de facturación, corte, mora y reglas de promesas.', icono: 'i-lucide-file-cog', ruta: '/plantillas', permiso: 'plantillas.ver' },
             { id: 'cuentas-bancarias', etiqueta: 'Cuentas bancarias', descripcion: 'Cuentas propias para depósitos, transferencias, ACH y remesas.', icono: 'i-lucide-landmark', ruta: '/configuracion/cuentas-bancarias', permiso: 'cuentas_bancarias.ver' },

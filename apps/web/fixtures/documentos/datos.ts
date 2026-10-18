@@ -34,7 +34,7 @@ export const variablesAvisoCobro: Schema<'VariableDocumento'>[] = [
     { nombre: 'cliente.email', descripcion: 'Correo del cliente' },
     { nombre: 'servicio.plan', descripcion: 'Plan del servicio facturado' },
     { nombre: 'servicio.direccion', descripcion: 'Dirección de instalación' },
-    { nombre: 'factura.documento', descripcion: '"Aviso de cobro" o "Factura" si tiene FEL' },
+    { nombre: 'factura.documento', descripcion: '"Aviso de cobro"; "Factura" (o "Nota de débito" en la mora) cuando su DTE está certificado' },
     { nombre: 'factura.numero', descripcion: 'Serie-número FEL o número del aviso' },
     { nombre: 'factura.periodo', descripcion: 'Mes facturado: "octubre 2026"' },
     { nombre: 'factura.emitida', descripcion: 'Fecha de emisión: 01/10/2026' },
@@ -47,10 +47,13 @@ export const variablesAvisoCobro: Schema<'VariableDocumento'>[] = [
     { nombre: 'factura.saldo', descripcion: 'Saldo a pagar' },
     { nombre: 'factura.lineas', descripcion: 'Tabla de líneas (concepto, cantidad, precio, total)' },
     { nombre: 'factura.tiene_pagos', descripcion: 'Sección: hay abonos' },
-    { nombre: 'factura.fel', descripcion: 'Sección: la factura está certificada (FEL, semana 5)' },
+    { nombre: 'factura.fel', descripcion: 'Sección: el DTE de la factura está certificado (FEL)' },
     { nombre: 'factura.fel_uuid', descripcion: 'Número de autorización FEL' },
     { nombre: 'factura.fel_serie', descripcion: 'Serie FEL' },
     { nombre: 'factura.fel_numero', descripcion: 'Número FEL' },
+    { nombre: 'factura.fel_fecha', descripcion: 'Fecha y hora de certificación (Guatemala)' },
+    { nombre: 'factura.fel_tipo', descripcion: 'Tipo de DTE en palabras: Factura, Factura cambiaria, Nota de débito' },
+    { nombre: 'factura.fel_anulado', descripcion: 'Sección: el DTE fue anulado ante la SAT' },
     { nombre: 'lineas', descripcion: 'Lista para {{#lineas}}: concepto, cantidad, precio_unitario, iva, total' },
     { nombre: 'generado', descripcion: 'Fecha y hora de generación (Guatemala)' },
 ]
@@ -63,6 +66,13 @@ const HTML_FABRICA = `<h1>{{empresa.nombre}}</h1>
 <p>Periodo: <strong>{{factura.periodo}}</strong> · Vence: <strong>{{factura.vence}}</strong></p>
 {{factura.lineas}}
 <p class="derecha grande"><strong>Saldo a pagar {{factura.saldo}}</strong></p>
+{{#factura.fel}}
+<p class="tenue"><small>Documento Tributario Electrónico (FEL) · {{factura.fel_tipo}} · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
+{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}
+{{/factura.fel}}
+{{^factura.fel}}
+<p class="tenue"><small>Este aviso de cobro no es una factura electrónica (FEL).</small></p>
+{{/factura.fel}}
 {{#empresa.instrucciones_pago}}<h3>Cómo pagar</h3><p>{{empresa.instrucciones_pago}}</p>{{/empresa.instrucciones_pago}}
 <p class="tenue centro"><small>Generado el {{generado}}</small></p>
 `

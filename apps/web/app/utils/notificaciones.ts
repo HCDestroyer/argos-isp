@@ -25,6 +25,8 @@ export interface FormularioNotificaciones {
         usuario: string
         remitente: string
         nombre_visible: string
+        /** Correos de contabilidad para los avisos fiscales, separados por coma (A6). */
+        contabilidad: string
     }
     telegram: {
         clientes_activo: boolean
@@ -38,6 +40,17 @@ export interface FormularioNotificaciones {
         token: Secreto
         webhook_secreto: Secreto
     }
+}
+
+/** Espejo de `LISTA_CORREOS` del validador de A6: direcciones separadas por coma (o vacío). */
+export const LISTA_CORREOS = /^\s*(?:[^\s@,]+@[^\s@,]+\.[^\s@,]+\s*(?:,\s*|$))*$/
+
+/** Error del campo «correo de contabilidad», o `undefined` si es válido. */
+export function errorListaCorreos(valor: string): string | undefined {
+    if (valor.length > 1000) {
+        return 'Máximo 1000 caracteres'
+    }
+    return LISTA_CORREOS.test(valor) ? undefined : 'Escribe correos válidos separados por coma'
 }
 
 export const TLS_CORREO: Record<Configuracion['correo']['tls'], string> = {
@@ -72,6 +85,7 @@ export function formularioNotificaciones(config: Configuracion): FormularioNotif
             usuario: config.correo.usuario ?? '',
             remitente: config.correo.remitente ?? '',
             nombre_visible: config.correo.nombre_visible ?? '',
+            contabilidad: config.correo.contabilidad ?? '',
         },
         telegram: {
             clientes_activo: config.telegram.clientes_activo,
@@ -109,6 +123,7 @@ export function cuerpoNotificaciones(form: FormularioNotificaciones, version: nu
         usuario: textoONull(form.correo.usuario),
         remitente: textoONull(form.correo.remitente),
         nombre_visible: textoONull(form.correo.nombre_visible),
+        contabilidad: textoONull(form.correo.contabilidad),
     }
     const password = secreto(form.secretos.password)
     if (password) {

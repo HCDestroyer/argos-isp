@@ -108,7 +108,14 @@
       "fiscal.instalar",
       "fiscal.editar_parametros",
       "fiscal.cambiar_regimen",
-      "usuarios.asignar_empresas"
+      "usuarios.asignar_empresas",
+      "fel.ver",
+      "fel.configurar",
+      "fel.certificar",
+      "fel.anular",
+      "fel.contingencia",
+      "facturas.sustituir",
+      "facturas.anular_nota_credito"
     ],
     "alcance_global": true,
     "empresas": [

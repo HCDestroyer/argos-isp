@@ -4,7 +4,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { hoyGuatemala } from '~/utils/cobro'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, empresaActivaDe, idDe, noEncontrado, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
-import { FRASES_REGIMEN, TIPOS_DTE_GT, localizacionesFiscales } from './datos'
+import { CATALOGO_DTE_GT, FRASES_REGIMEN, TIPOS_DTE_GT, localizacionesFiscales } from './datos'
 import { parametrosPaquete } from './paquete'
 
 /**
@@ -331,6 +331,7 @@ function localizacion(empresaId: number): Schema<'LocalizacionEmpresa'> {
         disponible: disponible?.codigo ?? null,
         actualizacion_disponible: Boolean(disponible && vigente && disponible.codigo !== vigente.localizacion_codigo),
         instalaciones,
+        tipos_dte: vigente ? CATALOGO_DTE_GT.map(t => ({ ...t, regimenes: [...t.regimenes] })) : [],
     }
 }
 

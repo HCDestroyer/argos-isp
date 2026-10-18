@@ -5,6 +5,7 @@ import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { bancosLibro } from '../libro/datos'
 import { categoriasEgreso } from './datos'
+import { ncreSinCertificar, rupturaDe } from '../fel/rutas'
 
 type Egreso = Schema<'Egreso'>
 type Errores = NonNullable<Problem['errors']>
@@ -219,6 +220,16 @@ export const rutasEgresos: RutasFixture = {
         }
         if (mesCerrado(`${periodo}-01`)) {
             return problemaCodigo(409, 'periodo_cerrado', 'Periodo cerrado', `El periodo ${periodo} ya está cerrado`)
+        }
+        // FEL (§17) e integridad (§10.10), en el orden de `CerrarPeriodo`.
+        const empresaCierre = typeof cuerpoObjeto(solicitud).empresa_id === 'number' ? Number(cuerpoObjeto(solicitud).empresa_id) : (empresaActivaDe(solicitud) ?? 1)
+        const ncre = ncreSinCertificar(empresaCierre, periodo)
+        if (ncre.length) {
+            return problemaCodigo(409, 'ncre_sin_certificar', 'NCRE sin certificar', `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre.slice(0, 20).map(x => `nota ${x.nota_id}: ${x.estado}`).join(', ')}): certifícalas o anula las rechazadas antes de cerrar el mes`)
+        }
+        const ruptura = rupturaDe(empresaCierre)
+        if (ruptura) {
+            return problemaCodigo(409, 'integridad_rota', 'Integridad del libro', `La cadena de hash del libro está rota en el sello ${ruptura.sello} (${ruptura.motivo}): no se puede cerrar el mes`)
         }
         const quien = usuario(solicitud)
         const cierre: Schema<'CierrePeriodo'> = {

@@ -5,6 +5,7 @@ definePageMeta({ permiso: 'facturas.ver' })
 
 const route = useRoute()
 const { puede, enlace } = usePermisos()
+const toast = useToast()
 
 const notaId = computed(() => Number(route.params.id))
 
@@ -49,6 +50,34 @@ async function cargar() {
     }
     nota.value = resultado.data
     void cargarAsiento(resultado.data)
+}
+
+/*
+ * FEL: la NCRE de la nota. Si la SAT la rechazó en definitivo, la nota se anula
+ * (`POST /notas-credito/:id/anular`, `facturas.anular_nota_credito`): reverso espejo y el monto
+ * vuelve al saldo de la factura. La API decide (409 si la NCRE sigue en cola o ya se certificó).
+ */
+const ncre = shallowRef<Dte | null>(null)
+const anularAbierto = ref(false)
+const puedeAnular = computed(() => puede('facturas.anular_nota_credito') && nota.value !== null && !nota.value.anulada_en
+    && ncre.value?.estado === 'rechazado')
+
+function alCambiarNcre(dte: Dte | null) {
+    ncre.value = dte
+}
+
+function anular(motivo: string, clave: string) {
+    return useNotasCredito().anular(notaId.value, motivo, clave).then(r => (r.ok ? r : { ...r, problema: problemaFelLegible(r.problema) }))
+}
+
+function alAnular(anulada: NotaCredito) {
+    toast.add({
+        title: `Nota de crédito #${anulada.id} anulada`,
+        description: `Se registró el reverso: ${formatearQuetzales(anulada.monto)} vuelven al saldo de la factura #${anulada.factura_id}`,
+        icon: 'i-lucide-ban',
+        color: 'success',
+    })
+    void cargar()
 }
 
 watch(notaId, cargar)
@@ -99,20 +128,51 @@ onMounted(cargar)
             v-else-if="nota"
             class="flex flex-col gap-6"
         >
-            <div class="flex flex-col gap-1">
-                <h2 class="text-xl font-semibold text-highlighted">
-                    Nota de crédito #{{ nota.id }}
-                </h2>
-                <p class="text-sm text-muted">
-                    {{ formatearFecha(nota.fecha) }} ·
-                    <ULink
-                        :to="enlace(`/clientes/${nota.cliente_id}?tab=cuenta`)"
-                        class="text-default hover:text-primary"
-                    >
-                        {{ nota.cliente_nombre }}
-                    </ULink>
-                </p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="flex flex-col gap-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-xl font-semibold text-highlighted">
+                            Nota de crédito #{{ nota.id }}
+                        </h2>
+                        <UBadge
+                            v-if="nota.anulada_en"
+                            :label="`Anulada · ${formatearFechaHora(nota.anulada_en)}`"
+                            icon="i-lucide-ban"
+                            color="neutral"
+                            variant="subtle"
+                            data-prueba="nota-anulada"
+                        />
+                    </div>
+                    <p class="text-sm text-muted">
+                        {{ formatearFecha(nota.fecha) }} ·
+                        <ULink
+                            :to="enlace(`/clientes/${nota.cliente_id}?tab=cuenta`)"
+                            class="text-default hover:text-primary"
+                        >
+                            {{ nota.cliente_nombre }}
+                        </ULink>
+                    </p>
+                </div>
+                <UButton
+                    v-if="puedeAnular"
+                    label="Anular nota"
+                    icon="i-lucide-ban"
+                    color="error"
+                    variant="outline"
+                    data-prueba="abrir-anular-nota"
+                    @click="anularAbierto = true"
+                />
             </div>
+
+            <UAlert
+                v-if="ncre?.estado === 'rechazado' && !nota.anulada_en"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-octagon-x"
+                title="La SAT rechazó la NCRE de esta nota"
+                description="Corrige el dato y reintenta la NCRE, o anula la nota: su asiento se revierte y el monto vuelve al saldo de la factura. Mientras siga sin certificar, el mes no se puede cerrar."
+                data-prueba="nota-ncre-rechazada"
+            />
 
             <UPageCard
                 title="Datos de la nota"
@@ -168,6 +228,20 @@ onMounted(cargar)
                 </dl>
             </UPageCard>
 
+            <UPageCard
+                v-if="puede('fel.ver')"
+                title="NCRE (certificación FEL)"
+                icon="i-lucide-badge-check"
+                variant="subtle"
+                data-prueba="nota-fel"
+            >
+                <DteDocumento
+                    tipo="nota_credito"
+                    :documento-id="nota.id"
+                    @cargado="alCambiarNcre"
+                />
+            </UPageCard>
+
             <section
                 v-if="puede('libro.ver')"
                 class="flex flex-col gap-2"
@@ -198,6 +272,18 @@ onMounted(cargar)
                     class="lg:max-w-2xl"
                 />
             </section>
+
+            <AccionMotivoModal
+                v-if="puedeAnular"
+                v-model:open="anularAbierto"
+                titulo="Anular nota de crédito"
+                :descripcion="`Nota #${nota.id} · ${formatearQuetzales(nota.monto)} · factura #${nota.factura_id}`"
+                efecto="La SAT rechazó su NCRE: se registra el asiento de reverso y el monto vuelve al saldo de la factura. El servicio se reevalúa. No se puede deshacer."
+                confirmar="Anular nota"
+                placeholder="Ej.: la SAT rechazó la NCRE; se emitirá otra con el dato corregido"
+                :ejecutar="anular"
+                @hecho="alAnular"
+            />
         </div>
     </PanelPagina>
 </template>

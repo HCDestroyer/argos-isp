@@ -41,7 +41,7 @@ function resumenDe(filtradas: readonly Comprobante[], sinEstado: readonly Compro
 /** Como `pendientesDelServicio` de `AprobarComprobante`: facturas con saldo del servicio, la más antigua primero. */
 function pendientesDelServicio(servicioId: number): number[] {
     return bd.facturas
-        .filter(f => f.servicio_id === servicioId && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .filter(f => f.servicio_id === servicioId && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
         .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
         .map(f => f.id)
 }

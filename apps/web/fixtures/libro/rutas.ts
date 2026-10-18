@@ -37,7 +37,30 @@ export function vistaAsiento(asiento: Schema<'Asiento'>): Schema<'Asiento'> {
     else if (asiento.origen_tipo === 'ajuste' && asiento.origen_id !== null) {
         bloqueo = `El asiento ${asiento.id} es del saldo inicial ${asiento.origen_id}: no se revierte directo; anula el saldo inicial`
     }
-    return { ...asiento, revertido_por: revertidoPor, revertible: bloqueo === null, motivo_no_revertible: bloqueo }
+    const diario = diarioDe(asiento)
+    const numero = bd.asientos
+        .filter(a => (a.empresa_id ?? 1) === (asiento.empresa_id ?? 1) && a.fecha.slice(0, 4) === asiento.fecha.slice(0, 4) && diarioDe(a) === diario && a.id <= asiento.id)
+        .length
+    return { ...asiento, revertido_por: revertidoPor, revertible: bloqueo === null, motivo_no_revertible: bloqueo, diario, numero, partida: null }
+}
+
+/** Diario del asiento como lo deriva A3 de `origen_tipo` (§10.7): VEN, COB, COM, CAJ-n, VAR. */
+function diarioDe(asiento: Schema<'Asiento'>): string {
+    switch (asiento.origen_tipo) {
+        case 'factura':
+        case 'mora':
+        case 'nota_credito':
+        case 'reclasificacion':
+            return 'VEN'
+        case 'pago':
+            return 'COB'
+        case 'egreso':
+            return 'COM'
+        case 'cierre_caja':
+            return 'CAJ-1'
+        default:
+            return 'VAR'
+    }
 }
 
 /** Saldo según la naturaleza de la cuenta, como `saldoSegunNaturaleza` de la API. */

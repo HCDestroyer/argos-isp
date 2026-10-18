@@ -73,7 +73,7 @@ onMounted(() => {
 watch(empresaId, cargar)
 
 async function guardar() {
-    if (!form.value || !config.value) {
+    if (!form.value || !config.value || errorListaCorreos(form.value.correo.contabilidad)) {
         return
     }
     guardando.value = true
@@ -298,6 +298,21 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
                                 type="email"
                                 placeholder="no-responder@dominio.gt"
                                 class="w-full"
+                            />
+                        </UFormField>
+                        <UFormField
+                            name="correo.contabilidad"
+                            label="Correo de contabilidad"
+                            description="Avisos fiscales: integridad del libro, DTE rechazado, contingencia FEL y notas anuladas. Varios, separados por coma."
+                            :error="errorListaCorreos(form.correo.contabilidad)"
+                            class="sm:col-span-6"
+                        >
+                            <UInput
+                                v-model="form.correo.contabilidad"
+                                :disabled="bloqueado"
+                                placeholder="contabilidad@dominio.gt, contador@despacho.gt"
+                                class="w-full"
+                                data-prueba="correo-contabilidad"
                             />
                         </UFormField>
                         <UFormField

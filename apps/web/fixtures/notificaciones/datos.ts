@@ -32,6 +32,7 @@ export const configuracionGlobal: Configuracion = {
         password: '***',
         remitente: 'no-responder@argosnet.gt',
         nombre_visible: 'ArgosNet',
+        contabilidad: 'contabilidad@argosnet.gt',
     },
     telegram: {
         clientes_activo: false,

@@ -218,6 +218,16 @@ export const FRASES_REGIMEN: Record<Regimen, Pick<Schema<'FraseFiscal'>, 'clave'
 /** Tipos de DTE del paquete GT (`TIPOS_DTE_GT`). */
 export const TIPOS_DTE_GT = ['FACT', 'FCAM', 'FPEQ', 'FCAP', 'NCRE', 'NDEB'] as const
 
+/** `tipos_dte` de `GET /fiscal/empresas/:id/localizacion` (capturado de la API con `gt-2026.1`). */
+export const CATALOGO_DTE_GT: Schema<'LocalizacionEmpresa'>['tipos_dte'] = [
+    { codigo: 'FACT', nombre: 'Factura', regimenes: ['utilidades', 'opcional_simplificado'], fuente: 'inv. C.1' },
+    { codigo: 'FCAM', nombre: 'Factura cambiaria', regimenes: ['utilidades', 'opcional_simplificado'], fuente: 'inv. C.1' },
+    { codigo: 'FPEQ', nombre: 'Factura de pequeño contribuyente', regimenes: ['pequeno_contribuyente'], fuente: 'inv. C.1 (Ley IVA, art. 29 b)' },
+    { codigo: 'FCAP', nombre: 'Factura cambiaria de pequeño contribuyente', regimenes: ['pequeno_contribuyente'], fuente: 'inv. C.1' },
+    { codigo: 'NCRE', nombre: 'Nota de crédito', regimenes: ['utilidades', 'opcional_simplificado'], fuente: 'inv. C.1 (Ley IVA, art. 29 d)' },
+    { codigo: 'NDEB', nombre: 'Nota de débito', regimenes: ['utilidades', 'opcional_simplificado'], fuente: 'inv. C.1 (Ley IVA, art. 29 c)' },
+]
+
 export interface FiscalFixtures {
     instalaciones: Record<number, InstalacionFiscal[]>
     valores: ValorParametro[]

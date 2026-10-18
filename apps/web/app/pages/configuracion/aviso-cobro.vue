@@ -53,6 +53,34 @@ const gruposVariables = computed(() => {
     return [...grupos.entries()].map(([etiqueta, variables]) => ({ etiqueta, variables }))
 })
 
+/**
+ * Variables del PDF FEL (A5, fase 3) que una plantilla ya guardada no recibe sola: la API solo da
+ * la de fábrica mientras nadie la guarde (`version` 0). Si la guardada no las usa y la API sí las
+ * ofrece, se avisa y se puede insertar el bloque FEL donde está el cursor.
+ */
+const VARIABLES_BLOQUE_FEL = ['factura.fel_tipo', 'factura.fel_fecha', 'factura.fel_anulado'] as const
+const faltanFel = computed(() => {
+    if (!plantilla.value || plantilla.value.version === 0) {
+        return []
+    }
+    const ofrecidas = new Set(plantilla.value.variables.map(v => v.nombre))
+    return VARIABLES_BLOQUE_FEL.filter(nombre => ofrecidas.has(nombre) && !estado.html.includes(nombre))
+})
+
+/** El bloque FEL de la plantilla de fábrica (A5): tipo, serie, número, autorización, fecha y anulación. */
+const BLOQUE_FEL = `{{#factura.fel}}
+<p class="tenue"><small>Documento Tributario Electrónico (FEL) · {{factura.fel_tipo}} · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
+{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}
+{{/factura.fel}}
+`
+
+function insertarBloqueFel() {
+    const area = editor.value?.textareaRef
+    const inicio = area?.selectionStart ?? estado.html.length
+    const fin = area?.selectionEnd ?? estado.html.length
+    estado.html = `${estado.html.slice(0, inicio)}${BLOQUE_FEL}${estado.html.slice(fin)}`
+}
+
 function rellenar(datos: PlantillaDocumento) {
     plantilla.value = datos
     estado.html = datos.html
@@ -182,6 +210,17 @@ onBeforeUnmount(liberarVista)
                     />
                     <span>HTML con variables <span class="font-mono">{{ EJEMPLO_VARIABLE }}</span>; una sección <span class="font-mono">{{ EJEMPLO_SECCION }}</span> se oculta si el dato está vacío.</span>
                 </div>
+
+                <UAlert
+                    v-if="faltanFel.length"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-badge-check"
+                    title="Tu plantilla guardada no tiene el bloque FEL nuevo"
+                    :description="`Una plantilla ya guardada no recibe sola las variables nuevas del PDF FEL: falta ${faltanFel.join(', ')}. Inserta el bloque donde está el cursor (o reemplaza el anterior) y guarda.`"
+                    :actions="editable ? [{ label: 'Insertar bloque FEL', icon: 'i-lucide-text-cursor-input', color: 'warning', variant: 'outline', onClick: insertarBloqueFel }] : undefined"
+                    data-prueba="falta-bloque-fel"
+                />
 
                 <UFormField
                     name="html"
