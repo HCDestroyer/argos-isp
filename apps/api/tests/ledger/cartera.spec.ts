@@ -10,6 +10,7 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import {
+    codigoCaja,
     errorDe,
     facturasDelServicio,
     lineas,
@@ -208,5 +209,80 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         assert.equal(castigo.gasto, '89.29')
         assert.equal(await saldoCuenta(e.B, IVA_POR_CERTIFICAR), '-5.36')
         await afirmarLibro(assert, [e.B])
+    })
+
+    test('castigada y recuperación: estado propio, pagado intacto; lo cobrado después va a 4.2.03 hasta lo castigado', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const s = await servicioFacturado(e.B, '2026-10-01', { instalacion: '2026-10-01' })
+        const [factura] = s.facturas
+        await new RegistrarPago().execute(
+            {
+                cliente_id: s.clienteId,
+                metodo: 'caja',
+                monto: '20.00',
+                caja_id: e.cajas.get(e.B)!,
+                empresa_id: e.B,
+            },
+            e.ctx,
+        )
+        const castigo = await new CastigarCartera().execute(
+            { facturas: [factura!.id], motivo: 'incobrable', evidencia: 'gestión documentada' },
+            e.ctx,
+        )
+        assert.equal(castigo.monto, '130.00')
+        let [despues] = await facturasDelServicio(s.servicioId)
+        assert.equal(despues!.estado, 'castigada')
+        assert.equal(despues!.pagado, '20.00', 'pagado es solo lo cobrado')
+        const caja = await codigoCaja(e.cajas.get(e.B)!)
+        const p1 = await new RegistrarPago().execute(
+            {
+                cliente_id: s.clienteId,
+                metodo: 'caja',
+                monto: '100.00',
+                caja_id: e.cajas.get(e.B)!,
+                empresa_id: e.B,
+            },
+            e.ctx,
+        )
+        assert.deepEqual(await lineas('pago', p1.id), [
+            [caja, '100.00', '0.00'],
+            [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '100.00'],
+        ])
+        assert.lengthOf(p1.aplicaciones, 0, 'nunca se aplica a la factura castigada')
+        const p2 = await new RegistrarPago().execute(
+            {
+                cliente_id: s.clienteId,
+                metodo: 'caja',
+                monto: '50.00',
+                caja_id: e.cajas.get(e.B)!,
+                empresa_id: e.B,
+            },
+            e.ctx,
+        )
+        assert.deepEqual(await lineas('pago', p2.id), [
+            [caja, '50.00', '0.00'],
+            [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '30.00'],
+            [CUENTAS.ANTICIPOS_CLIENTES, '0.00', '20.00'],
+        ])
+        ;[despues] = await facturasDelServicio(s.servicioId)
+        assert.equal(despues!.estado, 'castigada')
+        assert.equal(despues!.pagado, '20.00')
+        // anular un pago aplicado a la factura antes del castigo: el castigo ya cerró su saldo
+        const pagoPrevio = await db
+            .from('billing.pagos_aplicaciones')
+            .where('factura_id', factura!.id)
+            .select('pago_id')
+            .firstOrFail()
+        const castigada = await errorDe(
+            new AnularPago().execute({ pago_id: Number(pagoPrevio.pago_id), motivo: 'error' }, e.ctx),
+        )
+        assert.equal(castigada.codigo, 'factura_castigada')
+        // anular una recuperación la revierte con su espejo
+        await new AnularPago().execute({ pago_id: p2.id, motivo: 'cheque rechazado' }, e.ctx)
+        assert.equal(await saldoCuenta(e.B, CUENTAS_GT.RECUPERACION_INCOBRABLES), '-100.00')
+        assert.equal(await saldoCuenta(e.B, CUENTAS.ANTICIPOS_CLIENTES, s.clienteId), '0.00')
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

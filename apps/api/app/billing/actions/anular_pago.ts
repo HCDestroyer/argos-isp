@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { MetodoPago } from '#shared/eventos'
 import { dec } from '#ledger/dinero'
@@ -109,6 +109,21 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 'pagado',
                 'vencida_en',
             )) as FacturaPendiente[]
+        const castigadas = (await t.trx
+            .from('ledger.castigos_facturas')
+            .whereIn(
+                'factura_id',
+                facturas.map((f) => f.id),
+            )
+            .select('factura_id')) as Array<{ factura_id: number }>
+        if (castigadas.length > 0) {
+            throw new Conflicto(
+                `El pago ${pago.id} se aplicó a facturas ya castigadas (${castigadas.map((c) => c.factura_id).join(', ')}): ` +
+                    'el castigo cerró su saldo; corrige con un asiento de ajuste',
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!
             await sumarAPagado(t.trx, factura, dec(aplicado.monto).negated())

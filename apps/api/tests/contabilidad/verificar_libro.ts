@@ -59,12 +59,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    // decisiones del líder sobre la fase 4, a la espera de la implementación de A3
-    '5.factura_pagado_sin_castigo': 'decisión (g)',
-    '5.factura_castigada_inconsistente': 'decisión (g)',
-    '13.recuperacion_de_castigada': 'decisión (g)',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 

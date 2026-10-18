@@ -6143,7 +6143,7 @@ export interface components {
             empresas?: components["schemas"]["SeccionEstadoCuenta"][];
         };
         /** @enum {string} */
-        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada";
         EstadoPortal: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
             identificado: boolean;
@@ -14783,7 +14783,7 @@ export interface operations {
                 limit?: number;
                 cliente_id?: number;
                 servicio_id?: number;
-                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
                 tipo?: "servicio" | "mora";
