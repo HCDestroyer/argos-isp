@@ -22,6 +22,7 @@ export default defineConfig({
         () => import('#start/routes'),
         () => import('#start/kernel'),
         { file: () => import('#start/notify'), environment: ['web'] },
+        { file: () => import('#start/integraciones'), environment: ['web'] },
     ],
 
     tests: {

@@ -266,6 +266,68 @@ export interface CatalogoEventos {
         empresa_id: number | null
         campos: string[]
     }
+
+    // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
+    // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
+    /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
+    'horus.config_cambiada': { activo: boolean; campos: string[] }
+    /** Horus abrió un hallazgo de seguridad de un cliente (§3.4 `finding.opened`). */
+    'horus.hallazgo_abierto': PayloadHallazgoHorus
+    /** Horus resolvió un hallazgo (§3.4 `finding.resolved`). */
+    'horus.hallazgo_resuelto': PayloadHallazgoHorus
+    /** Cambió el estado de seguridad de un cliente en Horus (§3.4 `customer.security_state_changed`). */
+    'horus.estado_seguridad_cambiado': PayloadClienteHorus & {
+        estado: string
+        estado_anterior: string | null
+        hallazgos_abiertos: number | null
+    }
+    /** Un router que vigila Horus cambió de estado (§3.4 `router.status_changed`). */
+    'horus.router_estado_cambiado': {
+        webhook_id: string
+        router: {
+            id: string
+            nombre: string | null
+            estado: string
+            estado_anterior: string | null
+            motivo: string | null
+        }
+    }
+    /** Un servicio de infraestructura (IPTV, HTTP…) cambió de estado (§3.4 `infra_service.state_changed`). */
+    'horus.servicio_infra_cambiado': {
+        webhook_id: string
+        servicio_infra: {
+            id: string
+            nombre: string | null
+            estado: string
+            estado_anterior: string | null
+            motivo: string | null
+        }
+    }
+}
+
+/**
+ * Lo común de los eventos de Horus sobre un cliente: el `servicio_id`, `cliente_id` y
+ * `empresa_id` de Argos (de `external` del webhook, verificados contra `core.servicios`; null si
+ * Horus no tiene identidad vigente) y la IP que vio Horus.
+ */
+interface PayloadClienteHorus {
+    /** `X-Webhook-Id` / `id` del webhook de Horus (deduplicación) */
+    webhook_id: string
+    servicio_id: number | null
+    cliente_id: number | null
+    empresa_id: number | null
+    ip: string | null
+}
+
+type PayloadHallazgoHorus = PayloadClienteHorus & {
+    hallazgo: {
+        id: string | null
+        tipo: string | null
+        severidad: string | null
+        resumen: string | null
+        abierto_en: string | null
+        reabierto: boolean
+    }
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -302,6 +364,12 @@ export const EVENTOS = [
     'caja.cerrada',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'horus.config_cambiada',
+    'horus.hallazgo_abierto',
+    'horus.hallazgo_resuelto',
+    'horus.estado_seguridad_cambiado',
+    'horus.router_estado_cambiado',
+    'horus.servicio_infra_cambiado',
 ] as const satisfies readonly NombreEvento[]
 
 type Faltantes = Exclude<NombreEvento, (typeof EVENTOS)[number]>

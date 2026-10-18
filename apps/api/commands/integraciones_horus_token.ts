@@ -4,7 +4,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 /**
  * `node ace integraciones:horus-token`: genera el token `atk_` de Horus desde la consola (seed
  * opcional para laboratorio o instalación sin panel). Llama a la misma acción que el panel
- * (`integraciones.generar_token`, actor `sistema`, canal `consola`): crea el usuario técnico "Horus"
+ * (`horus.generar_token`, actor `sistema`, canal `consola`): crea el usuario técnico "Horus"
  * la primera vez y muestra el token una sola vez. Revocar: panel o
  * `POST /api/v1/integraciones/horus/tokens/:id/revocar`.
  */

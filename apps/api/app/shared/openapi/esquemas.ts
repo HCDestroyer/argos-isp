@@ -92,7 +92,11 @@ export const Dinero = definirEsquema('Dinero', {
     examples: ['150.00'],
 })
 
-/** RFC 9457. Debe conservar exactamente esta forma (la usa el frontend desde la semilla). */
+/**
+ * RFC 9457. Los campos base (`type`, `title`, `status`, `detail`, `errors`) conservan esta forma (la
+ * usa el frontend desde la semilla). Se permiten miembros de extensión **opcionales** (RFC 9457
+ * §3.2), declarados aquí para tiparlos; un cliente que no los conoce los ignora.
+ */
 export const Problem = definirEsquema('Problem', {
     type: 'object',
     required: ['type', 'title', 'status'],
@@ -101,6 +105,13 @@ export const Problem = definirEsquema('Problem', {
         title: { type: 'string' },
         status: { type: 'integer' },
         detail: { type: 'string' },
+        reintentar_en: {
+            type: 'string',
+            format: 'date-time',
+            description:
+                'Extensión: cuándo se reintenta (UTC) si el servicio externo está en pausa por la ' +
+                'espera exponencial (p. ej. `horus_error`). `detail` lo dice en hora de Guatemala',
+        },
         errors: {
             type: 'array',
             items: {
