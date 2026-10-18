@@ -4,6 +4,7 @@ import {
     auditable,
     booleano,
     definirEsquema,
+    entero,
     enumerado,
     fecha,
     id,
@@ -29,7 +30,7 @@ export const Cuenta = definirEsquema(
             id,
             codigo: texto,
             nombre: texto,
-            tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
+            tipo: enumerado(['activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto']),
             padre_id: nulable(id),
             imputable: { ...booleano, description: 'Recibe movimientos (false = cuenta de agrupación)' },
             auxiliar_cliente: {
@@ -37,9 +38,36 @@ export const Cuenta = definirEsquema(
                 description: 'Lleva auxiliar por cliente (CxC, anticipos): cada movimiento exige cliente_id',
             },
             activa: booleano,
+            pais: { ...texto, description: 'País del catálogo (GT); el código es único por país' },
+            naturaleza: {
+                ...enumerado(['deudora', 'acreedora']),
+                description: 'Lado en que crece el saldo (al revés del tipo en las contracuentas)',
+            },
+            contracuenta: booleano,
+            reinicia_anual: {
+                ...booleano,
+                description: 'El saldo vuelve a cero cada ejercicio (ingresos y gastos)',
+            },
+            auxiliar_proveedor: booleano,
+            categoria_fiscal: nulable(texto),
+            libro_inventario: booleano,
+            categoria_flujo: {
+                ...nulable(enumerado(['efectivo', 'operacion', 'inversion', 'financiamiento'])),
+                description: 'Clasificación del flujo de efectivo (método indirecto)',
+            },
             ...auditable,
         },
-        ['empresa_id'],
+        [
+            'empresa_id',
+            'pais',
+            'naturaleza',
+            'contracuenta',
+            'reinicia_anual',
+            'auxiliar_proveedor',
+            'categoria_fiscal',
+            'libro_inventario',
+            'categoria_flujo',
+        ],
     ),
 )
 
@@ -55,8 +83,13 @@ export const Movimiento = definirEsquema(
             haber: Dinero,
             cliente_id: nulable(id),
             cliente_nombre: { ...nulable(texto), description: 'Cliente del auxiliar (CxC, anticipos)' },
+            impuesto_codigo: { ...nulable(texto), description: 'Impuesto de la partida (fiscal.impuestos)' },
+            cuadricula: {
+                ...nulable(texto),
+                description: 'Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro',
+            },
         },
-        ['cliente_nombre'],
+        ['cliente_nombre', 'impuesto_codigo', 'cuadricula'],
     ),
 )
 
@@ -80,6 +113,7 @@ export const Asiento = definirEsquema(
                 'egreso',
                 'cierre_caja',
                 'ajuste',
+                'reclasificacion',
             ]),
             origen_id: nulable(id),
             reversa_de: {
@@ -87,6 +121,19 @@ export const Asiento = definirEsquema(
                 description: 'Asiento que este revierte (correcciones por reverso)',
             },
             revertido_por: { ...nulable(id), description: 'Asiento de reverso de este, si ya se revirtió' },
+            diario: {
+                ...nulable(texto),
+                description: 'Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>)',
+            },
+            numero: {
+                ...nulable(entero),
+                description: 'Número del asiento en su diario y año, guardado al registrar; nunca cambia',
+            },
+            partida: {
+                ...nulable(entero),
+                description:
+                    'Partida del Libro Diario (correlativo por empresa y año), asignada al cerrar el mes; null mientras el mes esté abierto',
+            },
             revertible: {
                 ...booleano,
                 description:
@@ -100,7 +147,7 @@ export const Asiento = definirEsquema(
             created_at: instante,
             movimientos: lista(Movimiento),
         },
-        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id'],
+        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id', 'diario', 'numero', 'partida'],
     ),
 )
 
@@ -159,6 +206,29 @@ export const Caja = definirEsquema(
         },
         ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre', 'empresa_id'],
     ),
+)
+
+export const Diario = definirEsquema(
+    'Diario',
+    objeto({
+        id,
+        empresa_id: id,
+        codigo: { ...texto, description: 'VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta bancaria>' },
+        nombre: texto,
+        tipo: enumerado(['ventas', 'cobros', 'caja', 'banco', 'compras', 'impuestos', 'cierre', 'varios']),
+        cuenta_por_defecto: nulable(id),
+        cuenta_por_defecto_codigo: nulable(texto),
+        caja_id: nulable(id),
+        cuenta_bancaria_id: nulable(id),
+        activo: booleano,
+        secuencias: {
+            ...lista(objeto({ anio: entero, ultimo: entero })),
+            description: 'Numeración guardada por año: último número asignado (el siguiente es ultimo + 1)',
+        },
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
 )
 
 export const BancoLibro = definirEsquema(
@@ -286,31 +356,49 @@ export const CierrePeriodo = definirEsquema(
             reabierto_por: nulable(id),
             reabierto_por_nombre: nulable(texto),
             motivo_reapertura: nulable(texto),
+            ultimo_sello: {
+                type: ['integer', 'null'],
+                description:
+                    'Último sello de la cadena de hash de la empresa al cerrar el mes (§10.10); null en cierres anteriores a la cadena',
+            },
+            ultimo_hash: {
+                type: ['string', 'null'],
+                pattern: '^[0-9a-f]{64}$',
+                description: 'Hash de ese sello (SHA-256 en hexadecimal)',
+            },
         },
-        ['empresa_id'],
+        ['empresa_id', 'ultimo_sello', 'ultimo_hash'],
     ),
 )
 
-const lineaEstado = objeto({
-    cuenta_id: id,
-    codigo: texto,
-    nombre: texto,
-    tipo: enumerado(['activo', 'pasivo', 'ingreso', 'gasto']),
-    debe: Dinero,
-    haber: Dinero,
-    saldo: { ...Dinero, description: 'Según la naturaleza de la cuenta' },
-})
+const lineaEstado = objeto(
+    {
+        cuenta_id: id,
+        codigo: texto,
+        nombre: texto,
+        tipo: enumerado(['activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto']),
+        naturaleza: enumerado(['deudora', 'acreedora']),
+        debe: Dinero,
+        haber: Dinero,
+        saldo: { ...Dinero, description: 'Según la naturaleza de la cuenta' },
+    },
+    ['naturaleza'],
+)
 
-const totalesBalance = objeto({
-    debe: Dinero,
-    haber: Dinero,
-    activo: Dinero,
-    pasivo: Dinero,
-    ingresos: Dinero,
-    gastos: Dinero,
-    resultado: { ...Dinero, description: 'ingresos − gastos' },
-    cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + resultado' },
-})
+const totalesBalance = objeto(
+    {
+        debe: Dinero,
+        haber: Dinero,
+        activo: { ...Dinero, description: 'Neto: las contracuentas (depreciación acumulada) restan' },
+        pasivo: Dinero,
+        patrimonio: Dinero,
+        ingresos: Dinero,
+        gastos: Dinero,
+        resultado: { ...Dinero, description: 'ingresos − gastos' },
+        cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + patrimonio + resultado' },
+    },
+    ['patrimonio'],
+)
 
 const totalesResultados = objeto({ ingresos: Dinero, gastos: Dinero, resultado: Dinero })
 
@@ -345,5 +433,48 @@ export const EstadoResultados = definirEsquema(
         consolidado: booleano,
         empresas: lista(seccion(totalesResultados)),
         total: objeto({ cuentas: lista(lineaEstado), totales: totalesResultados }),
+    }),
+)
+
+const hashHex = { type: 'string', pattern: '^[0-9a-f]{64}$', description: 'SHA-256 en hexadecimal' }
+
+export const IntegridadLibro = definirEsquema(
+    'IntegridadLibro',
+    objeto({
+        empresa_id: id,
+        version: { ...texto, description: 'Versión del JSON canónico de la cadena (`v1`)' },
+        verificado: {
+            ...booleano,
+            description: 'true si toda la cadena encadena y cada hash recalculado coincide con el guardado',
+        },
+        sellos: { ...entero, description: 'Sellos de toda la cadena de la empresa' },
+        verificados: {
+            ...entero,
+            description: 'Sellos cuyo hash se recalculó (asientos con fecha en el rango)',
+        },
+        sin_sellar: {
+            ...entero,
+            description: 'Asientos del rango sin sello todavía (el sellador corre cada minuto)',
+        },
+        primer_sello: nulable(entero),
+        ultimo_sello: nulable(entero),
+        primer_hash: nulable(hashHex),
+        ultimo_hash: nulable(hashHex),
+        ruptura: nulable(
+            objeto({
+                sello: entero,
+                asiento_id: nulable(id),
+                motivo: enumerado([
+                    'hash_distinto',
+                    'encadenamiento',
+                    'sello_faltante',
+                    'asiento_inexistente',
+                    'cierre_distinto',
+                    'asiento_en_mes_cerrado',
+                ]),
+                esperado: { ...texto, description: 'Valor guardado (hash, sello o hash del cierre)' },
+                obtenido: { ...texto, description: 'Valor recalculado o encontrado' },
+            }),
+        ),
     }),
 )

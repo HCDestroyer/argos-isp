@@ -155,6 +155,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
 | `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
+| `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |
 | `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
@@ -166,6 +167,19 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
+| `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
+| `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
+| `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
+| `libro.integridad_rota` | ledger (sellador) | empresa_id, sello, asiento_id, esperado, obtenido |
+| `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
+| `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
+| `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |
+| `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
+| `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
+| `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
+| `horus.estado_seguridad_cambiado` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, estado, estado_anterior, hallazgos_abiertos |
+| `horus.router_estado_cambiado` | integraciones (Horus) | webhook_id, router (id, nombre, estado, estado_anterior, motivo) |
+| `horus.servicio_infra_cambiado` | integraciones (Horus) | webhook_id, servicio_infra (id, nombre, estado, estado_anterior, motivo) |
 
 El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 

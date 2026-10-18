@@ -12,11 +12,13 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     egreso: { etiqueta: 'Egreso', icono: 'i-lucide-arrow-up-right' },
     cierre_caja: { etiqueta: 'Cierre de caja', icono: 'i-lucide-lock' },
     ajuste: { etiqueta: 'Ajuste', icono: 'i-lucide-scale' },
+    reclasificacion: { etiqueta: 'Reclasificación de IVA', icono: 'i-lucide-arrow-left-right' },
 }
 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {
     activo: 'Activo',
     pasivo: 'Pasivo',
+    patrimonio: 'Patrimonio',
     ingreso: 'Ingreso',
     gasto: 'Gasto',
 }

@@ -91,7 +91,7 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
 )
 
 export const FacturaLinea = definirEsquema(
@@ -138,10 +138,23 @@ export const Factura = definirEsquema(
                 ...Dinero,
                 description: 'Parte de pagado que viene de notas de crédito (saldo = total − pagado)',
             },
-            fel_uuid: nulable(texto),
+            fel_uuid: { ...nulable(texto), description: 'Autorización (UUID SAT) del DTE vigente' },
             fel_serie: nulable(texto),
             fel_numero: nulable(texto),
-            fel_estado: nulable(texto),
+            fel_estado: {
+                ...nulable(texto),
+                description:
+                    'Estado del DTE vigente (o del último rechazado): pendiente, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado',
+            },
+            dte_id: { ...nulable(id), description: 'DTE vigente (GET /dte/:id)' },
+            fel_error: { ...nulable(texto), description: 'Error visible del DTE (SAT, receptor_requerido…)' },
+            aviso_cobro: {
+                ...booleano,
+                description:
+                    'Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse',
+            },
+            certificar_al: nulable(enumerado(['emitir', 'pagar', 'nunca'])),
+            tipo_dte: { ...nulable(texto), description: 'FACT, FPEQ… (null sin FEL)' },
             tipo: {
                 ...enumerado(['servicio', 'mora']),
                 description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
@@ -156,9 +169,20 @@ export const Factura = definirEsquema(
                     'Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp',
             },
             id_externo: { ...nulable(texto), description: 'Id de la factura en su sistema de origen' },
+            sustituida_por: {
+                ...nulable(id),
+                description:
+                    'Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida',
+            },
+            sustituye_a: {
+                ...nulable(id),
+                description: 'Factura original que esta sustituye; null si no es una sustituta',
+            },
             ...auditable,
         },
         [
+            'sustituida_por',
+            'sustituye_a',
             'tipo',
             'factura_origen_id',
             'vencida_en',
@@ -170,6 +194,11 @@ export const Factura = definirEsquema(
             'id_externo',
             'empresa_id',
             'empresa_nombre',
+            'dte_id',
+            'fel_error',
+            'aviso_cobro',
+            'certificar_al',
+            'tipo_dte',
         ],
     ),
 )
@@ -196,8 +225,36 @@ export const NotaCredito = definirEsquema(
             created_by: nulable(id),
             created_by_nombre: nulable(texto),
             created_at: instante,
+            anulada_en: {
+                ...nulable(instante),
+                description:
+                    'Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente',
+            },
+            dte_id: {
+                ...nulable(id),
+                description:
+                    'Su NCRE (GET /dte/:id): la vigente o la última rechazada; null en una nota interna',
+            },
+            fel_estado: {
+                ...nulable(texto),
+                description:
+                    'Estado de su NCRE: pendiente, enviando, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado',
+            },
+            fel_uuid: { ...nulable(texto), description: 'Autorización (UUID SAT) de su NCRE' },
+            fel_serie: nulable(texto),
+            fel_numero: nulable(texto),
+            fel_error: { ...nulable(texto), description: 'Error visible de su NCRE (SAT…)' },
         },
-        ['empresa_id'],
+        [
+            'empresa_id',
+            'anulada_en',
+            'dte_id',
+            'fel_estado',
+            'fel_uuid',
+            'fel_serie',
+            'fel_numero',
+            'fel_error',
+        ],
     ),
 )
 
@@ -313,6 +370,19 @@ export const NotaCreditoEmitida = definirEsquema('NotaCreditoEmitida', {
         }),
     ],
 })
+
+export const SustitucionFactura = definirEsquema(
+    'SustitucionFactura',
+    objeto({
+        original: {
+            ...FacturaDetalle,
+            description: 'La factura sustituida (anulada o acreditada por completo)',
+        },
+        nueva: { ...FacturaDetalle, description: 'La factura nueva del mismo periodo' },
+        tipo: enumerado(['anulacion', 'nota_credito']),
+        nota_credito_id: { ...nulable(id), description: 'La nota (NCRE) que acreditó la original' },
+    }),
+)
 
 export const Pago = definirEsquema(
     'Pago',

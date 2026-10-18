@@ -70,7 +70,7 @@ export abstract class DomainAction<Entrada, Salida> {
                     trx,
                     t.ctx,
                     this.nombre,
-                    entrada,
+                    t.entradaAuditada(entrada),
                     t.entidadActual,
                     null,
                     t.empresaAuditoria,
@@ -168,6 +168,7 @@ export class Transaccion {
     #empresaId?: number | null
     #ganchos: GanchoConfirmacion[] = []
     #ctx: ContextoAccion
+    #anotaciones?: Record<string, unknown>
 
     constructor(
         readonly trx: TransactionClientContract,
@@ -204,6 +205,22 @@ export class Transaccion {
     /** Empresa para la auditoría: la fijada por la acción o la activa del contexto. */
     get empresaAuditoria(): number | null {
         return this.#empresaId !== undefined ? this.#empresaId : (this.#ctx.empresaId ?? null)
+    }
+
+    /**
+     * Agrega datos al registro de `audit.acciones.entrada` (bajo la clave `auditoria`) de una
+     * ejecución exitosa: lo que una lectura de datos personales devolvió (p. ej. qué clientes leyó
+     * un token de integración). Nunca datos sensibles: no se enmascaran.
+     */
+    anotarAuditoria(datos: Record<string, unknown>) {
+        this.#anotaciones = { ...this.#anotaciones, ...datos }
+    }
+
+    /** @internal entrada enmascarada + anotaciones de la acción */
+    entradaAuditada(entrada: unknown): unknown {
+        if (!this.#anotaciones) return entrada
+        const base = typeof entrada === 'object' && entrada !== null ? entrada : { entrada }
+        return { ...base, auditoria: this.#anotaciones }
     }
 
     /** Entidad principal afectada; se guarda en `audit.acciones.entidad_tipo/entidad_id`. */

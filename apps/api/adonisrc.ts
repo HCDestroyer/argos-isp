@@ -22,6 +22,9 @@ export default defineConfig({
         () => import('#start/routes'),
         () => import('#start/kernel'),
         { file: () => import('#start/notify'), environment: ['web'] },
+        // A3: instalador de la localización fiscal en el punto de extensión del núcleo
+        () => import('#start/fiscal'),
+        { file: () => import('#start/integraciones'), environment: ['web'] },
     ],
 
     tests: {

@@ -17,3 +17,6 @@ test-results/
 
 # worktrees temporales de agentes de Claude Code
 .claude/worktrees/
+
+# Snapshot de Redis local de pruebas
+dump.rdb

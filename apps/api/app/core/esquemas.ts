@@ -20,6 +20,7 @@ import { ReglasPromesa } from '#billing/esquemas'
 import { PlanEfectivo } from '#network/esquemas'
 import { TIPOS_ACTOR } from '#shared/contexto'
 import { REGIMENES_ISR } from '#core/empresas'
+import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -179,11 +180,43 @@ export const Cliente = definirEsquema(
     objeto(
         {
             id,
+            codigo: {
+                type: 'string',
+                pattern: '^C-\\d{6,}$',
+                description:
+                    'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
+            },
+            codigo_externo: {
+                ...nulable(texto),
+                description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
+            },
             nombre: texto,
             tipo: enumerado(['persona', 'empresa']),
-            nit_cui: nulable(texto),
+            tipo_documento_fiscal: {
+                ...enumerado(TIPOS_DOCUMENTO_FISCAL),
+                description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
+            },
+            nit_cui: {
+                ...nulable(texto),
+                description:
+                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
+            },
+            nit_cui_invalido: {
+                ...booleano,
+                description:
+                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
+                    'se apaga al corregirlo',
+            },
             nombre_fiscal: nulable(texto),
             direccion_fiscal: nulable(texto),
+            pais_fiscal: {
+                ...texto,
+                pattern: '^[A-Z]{2}$',
+                description: 'País del receptor (ISO 3166-1 alfa-2)',
+            },
+            agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
+            sector_publico: { ...booleano, description: 'Entidad del sector público' },
             email: nulable(texto),
             telefono: nulable(texto),
             movil: nulable(texto),
@@ -203,7 +236,16 @@ export const Cliente = definirEsquema(
             },
             ...auditable,
         },
-        [],
+        // Opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía
+        [
+            'codigo',
+            'codigo_externo',
+            'tipo_documento_fiscal',
+            'nit_cui_invalido',
+            'pais_fiscal',
+            'agente_retencion_iva',
+            'sector_publico',
+        ],
     ),
 )
 
@@ -408,6 +450,126 @@ export const ResolucionIp = definirEsquema(
     }),
 )
 
+/** IP resuelta por `POST /integraciones/horus/resolver` (contrato Horus §2.1). */
+export const IpResueltaHorus = definirEsquema(
+    'IpResueltaHorus',
+    objeto({
+        ip: { type: 'string', description: 'La IP tal como se pidió' },
+        servicio_id: id,
+        cliente_id: id,
+        prefijo: {
+            type: 'string',
+            description: 'Asignación o sesión que contiene la IP (prefijo más largo)',
+        },
+        cliente: objeto({
+            nombre: texto,
+            codigo: { type: 'string', description: 'Código estable del cliente (`C-000455`)' },
+            tipo: enumerado(['persona', 'empresa']),
+        }),
+        servicio: objeto({
+            user_ppp: nulable(texto),
+            plan: { type: 'string', description: 'Nombre del plan' },
+            estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+            router_id: id,
+        }),
+        empresa: objeto({
+            id,
+            nombre: { type: 'string', description: 'Nombre comercial de la empresa (NIT) del servicio' },
+            nit: nulable(texto),
+        }),
+        desde: { ...instante, description: 'Inicio de la sesión o asignación vigente que contiene la IP' },
+    }),
+)
+
+/** IP que ningún servicio del alcance del token tiene (o que no existe). */
+export const IpNoEncontradaHorus = definirEsquema(
+    'IpNoEncontradaHorus',
+    objeto({ ip: texto, error: enumerado(['no_encontrada']) }),
+)
+
+export const ResolucionIpsHorus = definirEsquema(
+    'ResolucionIpsHorus',
+    objeto({
+        resultados: {
+            ...lista({ anyOf: [IpResueltaHorus, IpNoEncontradaHorus] }),
+            description: 'Uno por IP pedida, en el mismo orden',
+        },
+    }),
+)
+
+/** `POST /integraciones/horus/tokens`: el token se muestra una sola vez. */
+export const TokenHorusCreado = definirEsquema(
+    'TokenHorusCreado',
+    objeto({
+        token: { type: 'string', description: 'Valor `atk_…`; se muestra una sola vez' },
+        datos: TokenApi,
+        usuario_id: { ...id, description: 'Usuario técnico Horus' },
+    }),
+)
+
+/** `POST /integraciones/horus/sso/tickets` (contrato Horus §1.5). */
+export const TicketSsoEmitido = definirEsquema(
+    'TicketSsoEmitido',
+    objeto({
+        url: {
+            type: 'string',
+            description:
+                '`https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso',
+        },
+        expira_en: instante,
+    }),
+)
+
+/** Resultado de `POST /auth/sso/canjear` y `POST /auth/sso/vincular`. */
+export const CanjeSso = definirEsquema(
+    'CanjeSso',
+    objeto({
+        resultado: {
+            ...enumerado(['sesion', 'vinculacion_requerida']),
+            description:
+                '`sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login ' +
+                'normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`',
+        },
+        ruta: { type: 'string', description: 'Ruta local del panel del destino, p. ej. `/servicios/812`' },
+        conector: { type: 'string', description: 'Sistema que pidió el autologin (`horus`)' },
+        sesion: { ...nulable(SesionPanel), description: 'Solo con `resultado: sesion`' },
+        vinculacion: {
+            ...nulable(
+                objeto({
+                    token: { type: 'string', description: 'Token de vinculación: 10 min, un solo uso' },
+                    expira_en: instante,
+                    usuario_externo: objeto({
+                        id_externo: texto,
+                        correo: nulable(texto),
+                        nombre: nulable(texto),
+                    }),
+                }),
+            ),
+            description: 'Solo con `resultado: vinculacion_requerida`',
+        },
+    }),
+)
+
+/** Vinculación `(conector, id_externo) → usuario local` del autologin. */
+export const VinculacionExterna = definirEsquema(
+    'VinculacionExterna',
+    objeto({
+        id,
+        conector: texto,
+        id_externo: { type: 'string', description: 'Usuario en el otro sistema' },
+        usuario_id: id,
+        correo_externo: nulable(texto),
+        nombre_externo: nulable(texto),
+        revocada_en: nulable(instante),
+        created_at: instante,
+    }),
+)
+
+export const RevocacionVinculaciones = definirEsquema(
+    'RevocacionVinculaciones',
+    objeto({ revocadas: { type: 'integer', minimum: 0 } }),
+)
+
 /**
  * Todo lo que necesita RADIUS para autorizar un user_ppp (lo arma A1, lo consume A2). Mismo JSON
  * que `aaa:user:<user_ppp>` en Redis; contrato en `.claude/integration/contratos/aaa.md`.
@@ -482,38 +644,65 @@ export const AaaServicio = definirEsquema(
 
 export const EmpresaGrupo = definirEsquema(
     'EmpresaGrupo',
+    objeto(
+        {
+            id,
+            nit: nulable(texto),
+            razon_social: nulable(texto),
+            nombre_comercial: texto,
+            direccion_fiscal: nulable(texto),
+            municipio: nulable(texto),
+            departamento: nulable(texto),
+            telefono: nulable(texto),
+            telefono_alterno: nulable(texto),
+            whatsapp: nulable(texto),
+            correo: nulable(texto),
+            sitio_web: nulable(texto),
+            horario: nulable(texto),
+            instrucciones_pago: nulable(texto),
+            color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
+            pais: {
+                ...texto,
+                pattern: '^[A-Z]{2}$',
+                description:
+                    'País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
+            },
+            regimen_isr: {
+                ...nulable(enumerado(REGIMENES_ISR)),
+                description:
+                    'Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen',
+            },
+            codigo_establecimiento: {
+                ...nulable(entero),
+                description: 'Solo lectura (localización fiscal): establecimiento por defecto en la SAT',
+            },
+            logo_url: {
+                ...nulable(texto),
+                description:
+                    'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
+            },
+            logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
+            activa: booleano,
+            principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+            version: {
+                type: 'integer',
+                minimum: 0,
+                description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
+            },
+            created_at: instante,
+            updated_at: instante,
+        },
+        ['pais'],
+    ),
+)
+
+/** País con localización fiscal (`GET /empresas/paises`). */
+export const PaisLocalizacion = definirEsquema(
+    'PaisLocalizacion',
     objeto({
-        id,
-        nit: nulable(texto),
-        razon_social: nulable(texto),
-        nombre_comercial: texto,
-        direccion_fiscal: nulable(texto),
-        municipio: nulable(texto),
-        departamento: nulable(texto),
-        telefono: nulable(texto),
-        telefono_alterno: nulable(texto),
-        whatsapp: nulable(texto),
-        correo: nulable(texto),
-        sitio_web: nulable(texto),
-        horario: nulable(texto),
-        instrucciones_pago: nulable(texto),
-        color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
-        regimen_isr: nulable(enumerado(REGIMENES_ISR)),
-        codigo_establecimiento: nulable(entero),
-        logo_url: {
-            ...nulable(texto),
-            description: 'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
-        },
-        logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
-        activa: booleano,
-        principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
-        version: {
-            type: 'integer',
-            minimum: 0,
-            description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
-        },
-        created_at: instante,
-        updated_at: instante,
+        codigo: { ...texto, pattern: '^[A-Z]{2}$', description: 'ISO 3166-1 alfa-2' },
+        nombre: texto,
     }),
 )
 

@@ -18,6 +18,8 @@ import { CANALES } from '#shared/contexto'
 import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
+import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
+import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -40,21 +42,53 @@ export const loginValidator = vine.compile(
 |--------------------------------------------------------------------------
 */
 
-/** NIT guatemalteco (dígitos + verificador numérico o K) o CUI de 13 dígitos; "CF" para consumidor final. */
+/**
+ * Número del documento fiscal del receptor. El formato fino depende de `tipo_documento_fiscal` y
+ * lo valida la acción (`#core/nit_cui`): NIT con verificador, CUI de 13 dígitos, pasaporte o CF.
+ */
 const nitCui = () =>
     vine
         .string()
         .trim()
         .toUpperCase()
-        .regex(/^(CF|\d{13}|\d{1,12}-?[0-9K])$/)
-        .meta({ description: 'NIT (con dígito verificador), CUI de 13 dígitos o CF' })
+        .regex(/^[0-9A-Z][0-9A-Z -]{0,24}$/)
+        .meta({
+            description:
+                'NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, ' +
+                'según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios',
+        })
+
+/** País ISO 3166-1 alfa-2 en mayúsculas. */
+const pais = () =>
+    vine
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z]{2}$/)
 
 const camposCliente = {
     nombre: vine.string().trim().minLength(2).maxLength(200),
     tipo: vine.enum(['persona', 'empresa'] as const).optional(),
+    tipo_documento_fiscal: vine
+        .enum(TIPOS_DOCUMENTO_FISCAL)
+        .optional()
+        .meta({
+            description:
+                'Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` ' +
+                '(vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)',
+        }),
     nit_cui: nitCui().nullable().optional(),
     nombre_fiscal: vine.string().trim().maxLength(200).nullable().optional(),
     direccion_fiscal: vine.string().trim().maxLength(300).nullable().optional(),
+    pais_fiscal: pais().optional().meta({
+        description: 'País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte',
+    }),
+    agente_retencion_iva: vine.boolean().optional().meta({
+        description: 'El cliente es agente de retención de IVA (retiene al pagar)',
+    }),
+    sector_publico: vine.boolean().optional().meta({
+        description: 'Entidad del sector público (reglas propias de retención)',
+    }),
     email: vine.string().trim().email().nullable().optional(),
     telefono: vine.string().trim().maxLength(30).nullable().optional(),
     movil: vine.string().trim().maxLength(30).nullable().optional(),
@@ -63,6 +97,9 @@ const camposCliente = {
     zona_id: idEntidad().nullable().optional(),
     campos_personalizados: vine.record(vine.any()).optional(),
     canal_preferido: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
+    codigo_externo: vine.string().trim().maxLength(50).nullable().optional().meta({
+        description: 'Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`',
+    }),
 }
 
 export const crearClienteValidator = vine.compile(vine.object(camposCliente))
@@ -84,7 +121,7 @@ export const listarClientesValidator = vine.compile(
             .trim()
             .maxLength(100)
             .optional()
-            .meta({ description: 'Busca por nombre, NIT/CUI, teléfono, user_ppp o IP' }),
+            .meta({ description: 'Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP' }),
         zona_id: idEntidad().optional(),
         estado_servicio: vine
             .enum(ESTADOS_SERVICIO)
@@ -100,6 +137,10 @@ export const listarClientesValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: con alguna factura vencida; false: sin ninguna' }),
+        nit_cui_invalido: vine.boolean().optional().meta({
+            description:
+                'true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal)',
+        }),
         con_promesa_activa: vine
             .boolean()
             .optional()
@@ -530,7 +571,11 @@ const camposEmpresa = {
         .enum(REGIMENES_ISR)
         .nullable()
         .optional()
-        .meta({ description: 'Régimen de ISR para las frases de FEL' }),
+        .meta({
+            description:
+                'Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del ' +
+                'parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)',
+        }),
     codigo_establecimiento: vine
         .number()
         .withoutDecimals()
@@ -538,7 +583,11 @@ const camposEmpresa = {
         .max(999999)
         .nullable()
         .optional()
-        .meta({ description: 'Código de establecimiento en la SAT (FEL)' }),
+        .meta({
+            description:
+                'Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); ' +
+                'al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)',
+        }),
 }
 
 const nitEmpresa = () =>
@@ -556,7 +605,23 @@ export const crearEmpresaValidator = vine.compile(
         nit: nitEmpresa(),
         razon_social: vine.string().trim().minLength(1).maxLength(200),
         nombre_comercial: vine.string().trim().minLength(1).maxLength(200),
+        pais: pais()
+            .optional()
+            .meta({
+                description:
+                    'País de la localización fiscal (por defecto GT; hoy solo GT, ver GET /empresas/paises). ' +
+                    '422 `pais_no_soportado` sin paquete',
+            }),
         ...camposEmpresa,
+    }),
+)
+
+export const cambiarPaisEmpresaValidator = vine.compile(
+    vine.object({
+        pais: pais().meta({ description: 'País nuevo (ISO 3166-1 alfa-2); ver GET /empresas/paises' }),
+        version: vine.number().withoutDecimals().min(0).meta({
+            description: 'version leída de la empresa; si cambió responde 409',
+        }),
     }),
 )
 
@@ -591,5 +656,98 @@ export const cambiarLogoEmpresaValidator = vine.compile(
 export const listarEmpresasValidator = vine.compile(
     vine.object({
         activas: vine.boolean().optional().meta({ description: 'Solo las activas (true) o todas (omitido)' }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Integración Horus (contrato `.claude/integration/contratos/horus.md`)
+|--------------------------------------------------------------------------
+*/
+
+/** Máximo de IPs por llamada a `POST /integraciones/horus/resolver` (contrato §2.1). */
+export const MAXIMO_IPS_RESOLVER = 500
+
+/** `POST /integraciones/horus/resolver`: las IPs van en el cuerpo, nunca en la URL. */
+export const resolverIpsValidator = vine.compile(
+    vine.object({
+        ips: vine
+            .array(vine.string().trim().ipAddress())
+            .minLength(1)
+            .maxLength(MAXIMO_IPS_RESOLVER)
+            .meta({ description: 'IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden' }),
+    }),
+)
+
+/** `POST /integraciones/horus/tokens`. */
+export const generarTokenHorusValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        routers: vine
+            .array(idEntidad())
+            .optional()
+            .meta({ description: 'Restringe el token a servicios de estos routers' }),
+        zonas: vine
+            .array(idEntidad())
+            .optional()
+            .meta({ description: 'Restringe el token a clientes de estas zonas' }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Autologin desde Horus (contrato Horus §1.5, lado receptor)
+|--------------------------------------------------------------------------
+*/
+
+/** `POST /integraciones/horus/sso/tickets` (servidor de Horus con su token `atk_`). */
+export const emitirTicketSsoValidator = vine.compile(
+    vine.object({
+        usuario: vine.object({
+            id_externo: vine
+                .string()
+                .trim()
+                .minLength(1)
+                .maxLength(200)
+                .meta({ description: 'Id del usuario en Horus; con el conector forma la vinculación' }),
+            correo: vine
+                .string()
+                .trim()
+                .maxLength(254)
+                .nullable()
+                .optional()
+                .meta({ description: 'Solo informativo: nunca se vincula por correo' }),
+            nombre: vine.string().trim().maxLength(200).nullable().optional(),
+        }),
+        destino: vine.object({
+            tipo: vine.enum(TIPOS_DESTINO_SSO),
+            id_externo: vine
+                .string()
+                .trim()
+                .regex(/^[1-9]\d{0,17}$/)
+                .meta({ description: 'Id del recurso en ArgosIsp (cliente, servicio o router)' }),
+        }),
+    }),
+)
+
+/** `POST /auth/sso/canjear` (panel, desde `/sso/entrar#<ticket>`). */
+export const canjearTicketSsoValidator = vine.compile(
+    vine.object({ ticket: vine.string().trim().minLength(20).maxLength(200) }),
+)
+
+/** `POST /auth/sso/vincular`: login normal + token de vinculación del canje. */
+export const vincularCuentaSsoValidator = vine.compile(
+    vine.object({
+        token_vinculacion: vine.string().trim().minLength(20).maxLength(200),
+        email: vine.string().trim().email().toLowerCase(),
+        password: vine.string().minLength(1).maxLength(200),
+    }),
+)
+
+/** `POST /vinculaciones/revocar` (administrador). */
+export const revocarVinculacionesValidator = vine.compile(
+    vine.object({
+        usuario_id: idEntidad().optional().meta({ description: 'Solo las de este usuario; sin él, todas' }),
+        conector: vine.enum(CONECTORES_SSO).optional(),
     }),
 )
