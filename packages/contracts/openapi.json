@@ -88,6 +88,9 @@
     },
     {
       "name": "sesiones"
+    },
+    {
+      "name": "sistema"
     }
   ],
   "paths": {
@@ -29906,6 +29909,47 @@
         "x-implementado": true
       }
     },
+    "/api/v1/version": {
+      "get": {
+        "operationId": "versionInstalada",
+        "summary": "Versión instalada de ArgosIsp y qué cambió en ella",
+        "description": "Cualquier usuario con sesión (sin permiso del ACL, como `/me`). `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versión instalada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInstalada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/vinculaciones/revocar": {
       "post": {
         "operationId": "vinculacionesRevocar",
@@ -45380,6 +45424,52 @@
           },
           "descripcion": {
             "type": "string"
+          }
+        }
+      },
+      "VersionInstalada": {
+        "type": "object",
+        "required": [
+          "version",
+          "commit",
+          "compilada",
+          "notas_url",
+          "cambios"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "SemVer de la imagen instalada (`1.4.2`) o `desarrollo` fuera de una imagen publicada"
+          },
+          "commit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA del commit de la imagen"
+          },
+          "compilada": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Fecha de compilación de la imagen (UTC)"
+          },
+          "notas_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Notas de la versión en GitHub Releases (null en desarrollo)"
+          },
+          "cambios": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Sección de la versión en CHANGELOG.md, en Markdown (null si no está)"
           }
         }
       },
