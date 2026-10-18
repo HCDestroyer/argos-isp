@@ -15,6 +15,7 @@ import ledger from '#start/routes/ledger'
 import portal from '#start/routes/portal'
 import notify from '#start/routes/notify'
 import fiscal from '#start/routes/fiscal'
+import integraciones from '#start/routes/integraciones'
 
 export const registroRutas: Ruta[] = [
     ...core,
@@ -24,4 +25,5 @@ export const registroRutas: Ruta[] = [
     ...fiscal,
     ...portal,
     ...notify,
+    ...integraciones,
 ]

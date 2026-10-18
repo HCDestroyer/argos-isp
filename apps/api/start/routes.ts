@@ -24,6 +24,15 @@ router.get('/metrics', async ({ request, response }) => {
     return response.header('content-type', TIPO_CONTENIDO).send(await recolectarMetricas())
 })
 
+// Enlace de conexión de Horus (A6, contrato horus §1.4): el enlace `<API>/conectar#<código>` debe
+// estar en el host de la API (Horus canjea en `<API>/api/v1/…`), pero quien lo abre en el navegador
+// va a la página del panel que explica que se pega en Horus. El fragmento no llega al servidor y el
+// navegador lo conserva en la redirección. Fuera de /api/v1 y del OpenAPI.
+router.get('/conectar', async ({ response }) => {
+    const { urlConectarPanel } = await import('#integraciones/horus/panel')
+    return response.redirect().status(302).toPath(urlConectarPanel())
+})
+
 for (const ruta of registroRutas) {
     const seguridad = ruta.seguridad ?? 'sesion'
     const cadena = []

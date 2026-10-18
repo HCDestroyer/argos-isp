@@ -186,6 +186,11 @@ export async function crearAlerta(
         evento: string
         alerta: Variables
         requestId: string
+        /**
+         * Empresa del incidente (alertas de Horus sobre un servicio): usa su configuración y su
+         * chat del equipo (o la global si hereda). Sin ella, la global.
+         */
+        empresaId?: number | null
     },
 ): Promise<EnvioCreado | null> {
     const enBase = (await trx
@@ -198,8 +203,10 @@ export async function crearAlerta(
     const plantilla = enBase ?? PLANTILLAS_ALERTA.find((p) => p.evento === datos.evento)
     if (!plantilla) throw new Error(`Alerta sin plantilla: ${datos.evento}`)
 
-    // Las alertas al equipo usan la configuración global y su interruptor de alertas.
-    const config = await configPara(null)
+    // Las alertas al equipo usan la configuración global (o la de la empresa del incidente) y su
+    // interruptor de alertas.
+    const empresaId = datos.empresaId ?? null
+    const config = await configPara(empresaId)
     const chat = chatDelEquipo(config)
     const uso = disponibilidad(config, 'telegram', 'alertas')
     const omitido = uso.apagado ? uso.motivo : null
@@ -215,11 +222,16 @@ export async function crearAlerta(
         clienteId: null,
         canal: 'telegram',
         destino: chat ?? '-',
-        variables: { evento: datos.evento, empresa: await variablesEmpresa(trx), alerta: datos.alerta },
+        variables: {
+            evento: datos.evento,
+            empresa: await variablesEmpresa(trx, empresaId ?? undefined),
+            alerta: datos.alerta,
+        },
         plantilla,
         requestId: datos.requestId,
         error,
         omitido,
+        empresaId,
     })
 }
 

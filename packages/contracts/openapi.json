@@ -42,9 +42,6 @@
       "name": "facturacion"
     },
     {
-      "name": "fel"
-    },
-    {
       "name": "fiscal"
     },
     {
@@ -4351,587 +4348,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/dte": {
-      "get": {
-        "operationId": "dteListar",
-        "summary": "Listar DTE (certificaciones FEL)",
-        "description": "De la empresa activa (o empresas=todas con alcance global), del más reciente al más antiguo. estado se repite para pedir varios (?estado=pendiente&estado=error_temporal); desde/hasta filtran por la fecha de emisión en Guatemala.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "empresas",
-            "in": "query",
-            "required": false,
-            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "todas"
-              ]
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "description": "Cursor opaco de la página anterior",
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Tamaño de página (por defecto 50)",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 200
-            }
-          },
-          {
-            "name": "estado",
-            "in": "query",
-            "required": false,
-            "description": "Uno o varios estados (se repite el parámetro): cualquiera de ellos",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "pendiente",
-                  "enviando",
-                  "certificado",
-                  "error_temporal",
-                  "rechazado",
-                  "contingencia",
-                  "anulacion_pendiente",
-                  "anulado"
-                ]
-              }
-            }
-          },
-          {
-            "name": "desde",
-            "in": "query",
-            "required": false,
-            "description": "Fecha de emisión desde (inclusive, en Guatemala)",
-            "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-              "format": "date"
-            }
-          },
-          {
-            "name": "hasta",
-            "in": "query",
-            "required": false,
-            "description": "Fecha de emisión hasta (inclusive, en Guatemala)",
-            "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-              "format": "date"
-            }
-          },
-          {
-            "name": "documento_tipo",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "factura",
-                "nota_credito",
-                "nota_debito"
-              ]
-            }
-          },
-          {
-            "name": "documento_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Página de DTE",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "data",
-                    "nextCursor"
-                  ],
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Dte"
-                      }
-                    },
-                    "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/dte/{id}": {
-      "get": {
-        "operationId": "dteVer",
-        "summary": "Ver un DTE",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "DTE",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Dte"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/dte/{id}/intentos": {
-      "get": {
-        "operationId": "dteIntentos",
-        "summary": "Bitácora del DTE ante el certificador",
-        "description": "Cada envío, anulación y consulta (fiscal.dte_intentos), del más antiguo al más reciente, con su resultado, duración y la respuesta del certificador (nunca credenciales).",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Intentos",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DteIntento"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/dte/{id}/pdf": {
-      "get": {
-        "operationId": "dtePdf",
-        "summary": "PDF del DTE que devolvió el certificador",
-        "description": "Solo si el certificador devolvió PDF (404 si no). El PDF con la marca de la empresa lo genera el portal (A5) con los datos del DTE.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "PDF",
-            "content": {
-              "application/pdf": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/dte/{id}/reintentar": {
-      "post": {
-        "operationId": "dteReintentar",
-        "summary": "Reintentar un DTE rechazado o con error temporal",
-        "description": "Rechazado: crea un DTE nuevo (otro identificador) con el receptor releído; 422 receptor_requerido si aún falta el NIT. Error temporal: vuelve a la cola ya. 409 dte_no_reintentable, dte_en_proceso.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "DTE en cola",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Dte"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.certificar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/dte/{id}/xml": {
-      "get": {
-        "operationId": "dteXml",
-        "summary": "XML certificado del DTE",
-        "description": "404 si el DTE aún no tiene XML (no se ha certificado).",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "XML",
-            "content": {
-              "application/xml": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      }
-    },
     "/api/v1/egresos": {
       "get": {
         "operationId": "egresosListar",
@@ -6941,7 +6357,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "por_certificar",
                 "emitida",
                 "parcial",
                 "pagada",
@@ -7114,7 +6529,7 @@
       "post": {
         "operationId": "facturasAnular",
         "summary": "Anular factura (asiento de reverso)",
-        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba. FEL: con DTE certificado exige además el permiso fel.anular; dentro del plazo (dte_anulacion_plazo) el DTE queda anulacion_pendiente (fel_estado) y la factura se anula cuando el certificador lo confirma; fuera de plazo 422 anulacion_fuera_de_plazo (emite una nota de crédito). 409 anulacion_en_proceso, dte_en_proceso.",
+        "description": "Revierte su asiento (y el de sus moras pendientes), emite factura.anulada y re-evalúa el servicio. 409 factura_con_pagos si tiene pagos aplicados (anula primero el pago), factura_con_notas_credito si tiene notas de crédito (acredita el resto con otra nota) o factura_anulada si ya lo estaba.",
         "tags": [
           "facturacion"
         ],
@@ -7171,7 +6586,7 @@
         },
         "responses": {
           "200": {
-            "description": "Factura anulada (o con su DTE en anulación)",
+            "description": "Factura anulada",
             "content": {
               "application/json": {
                 "schema": {
@@ -7235,115 +6650,11 @@
         "x-implementado": true
       }
     },
-    "/api/v1/facturas/{id}/certificar": {
-      "post": {
-        "operationId": "facturasCertificar",
-        "summary": "Pedir la certificación FEL de una factura",
-        "description": "Crea el DTE pendiente (o en contingencia) que el worker envía; si ya tiene uno vigente lo devuelve. Una mora con IVA sale como NDEB referida a su factura certificada. 422 fel_no_configurada, receptor_requerido (consumidor final desde el límite), tipo_dte_no_permitido; 409 factura_anulada.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Solicitud",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SolicitudCertificacion"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.certificar",
-        "x-implementado": true
-      }
-    },
     "/api/v1/facturas/{id}/notas-credito": {
       "post": {
         "operationId": "facturasNotaCredito",
         "summary": "Emitir nota de crédito interna (parcial o total)",
-        "description": "Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura, o por línea con lineas[]; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). FEL: sobre una factura certificada es una NCRE (IVA a 2.1.02, su DTE en cola; 422 nota_fuera_de_plazo); sobre un aviso sin DTE, nota interna (IVA de 2.1.11). 422 monto si excede el saldo; 409 factura_anulada, factura_sin_saldo, dte_en_proceso, nota_por_linea_no_disponible.",
+        "description": "Reduce el saldo de la factura y la CxC del cliente con un asiento nota_credito (Debe ingresos, IVA, recargos… en proporción a la factura; Haber CxC). Suma a pagado (la factura puede quedar pagada), emite nota_credito.emitida y re-evalúa el servicio (puede reactivar: servicios[]). Sin FEL todavía. 422 monto si excede el saldo; 409 factura_anulada o factura_sin_saldo.",
         "tags": [
           "facturacion"
         ],
@@ -7387,7 +6698,7 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Obligatorio sin lineas; con lineas, si viene debe ser su suma",
+                    "description": "Monto con hasta 2 decimales, como string",
                     "examples": [
                       "150.00"
                     ]
@@ -7396,37 +6707,10 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 500
-                  },
-                  "lineas": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "linea_id": {
-                          "type": "integer",
-                          "minimum": 1
-                        },
-                        "monto": {
-                          "type": "string",
-                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                          "description": "Monto con hasta 2 decimales, como string",
-                          "examples": [
-                            "150.00"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "linea_id",
-                        "monto"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "minItems": 1,
-                    "maxItems": 100,
-                    "description": "Nota por línea: acredita conceptos concretos de la factura con su IVA"
                   }
                 },
                 "required": [
+                  "monto",
                   "motivo"
                 ],
                 "additionalProperties": false
@@ -7497,174 +6781,6 @@
           }
         },
         "x-permiso": "facturas.nota_credito",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/facturas/{id}/sustituir": {
-      "post": {
-        "operationId": "facturasSustituir",
-        "summary": "Sustituir una factura mal emitida (mismo periodo)",
-        "description": "Anula la original (sin DTE certificado) o la acredita con una NCRE por todo su saldo (con DTE certificado) y emite una nueva con las mismas líneas, periodo y vencimiento y el receptor corregido (cliente_fiscal). Emite factura.sustituida. 409 sustitucion_no_permitida (pagos, mora, ya sustituida), factura_anulada; 422 nota_fuera_de_plazo.",
-        "tags": [
-          "facturacion"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "motivo": {
-                    "type": "string",
-                    "minLength": 3,
-                    "maxLength": 500
-                  },
-                  "cliente_fiscal": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "tipo_documento_fiscal": {
-                        "type": "string",
-                        "enum": [
-                          "nit",
-                          "cui",
-                          "pasaporte",
-                          "cf"
-                        ]
-                      },
-                      "nit_cui": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 20
-                      },
-                      "nombre_fiscal": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 200
-                      },
-                      "direccion_fiscal": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 300
-                      }
-                    },
-                    "required": [
-                      "tipo_documento_fiscal"
-                    ],
-                    "additionalProperties": false,
-                    "description": "Receptor corregido para la factura nueva (el del cliente se corrige aparte en PUT /clientes/:id)"
-                  }
-                },
-                "required": [
-                  "motivo"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Original y nueva",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SustitucionFactura"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso facturas.sustituir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "facturas.sustituir",
         "x-implementado": true
       }
     },
@@ -7990,884 +7106,6 @@
           }
         },
         "x-permiso": "facturas.generar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/activar-contingencia": {
-      "post": {
-        "operationId": "felActivarContingencia",
-        "summary": "Declarar contingencia FEL",
-        "description": "Con contingencia activa y FEL obligatoria, las facturas nuevas se emiten y su DTE queda en contingencia, en cola hasta levantarla. Emite fel.contingencia_cambiada. 409 contingencia_sin_cambio. Procedimiento y plazo oficiales: confirmar con contador.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "empresa_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
-                  },
-                  "motivo": {
-                    "type": "string",
-                    "minLength": 3,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "motivo"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Configuración FEL",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfiguracionFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.contingencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.contingencia",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/configuracion": {
-      "get": {
-        "operationId": "felConfiguracion",
-        "summary": "Configuración FEL de la empresa (sin secretos)",
-        "description": "Proveedor, ambiente, modo (obligatoria, opcional, desactivada), contingencia y las credenciales guardadas (solo campos visibles: usuario; nunca las llaves). Sin configuración, la empresa está desactivada con version 0.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "empresa_id",
-            "in": "query",
-            "required": false,
-            "description": "Empresa; por defecto la activa (X-Empresa-Id)",
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Configuración FEL",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfiguracionFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
-        "x-implementado": true
-      },
-      "put": {
-        "operationId": "felConfigurar",
-        "summary": "Configurar proveedor, ambiente y modo FEL",
-        "description": "409 conflicto_version si version cambió. 422 certificar_al_incompatible: obligatoria con servicios en certificar_al = nunca. El proveedor falso no se admite en produccion. Emite fiscal.config_cambiada (fel_modo, proveedor).",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "empresa_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
-                  },
-                  "proveedor": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "infile",
-                          "falso"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Certificador; falso solo en pruebas. Obligatorio salvo con modo desactivada"
-                  },
-                  "ambiente": {
-                    "type": "string",
-                    "enum": [
-                      "pruebas",
-                      "produccion"
-                    ]
-                  },
-                  "modo": {
-                    "type": "string",
-                    "enum": [
-                      "obligatoria",
-                      "opcional",
-                      "desactivada"
-                    ]
-                  },
-                  "version": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "description": "version leída (0 si la empresa nunca se configuró); si cambió responde 409"
-                  }
-                },
-                "required": [
-                  "ambiente",
-                  "modo",
-                  "version"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Configuración FEL",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfiguracionFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicto de versión",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.configurar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/credenciales/{ambiente}": {
-      "put": {
-        "operationId": "felGuardarCredenciales",
-        "summary": "Guardar (o reemplazar) las credenciales del certificador",
-        "description": "Se guardan cifradas con la clave de la instalación; la respuesta y la auditoría nunca las incluyen (***). 422 por campo si falta uno obligatorio del proveedor.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "ambiente",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "pruebas",
-                "produccion"
-              ],
-              "description": "Ambiente del certificador"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "empresa_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
-                  },
-                  "proveedor": {
-                    "type": "string",
-                    "enum": [
-                      "infile",
-                      "falso"
-                    ]
-                  },
-                  "credenciales": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string",
-                      "maxLength": 500
-                    },
-                    "description": "Campos del certificador (infile: usuario_firma, llave_firma, usuario_api, llave_api, correo_copia; falso: usuario, llave). Nunca se devuelven ni se auditan"
-                  }
-                },
-                "required": [
-                  "credenciales"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Credenciales guardadas (sin secretos)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CredencialesFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.configurar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/credenciales/{ambiente}/probar": {
-      "post": {
-        "operationId": "felProbarCredenciales",
-        "summary": "Probar las credenciales contra el certificador",
-        "description": "No certifica nada. Guarda probada_en y el resultado. 422 fel_no_configurada sin proveedor o credenciales; 503 fel_proveedor_no_disponible si el certificador no responde.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "ambiente",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "pruebas",
-                "produccion"
-              ],
-              "description": "Ambiente del certificador"
-            }
-          },
-          {
-            "name": "empresa_id",
-            "in": "query",
-            "required": false,
-            "description": "Empresa; por defecto la activa (X-Empresa-Id)",
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resultado de la prueba",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CredencialesFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.configurar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/desactivar-contingencia": {
-      "post": {
-        "operationId": "felDesactivarContingencia",
-        "summary": "Levantar la contingencia FEL",
-        "description": "Con contingencia activa y FEL obligatoria, las facturas nuevas se emiten y su DTE queda en contingencia, en cola hasta levantarla. Emite fel.contingencia_cambiada. 409 contingencia_sin_cambio. Procedimiento y plazo oficiales: confirmar con contador.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "empresa_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
-                  },
-                  "motivo": {
-                    "type": "string",
-                    "minLength": 3,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "motivo"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Configuración FEL",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfiguracionFel"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.contingencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.contingencia",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/lotes": {
-      "post": {
-        "operationId": "felLote",
-        "summary": "Pedir la certificación de varias facturas",
-        "description": "facturas[] o desde/hasta (emitidas en el rango sin DTE, hasta 500). Cada una como POST /facturas/:id/certificar; las que fallan van en errores[] con su type.",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "empresa_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
-                  },
-                  "facturas": {
-                    "type": "array",
-                    "items": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "minItems": 1,
-                    "maxItems": 500,
-                    "description": "Facturas a certificar; o desde/hasta (fecha de emisión, Guatemala)"
-                  },
-                  "desde": {
-                    "type": "string",
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date"
-                  },
-                  "hasta": {
-                    "type": "string",
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date"
-                  }
-                },
-                "required": [],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Lote",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoteCertificacion"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.certificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.certificar",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/fel/proveedores": {
-      "get": {
-        "operationId": "felProveedores",
-        "summary": "Catálogo de certificadores FEL (campos de credenciales y ambientes)",
-        "description": "Los certificadores registrados en la instalación: código, nombre, campos obligatorios, opcionales y visibles de PUT /fel/credenciales/:ambiente, ambientes que admite (solo_pruebas = no admite produccion) y capacidades (contingencia, consulta de NIT, PDF).",
-        "tags": [
-          "fel"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Certificadores",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProveedorFelCatalogo"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso fel.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "fel.ver",
         "x-implementado": true
       }
     },
@@ -10691,6 +8929,962 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/horus": {
+      "get": {
+        "operationId": "horusConectorVer",
+        "summary": "Conector con Horus Flow: configuración (secretos como ***) y salud de la conexión",
+        "description": "Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "horusConectorGuardar",
+        "summary": "Guardar el conector con Horus: URL, código hf_pat_, receptor de Horus e interruptor",
+        "description": "Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de los receptores) salen siempre como `***` y en la auditoría también. Contrato: `.claude/integration/contratos/horus.md`; pantallas en `.claude/integration/a6.md`. `version: 0` lo crea. El primer guardado (o `regenerar_secreto_entrada`) genera el secreto del receptor de Argos y lo devuelve **una sola vez** en `webhook_entrada_secreto_nuevo`. Emite `horus.config_cambiada`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída; 0 si nunca se guardó. 409 si cambió"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "url_base": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL base de Horus, solo https (http solo en laboratorio)"
+                  },
+                  "token": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Código de conexión `hf_pat_…`. Omitido se conserva; null lo borra"
+                  },
+                  "webhook_salida_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL completa del receptor de Horus (la muestra Horus)"
+                  },
+                  "webhook_salida_secreto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Secreto del receptor de Horus. Omitido se conserva; null lo borra"
+                  },
+                  "regenerar_secreto_entrada": {
+                    "description": "Genera otro secreto para el receptor de Argos (se muestra una vez)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conector guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorusGuardado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/abrir": {
+      "post": {
+        "operationId": "horusAbrir",
+        "summary": "Ver en Horus: URL de autologin con ticket de un solo uso",
+        "description": "§1.5. El servidor de Argos pide el ticket a Horus con el `hf_pat_` y devuelve solo la URL (el navegador nunca pide el ticket). 422 `horus_apagado` con el conector apagado; 502 `horus_error` si Horus falla; si está en pausa por la espera exponencial, el problem+json trae `reintentar_en` (ISO UTC) y `detail` la hora de Guatemala. Para `servicio` y `cliente` se revisa el acceso del usuario.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "cliente",
+                          "servicio",
+                          "router",
+                          "hallazgo"
+                        ]
+                      },
+                      "id_externo": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "tipo",
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "URL de Horus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/conexion/canjear": {
+      "post": {
+        "operationId": "horusEnlaceCanjear",
+        "summary": "Canje del enlace de conexión de Argos (lo llama Horus, servidor a servidor)",
+        "description": "§1.4. Sin sesión: lo autentica el código del enlace. Guarda cifrados el `hf_pat_`, la URL de Horus y su receptor; emite el token `atk_` del usuario técnico Horus y genera el secreto del receptor de Argos. El conector queda apagado. 410 si el código venció, se usó o no existe.",
+        "tags": [
+          "integraciones"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "codigo": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "sistema": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "webhook": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "secreto": {
+                        "type": "string",
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "secreto"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "sistema",
+                  "base_url",
+                  "token",
+                  "webhook"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credenciales de Argos para Horus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeConexionHorus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/conexion/conectar": {
+      "post": {
+        "operationId": "horusEnlaceConectar",
+        "summary": "Conectar con un enlace de conexión generado en Horus",
+        "description": "§1.4 (Argos canjea el enlace de Horus). Emite el token `atk_` y el secreto del receptor de Argos, llama a `POST <horus>/api/v1/integrations/argosisp/conexion/canjear` y guarda lo que devuelve. El conector queda apagado. 422 `enlace_vencido` si Horus responde 410; 502 `horus_error` con el error real si Horus falla (no queda nada guardado).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enlace": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Enlace de conexión de Horus: `https://<horus>/conectar#<codigo>`"
+                  }
+                },
+                "required": [
+                  "enlace"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/consumo": {
+      "post": {
+        "operationId": "horusConsumoLotes",
+        "summary": "Consumo mensual de varios servicios (hasta 500) según Horus",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Es una lectura (POST por el tamaño de la lista).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  },
+                  "mes": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "description": "Mes `YYYY-MM` (hora de Guatemala); por defecto el actual"
+                  },
+                  "granularidad": {
+                    "type": "string",
+                    "enum": [
+                      "day",
+                      "total"
+                    ]
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consumo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumoHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/enlace": {
+      "post": {
+        "operationId": "horusEnlaceGenerar",
+        "summary": "Generar enlace de conexión para pegar en Horus (15 min, un solo uso)",
+        "description": "§1.4. El enlace `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256 del código. Horus lo canjea en `POST /integraciones/horus/conexion/canjear` del mismo host (la URL pública de la API). Si alguien abre el enlace en el navegador, `GET /conectar` de la API lo redirige (302, el fragmento se conserva) a `<PANEL_URL_PUBLICA>/conectar`, que explica que se pega en Horus.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Enlace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnlaceConexionHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/envios": {
+      "get": {
+        "operationId": "horusEnviosListar",
+        "summary": "Webhooks enviados a Horus: estado, intentos y próximo reintento",
+        "description": "Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "fallido",
+                "descartado"
+              ]
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioHorus"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/estado": {
+      "get": {
+        "operationId": "horusConectorEstado",
+        "summary": "Estado del conector para \"Ver en Horus\": encendido o no, y pausa (sin secretos)",
+        "description": "Con `horus.abrir` (no hace falta `horus.ver`): el panel deshabilita \"Ver en Horus\" con el conector apagado o sin URL o código, y avisa hasta cuándo está en pausa si Horus no respondió. No llama a Horus. El conector es uno por instalación: igual para toda empresa.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado del conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConectorHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.abrir",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/probar": {
+      "post": {
+        "operationId": "horusConectorProbar",
+        "summary": "Probar la conexión con Horus (lectura autenticada y ping firmado al receptor)",
+        "description": "Con la configuración guardada, encendida o no. Responde 200 aunque falle: `ok: false` y el error real (`ECONNREFUSED`, `Horus respondió 401: …`).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPruebaHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/recibidos": {
+      "get": {
+        "operationId": "horusRecibidosListar",
+        "summary": "Webhooks recibidos de Horus",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de webhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookHorusRecibido"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/horus/resolver": {
       "post": {
         "operationId": "integracionesHorusResolver",
@@ -10776,6 +9970,93 @@
           }
         },
         "x-permiso": "ip.resolver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/seguridad": {
+      "post": {
+        "operationId": "horusSeguridadLotes",
+        "summary": "Estado de seguridad de varios servicios (hasta 500) para la columna \"Seguridad\"",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Usa §3.5 de Horus; mientras Horus no lo tenga (H9) responde `modo: alternativa` con el último dato de la consulta 360 o de los webhooks, sin una llamada por servicio.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "servicio_ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seguridad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeguridadHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
         "x-implementado": true
       }
     },
@@ -10951,7 +10232,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso integraciones.ver",
+            "description": "Sin el permiso horus.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10961,7 +10242,7 @@
             }
           }
         },
-        "x-permiso": "integraciones.ver",
+        "x-permiso": "horus.ver",
         "x-implementado": true
       },
       "post": {
@@ -11036,7 +10317,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso integraciones.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso horus.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11056,7 +10337,7 @@
             }
           }
         },
-        "x-permiso": "integraciones.generar_token",
+        "x-permiso": "horus.generar_token",
         "x-implementado": true
       }
     },
@@ -11108,7 +10389,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso integraciones.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso horus.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11128,7 +10409,30 @@
             }
           }
         },
-        "x-permiso": "integraciones.revocar_token",
+        "x-permiso": "horus.revocar_token",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/horus/webhook": {
+      "post": {
+        "operationId": "horusWebhook",
+        "summary": "Receptor de webhooks de Horus (firmados con HMAC, lo llama Horus)",
+        "description": "§1.3 y §3.4. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>` con el secreto que generó Argos (401 `firma_invalida`), `X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `horus_apagado` con el conector apagado. Cuerpo `{ id, event, occurred_at, tenant, data }`. Deduplica por `id`; responde 202 y lo demás pasa por el bus (`horus.*`). `ping` y `test` solo se registran; eventos y campos desconocidos se ignoran.",
+        "tags": [
+          "integraciones"
+        ],
+        "responses": {
+          "202": {
+            "description": "Webhook recibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookHorus"
+                }
+              }
+            }
+          }
+        },
         "x-implementado": true
       }
     },
@@ -12107,8 +11411,7 @@
                 "nota_credito",
                 "egreso",
                 "cierre_caja",
-                "ajuste",
-                "reclasificacion"
+                "ajuste"
               ]
             }
           },
@@ -12174,157 +11477,6 @@
           },
           "422": {
             "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "libro.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/libro/diarios": {
-      "get": {
-        "operationId": "libroDiarios",
-        "summary": "Diarios del libro y su numeración por año",
-        "description": "Diarios de la empresa activa (o empresas=todas): VEN, COB, COM, IMP, CIE, VAR, uno CAJ-n por caja y uno BAN-n por cuenta bancaria, con el último número asignado de cada año (§10.7). Solo lectura: los diarios se crean solos cuando un asiento los necesita.",
-        "tags": [
-          "libro"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "empresas",
-            "in": "query",
-            "required": false,
-            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "todas"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Diarios",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Diario"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso libro.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "libro.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/libro/diarios/{id}": {
-      "get": {
-        "operationId": "libroDiarioVer",
-        "summary": "Ver un diario y su numeración",
-        "tags": [
-          "libro"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Diario",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Diario"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso libro.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13448,131 +12600,6 @@
           }
         },
         "x-permiso": "facturas.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/notas-credito/{id}/anular": {
-      "post": {
-        "operationId": "notasCreditoAnular",
-        "summary": "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo",
-        "description": "Reverso espejo del asiento de la nota; el monto vuelve al saldo de la factura y el servicio se reevalúa. Emite nota_credito.anulada. 409 nota_anulada, ncre_certificada, dte_en_proceso (la NCRE sigue en cola), nota_sin_ncre_rechazada.",
-        "tags": [
-          "facturacion"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "motivo": {
-                    "type": "string",
-                    "minLength": 3,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "motivo"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Nota anulada",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotaCredito"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso facturas.anular_nota_credito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "facturas.anular_nota_credito",
         "x-implementado": true
       }
     },
@@ -17644,8 +16671,7 @@
                       "emitir",
                       "pagar",
                       "nunca"
-                    ],
-                    "description": "Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)"
+                    ]
                   },
                   "reglas_promesa": {
                     "type": "object",
@@ -22551,10 +21577,8 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
-                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
-                        "facturas.sustituir",
                         "facturas.ver",
                         "fel.anular",
                         "fel.certificar",
@@ -22566,9 +21590,12 @@
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
-                        "integraciones.generar_token",
-                        "integraciones.revocar_token",
-                        "integraciones.ver",
+                        "horus.abrir",
+                        "horus.configurar",
+                        "horus.generar_token",
+                        "horus.probar",
+                        "horus.revocar_token",
+                        "horus.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -22792,10 +21819,8 @@
                         "empresas.editar",
                         "empresas.ver",
                         "facturas.anular",
-                        "facturas.anular_nota_credito",
                         "facturas.generar",
                         "facturas.nota_credito",
-                        "facturas.sustituir",
                         "facturas.ver",
                         "fel.anular",
                         "fel.certificar",
@@ -22807,9 +21832,12 @@
                         "fiscal.editar_parametros",
                         "fiscal.instalar",
                         "fiscal.ver",
-                        "integraciones.generar_token",
-                        "integraciones.revocar_token",
-                        "integraciones.ver",
+                        "horus.abrir",
+                        "horus.configurar",
+                        "horus.generar_token",
+                        "horus.probar",
+                        "horus.revocar_token",
+                        "horus.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -26056,6 +25084,184 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/horus": {
+      "get": {
+        "operationId": "horusServicio360",
+        "summary": "Consumo, salud y seguridad del servicio según Horus (consulta 360)",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus. Pregunta por `external_service_id` (1.2.0); si Horus no lo acepta o no conoce el servicio, por la IP actual (`consulta: address`). Incluye los últimos webhooks de Horus del servicio (`eventos_recientes`).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consulta 360",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Horus360Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/horus/consumo": {
+      "get": {
+        "operationId": "horusServicioConsumo",
+        "summary": "Consumo mensual del servicio según Horus (por día o total)",
+        "description": "Nunca bloquea: si Horus no responde (o está en pausa por la espera exponencial, máx. 15 min) devuelve el último dato conocido con `stale: true`, `actualizado_en` y `error`. Con el conector apagado responde `conector: apagado` sin llamar a Horus.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "mes",
+            "in": "query",
+            "required": false,
+            "description": "Mes `YYYY-MM` (hora de Guatemala); por defecto el actual",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          },
+          {
+            "name": "granularidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "day",
+                "total"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consumo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumoHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso horus.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "horus.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/limitar": {
       "post": {
         "operationId": "serviciosLimitar",
@@ -27324,10 +26530,8 @@
                             "empresas.editar",
                             "empresas.ver",
                             "facturas.anular",
-                            "facturas.anular_nota_credito",
                             "facturas.generar",
                             "facturas.nota_credito",
-                            "facturas.sustituir",
                             "facturas.ver",
                             "fel.anular",
                             "fel.certificar",
@@ -27339,9 +26543,12 @@
                             "fiscal.editar_parametros",
                             "fiscal.instalar",
                             "fiscal.ver",
-                            "integraciones.generar_token",
-                            "integraciones.revocar_token",
-                            "integraciones.ver",
+                            "horus.abrir",
+                            "horus.configurar",
+                            "horus.generar_token",
+                            "horus.probar",
+                            "horus.revocar_token",
+                            "horus.ver",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
@@ -28979,8 +28186,7 @@
               "nota_credito",
               "egreso",
               "cierre_caja",
-              "ajuste",
-              "reclasificacion"
+              "ajuste"
             ]
           },
           "origen_id": {
@@ -29706,6 +28912,38 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CanjeConexionHorus": {
+        "type": "object",
+        "required": [
+          "token",
+          "webhook",
+          "conector_id"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token `atk_` de Argos para Horus (§1.2)"
+          },
+          "webhook": {
+            "type": "object",
+            "required": [
+              "url",
+              "secreto"
+            ],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "secreto": {
+                "type": "string"
+              }
+            }
+          },
+          "conector_id": {
+            "type": "string"
           }
         }
       },
@@ -30739,6 +29977,378 @@
           }
         }
       },
+      "ConectorHorus": {
+        "type": "object",
+        "required": [
+          "activo",
+          "url_base",
+          "token",
+          "webhook_salida_url",
+          "webhook_salida_secreto",
+          "webhook_entrada_url",
+          "webhook_entrada_ruta",
+          "webhook_entrada_secreto",
+          "conector_id",
+          "conectado_por_enlace_en",
+          "ultima_prueba",
+          "salud",
+          "errores_cifrado",
+          "version"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Apagado por defecto: sin él no hay llamadas ni webhooks"
+          },
+          "url_base": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL base de Horus (https), sin `/api/v1`"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Código de conexión `hf_pat_` de Horus (`***`)"
+          },
+          "webhook_salida_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Horus (lo genera Horus)"
+          },
+          "webhook_salida_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Horus (`***`)"
+          },
+          "webhook_entrada_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública)"
+          },
+          "webhook_entrada_ruta": {
+            "type": "string",
+            "description": "Ruta del receptor de Argos"
+          },
+          "webhook_entrada_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Argos (`***`)"
+          },
+          "conector_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del conector en Argos (§1.4)"
+          },
+          "conectado_por_enlace_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Último canje de un enlace de conexión"
+          },
+          "ultima_prueba": {
+            "type": "object",
+            "required": [
+              "en",
+              "ok",
+              "error"
+            ],
+            "properties": {
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "salud": {
+            "type": "object",
+            "required": [
+              "fallos_seguidos",
+              "pausa_hasta",
+              "ultimo_error",
+              "ultimo_error_en",
+              "ultimo_exito_en"
+            ],
+            "properties": {
+              "fallos_seguidos": {
+                "type": "integer"
+              },
+              "pausa_hasta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ultimo_error_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ultimo_exito_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "errores_cifrado": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Secretos que no se pudieron descifrar (cambió la clave)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = nunca se guardó. Envíala al guardar"
+          }
+        }
+      },
+      "ConectorHorusGuardado": {
+        "type": "object",
+        "required": [
+          "activo",
+          "url_base",
+          "token",
+          "webhook_salida_url",
+          "webhook_salida_secreto",
+          "webhook_entrada_url",
+          "webhook_entrada_ruta",
+          "webhook_entrada_secreto",
+          "conector_id",
+          "conectado_por_enlace_en",
+          "ultima_prueba",
+          "salud",
+          "errores_cifrado",
+          "version",
+          "webhook_entrada_secreto_nuevo"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Apagado por defecto: sin él no hay llamadas ni webhooks"
+          },
+          "url_base": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL base de Horus (https), sin `/api/v1`"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Código de conexión `hf_pat_` de Horus (`***`)"
+          },
+          "webhook_salida_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Horus (lo genera Horus)"
+          },
+          "webhook_salida_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Horus (`***`)"
+          },
+          "webhook_entrada_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL del receptor de Argos para pegar en Horus (null si la API no conoce su URL pública)"
+          },
+          "webhook_entrada_ruta": {
+            "type": "string",
+            "description": "Ruta del receptor de Argos"
+          },
+          "webhook_entrada_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto del receptor de Argos (`***`)"
+          },
+          "conector_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del conector en Argos (§1.4)"
+          },
+          "conectado_por_enlace_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Último canje de un enlace de conexión"
+          },
+          "ultima_prueba": {
+            "type": "object",
+            "required": [
+              "en",
+              "ok",
+              "error"
+            ],
+            "properties": {
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "salud": {
+            "type": "object",
+            "required": [
+              "fallos_seguidos",
+              "pausa_hasta",
+              "ultimo_error",
+              "ultimo_error_en",
+              "ultimo_exito_en"
+            ],
+            "properties": {
+              "fallos_seguidos": {
+                "type": "integer"
+              },
+              "pausa_hasta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Sin llamadas a Horus hasta este instante (espera exponencial, máx. 15 min)"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ultimo_error_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "ultimo_exito_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "errores_cifrado": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Secretos que no se pudieron descifrar (cambió la clave)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = nunca se guardó. Envíala al guardar"
+          },
+          "webhook_entrada_secreto_nuevo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Secreto del receptor de Argos en claro, solo cuando se acaba de generar: copiarlo a Horus"
+          }
+        }
+      },
       "ConfiguracionEfectivaServicio": {
         "type": "object",
         "required": [
@@ -30866,85 +30476,6 @@
               "type": "string"
             },
             "description": "Campos que vienen de una excepción del servicio"
-          }
-        }
-      },
-      "ConfiguracionFel": {
-        "type": "object",
-        "required": [
-          "empresa_id",
-          "proveedor",
-          "ambiente",
-          "modo",
-          "contingencia_activa",
-          "contingencia_motivo",
-          "contingencia_desde",
-          "version",
-          "updated_at",
-          "credenciales"
-        ],
-        "properties": {
-          "empresa_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "proveedor": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "infile",
-              "falso"
-            ]
-          },
-          "ambiente": {
-            "type": "string",
-            "enum": [
-              "pruebas",
-              "produccion"
-            ]
-          },
-          "modo": {
-            "type": "string",
-            "enum": [
-              "obligatoria",
-              "opcional",
-              "desactivada"
-            ]
-          },
-          "contingencia_activa": {
-            "type": "boolean"
-          },
-          "contingencia_motivo": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "contingencia_desde": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "version": {
-            "type": "integer",
-            "description": "0 si la empresa nunca se configuró (está desactivada)"
-          },
-          "updated_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "credenciales": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CredencialesFel"
-            }
           }
         }
       },
@@ -31189,76 +30720,146 @@
           }
         }
       },
-      "CredencialesFel": {
+      "ConsumoHorus": {
         "type": "object",
         "required": [
-          "id",
-          "empresa_id",
-          "proveedor",
-          "ambiente",
-          "campos_visibles",
-          "probada_en",
-          "resultado_prueba",
-          "version",
-          "updated_at"
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "reintentar_en",
+          "desde",
+          "hasta",
+          "granularidad",
+          "items"
         ],
         "properties": {
-          "id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "empresa_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "proveedor": {
-            "type": "string"
-          },
-          "ambiente": {
+          "conector": {
             "type": "string",
             "enum": [
-              "pruebas",
-              "produccion"
+              "activo",
+              "apagado"
             ]
           },
-          "campos_visibles": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "Solo lo que se puede mostrar (usuario); las llaves nunca salen de la API"
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
           },
-          "probada_en": {
+          "actualizado_en": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
           },
-          "resultado_prueba": {
+          "error": {
             "type": [
-              "object",
+              "string",
               "null"
             ],
-            "required": [
-              "ok",
-              "detalle"
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
             ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              },
-              "detalle": {
-                "type": "string"
-              }
-            }
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
           },
-          "version": {
-            "type": "integer"
-          },
-          "updated_at": {
+          "desde": {
             "type": "string",
             "format": "date-time"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "granularidad": {
+            "type": "string",
+            "enum": [
+              "day",
+              "total"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "stale",
+                "actualizado_en",
+                "error",
+                "subida_bytes",
+                "bajada_bytes",
+                "series",
+                "direcciones"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "actualizado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "subida_bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "bajada_bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "dia",
+                      "subida_bytes",
+                      "bajada_bytes"
+                    ],
+                    "properties": {
+                      "dia": {
+                        "type": "string"
+                      },
+                      "subida_bytes": {
+                        "type": "integer"
+                      },
+                      "bajada_bytes": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "direcciones": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -31577,115 +31178,6 @@
           }
         }
       },
-      "Diario": {
-        "type": "object",
-        "required": [
-          "id",
-          "empresa_id",
-          "codigo",
-          "nombre",
-          "tipo",
-          "cuenta_por_defecto",
-          "cuenta_por_defecto_codigo",
-          "caja_id",
-          "cuenta_bancaria_id",
-          "activo",
-          "secuencias",
-          "version",
-          "created_at",
-          "updated_at"
-        ],
-        "properties": {
-          "id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "empresa_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "codigo": {
-            "type": "string",
-            "description": "VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta bancaria>"
-          },
-          "nombre": {
-            "type": "string"
-          },
-          "tipo": {
-            "type": "string",
-            "enum": [
-              "ventas",
-              "cobros",
-              "caja",
-              "banco",
-              "compras",
-              "impuestos",
-              "cierre",
-              "varios"
-            ]
-          },
-          "cuenta_por_defecto": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1
-          },
-          "cuenta_por_defecto_codigo": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "caja_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1
-          },
-          "cuenta_bancaria_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1
-          },
-          "activo": {
-            "type": "boolean"
-          },
-          "secuencias": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "anio",
-                "ultimo"
-              ],
-              "properties": {
-                "anio": {
-                  "type": "integer"
-                },
-                "ultimo": {
-                  "type": "integer"
-                }
-              }
-            },
-            "description": "Numeración guardada por año: último número asignado (el siguiente es ultimo + 1)"
-          },
-          "version": {
-            "type": "integer"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "Dinero": {
         "type": "string",
         "pattern": "^-?\\d{1,12}\\.\\d{2}$",
@@ -31693,318 +31185,6 @@
         "examples": [
           "150.00"
         ]
-      },
-      "Dte": {
-        "type": "object",
-        "required": [
-          "id",
-          "empresa_id",
-          "establecimiento_id",
-          "documento_tipo",
-          "documento_id",
-          "tipo_dte",
-          "estado",
-          "proveedor",
-          "ambiente",
-          "identificador",
-          "autorizacion",
-          "serie",
-          "numero",
-          "fecha_emision",
-          "certificado_en",
-          "receptor",
-          "referencia",
-          "total",
-          "iva",
-          "contingencia",
-          "intentos",
-          "proximo_intento",
-          "ultimo_error",
-          "definitivo",
-          "solicitud",
-          "anulado_en",
-          "motivo_anulacion",
-          "version",
-          "created_at",
-          "updated_at"
-        ],
-        "properties": {
-          "id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "empresa_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "establecimiento_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1
-          },
-          "documento_tipo": {
-            "type": "string",
-            "enum": [
-              "factura",
-              "nota_credito",
-              "nota_debito"
-            ]
-          },
-          "documento_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "tipo_dte": {
-            "type": "string",
-            "description": "FACT, FPEQ, NCRE, NDEB…"
-          },
-          "estado": {
-            "type": "string",
-            "enum": [
-              "pendiente",
-              "enviando",
-              "certificado",
-              "error_temporal",
-              "rechazado",
-              "contingencia",
-              "anulacion_pendiente",
-              "anulado"
-            ]
-          },
-          "proveedor": {
-            "type": "string"
-          },
-          "ambiente": {
-            "type": "string",
-            "enum": [
-              "pruebas",
-              "produccion"
-            ]
-          },
-          "identificador": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Clave de idempotencia ante el certificador"
-          },
-          "autorizacion": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "UUID de autorización de la SAT"
-          },
-          "serie": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "numero": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "fecha_emision": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "certificado_en": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "receptor": {
-            "type": "object",
-            "required": [
-              "tipo",
-              "id",
-              "nombre",
-              "direccion",
-              "correo"
-            ],
-            "properties": {
-              "tipo": {
-                "type": "string",
-                "enum": [
-                  "nit",
-                  "cui",
-                  "pasaporte",
-                  "cf"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "nombre": {
-                "type": "string"
-              },
-              "direccion": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "correo": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
-          },
-          "referencia": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "required": [
-              "autorizacion",
-              "serie",
-              "numero",
-              "fecha",
-              "motivo"
-            ],
-            "properties": {
-              "autorizacion": {
-                "type": "string"
-              },
-              "serie": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "numero": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "fecha": {
-                "type": "string",
-                "format": "date"
-              },
-              "motivo": {
-                "type": "string"
-              }
-            }
-          },
-          "total": {
-            "type": "string",
-            "description": "Monto con 2 decimales"
-          },
-          "iva": {
-            "type": "string",
-            "description": "Monto con 2 decimales"
-          },
-          "contingencia": {
-            "type": "boolean"
-          },
-          "intentos": {
-            "type": "integer"
-          },
-          "proximo_intento": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "ultimo_error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Error visible (SAT, receptor_requerido, aviso_sin_cubrir…)"
-          },
-          "definitivo": {
-            "type": "boolean",
-            "description": "Rechazo definitivo: se corrige el dato y se reintenta a mano"
-          },
-          "solicitud": {
-            "type": "string",
-            "enum": [
-              "automatico",
-              "manual"
-            ]
-          },
-          "anulado_en": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "motivo_anulacion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "version": {
-            "type": "integer"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "DteIntento": {
-        "type": "object",
-        "required": [
-          "id",
-          "dte_id",
-          "operacion",
-          "enviado_en",
-          "resultado",
-          "duracion_ms",
-          "respuesta"
-        ],
-        "properties": {
-          "id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "dte_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "operacion": {
-            "type": "string",
-            "enum": [
-              "certificar",
-              "anular",
-              "consultar",
-              "validar"
-            ]
-          },
-          "enviado_en": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "resultado": {
-            "type": "string",
-            "description": "enviando, certificado, rechazado, error_temporal, anulado… (lo que respondió el certificador)"
-          },
-          "duracion_ms": {
-            "type": "integer"
-          },
-          "respuesta": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Respuesta del certificador, sin credenciales"
-          }
-        }
       },
       "Egreso": {
         "type": "object",
@@ -32733,6 +31913,106 @@
           }
         }
       },
+      "EnlaceConexionHorus": {
+        "type": "object",
+        "required": [
+          "enlace",
+          "vence_en"
+        ],
+        "properties": {
+          "enlace": {
+            "type": "string",
+            "description": "`https://<argos>/conectar#<codigo>`: se muestra una sola vez"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EnvioHorus": {
+        "type": "object",
+        "required": [
+          "id",
+          "evento_id",
+          "evento",
+          "empresa_id",
+          "estado",
+          "intentos",
+          "proximo_intento_en",
+          "ultimo_status",
+          "ultimo_error",
+          "enviado_en",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento_id": {
+            "type": "string",
+            "description": "`id` del webhook (estable entre reintentos)"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido",
+              "descartado"
+            ]
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proximo_intento_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EnvioNotificacion": {
         "type": "object",
         "required": [
@@ -32930,6 +32210,27 @@
           }
         }
       },
+      "EstadoConectorHorus": {
+        "type": "object",
+        "required": [
+          "activo",
+          "reintentar_en"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Encendido y con URL y código de Horus: \"Ver en Horus\" puede funcionar"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus no respondió y está en pausa hasta este instante (UTC); null si no"
+          }
+        }
+      },
       "EstadoCuenta": {
         "type": "object",
         "required": [
@@ -32976,7 +32277,6 @@
       "EstadoFactura": {
         "type": "string",
         "enum": [
-          "por_certificar",
           "emitida",
           "parcial",
           "pagada",
@@ -33548,8 +32848,7 @@
             "type": [
               "string",
               "null"
-            ],
-            "description": "Autorización (UUID SAT) del DTE vigente"
+            ]
           },
           "fel_serie": {
             "type": [
@@ -33567,45 +32866,7 @@
             "type": [
               "string",
               "null"
-            ],
-            "description": "Estado del DTE vigente (o del último rechazado): pendiente, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado"
-          },
-          "dte_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "DTE vigente (GET /dte/:id)"
-          },
-          "fel_error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Error visible del DTE (SAT, receptor_requerido…)"
-          },
-          "aviso_cobro": {
-            "type": "boolean",
-            "description": "Aviso de cobro (certificar_al = pagar): su IVA está en 2.1.11 hasta certificarse"
-          },
-          "certificar_al": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "emitir",
-              "pagar",
-              "nunca"
             ]
-          },
-          "tipo_dte": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "FACT, FPEQ… (null sin FEL)"
           },
           "tipo": {
             "type": "string",
@@ -33658,22 +32919,6 @@
               "null"
             ],
             "description": "Id de la factura en su sistema de origen"
-          },
-          "sustituida_por": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida"
-          },
-          "sustituye_a": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "Factura original que esta sustituye; null si no es una sustituta"
           },
           "version": {
             "type": "integer",
@@ -34017,6 +33262,218 @@
               "integer",
               "null"
             ]
+          }
+        }
+      },
+      "Horus360Servicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "reintentar_en",
+          "consulta",
+          "ip",
+          "datos",
+          "eventos_recientes"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "conector": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "apagado"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
+          },
+          "consulta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "external_service_id",
+              "address"
+            ]
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IP actual del servicio en Argos"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "security": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "description": "`clean`, `suspected`, `compromised`"
+                  },
+                  "open_findings": {
+                    "type": "integer"
+                  },
+                  "findings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [],
+                      "properties": {
+                        "id": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "description": "p. ej. `outbound_scanning`"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "description": "`info`, `low`, `medium`, `high`, `critical`"
+                        },
+                        "opened_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "summary": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "additionalProperties": true
+              },
+              "meta": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Instante del dato en Horus"
+                  },
+                  "omitted": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "block",
+                        "reason"
+                      ],
+                      "properties": {
+                        "block": {
+                          "type": "string",
+                          "enum": [
+                            "consumption",
+                            "health",
+                            "security"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "description": "`permission`, `unavailable`, `not_requested`, `not_configured`"
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "description": "Bloques que Horus no devolvió y por qué (lista vacía si no omitió nada)"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true,
+            "description": "Respuesta de Horus §3.1 tal cual (customer, external, consumption, health, security, meta). Se declaran `security` y `meta`, que lee el panel; lo demás llega sin tipar. Cualquier bloque puede faltar (ver `meta.omitted`)"
+          },
+          "eventos_recientes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "evento",
+                "evento_interno",
+                "ocurrido_en",
+                "recibido_en",
+                "resumen"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "evento": {
+                  "type": "string"
+                },
+                "evento_interno": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ocurrido_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "recibido_en": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "resumen": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -34807,44 +34264,6 @@
           }
         }
       },
-      "LoteCertificacion": {
-        "type": "object",
-        "required": [
-          "solicitadas",
-          "errores"
-        ],
-        "properties": {
-          "solicitadas": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SolicitudCertificacion"
-            }
-          },
-          "errores": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "factura_id",
-                "tipo",
-                "detalle"
-              ],
-              "properties": {
-                "factura_id": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "tipo": {
-                  "type": "string"
-                },
-                "detalle": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
       "Mayor": {
         "type": "object",
         "required": [
@@ -35200,55 +34619,6 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
-          },
-          "anulada_en": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "description": "Anulada porque la SAT rechazó su NCRE en definitivo (fase 3); null si sigue vigente"
-          },
-          "dte_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "Su NCRE (GET /dte/:id): la vigente o la última rechazada; null en una nota interna"
-          },
-          "fel_estado": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Estado de su NCRE: pendiente, enviando, certificado, error_temporal, rechazado, contingencia, anulacion_pendiente, anulado"
-          },
-          "fel_uuid": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Autorización (UUID SAT) de su NCRE"
-          },
-          "fel_serie": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "fel_numero": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "fel_error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Error visible de su NCRE (SAT…)"
           }
         }
       },
@@ -37513,6 +36883,11 @@
           "detail": {
             "type": "string"
           },
+          "reintentar_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Extensión: cuándo se reintenta (UTC) si el servicio externo está en pausa por la espera exponencial (p. ej. `horus_error`). `detail` lo dice en hora de Guatemala"
+          },
           "errors": {
             "type": "array",
             "items": {
@@ -37631,81 +37006,6 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "ProveedorFelCatalogo": {
-        "type": "object",
-        "required": [
-          "codigo",
-          "nombre",
-          "campos_obligatorios",
-          "campos_opcionales",
-          "campos_visibles",
-          "ambientes",
-          "solo_pruebas",
-          "capacidades"
-        ],
-        "properties": {
-          "codigo": {
-            "type": "string",
-            "description": "proveedor de PUT /fel/configuracion y /fel/credenciales"
-          },
-          "nombre": {
-            "type": "string"
-          },
-          "campos_obligatorios": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Campos de credenciales que exige"
-          },
-          "campos_opcionales": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "campos_visibles": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Campos que la API devuelve guardados (los demás son secretos y nunca salen)"
-          },
-          "ambientes": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "pruebas",
-                "produccion"
-              ]
-            }
-          },
-          "solo_pruebas": {
-            "type": "boolean",
-            "description": "No admite produccion (laboratorio)"
-          },
-          "capacidades": {
-            "type": "object",
-            "required": [
-              "contingencia",
-              "consulta_nit",
-              "pdf"
-            ],
-            "properties": {
-              "contingencia": {
-                "type": "boolean"
-              },
-              "consulta_nit": {
-                "type": "boolean"
-              },
-              "pdf": {
-                "type": "boolean"
-              }
-            }
           }
         }
       },
@@ -40429,6 +39729,85 @@
           }
         }
       },
+      "ResultadoPruebaHorus": {
+        "type": "object",
+        "required": [
+          "ok",
+          "probado_en",
+          "api",
+          "webhook"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "probado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "api": {
+            "type": "object",
+            "required": [
+              "ok",
+              "status",
+              "latencia_ms",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "latencia_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Error real (red, HTTP de Horus)"
+              }
+            }
+          },
+          "webhook": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ok",
+              "status",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
       "ResultadoVencimiento": {
         "type": "object",
         "required": [
@@ -40448,6 +39827,36 @@
           "errores": {
             "type": "integer",
             "description": "Facturas que no se pudieron procesar (ver log)"
+          }
+        }
+      },
+      "ResultadoWebhookHorus": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "estado",
+          "evento_interno"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "evento_interno": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -41060,6 +40469,141 @@
               "$ref": "#/components/schemas/MovimientoEstadoCuenta"
             },
             "description": "Saldo acumulado dentro de la empresa"
+          }
+        }
+      },
+      "SeguridadHorus": {
+        "type": "object",
+        "required": [
+          "conector",
+          "stale",
+          "actualizado_en",
+          "error",
+          "reintentar_en",
+          "modo",
+          "items"
+        ],
+        "properties": {
+          "conector": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "apagado"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "true = Horus no respondió y se muestra el último dato conocido"
+          },
+          "actualizado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se obtuvo de Horus el dato mostrado"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no hay dato fresco (las horas, en hora de Guatemala)"
+          },
+          "reintentar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Horus en pausa por la espera exponencial: cuándo se vuelve a llamar (UTC); null si no hay pausa"
+          },
+          "modo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "lotes",
+              "alternativa"
+            ],
+            "description": "`alternativa` = Horus aún no tiene §3.5: último dato de la consulta 360 o de los webhooks"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "estado",
+                "hallazgos_abiertos",
+                "severidad_maxima",
+                "desde",
+                "fuente",
+                "stale",
+                "actualizado_en",
+                "error"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "estado": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "`clean`, `suspected`, `compromised`"
+                },
+                "hallazgos_abiertos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "severidad_maxima": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "fuente": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "horus",
+                    "consulta_360",
+                    "webhook"
+                  ]
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "actualizado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -41750,74 +41294,6 @@
           }
         }
       },
-      "SolicitudCertificacion": {
-        "type": "object",
-        "required": [
-          "factura_id",
-          "dte",
-          "creado",
-          "motivo"
-        ],
-        "properties": {
-          "factura_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "dte": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Dte"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "creado": {
-            "type": "boolean"
-          },
-          "motivo": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "SustitucionFactura": {
-        "type": "object",
-        "required": [
-          "original",
-          "nueva",
-          "tipo",
-          "nota_credito_id"
-        ],
-        "properties": {
-          "original": {
-            "$ref": "#/components/schemas/FacturaDetalle",
-            "description": "La factura sustituida (anulada o acreditada por completo)"
-          },
-          "nueva": {
-            "$ref": "#/components/schemas/FacturaDetalle",
-            "description": "La factura nueva del mismo periodo"
-          },
-          "tipo": {
-            "type": "string",
-            "enum": [
-              "anulacion",
-              "nota_credito"
-            ]
-          },
-          "nota_credito_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "La nota (NCRE) que acreditó la original"
-          }
-        }
-      },
       "TelegramWebhookRespuesta": {
         "type": "object",
         "required": [
@@ -41826,6 +41302,26 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "TicketHorus": {
+        "type": "object",
+        "required": [
+          "url",
+          "expira_en"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL de Horus con el ticket (un solo uso, 60 s); el panel la abre"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -42549,6 +42045,70 @@
                 "description": "Con 0 se calcula como 1"
               }
             }
+          }
+        }
+      },
+      "WebhookHorusRecibido": {
+        "type": "object",
+        "required": [
+          "id",
+          "webhook_id",
+          "evento",
+          "ocurrido_en",
+          "estado",
+          "evento_interno",
+          "empresa_id",
+          "servicio_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "webhook_id": {
+            "type": "string"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "evento_interno": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
