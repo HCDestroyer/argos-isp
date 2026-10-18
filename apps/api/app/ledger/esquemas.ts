@@ -113,6 +113,7 @@ export const Asiento = definirEsquema(
                 'egreso',
                 'cierre_caja',
                 'ajuste',
+                'reclasificacion',
             ]),
             origen_id: nulable(id),
             reversa_de: {
@@ -205,6 +206,29 @@ export const Caja = definirEsquema(
         },
         ['cajero_nombre', 'turno_abierto_por', 'turno_abierto_por_nombre', 'empresa_id'],
     ),
+)
+
+export const Diario = definirEsquema(
+    'Diario',
+    objeto({
+        id,
+        empresa_id: id,
+        codigo: { ...texto, description: 'VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta bancaria>' },
+        nombre: texto,
+        tipo: enumerado(['ventas', 'cobros', 'caja', 'banco', 'compras', 'impuestos', 'cierre', 'varios']),
+        cuenta_por_defecto: nulable(id),
+        cuenta_por_defecto_codigo: nulable(texto),
+        caja_id: nulable(id),
+        cuenta_bancaria_id: nulable(id),
+        activo: booleano,
+        secuencias: {
+            ...lista(objeto({ anio: entero, ultimo: entero })),
+            description: 'Numeración guardada por año: último número asignado (el siguiente es ultimo + 1)',
+        },
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
 )
 
 export const BancoLibro = definirEsquema(

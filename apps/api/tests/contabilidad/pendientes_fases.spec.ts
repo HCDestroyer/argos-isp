@@ -16,25 +16,7 @@ interface Pendiente {
 
 const PENDIENTES: Pendiente[] = [
     // Localización fiscal · fase 2: activados en `fase2.spec.ts` (instalación, vigencia y cadena de hash)
-    // Fase 3 (FEL)
-    {
-        titulo: '2.1.11 IVA por certificar = IVA de los avisos de cobro sin DTE',
-        fase: 'localización fiscal, fase 3 (FEL)',
-        criterio:
-            'Contrato §8.3 (certificar_al = pagar): por empresa, saldo acreedor de 2.1.11 = Σ iva de las facturas emitidas sin fiscal.dte certificado (menos lo acreditado por notas); al certificar, reclasificación 2.1.11 / 2.1.02 por el IVA del DTE; un pago anulado NO revierte un DTE certificado (estudio Odoo §3.3).',
-    },
-    {
-        titulo: 'FEL obligatoria + emitir: la factura por_certificar no tiene asiento ni evento',
-        fase: 'localización fiscal, fase 3 (FEL)',
-        criterio:
-            'Contrato §8.3: estado por_certificar ⇒ ningún asiento con origen factura; al certificar, un solo asiento con la fecha de certificación; reintentar tras error_temporal no duplica (idempotente por identificador).',
-    },
-    {
-        titulo: 'anulación de DTE y NCRE: reverso exacto del asiento de la factura',
-        fase: 'localización fiscal, fase 3 (FEL)',
-        criterio:
-            'Contrato §8: anular dentro del plazo revierte el asiento (espejo, fecha de hoy); fuera del plazo, NCRE con su IVA; la factura acreditada al 100 % deja cada cuenta del asiento original en cero (ver hallazgo H1).',
-    },
+    // Fase 3 (FEL): activados en `fase3.spec.ts`
     // Fase 4 (compras y retenciones)
     {
         titulo: 'libro de compras = cuenta 1.1.04 IVA crédito fiscal',

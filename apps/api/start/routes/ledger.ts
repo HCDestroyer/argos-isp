@@ -10,6 +10,7 @@ import {
     Asiento,
     BancoLibro,
     Caja,
+    Diario,
     CajaTurno,
     CategoriaEgreso,
     CierrePeriodo,
@@ -31,6 +32,7 @@ import AnularEgreso from '#ledger/actions/anular_egreso'
 import { libroDiario, libroMayor, listarCuentas, verAsiento } from '#ledger/consultas'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { listarBancosLibro } from '#ledger/bancos'
+import { listarDiarios, verDiario } from '#ledger/diarios'
 import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
@@ -150,6 +152,33 @@ const libro: Ruta[] = [
         query: v.libroEmpresasValidator,
         respuesta: { status: 200, descripcion: 'Bancos del libro', esquema: lista(BancoLibro) },
         handler: (ctx, { query }) => listarBancosLibro(empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/diarios',
+        operacion: 'libroDiarios',
+        resumen: 'Diarios del libro y su numeración por año',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.libroEmpresasValidator,
+        descripcion:
+            'Diarios de la empresa activa (o empresas=todas): VEN, COB, COM, IMP, CIE, VAR, uno CAJ-n por caja y uno BAN-n por cuenta bancaria, con el último número asignado de cada año (§10.7). Solo lectura: los diarios se crean solos cuando un asiento los necesita.',
+        respuesta: { status: 200, descripcion: 'Diarios', esquema: lista(Diario) },
+        handler: (ctx, { query }) => listarDiarios(empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/diarios/:id',
+        operacion: 'libroDiarioVer',
+        resumen: 'Ver un diario y su numeración',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        respuesta: { status: 200, descripcion: 'Diario', esquema: Diario },
+        handler: async (ctx, { params }) => {
+            const diario = await verDiario(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, diario.empresa_id)
+            return diario
+        },
     }),
     definirRuta({
         metodo: 'get',

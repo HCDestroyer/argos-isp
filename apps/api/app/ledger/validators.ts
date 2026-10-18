@@ -81,7 +81,16 @@ export const diarioValidator = vine.compile(
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
         origen_tipo: vine
-            .enum(['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste'] as const)
+            .enum([
+                'factura',
+                'pago',
+                'mora',
+                'nota_credito',
+                'egreso',
+                'cierre_caja',
+                'ajuste',
+                'reclasificacion',
+            ] as const)
             .optional(),
         origen_id: idEntidad()
             .optional()

@@ -55,6 +55,10 @@ export const PERMISOS = {
     'facturas.generar': 'Generar facturas',
     'facturas.anular': 'Anular facturas',
     'facturas.nota_credito': 'Emitir notas de crédito (parcial o total) sobre el saldo de una factura',
+    'facturas.anular_nota_credito':
+        'Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)',
+    'facturas.sustituir':
+        'Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)',
     'pagos.ver': 'Ver pagos',
     'pagos.registrar': 'Registrar pagos',
     'pagos.anular': 'Anular pagos',
@@ -299,6 +303,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.generar',
             'facturas.anular',
             'facturas.nota_credito',
+            'facturas.sustituir',
+            'facturas.anular_nota_credito',
             'pagos.ver',
             'pagos.registrar',
             'pagos.anular',

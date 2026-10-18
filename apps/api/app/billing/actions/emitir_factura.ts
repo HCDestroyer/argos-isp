@@ -1,11 +1,10 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
-import { CUENTAS } from '#ledger/plan_cuentas'
-import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
+import { aTexto, dec } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { claveFactura, sumarDias, type PeriodoFacturable } from '#billing/periodos'
 import { lineaConIva, totalesDe, type LineaCalculada } from '#billing/facturas'
-import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
+import { bloquearCliente } from '#billing/cobros'
+import { emitirDocumento } from '#billing/emision'
 
 /**
  * `facturas.emitir`: emite la factura de UN periodo de un servicio. La llama `generarFacturas`
@@ -22,6 +21,9 @@ import { aplicarAnticipos, bloquearCliente } from '#billing/cobros'
  * - Multiempresa: la factura (y su asiento) es de la empresa del servicio (`empresa_id`): sale con
  *   su NIT y va a su libro. El anticipo que se aplica es el de esa empresa.
  * - Emite `factura.emitida` y aplica el anticipo del cliente si tiene (excedentes de pagos).
+ * - FEL (contrato de localización fiscal §8.3, `#billing/emision`): según el modo de la empresa y
+ *   el `certificar_al` efectivo, nace como hoy, como aviso de cobro (IVA a `2.1.11`) o
+ *   `por_certificar` (sin asiento ni evento hasta que se certifique).
  */
 
 export interface EntradaEmitirFactura {
@@ -105,80 +107,20 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             periodo: input.periodo,
         }
 
-        const insertadas = (await t.trx
-            .knexQuery()
-            .table('billing.facturas')
-            .insert({
-                empresa_id: servicio.empresa_id,
-                cliente_id: servicio.cliente_id,
-                servicio_id: servicio.id,
-                tipo: 'servicio',
-                periodo,
-                clave_unica: clave,
-                vence_en: venceEn,
-                estado: 'emitida',
-                subtotal: aTexto(totales.subtotal),
-                iva: aTexto(totales.iva),
-                total: aTexto(totales.total),
-                reglas_snapshot: JSON.stringify(snapshot),
-            })
-            .onConflict('clave_unica')
-            .ignore()
-            .returning('id')) as Array<{ id: number }>
-        const facturaId = insertadas[0]?.id
-        if (!facturaId) {
-            const otra = await t.trx.from('billing.facturas').where('clave_unica', clave).select('id').first()
-            return { factura_id: otra?.id ?? null, creada: false, motivo: 'ya_existe' }
-        }
-        t.fijarEntidad('factura', facturaId)
-
-        await t.trx
-            .insertQuery()
-            .table('billing.facturas_lineas')
-            .multiInsert(conMonto.map((linea) => ({ ...linea, factura_id: facturaId })))
-
-        await new RegistrarAsiento().execute(
-            {
-                empresa_id: servicio.empresa_id,
-                descripcion: `Factura ${facturaId} · servicio ${servicio.id} · periodo ${periodo}`,
-                origen_tipo: 'factura',
-                origen_id: facturaId,
-                movimientos: movimientosFactura(servicio.cliente_id, conMonto, totales.total),
-            },
-            t.ctx,
-            { trx: t.trx },
-        )
-
-        await t.emit('factura.emitida', {
-            factura_id: facturaId,
+        const emision = await emitirDocumento(t, {
             empresa_id: servicio.empresa_id,
-            servicio_id: servicio.id,
             cliente_id: servicio.cliente_id,
-            total: aTexto(totales.total),
-            vence: venceEn,
+            servicio_id: servicio.id,
+            periodo,
+            clave_unica: clave,
+            vence_en: venceEn,
+            lineas: conMonto,
+            reglas_snapshot: snapshot,
+            certificar_al: config.certificar_al,
+            descripcion: `servicio ${servicio.id} · periodo ${periodo}`,
         })
-
-        await aplicarAnticipos(t, servicio.cliente_id, servicio.empresa_id)
+        if (!emision.creada) return { factura_id: emision.factura_id, creada: false, motivo: 'ya_existe' }
+        const facturaId = emision.factura_id!
         return { factura_id: facturaId, creada: true, motivo: null }
     }
-}
-
-/** `CxC / Ingresos (servicio) + Otros ingresos + IVA`, omitiendo las cuentas en cero. */
-function movimientosFactura(clienteId: number, lineas: LineaCalculada[], total: Dec): LineaAsiento[] {
-    let internet = CERO
-    let otros = CERO
-    let iva = CERO
-    for (const linea of lineas) {
-        const subtotal = dec(linea.total).minus(linea.iva)
-        if (linea.tipo === 'servicio') internet = internet.plus(subtotal)
-        else otros = otros.plus(subtotal)
-        iva = iva.plus(linea.iva)
-    }
-    const movimientos: LineaAsiento[] = [
-        { cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(total), cliente_id: clienteId },
-    ]
-    if (internet.gt(0)) movimientos.push({ cuenta: CUENTAS.INGRESOS_INTERNET, haber: aTexto(internet) })
-    if (otros.gt(0)) movimientos.push({ cuenta: CUENTAS.OTROS_INGRESOS, haber: aTexto(otros) })
-    if (iva.gt(0)) movimientos.push({ cuenta: CUENTAS.IVA_DEBITO, haber: aTexto(iva) })
-    return movimientos
 }

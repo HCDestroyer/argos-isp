@@ -36,7 +36,13 @@ const camposPlantilla = {
         .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
         .optional()
         .meta({ description: 'HH:MM hora de Guatemala' }),
-    certificar_al: vine.enum(['emitir', 'pagar', 'nunca'] as const).optional(),
+    certificar_al: vine
+        .enum(['emitir', 'pagar', 'nunca'] as const)
+        .optional()
+        .meta({
+            description:
+                'Cuándo se certifica con FEL: pagar (por defecto: aviso de cobro), emitir o nunca (no con FEL obligatoria)',
+        }),
     reglas_promesa: reglasPromesaSchema()
         .optional()
         .meta({ description: 'Reglas de promesas; las claves que falten toman su valor por defecto' }),
@@ -89,7 +95,9 @@ export const listarFacturasValidator = vine.compile(
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         servicio_id: idEntidad().optional(),
-        estado: vine.enum(['emitida', 'parcial', 'pagada', 'vencida', 'anulada'] as const).optional(),
+        estado: vine
+            .enum(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada'] as const)
+            .optional(),
         periodo: fechaIso().optional(),
         tipo: vine
             .enum(['servicio', 'mora'] as const)
@@ -137,8 +145,37 @@ export const anularFacturaValidator = vine.compile(vine.object({ motivo: motivo(
 
 export const notaCreditoValidator = vine.compile(
     vine.object({
-        monto: dinero(),
+        monto: dinero()
+            .optional()
+            .meta({ description: 'Obligatorio sin lineas; con lineas, si viene debe ser su suma' }),
         motivo: motivo(),
+        lineas: vine
+            .array(vine.object({ linea_id: idEntidad(), monto: dinero() }))
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Nota por línea: acredita conceptos concretos de la factura con su IVA' }),
+    }),
+)
+
+export const anularNotaCreditoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const sustituirFacturaValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        cliente_fiscal: vine
+            .object({
+                tipo_documento_fiscal: vine.enum(['nit', 'cui', 'pasaporte', 'cf'] as const),
+                nit_cui: vine.string().trim().maxLength(20).nullable().optional(),
+                nombre_fiscal: vine.string().trim().maxLength(200).nullable().optional(),
+                direccion_fiscal: vine.string().trim().maxLength(300).nullable().optional(),
+            })
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Receptor corregido para la factura nueva (el del cliente se corrige aparte en PUT /clientes/:id)',
+            }),
     }),
 )
 

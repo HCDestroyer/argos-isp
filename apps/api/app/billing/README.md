@@ -64,20 +64,29 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 - `vence_en = periodo + dias_gracia`. Asiento: `CxC (cliente) / Ingresos por internet + Otros ingresos + IVA débito`.
 - `facturas.tipo`: `servicio` (periodo) o `mora` (recargo, ver tarea 5). Solo `servicio` cuenta para limitar/cortar.
 - Estado según lo pagado (`estadoSegunPago`): `pagada` si `pagado = total`; si ya pasó por `vencerFacturas` (`vencida_en`), `vencida`; si no, `parcial` o `emitida`.
+- FEL (`emision.ts`, contrato de localización fiscal §8.3; detalle en `app/fiscal/README.md`): con FEL desactivada todo queda como arriba. Con `certificar_al = pagar` (por defecto en plantillas nuevas) y FEL obligatoria u opcional, la factura es un **aviso de cobro** (`aviso_cobro`): su IVA va a `2.1.11 IVA por certificar` y, al certificarse, se reclasifica a `2.1.02` (`fel_facturas.ts`). Con FEL obligatoria y `emitir`, nace `por_certificar`: sin asiento, sin `factura.emitida` y sin contar para el corte, hasta que `facturas.confirmar_emision` la emite con la fecha de certificación.
 
 ## Anular factura
 
-`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir. La anulación FEL llega en la semana 5. Una factura con notas de crédito no se anula (409 `factura_con_notas_credito`): se acredita el resto con otra nota.
+`actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir (para corregirla, `facturas.sustituir`). Con DTE certificado la anulación es en dos pasos (dentro de `dte_anulacion_plazo`; exige además `fel.anular`) y revierte también la reclasificación del IVA; fuera de plazo 422 `anulacion_fuera_de_plazo`. Una factura con notas de crédito no se anula (409 `factura_con_notas_credito`): se acredita el resto con otra nota.
 
 ## Notas de crédito
 
-`actions/emitir_nota_credito.ts` (`facturas.nota_credito`, `POST /facturas/:id/notas-credito { monto, motivo }` + `Idempotency-Key`, 201 `NotaCreditoEmitida`). Interna, sin FEL (semana 5). Tabla `billing.notas_credito`, inmutable (trigger y `REVOKE`).
+`actions/emitir_nota_credito.ts` (`facturas.nota_credito`, `POST /facturas/:id/notas-credito { monto, motivo, lineas? }` + `Idempotency-Key`, 201 `NotaCreditoEmitida`). Sobre una factura certificada es una **NCRE** (IVA de `2.1.02`, su DTE en cola, solo dentro de `nota_ventana_meses`); sobre un aviso sin DTE, una nota interna (IVA de `2.1.11`); sin FEL, interna como antes. `lineas[] { linea_id, monto }`: nota por línea con el IVA de cada línea (`billing.notas_credito_lineas`). Tabla `billing.notas_credito`, inmutable (trigger y `REVOKE`).
 
 - `monto` parcial o total, nunca mayor al saldo (`total − pagado`) de la factura (422 `monto`); 409 `factura_anulada` o `factura_sin_saldo`.
 - Asiento `nota_credito` (origen = la nota): Debe lo que a la factura **le queda** acreditado en cada cuenta (su asiento — Ingresos, IVA débito, Otros ingresos, Recargos por mora, Saldos de apertura — menos lo que ya debitaron sus notas anteriores) en proporción `monto / restante`, redondeado al final y con la diferencia en la línea con más holgura, sin pasar nunca su restante (`repartirProporcional` en `notas_credito.ts`); Haber CxC del cliente. **El último toma el resto**: la nota que agota lo acreditable lleva el restante exacto de cada cuenta, así una factura acreditada al 100 % con varias notas no deja IVA ni ingresos residuales por redondeo (hallazgo H1 del auditor). La nota guarda `subtotal` e `iva`.
 - Suma `monto` a `facturas.pagado` (lo cubierto) y recalcula su estado (puede quedar `pagada`); `Factura.acreditado` es la parte de notas. Emite `nota_credito.emitida`, re-evalúa el servicio (sube de inmediato: `servicios[]`) y el consumidor `billing` revisa las promesas del cliente con ese evento.
 - Estado de cuenta: abono con `tipo: nota_credito` y `referencia_id` = la nota. `GET /facturas/:id` trae `notas_credito[]`; `GET /notas-credito` (`cliente_id`, `factura_id`, `desde`, `hasta`) y `GET /notas-credito/:id` con `facturas.ver`.
 - Su asiento no se revierte directo (`reverso_por_documento`).
+
+## Anular una nota de crédito (NCRE rechazada)
+
+`actions/anular_nota_credito.ts` (`facturas.anular_nota_credito`, `POST /notas-credito/:id/anular { motivo }`): solo una nota cuya NCRE la SAT rechazó en definitivo. Reverso espejo de su asiento, fila en `billing.notas_credito_anulaciones` (solo inserción, una por nota), el monto vuelve al saldo de la factura y se reevalúa el servicio; evento `nota_credito.anulada`. 409 `nota_anulada`, `ncre_certificada`, `dte_en_proceso`, `nota_sin_ncre_rechazada`. Las notas anuladas no cuentan en `acreditado`. El cierre del mes responde 409 `ncre_sin_certificar` mientras haya NCRE del mes o anteriores sin certificar.
+
+## Sustituir factura
+
+`actions/sustituir_factura.ts` (`facturas.sustituir`, `POST /facturas/:id/sustituir { motivo, cliente_fiscal? }`, contrato §10.9): para un dato mal emitido cuando el periodo ya está ocupado. Sin pagos (409 `sustitucion_no_permitida`). Sin DTE certificado anula la original; con DTE, la acredita con una NCRE por todo su saldo. Emite la nueva con las mismas líneas, periodo y vencimiento, `clave_unica = <clave>#s<n>` y el receptor corregido en su `reglas_snapshot`. `billing.sustituciones` (solo inserción) traza la relación; evento `factura.sustituida`.
 
 ## Importación (para A6, sin endpoint)
 
@@ -105,7 +114,7 @@ Todas idempotentes por (`origen`, `clave_externa`) (repetir → `creada/creado: 
 | `facturas.vencer_pendientes` | `actions/vencer_facturas.ts` | Cron y `POST /facturas/vencer`. Todo lo pendiente hasta `hasta` (hoy por defecto), por lotes de 500.                                                      |
 | `facturas.vencer`            | `actions/vencer_factura.ts`  | Una factura de servicio `emitida`/`parcial` con `vence_en < hoy` → `vencida` (`vencida_en`), evento `factura.vencida`, y los recargos de mora pendientes. |
 
-- Mora (`mora.ts`) según el `reglas_snapshot` de la factura: `fija` (`mora_valor` Q) o `porcentaje` (del total). Es una factura `tipo = 'mora'` con `factura_origen_id`, sin IVA, asiento `CxC / Recargos por mora` (`origen_tipo = 'mora'`). Nace `vencida` (se debe ya) pero no cuenta para el corte.
+- Mora (`mora.ts`) según el `reglas_snapshot` de la factura: `fija` (`mora_valor` Q) o `porcentaje` (del total). Es una factura `tipo = 'mora'` con `factura_origen_id`, sin IVA, asiento `CxC / Recargos por mora` (`origen_tipo = 'mora'`); con `mora_con_iva` de la empresa (solo el contador lo activa) lleva IVA desglosado y, con FEL, es un aviso que se certifica como NDEB referida a su factura. Nace `vencida` (se debe ya) pero no cuenta para el corte.
 - `mora_recurrente`: un recargo más por cada mes cumplido después del vencimiento. Clave `mora-<factura>-<n>`: repetir no duplica.
 - Vencer no cambia el estado del servicio: lo hace el cron de corte a la `hora_corte`.
 
@@ -310,6 +319,6 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`.
+Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `factura.sustituida`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`. Con FEL obligatoria y `certificar_al = emitir`, `factura.emitida` sale al certificarse la factura (contrato de localización fiscal §11.3).
 
-Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
+Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas; y pedir la certificación FEL de los avisos cubiertos, `ConsumidorFel`); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.

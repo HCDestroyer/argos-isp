@@ -27,6 +27,10 @@ export const INMUTABLES: Record<string, string> = {
     'billing.cobros': 'cobro repartido',
     'billing.pagos_aplicaciones': 'aplicación de un pago a una factura (dinero)',
     'billing.saldos_iniciales_aplicaciones': 'aplicación de un saldo a favor importado (dinero)',
+    // localización fiscal, fase 3 (FEL)
+    'billing.notas_credito_lineas': 'nota de crédito por línea (§10.9)',
+    'billing.sustituciones': 'sustitución de una factura (§10.9)',
+    'fiscal.dte_intentos': 'bitácora ante el certificador (§3.6)',
     // localización fiscal §10.7 (numeración guardada)
     'ledger.asientos_numeros': 'número de diario asignado al insertar (§10.7)',
     'ledger.asientos_partidas': 'partida legal asignada al cerrar el mes (§10.7)',
