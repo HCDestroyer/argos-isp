@@ -6,6 +6,7 @@ import { EMPRESA_PRINCIPAL, exigirEmpresaActiva, unicaEmpresaActiva } from '#cor
 import type { ContextoAccion } from '#shared/contexto'
 import { EmpresaNoPermitida, exigirAccesoEmpresa, type EmpresaPeticion } from '#shared/empresa_activa'
 import { NoEncontrado } from '#shared/errores'
+import { datosFiscalesEmpresas } from '#fiscal/instalador_localizacion'
 
 /**
  * Multiempresa en billing y ledger (`contratos/multiempresa.md`): cada documento financiero
@@ -138,10 +139,16 @@ export async function emisorDeFactura(
         )
         .first()) as EmisorFactura | null
     if (!fila) throw new NoEncontrado(`La factura ${facturaId} no existe`)
+    const empresaId = Number(fila.empresa_id)
+    // régimen y establecimiento vigentes según la localización fiscal (las columnas de
+    // core.empresas son de solo lectura); sin localización instalada, lo guardado en la empresa
+    const datosFiscales = await datosFiscalesEmpresas([empresaId], cliente)
+    const fiscales = datosFiscales.get(empresaId)
     return {
         ...fila,
-        empresa_id: Number(fila.empresa_id),
+        empresa_id: empresaId,
         codigo_establecimiento:
             fila.codigo_establecimiento === null ? null : Number(fila.codigo_establecimiento),
+        ...fiscales,
     }
 }

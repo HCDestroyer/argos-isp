@@ -30,7 +30,16 @@ function exigirCampos(assert: any, esquema: Esquema, valor: Record<string, unkno
  * fixtures tipados del panel (A4) no los tengan (`a1.md`). Se vuelven obligatorios después.
  */
 const OPCIONALES_PENDIENTES: Record<string, string[]> = {
-    Cliente: ['codigo', 'codigo_externo'],
+    Cliente: [
+        'codigo',
+        'codigo_externo',
+        // localización fiscal, fase 1
+        'tipo_documento_fiscal',
+        'nit_cui_invalido',
+        'pais_fiscal',
+        'agente_retencion_iva',
+        'sector_publico',
+    ],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {

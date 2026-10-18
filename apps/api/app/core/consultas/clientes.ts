@@ -21,9 +21,14 @@ export const COLUMNAS_CLIENTE = [
     'codigo_externo',
     'nombre',
     'tipo',
+    'tipo_documento_fiscal',
     'nit_cui',
+    'nit_cui_invalido',
     'nombre_fiscal',
     'direccion_fiscal',
+    'pais_fiscal',
+    'agente_retencion_iva',
+    'sector_publico',
     'email',
     'telefono',
     'movil',
@@ -68,6 +73,8 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     con_promesa_activa?: boolean
     /** dependientes de este responsable de pago */
     responsable_pago_id?: number
+    /** documento fiscal marcado inválido por la migración (true) o no (false) */
+    nit_cui_invalido?: boolean
 }
 
 /** Cómo se filtra `core.clientes as c` por alcance. */
@@ -196,6 +203,7 @@ export async function buscarClientes(
     const consulta = db.from('core.clientes as c').select(columnasVista(db.connection()))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
     if (filtros.responsable_pago_id) consulta.where('c.responsable_pago_id', filtros.responsable_pago_id)
+    if (filtros.nit_cui_invalido !== undefined) consulta.where('c.nit_cui_invalido', filtros.nit_cui_invalido)
     if (filtros.q) aplicarBusqueda(consulta, filtros.q)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)

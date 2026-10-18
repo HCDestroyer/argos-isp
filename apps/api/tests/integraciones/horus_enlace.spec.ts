@@ -473,4 +473,85 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
         )
         assert.isNull(apagada.body().reintentar_en)
     })
+    test('la primera falla ya trae reintentar_en (la pausa que acaba de abrir) en abrir, 360, consumo y seguridad', async ({
+        client,
+        assert,
+    }) => {
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            const { token: admin } = await usuarioConRoles(['admin'])
+            const servicioId = await crearServicio(await crearCliente())
+            const caido = () => ({ status: 503, cuerpo: { detail: 'mantenimiento' } })
+            for (const ruta of [
+                RUTA_TICKETS_HORUS,
+                '/api/v1/integrations/ip-lookup',
+                '/api/v1/integrations/consumption',
+                '/api/v1/integrations/security-states',
+            ]) {
+                horus.responder(ruta, caido)
+            }
+
+            /** Conector limpio (sin pausa), una llamada que falla y la pausa que dejó. */
+            async function primeraFalla(pedir: () => PromiseLike<any>, status: number) {
+                await fijarConector({ url_base: horus.url })
+                const r = await estado(pedir(), status)
+                const salud = await db.from('integraciones.horus_salud').where('id', 1).first()
+                assert.equal(salud.fallos_seguidos, 1)
+                return { cuerpo: r.body(), pausa: new Date(salud.pausa_hasta).toISOString() }
+            }
+
+            const abrir = await primeraFalla(
+                () =>
+                    client
+                        .post('/api/v1/integraciones/horus/abrir')
+                        .bearerToken(admin)
+                        .json({ destino: { tipo: 'servicio', id_externo: String(servicioId) } }),
+                502,
+            )
+            assert.equal(abrir.cuerpo.reintentar_en, abrir.pausa)
+            assert.include(
+                abrir.cuerpo.detail,
+                'Horus respondió 503: mantenimiento; se reintenta después de las ',
+            )
+            assert.include(abrir.cuerpo.detail, '(hora de Guatemala)')
+
+            const ficha = await primeraFalla(
+                () => client.get(`/api/v1/servicios/${servicioId}/horus`).bearerToken(admin),
+                200,
+            )
+            assert.equal(ficha.cuerpo.reintentar_en, ficha.pausa)
+            assert.include(ficha.cuerpo.error, '(hora de Guatemala)')
+
+            const consumo = await primeraFalla(
+                () => client.get(`/api/v1/servicios/${servicioId}/horus/consumo`).bearerToken(admin),
+                200,
+            )
+            assert.equal(consumo.cuerpo.reintentar_en, consumo.pausa)
+
+            const seguridad = await primeraFalla(
+                () =>
+                    client
+                        .post('/api/v1/integraciones/horus/seguridad')
+                        .bearerToken(admin)
+                        .json({ servicio_ids: [servicioId] }),
+                200,
+            )
+            assert.equal(seguridad.cuerpo.reintentar_en, seguridad.pausa)
+
+            // un 4xx de Horus no abre pausa: sin reintentar_en
+            horus.responder(RUTA_TICKETS_HORUS, () => ({ status: 403, cuerpo: { detail: 'sin scope' } }))
+            await fijarConector({ url_base: horus.url })
+            const prohibido = await estado(
+                client
+                    .post('/api/v1/integraciones/horus/abrir')
+                    .bearerToken(admin)
+                    .json({ destino: { tipo: 'router', id_externo: '3' } }),
+                502,
+            )
+            assert.isUndefined(prohibido.body().reintentar_en)
+            assert.equal(prohibido.body().detail, 'Horus respondió 403: sin scope')
+        } finally {
+            await horus.detener()
+        }
+    })
 })

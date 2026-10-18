@@ -14,6 +14,7 @@ import billing from '#start/routes/billing'
 import ledger from '#start/routes/ledger'
 import portal from '#start/routes/portal'
 import notify from '#start/routes/notify'
+import fiscal from '#start/routes/fiscal'
 import integraciones from '#start/routes/integraciones'
 
 export const registroRutas: Ruta[] = [
@@ -21,6 +22,7 @@ export const registroRutas: Ruta[] = [
     ...network,
     ...billing,
     ...ledger,
+    ...fiscal,
     ...portal,
     ...notify,
     ...integraciones,

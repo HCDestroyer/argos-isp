@@ -274,4 +274,61 @@ test.group('billing · notas de crédito', () => {
         )
         assert.isTrue(new ConsumidorBilling().acepta('nota_credito.emitida'))
     })
+
+    test('el último toma el resto: notas pequeñas y luego el saldo dejan Σ IVA = IVA de la factura', async ({
+        assert,
+    }) => {
+        const { servicioId } = await servicioCortado()
+        const facturas = await facturasDe(servicioId)
+        const septiembre = facturas.find((f) => f.tipo === 'servicio')!
+        const original = await db.from('billing.facturas').where('id', septiembre.id).firstOrFail()
+        for (let i = 0; i < 7; i++) {
+            await new EmitirNotaCredito().execute(
+                { factura_id: septiembre.id, monto: '0.05', motivo: `centavos ${i}` },
+                contextoPrueba(),
+            )
+        }
+        const resto = dec(original.total).minus('0.35').toFixed(2)
+        await new EmitirNotaCredito().execute(
+            { factura_id: septiembre.id, monto: resto, motivo: 'resto' },
+            contextoPrueba(),
+        )
+        const notas = await db
+            .from('billing.notas_credito')
+            .where('factura_id', septiembre.id)
+            .select(
+                db.raw('sum(monto)::text as monto'),
+                db.raw('sum(iva)::text as iva'),
+                db.raw('sum(subtotal)::text as subtotal'),
+            )
+            .firstOrFail()
+        assert.deepEqual(notas, { monto: original.total, iva: original.iva, subtotal: original.subtotal })
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('reparto sobre el restante: monto = restante toma cada línea exacta y nunca pasa su tope', async ({
+        assert,
+    }) => {
+        const lineas = [
+            { cuenta_id: 1, cuenta_codigo: '4.1.01', haber: '178.16' },
+            { cuenta_id: 2, cuenta_codigo: '2.1.02', haber: '21.43' },
+        ]
+        assert.deepEqual(
+            repartirProporcional(lineas, dec('199.59')).map((p) => [p.cuenta_codigo, p.debe.toFixed(2)]),
+            [
+                ['4.1.01', '178.16'],
+                ['2.1.02', '21.43'],
+            ],
+        )
+        const chicas = repartirProporcional(
+            [
+                { cuenta_id: 1, cuenta_codigo: '4.1.01', haber: '0.01' },
+                { cuenta_id: 2, cuenta_codigo: '4.1.03', haber: '0.01' },
+                { cuenta_id: 3, cuenta_codigo: '2.1.02', haber: '0.01' },
+            ],
+            dec('0.02'),
+        )
+        assert.equal(chicas.reduce((s, p) => s.plus(p.debe), dec('0')).toFixed(2), '0.02')
+        assert.isTrue(chicas.every((p) => p.debe.lte('0.01')))
+    })
 })

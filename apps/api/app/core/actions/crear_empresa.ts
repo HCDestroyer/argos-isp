@@ -1,5 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Conflicto } from '#shared/errores'
+import { Conflicto, Problema } from '#shared/errores'
+import { instaladorLocalizacion, paisesSoportados, paisSoportado } from '#core/localizacion'
 import {
     CAMPOS_DATOS_EMPRESA,
     normalizarNitEmpresa,
@@ -12,6 +13,20 @@ export type EntradaCrearEmpresa = Partial<DatosEmpresaCompleta> & {
     nit: string
     razon_social: string
     nombre_comercial: string
+    /** país de la localización fiscal; por defecto GT */
+    pais?: string
+}
+
+/** 422 `pais_no_soportado` si el país no tiene paquete de localización. */
+export function exigirPaisSoportado(pais: string): void {
+    if (paisSoportado(pais)) return
+    throw new Problema(
+        422,
+        'pais_no_soportado',
+        'País no soportado',
+        `No hay localización fiscal para ${pais}; países disponibles: ${paisesSoportados().join(', ')}`,
+        [{ field: 'pais', message: `País sin localización fiscal: ${pais}`, rule: 'pais_no_soportado' }],
+    )
 }
 
 /** Limpia los campos enviados: texto recortado, vacío = null, NIT normalizado. */
@@ -52,12 +67,19 @@ export function sinDerivados(empresa: EmpresaCompleta) {
  * Alta de una empresa (NIT) de la instalación (`empresas.crear`). Exige NIT válido, razón social y
  * nombre comercial; el NIT es único entre las empresas activas (409 `nit_duplicado`). El logo se
  * sube aparte (`empresas.cambiar_logo`).
+ *
+ * `pais` (por defecto GT; 422 `pais_no_soportado` si no hay paquete) elige la localización fiscal:
+ * el instalador registrado por `fiscal` corre en esta misma transacción (`#core/localizacion`).
+ * `regimen_isr` y `codigo_establecimiento` solo se aceptan aquí, como semilla de esa instalación.
  */
 export default class CrearEmpresa extends DomainAction<EntradaCrearEmpresa, EmpresaCompleta> {
     readonly nombre = 'empresas.crear'
 
     protected async handle(input: EntradaCrearEmpresa, t: Transaccion): Promise<EmpresaCompleta> {
         const datos = limpiarDatosEmpresa(input)
+        const pais = (input.pais ?? 'GT').toUpperCase()
+        exigirPaisSoportado(pais)
+        datos.pais = pais
         await t.trx.rawQuery('LOCK TABLE core.empresas IN SHARE ROW EXCLUSIVE MODE')
         await exigirNitLibre(t, datos.nit as string | null)
         const [fila] = (await t.trx
@@ -68,6 +90,13 @@ export default class CrearEmpresa extends DomainAction<EntradaCrearEmpresa, Empr
         const id = Number(fila!.id)
         t.fijarEntidad('empresa', id)
         t.fijarEmpresa(id)
+        await instaladorLocalizacion()?.instalar({
+            trx: t.trx,
+            ctx: t.ctx,
+            empresaId: id,
+            pais,
+            paisAnterior: null,
+        })
         const empresa = await verEmpresaCompleta(id, t.trx)
         await t.registrarCambios({ tipo: 'empresa', id }, null, sinDerivados(empresa))
         return empresa

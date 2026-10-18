@@ -100,6 +100,37 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
         }
     })
 
+    test('con `ahora` explícito entra el envío registrado en ese mismo milisegundo (µs en la base)', async ({
+        assert,
+    }) => {
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            horus.responder('/receptor', () => ({ status: 202 }))
+            await fijarConector({
+                url_base: horus.url,
+                webhook_salida_url: `${horus.url}/receptor`,
+                webhook_salida_secreto: SECRETO_SALIDA,
+            })
+            const servicioId = await crearServicio(await crearCliente())
+            await evento('servicio.estado_cambiado', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                de: 'activo',
+                a: 'limitado',
+                motivo: 'x',
+            })
+            // la base guarda microsegundos; Node solo tiene milisegundos
+            await db.rawQuery(
+                `UPDATE integraciones.horus_envios SET proximo_intento_en = '2026-10-18 12:00:00.123456+00'`,
+            )
+            const r = await entregarPendientes({ ahora: new Date('2026-10-18T12:00:00.123Z') })
+            assert.equal(r.enviados, 1)
+            assert.lengthOf(horus.de('/receptor'), 1)
+        } finally {
+            await horus.detener()
+        }
+    })
+
     test('reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después fallido', async ({ assert }) => {
         const horus = await new HorusSimulado().iniciar()
         try {

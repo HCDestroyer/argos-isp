@@ -69,7 +69,10 @@ servidor y el navegador lo conserva), la página del panel que explica que se pe
 Con Horus en pausa, `detail` (502 de `abrir`) y `error` (lecturas) dicen la hora en
 `America/Guatemala` ("se reintenta después de las 17/10/2026 14:33 (hora de Guatemala)") y el
 instante va aparte en `reintentar_en` (ISO UTC): extensión del problem+json de `horus_error` (declarada en el schema común `Problem`) y
-campo de `Horus360Servicio`, `ConsumoHorus` y `SeguridadHorus` (null sin pausa).
+campo de `Horus360Servicio`, `ConsumoHorus` y `SeguridadHorus` (null sin pausa). Va también en la
+respuesta que **abre** la pausa (el primer fallo transitorio: sin red, timeout, 5xx o 429), no solo
+en las siguientes: `registrarFallo` devuelve el `pausa_hasta` recién fijado. Un 4xx de Horus no
+abre pausa ni trae `reintentar_en`.
 
 ### `Horus360Servicio.datos`
 

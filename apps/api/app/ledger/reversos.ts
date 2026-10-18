@@ -29,6 +29,10 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         documento: 'la nota de crédito (emitiendo un cargo o anulando la factura)',
     },
     egreso: { accion: 'egresos.anular', documento: 'el egreso (POST /egresos/:id/anular)' },
+    reclasificacion: {
+        accion: 'facturas.anular',
+        documento: 'la factura certificada (POST /facturas/:id/anular: anula su DTE)',
+    },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

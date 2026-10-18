@@ -81,9 +81,13 @@ export async function leerSalud(): Promise<SaludHorus> {
     )
 }
 
-/** Suma un fallo y fija la pausa exponencial (la expresión usa los fallos de antes del UPDATE). */
-export async function registrarFallo(error: string): Promise<void> {
-    await db.rawQuery(
+/**
+ * Suma un fallo y fija la pausa exponencial (la expresión usa los fallos de antes del UPDATE).
+ * Devuelve el `pausa_hasta` recién fijado, para que la misma respuesta que abre la pausa ya diga
+ * hasta cuándo (`reintentar_en`).
+ */
+export async function registrarFallo(error: string): Promise<Date> {
+    const resultado = (await db.rawQuery(
         `INSERT INTO ${TABLA_SALUD} AS s (id, fallos_seguidos, pausa_hasta, ultimo_error, ultimo_error_en)
          VALUES (1, 1, now() + make_interval(secs => ?::float8), ?, now())
          ON CONFLICT (id) DO UPDATE
@@ -93,9 +97,27 @@ export async function registrarFallo(error: string): Promise<void> {
                 ),
                 ultimo_error = EXCLUDED.ultimo_error,
                 ultimo_error_en = now(),
-                updated_at = now()`,
+                updated_at = now()
+         RETURNING pausa_hasta`,
         [PAUSA_INICIAL_S, error.slice(0, 500), PAUSA_MAXIMA_S, PAUSA_INICIAL_S],
-    )
+    )) as { rows: Array<{ pausa_hasta: Date }> }
+    return new Date(resultado.rows[0]!.pausa_hasta)
+}
+
+/** Texto del error con la pausa: "…; se reintenta después de las 17/10/2026 14:33 (hora de Guatemala)". */
+function conPausa(mensaje: string, pausa: Date): string {
+    return `${mensaje}; se reintenta después de las ${horaGuatemala(pausa)} (hora de Guatemala)`
+}
+
+/** Fallo transitorio: abre (o alarga) la pausa y devuelve el error con `reintentarEn` ya puesto. */
+async function falloTransitorio(
+    mensaje: string,
+    tipo: TipoErrorHorus,
+    status: number | null = null,
+    cuerpo: unknown = null,
+): Promise<ErrorHorus> {
+    const pausa = await registrarFallo(mensaje)
+    return new ErrorHorus(conPausa(mensaje, pausa), tipo, status, cuerpo, pausa)
 }
 
 /** Horus respondió: sin fallos ni pausa. Solo escribe si algo cambia o pasó un minuto. */
@@ -133,8 +155,7 @@ export async function llamarHorus<T = unknown>(
         const salud = await leerSalud()
         if (salud.pausa_hasta && salud.pausa_hasta.getTime() > Date.now()) {
             throw new ErrorHorus(
-                `Horus no respondió (${salud.ultimo_error ?? 'sin detalle'}); se reintenta después de las ` +
-                    `${horaGuatemala(salud.pausa_hasta)} (hora de Guatemala)`,
+                conPausa(`Horus no respondió (${salud.ultimo_error ?? 'sin detalle'})`, salud.pausa_hasta),
                 'pausa',
                 null,
                 null,
@@ -159,12 +180,12 @@ export async function llamarHorus<T = unknown>(
         })
     } catch (error) {
         const nombre = (error as Error).name
-        const fallo =
-            nombre === 'TimeoutError' || nombre === 'AbortError'
-                ? new ErrorHorus(`Horus no respondió en ${opciones.timeoutMs ?? TIMEOUT_MS} ms`, 'timeout')
-                : new ErrorHorus(`No se pudo conectar con Horus: ${causa(error)}`, 'red')
-        await registrarFallo(fallo.message)
-        throw fallo
+        throw nombre === 'TimeoutError' || nombre === 'AbortError'
+            ? await falloTransitorio(
+                  `Horus no respondió en ${opciones.timeoutMs ?? TIMEOUT_MS} ms`,
+                  'timeout',
+              )
+            : await falloTransitorio(`No se pudo conectar con Horus: ${causa(error)}`, 'red')
     }
 
     const texto = await respuesta.text().catch(() => '')
@@ -180,13 +201,9 @@ export async function llamarHorus<T = unknown>(
     }
 
     const detalle = detalleError(datos) ?? respuesta.statusText
-    const error = new ErrorHorus(
-        `Horus respondió ${respuesta.status}${detalle ? `: ${detalle}` : ''}`,
-        'http',
-        respuesta.status,
-        datos,
-    )
-    if (error.transitorio) await registrarFallo(error.message)
+    const mensaje = `Horus respondió ${respuesta.status}${detalle ? `: ${detalle}` : ''}`
+    let error = new ErrorHorus(mensaje, 'http', respuesta.status, datos)
+    if (error.transitorio) error = await falloTransitorio(mensaje, 'http', respuesta.status, datos)
     else await registrarExito()
     logger.debug({ status: respuesta.status, ruta }, 'horus: respuesta de error')
     throw error

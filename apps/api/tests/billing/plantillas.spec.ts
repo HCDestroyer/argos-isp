@@ -42,7 +42,7 @@ test.group('Plantillas de facturación (API)', () => {
             mora_valor: '0.00',
             mora_recurrente: false,
             hora_corte: '08:00',
-            certificar_al: 'nunca',
+            certificar_al: 'pagar',
             version: 1,
         })
         assert.deepEqual(plantilla.reglas_promesa, REGLAS_PROMESA_POR_DEFECTO)

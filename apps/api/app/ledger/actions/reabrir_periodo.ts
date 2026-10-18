@@ -12,6 +12,12 @@ import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  * `ledger.reaperturas_mensuales` que apunta a él (queda la historia y la auditoría de la acción
  * con el motivo). Después se puede volver a cerrar (un cierre nuevo). 409 `periodo_abierto` si
  * el mes no está cerrado.
+ *
+ * Partidas del Libro Diario (decisión del líder): las ya asignadas nunca cambian y, al volver a
+ * cerrar, los asientos nuevos del mes reciben las siguientes. Para que la secuencia anual no se
+ * rompa, solo se reabre un mes si ningún mes posterior **cerrado** del mismo año tiene partidas:
+ * 409 `reapertura_fuera_de_orden` (se reabren primero los posteriores, del más reciente hacia
+ * atrás).
  */
 
 export interface EntradaReabrirPeriodo {
@@ -52,6 +58,25 @@ export default class ReabrirPeriodo extends DomainAction<EntradaReabrirPeriodo, 
             )
         }
         t.fijarEntidad('cierre_mensual', cierre.id as number)
+        const conPartidas = await t.trx.rawQuery(
+            `SELECT DISTINCT to_char(date_trunc('month', a.fecha), 'YYYY-MM') AS mes
+               FROM ledger.asientos_partidas p
+               JOIN ledger.asientos a ON a.id = p.asiento_id
+              WHERE p.empresa_id = ? AND p.anio = ?
+                AND a.fecha >= (?::date + interval '1 month')
+                AND ledger.periodo_cerrado(a.fecha, a.empresa_id)
+              ORDER BY 1`,
+            [empresaId, input.anio, periodo],
+        )
+        const posteriores = conPartidas.rows as Array<{ mes: string }>
+        if (posteriores.length > 0) {
+            throw new Conflicto(
+                `No se puede reabrir ${periodo.slice(0, 7)}: ${posteriores.map((p) => p.mes).join(', ')} ` +
+                    'ya tiene partidas del Libro Diario. Reabre primero los meses posteriores, del más reciente hacia atrás',
+                'reapertura_fuera_de_orden',
+                'Reapertura fuera de orden',
+            )
+        }
         await t.trx
             .insertQuery()
             .table('ledger.reaperturas_mensuales')

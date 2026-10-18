@@ -8,9 +8,11 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  *
  * Además consume el grupo `billing` del bus de eventos (`pago.registrado` → cumplir promesas,
  * `ConsumidorBilling`; `factura.*`, `pago.*`, `promesa.*` y `servicio.estado_cambiado` →
- * refrescar los resúmenes del dashboard, `ConsumidorResumenes`); `--sin-eventos` lo apaga.
+ * refrescar los resúmenes del dashboard, `ConsumidorResumenes`; `fiscal.parametros_cambiados` →
+ * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`; `pago.registrado` → pedir la
+ * certificación de los avisos de cobro cubiertos, `ConsumidorFel`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas` o `conciliar`) y termina:
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar` o `integridad`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -24,7 +26,8 @@ export default class BillingWorker extends BaseCommand {
     }
 
     @flags.string({
-        description: 'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar) y termina',
+        description:
+            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad) y termina',
     })
     declare unaVez?: string
 
@@ -51,10 +54,17 @@ export default class BillingWorker extends BaseCommand {
             const { EjecutorGrupo } = await import('#shared/eventos_bus')
             const { ConsumidorBilling } = await import('#billing/consumidor')
             const { ConsumidorResumenes } = await import('#billing/reportes/resumenes')
+            const { ConsumidorFiscal } = await import('#fiscal/consumidor')
+            const { ConsumidorFel } = await import('#fiscal/consumidor_fel')
             // promesas primero (pueden cambiar estados) y después los resúmenes del dashboard
             const grupo = new EjecutorGrupo({
                 grupo: 'billing',
-                consumidores: [new ConsumidorBilling(), new ConsumidorResumenes()],
+                consumidores: [
+                    new ConsumidorBilling(),
+                    new ConsumidorResumenes(),
+                    new ConsumidorFiscal(),
+                    new ConsumidorFel(),
+                ],
             })
             grupo.iniciar()
             ejecutor = grupo

@@ -4,12 +4,13 @@
 |--------------------------------------------------------------------------
 */
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { lista, pagina } from '#shared/openapi/esquemas'
+import { lista, objeto, pagina } from '#shared/openapi/esquemas'
 import * as v from '#ledger/validators'
 import {
     Asiento,
     BancoLibro,
     Caja,
+    Diario,
     CajaTurno,
     CategoriaEgreso,
     CierrePeriodo,
@@ -18,7 +19,9 @@ import {
     Mayor,
     BalanceSaldos,
     EstadoResultados,
+    IntegridadLibro,
 } from '#ledger/esquemas'
+import { integridadLibro } from '#ledger/sellos'
 import { listarCierres } from '#ledger/cierres'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
@@ -29,6 +32,7 @@ import AnularEgreso from '#ledger/actions/anular_egreso'
 import { libroDiario, libroMayor, listarCuentas, verAsiento } from '#ledger/consultas'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { listarBancosLibro } from '#ledger/bancos'
+import { listarDiarios, verDiario } from '#ledger/diarios'
 import { cajaDelCajero, existeCaja, listarCajas, listarTurnos } from '#ledger/cajas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
@@ -151,6 +155,33 @@ const libro: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/libro/diarios',
+        operacion: 'libroDiarios',
+        resumen: 'Diarios del libro y su numeración por año',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.libroEmpresasValidator,
+        descripcion:
+            'Diarios de la empresa activa (o empresas=todas): VEN, COB, COM, IMP, CIE, VAR, uno CAJ-n por caja y uno BAN-n por cuenta bancaria, con el último número asignado de cada año (§10.7). Solo lectura: los diarios se crean solos cuando un asiento los necesita.',
+        respuesta: { status: 200, descripcion: 'Diarios', esquema: lista(Diario) },
+        handler: (ctx, { query }) => listarDiarios(empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/diarios/:id',
+        operacion: 'libroDiarioVer',
+        resumen: 'Ver un diario y su numeración',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        respuesta: { status: 200, descripcion: 'Diario', esquema: Diario },
+        handler: async (ctx, { params }) => {
+            const diario = await verDiario(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, diario.empresa_id)
+            return diario
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/libro/diario',
         operacion: 'libroDiario',
         resumen: 'Libro diario: asientos con sus movimientos',
@@ -228,6 +259,32 @@ const libro: Ruta[] = [
         query: v.estadoResultadosValidator,
         respuesta: { status: 200, descripcion: 'Estado de resultados', esquema: EstadoResultados },
         handler: (ctx, { query }) => estadoResultados(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/integridad',
+        operacion: 'libroIntegridad',
+        resumen: 'Verificar la cadena de hash del libro (una sección por empresa)',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.integridadValidator,
+        descripcion:
+            'Recalcula la cadena de hash de los asientos de cada empresa desde el sello 1 (contrato de localización fiscal §10.10): el encadenamiento siempre completo y el hash de los asientos con fecha en `desde`–`hasta` y número de sello en `desde_sello`–`hasta_sello` (sin rango, todos). Un sello posterior al cierre de un mes con un asiento de ese mes es una ruptura `asiento_en_mes_cerrado`. Devuelve `verificado` o la primera `ruptura`, con el primer y el último hash del rango. Es una lectura: el aviso `libro.integridad_rota` lo emiten el sellador y la verificación diaria.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Integridad por empresa',
+            esquema: objeto({ data: lista(IntegridadLibro) }),
+        },
+        handler: (ctx, { query }) =>
+            integridadLibro(
+                {
+                    desde: query.desde,
+                    hasta: query.hasta,
+                    desde_sello: query.desde_sello,
+                    hasta_sello: query.hasta_sello,
+                },
+                empresasDeLaLista(ctx.empresa, query.empresas),
+            ),
     }),
 ]
 

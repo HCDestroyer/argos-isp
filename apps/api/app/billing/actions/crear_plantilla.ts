@@ -42,7 +42,7 @@ export const VALORES_POR_DEFECTO = {
     mora_valor: '0.00',
     mora_recurrente: false,
     hora_corte: '08:00',
-    certificar_al: 'nunca',
+    certificar_al: 'pagar',
 } as const
 
 export default class CrearPlantilla extends DomainAction<EntradaCrearPlantilla, PlantillaPublica> {

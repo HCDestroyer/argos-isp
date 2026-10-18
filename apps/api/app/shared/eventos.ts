@@ -97,8 +97,17 @@ interface PayloadSesion {
     prefijos_v6: string[]
 }
 
-/** Campos de `core.clientes` que emiten `cliente.actualizado` (los que Horus muestra). */
-export const CAMPOS_CLIENTE_ACTUALIZADO = ['nombre', 'tipo', 'codigo'] as const
+/**
+ * Campos de `core.clientes` que emiten `cliente.actualizado`: los que Horus muestra (`nombre`,
+ * `tipo`, `codigo`) y la identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`).
+ */
+export const CAMPOS_CLIENTE_ACTUALIZADO = [
+    'nombre',
+    'tipo',
+    'codigo',
+    'nit_cui',
+    'tipo_documento_fiscal',
+] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
 export interface CatalogoEventos {
@@ -204,7 +213,8 @@ export interface CatalogoEventos {
 
     /**
      * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
-     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro). Sin `empresa_id`: el
+     * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
+     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar). Sin `empresa_id`: el
      * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
      */
     'cliente.actualizado': {
@@ -220,6 +230,15 @@ export interface CatalogoEventos {
     'pago.anulado': PayloadPago
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
+    /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
+    'nota_credito.anulada': {
+        nota_credito_id: number
+        empresa_id: number
+        factura_id: number
+        cliente_id: number
+        monto: Dinero
+        motivo: string
+    }
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
@@ -239,6 +258,18 @@ export interface CatalogoEventos {
         contado: Dinero
         diferencia: Dinero
     }
+    /**
+     * La cadena de hash del libro de la empresa no verifica (contrato de localización fiscal
+     * §10.10): el sello `sello` guarda `esperado` y el recálculo dio `obtenido`. Lo emite el
+     * sellador o la verificación diaria, una vez por (empresa, sello).
+     */
+    'libro.integridad_rota': {
+        empresa_id: number
+        sello: number
+        asiento_id: number | null
+        esperado: string
+        obtenido: string
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -257,6 +288,68 @@ export interface CatalogoEventos {
         campos: string[]
     }
 
+    // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
+    'fiscal.localizacion_instalada': {
+        empresa_id: number
+        pais: string
+        /** versión instalada, p. ej. `gt-2026.1` */
+        codigo: string
+        /** versión anterior; null en la primera instalación */
+        de_codigo: string | null
+    }
+    /** invalida la caché de parámetros (regla 5); null = valor global de la instalación */
+    'fiscal.parametros_cambiados': {
+        empresa_id: number | null
+        claves: string[]
+        /** YYYY-MM-DD: la vigencia más antigua de lo insertado */
+        vigente_desde: string
+    }
+    /** nunca lleva valores secretos */
+    'fiscal.config_cambiada': {
+        empresa_id: number
+        campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
+    }
+    // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
+    'dte.certificado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        tipo_dte: string
+        autorizacion: string
+        serie: string | null
+        numero: string | null
+        contingencia: boolean
+    }
+    /** `definitivo: false` = se agotaron los reintentos automáticos (sigue en error_temporal) */
+    'dte.rechazado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        error: string
+        definitivo: boolean
+    }
+    'dte.anulado': {
+        dte_id: number
+        empresa_id: number
+        documento_tipo: 'factura' | 'nota_credito' | 'nota_debito'
+        documento_id: number
+        motivo: string
+    }
+    'fel.contingencia_cambiada': {
+        empresa_id: number
+        activa: boolean
+        motivo: string
+    }
+    'factura.sustituida': {
+        factura_id: number
+        nueva_factura_id: number
+        empresa_id: number
+        servicio_id: number | null
+        cliente_id: number
+        motivo: string
+    }
     // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
     // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
     /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
@@ -345,6 +438,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'nota_credito.emitida',
+    'nota_credito.anulada',
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
@@ -352,8 +446,17 @@ export const EVENTOS = [
     'comprobante.aprobado',
     'comprobante.rechazado',
     'caja.cerrada',
+    'libro.integridad_rota',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'fiscal.localizacion_instalada',
+    'fiscal.parametros_cambiados',
+    'fiscal.config_cambiada',
+    'dte.certificado',
+    'dte.rechazado',
+    'dte.anulado',
+    'fel.contingencia_cambiada',
+    'factura.sustituida',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',

@@ -17,7 +17,8 @@ interface FilaSaldo {
     cuenta_id: number
     codigo: string
     nombre: string
-    tipo: 'activo' | 'pasivo' | 'ingreso' | 'gasto'
+    tipo: 'activo' | 'pasivo' | 'patrimonio' | 'ingreso' | 'gasto'
+    naturaleza: 'deudora' | 'acreedora'
     debe: string
     haber: string
 }
@@ -27,9 +28,10 @@ export interface LineaEstado {
     codigo: string
     nombre: string
     tipo: FilaSaldo['tipo']
+    naturaleza: FilaSaldo['naturaleza']
     debe: string
     haber: string
-    /** según la naturaleza: deudora (activo, gasto) o acreedora (pasivo, ingreso) */
+    /** según la naturaleza: deudora (activo, gasto) o acreedora (pasivo, patrimonio, ingreso; al revés en las contracuentas) */
     saldo: string
 }
 
@@ -38,11 +40,13 @@ export interface TotalesBalance {
     haber: string
     activo: string
     pasivo: string
+    /** patrimonio (capital, reservas, resultados acumulados) */
+    patrimonio: string
     ingresos: string
     gastos: string
     /** ingresos − gastos */
     resultado: string
-    /** debe = haber y activo = pasivo + resultado */
+    /** debe = haber y activo = pasivo + patrimonio + resultado */
     cuadra: boolean
 }
 
@@ -73,7 +77,7 @@ async function saldosPorCuenta(
         .if(rango.desde, (q) => q.where('a.fecha', '>=', rango.desde!))
         .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
         .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
-        .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo')
+        .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
         .orderBy([
             { column: 'a.empresa_id', order: 'asc' },
             { column: 'c.codigo', order: 'asc' },
@@ -84,6 +88,7 @@ async function saldosPorCuenta(
             'c.codigo',
             'c.nombre',
             'c.tipo',
+            'c.naturaleza',
             db.raw('sum(m.debe)::text as debe'),
             db.raw('sum(m.haber)::text as haber'),
         )) as FilaSaldo[]
@@ -104,14 +109,26 @@ function lineas(filas: FilaSaldo[]): LineaEstado[] {
             codigo: fila.codigo,
             nombre: fila.nombre,
             tipo: fila.tipo,
+            naturaleza: fila.naturaleza,
             debe: aTexto(debe),
             haber: aTexto(haber),
-            saldo: aTexto(saldoSegunNaturaleza(fila.tipo, debe, haber)),
+            saldo: aTexto(saldoSegunNaturaleza(fila.naturaleza, debe, haber)),
         }))
 }
 
+/**
+ * Total de un tipo en su lado normal (deudor en activo y gasto, acreedor en los demás). Las
+ * contracuentas restan: la depreciación acumulada baja el activo, los ingresos diferidos bajan los
+ * ingresos.
+ */
 function sumaPorTipo(cuentas: LineaEstado[], tipo: FilaSaldo['tipo']): Dec {
-    return cuentas.filter((c) => c.tipo === tipo).reduce((suma, c) => suma.plus(dec(c.saldo)), CERO)
+    const deudor = tipo === 'activo' || tipo === 'gasto'
+    return cuentas
+        .filter((c) => c.tipo === tipo)
+        .reduce((suma, c) => {
+            const neto = dec(c.debe).minus(dec(c.haber))
+            return suma.plus(deudor ? neto : neto.negated())
+        }, CERO)
 }
 
 function totalesBalance(cuentas: LineaEstado[]): TotalesBalance {
@@ -119,6 +136,7 @@ function totalesBalance(cuentas: LineaEstado[]): TotalesBalance {
     const haber = cuentas.reduce((s, c) => s.plus(dec(c.haber)), CERO)
     const activo = sumaPorTipo(cuentas, 'activo')
     const pasivo = sumaPorTipo(cuentas, 'pasivo')
+    const patrimonio = sumaPorTipo(cuentas, 'patrimonio')
     const ingresos = sumaPorTipo(cuentas, 'ingreso')
     const gastos = sumaPorTipo(cuentas, 'gasto')
     const resultado = ingresos.minus(gastos)
@@ -127,10 +145,11 @@ function totalesBalance(cuentas: LineaEstado[]): TotalesBalance {
         haber: aTexto(haber),
         activo: aTexto(activo),
         pasivo: aTexto(pasivo),
+        patrimonio: aTexto(patrimonio),
         ingresos: aTexto(ingresos),
         gastos: aTexto(gastos),
         resultado: aTexto(resultado),
-        cuadra: debe.equals(haber) && activo.equals(pasivo.plus(resultado)),
+        cuadra: debe.equals(haber) && activo.equals(pasivo.plus(patrimonio).plus(resultado)),
     }
 }
 
