@@ -72,8 +72,14 @@ version_mayor_igual() { [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" 
 # ---------------------------------------------------------------------------
 [ "$(id -u)" = 0 ] || morir "corre el instalador como root (sudo bash instalar.sh)"
 [ -r /etc/os-release ] || morir "no encuentro /etc/os-release: solo Ubuntu y Debian"
+# Se lee en un subshell: /etc/os-release define VERSION y pisaría la versión de ArgosIsp.
 # shellcheck disable=SC1091
-. /etc/os-release
+read -r ID ID_LIKE UBUNTU_CODENAME VERSION_CODENAME < <(
+    . /etc/os-release
+    printf '%s %s %s %s\n' "${ID:--}" "$(echo "${ID_LIKE:--}" | tr ' ' ',')" "${UBUNTU_CODENAME:--}" "${VERSION_CODENAME:--}"
+)
+ID_LIKE="${ID_LIKE//,/ }"
+for v in ID ID_LIKE UBUNTU_CODENAME VERSION_CODENAME; do [ "${!v}" != - ] || printf -v "$v" ''; done
 case "${ID:-}" in
     ubuntu | debian) ;;
     *) case " ${ID_LIKE:-} " in *" debian "*) aviso "distribución $ID (derivada de Debian): sin soporte oficial" ;; *) morir "solo Ubuntu y Debian (este es ${ID:-desconocido})" ;; esac ;;
