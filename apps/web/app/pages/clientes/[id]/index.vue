@@ -121,6 +121,11 @@ onMounted(cargar)
         icono="i-lucide-user"
     >
         <template #acciones>
+            <VerEnHorusBoton
+                v-if="cliente"
+                tipo="cliente"
+                :id-externo="cliente.id"
+            />
             <UButton
                 to="/clientes"
                 icon="i-lucide-arrow-left"

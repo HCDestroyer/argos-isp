@@ -152,7 +152,9 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
 
     it('cada página declara su permiso; el menú pide el mismo que la página', () => {
         const sinPermiso = PAGINAS
-            .filter(archivo => !/\/(login|sin-permiso|index)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
+            // Sin permiso a propósito: login, autologin desde Horus (`sso/entrar`), la explicación del
+            // enlace de conexión (`conectar`) y "Mi cuenta" (`perfil`, cualquier usuario con sesión).
+            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|sso\/entrar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
             .filter(archivo => !permisoDePagina(leer(archivo)))
             .map(relativo)
         expect(sinPermiso).toEqual([])

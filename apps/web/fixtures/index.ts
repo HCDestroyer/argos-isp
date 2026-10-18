@@ -9,7 +9,7 @@
  */
 import type { Problem, Schema, paths } from '@argosisp/contracts'
 import type { ManejadorFixture, RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import { bd } from './bd'
+import { bd, siguienteId } from './bd'
 import loginAdmin from './auth/login.admin.json'
 import loginCajero from './auth/login.cajero.json'
 import login401 from './auth/login.401.json'
@@ -25,7 +25,9 @@ import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
-import { empresaActivaDe, empresaNoPermitida, sinSesion, usuariosPorToken } from './comun'
+import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
+import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horus/datos'
+import { rutasHorus } from './horus/rutas'
 import { rutasPlanes } from './planes/rutas'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
@@ -223,12 +225,29 @@ function revisarVencimiento(solicitud: SolicitudFixture): RespuestaFixture | nul
     return null
 }
 
+/** Pone la cookie simulada (token + `csrf` + vencimientos) y devuelve la `SesionPanel`, como la API. */
+function abrirSesion(respuesta: RespuestaLogin): Schema<'SesionPanel'> {
+    const csrf = `csrf-${respuesta.token}-${Date.now().toString(36)}`
+    const ahora = Date.now()
+    const expiraEn = new Date(ahora + SESION_INACTIVIDAD_MS).toISOString()
+    const expiraMaxEn = new Date(ahora + SESION_MAXIMA_MS).toISOString()
+    bd.sesion = { token: respuesta.token, csrf, expiraEn, expiraMaxEn }
+    guardarCookieSimulada()
+    return {
+        usuario: { ...respuesta.usuario, csrf },
+        csrf,
+        expira_en: expiraEn,
+        expira_max_en: expiraMaxEn,
+    }
+}
+
 const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /** Como `sesion_panel.ts` (A1): con la cookie, POST/PUT/DELETE llevan el `X-CSRF-Token` de la sesión. */
 function csrfInvalido(solicitud: SolicitudFixture, clave: string): boolean {
     return solicitud.porCookie
         && clave !== 'POST /api/v1/auth/sesion'
+        && !clave.startsWith('POST /api/v1/auth/sso/')
         && !METODOS_SEGUROS.has(solicitud.metodo)
         && bd.sesion.csrf !== null
         && solicitud.headers.get('X-CSRF-Token') !== bd.sesion.csrf
@@ -281,7 +300,7 @@ function conFallasSimuladas(rutas: RutasFixture): RutasFixture {
             if (status) {
                 return respuestaFalla(clave, status)
             }
-            const vencida = clave === 'POST /api/v1/auth/sesion' ? null : revisarVencimiento(solicitud)
+            const vencida = clave === 'POST /api/v1/auth/sesion' || clave.startsWith('POST /api/v1/auth/sso/') ? null : revisarVencimiento(solicitud)
             if (vencida) {
                 return vencida
             }
@@ -308,20 +327,60 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         if (!revision.ok) {
             return revision.falla
         }
-        const respuesta = revision.respuesta
-        const csrf = `csrf-${respuesta.token}-${Date.now().toString(36)}`
-        const ahora = Date.now()
-        const expiraEn = new Date(ahora + SESION_INACTIVIDAD_MS).toISOString()
-        const expiraMaxEn = new Date(ahora + SESION_MAXIMA_MS).toISOString()
-        bd.sesion = { token: respuesta.token, csrf, expiraEn, expiraMaxEn }
-        guardarCookieSimulada()
-        const sesion: Schema<'SesionPanel'> = {
-            usuario: { ...respuesta.usuario, csrf },
-            csrf,
-            expira_en: expiraEn,
-            expira_max_en: expiraMaxEn,
+        return { status: 200, cuerpo: abrirSesion(revision.respuesta) }
+    },
+
+    /**
+     * Autologin desde Horus (A1, `contratos/horus.md` §1.5): un ticket de un solo uso. Con
+     * vinculación abre la sesión como `POST /auth/sesion`; sin ella pide el login normal.
+     */
+    'POST /api/v1/auth/sso/canjear': ({ cuerpo }) => {
+        const ticket = typeof cuerpo === 'object' && cuerpo !== null && 'ticket' in cuerpo && typeof cuerpo.ticket === 'string' ? cuerpo.ticket : ''
+        if (bd.horus.usados.includes(ticket) || (ticket !== TICKET_VINCULADO && ticket !== TICKET_SIN_VINCULAR)) {
+            return problemaTipado(410, 'ticket_invalido', 'Ticket inválido', 'El ticket de autologin venció, ya se usó o el conector ya no está conectado')
         }
-        return { status: 200, cuerpo: sesion }
+        bd.horus.usados.push(ticket)
+        if (ticket === TICKET_VINCULADO && loginAdmin.usuario.id === bd.horus.vinculaciones.find(v => v.revocada_en === null)?.usuario_id) {
+            const canje: Schema<'CanjeSso'> = { resultado: 'sesion', ruta: '/servicios/1', conector: 'horus', sesion: abrirSesion(loginAdmin), vinculacion: null }
+            return { status: 200, cuerpo: canje }
+        }
+        const canje: Schema<'CanjeSso'> = {
+            resultado: 'vinculacion_requerida',
+            ruta: '/clientes/1',
+            conector: 'horus',
+            sesion: null,
+            vinculacion: {
+                token: TOKEN_VINCULACION,
+                expira_en: new Date(Date.now() + 10 * 60_000).toISOString(),
+                usuario_externo: { id_externo: 'u-42', correo: 'luis@horus.isp.gt', nombre: 'Luis Pérez (Horus)' },
+            },
+        }
+        return { status: 200, cuerpo: canje }
+    },
+
+    /** Login normal con el token de vinculación (10 min, un uso): guarda la vinculación. */
+    'POST /api/v1/auth/sso/vincular': ({ cuerpo }) => {
+        const token = typeof cuerpo === 'object' && cuerpo !== null && 'token_vinculacion' in cuerpo ? cuerpo.token_vinculacion : null
+        if (token !== TOKEN_VINCULACION || bd.horus.usados.includes(token)) {
+            return problemaTipado(410, 'vinculacion_invalida', 'Vinculación inválida', 'El token de vinculación venció o ya se usó')
+        }
+        const revision = revisarCredenciales(cuerpo)
+        if (!revision.ok) {
+            return revision.falla
+        }
+        bd.horus.usados.push(token)
+        bd.horus.vinculaciones.push({
+            id: siguienteId(bd.horus.vinculaciones),
+            conector: 'horus',
+            id_externo: 'u-42',
+            usuario_id: revision.respuesta.usuario.id,
+            correo_externo: 'luis@horus.isp.gt',
+            nombre_externo: 'Luis Pérez (Horus)',
+            revocada_en: null,
+            created_at: new Date().toISOString(),
+        })
+        const canje: Schema<'CanjeSso'> = { resultado: 'sesion', ruta: '/clientes/1', conector: 'horus', sesion: abrirSesion(revision.respuesta), vinculacion: null }
+        return { status: 200, cuerpo: canje }
     },
 
     /** Como `POST /auth/logout`: revoca el token, borra la cookie y responde 204; sin sesión, 401. */
@@ -386,4 +445,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasDocumentos,
     ...rutasReportes,
     ...rutasEgresos,
+    ...rutasHorus,
 })
