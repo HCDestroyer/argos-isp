@@ -13411,6 +13411,15 @@
                         ],
                         "maxLength": 100,
                         "description": "Nombre visible del remitente"
+                      },
+                      "contabilidad": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 1000,
+                        "pattern": "^\\s*(?:[^\\s@,]+@[^\\s@,]+\\.[^\\s@,]+\\s*(?:,\\s*|$))*$",
+                        "description": "Correo de contabilidad para los avisos fiscales; varias direcciones separadas por coma. Vacío o null lo quita"
                       }
                     },
                     "required": [],
@@ -13790,6 +13799,15 @@
                         ],
                         "maxLength": 100,
                         "description": "Nombre visible del remitente"
+                      },
+                      "contabilidad": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 1000,
+                        "pattern": "^\\s*(?:[^\\s@,]+@[^\\s@,]+\\.[^\\s@,]+\\s*(?:,\\s*|$))*$",
+                        "description": "Correo de contabilidad para los avisos fiscales; varias direcciones separadas por coma. Vacío o null lo quita"
                       }
                     },
                     "required": [],
@@ -30753,6 +30771,13 @@
                   "string",
                   "null"
                 ]
+              },
+              "contabilidad": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve"
               }
             }
           },

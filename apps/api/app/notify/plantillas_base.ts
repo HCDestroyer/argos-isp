@@ -40,7 +40,24 @@ export const RECORDATORIOS_BASE = [
 ]
 
 /**
- * Alertas internas al chat del equipo (`TELEGRAM_CHAT_EQUIPO`, tarea 7). Solo Telegram. Variables:
+ * Aviso fiscal (contrato de localización fiscal §14): Telegram al chat del equipo y correo a
+ * contabilidad, con la configuración de canales de la empresa del evento. Mismo texto en los dos.
+ */
+function alertaFiscal(evento: string, asunto: string, cuerpo: string): PlantillaBase[] {
+    return [
+        { evento, canal: 'telegram', asunto: null, cuerpo: `${asunto}\n\n${cuerpo}` },
+        {
+            evento,
+            canal: 'correo',
+            asunto,
+            cuerpo: `Equipo de contabilidad:\n\n${cuerpo}\n\nAviso automático de ArgosIsp para {{empresa.nombre}}.`,
+        },
+    ]
+}
+
+/**
+ * Alertas internas al chat del equipo (`TELEGRAM_CHAT_EQUIPO`, tarea 7). Telegram; los avisos
+ * fiscales (`alertaFiscal`) también por correo a contabilidad. Variables:
  * `alerta.*` (ver `app/notify/alertas.ts`) y `empresa.*`. Si la plantilla está desactivada o no
  * existe se usa este mismo texto: una alerta interna nunca se pierde por falta de plantilla.
  */
@@ -111,6 +128,45 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         asunto: null,
         cuerpo: 'RESUELTO · {{alerta.descripcion}} volvió a ejecutarse\nÚltima ejecución: {{alerta.ultima}}',
     },
+    ...alertaFiscal(
+        'alerta.libro.integridad_rota',
+        'URGENTE · Integridad del libro contable rota ({{empresa.nombre}})',
+        'La verificación de la cadena de sellos del libro contable de {{empresa.nombre}} encontró una diferencia: un asiento ya sellado no coincide con su sello.' +
+            '\nSello: {{alerta.sello}}{{#alerta.asiento_id}}\nAsiento: {{alerta.asiento_id}}{{/alerta.asiento_id}}' +
+            '\nHuella esperada: {{alerta.esperado}}\nHuella obtenida: {{alerta.obtenido}}' +
+            '\nEl cierre del mes queda bloqueado hasta revisarlo. Revisa Contabilidad → Integridad del libro en el panel y no registres correcciones a mano en la base de datos.',
+    ),
+    ...alertaFiscal(
+        'alerta.dte.rechazado',
+        '{{#alerta.definitivo}}DTE rechazado{{/alerta.definitivo}}{{^alerta.definitivo}}DTE sin certificar tras agotar los reintentos{{/alerta.definitivo}} · {{alerta.documento}} ({{empresa.nombre}})',
+        '{{#alerta.definitivo}}El certificador rechazó el DTE de {{alerta.documento}}.{{/alerta.definitivo}}' +
+            '{{^alerta.definitivo}}El DTE de {{alerta.documento}} no se pudo certificar: se agotaron los reintentos sin respuesta válida del certificador.{{/alerta.definitivo}}' +
+            '\nDTE: {{alerta.dte_id}}{{#alerta.receptor}}\nReceptor: {{alerta.receptor}}{{/alerta.receptor}}{{#alerta.total_q}}\nTotal: {{alerta.total_q}}{{/alerta.total_q}}' +
+            '\nError: {{alerta.error}}' +
+            '{{#alerta.definitivo}}\nCorrige el dato que indica el error (por ejemplo, el NIT o el nombre del cliente) y reintenta el DTE desde el panel: se envía con otro identificador.{{/alerta.definitivo}}' +
+            '{{^alerta.definitivo}}\nRevisa la conexión con el certificador y las credenciales FEL de la empresa; luego reintenta el DTE desde el panel. Si el certificador sigue caído, valora activar la contingencia.{{/alerta.definitivo}}' +
+            '\nLos siguientes rechazos de esta empresa en {{alerta.ventana_min}} min no se repiten aquí: están en el panel, en la lista de DTE rechazados.',
+    ),
+    ...alertaFiscal(
+        'alerta.fel.contingencia_activada',
+        'Contingencia FEL activada ({{empresa.nombre}})',
+        'Se activó la contingencia FEL de {{empresa.nombre}} el {{alerta.desde}}.{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '\nLas facturas se emiten igual y sus DTE quedan en cola; se certifican cuando se desactive la contingencia. Regulariza dentro del plazo que indique el contador.',
+    ),
+    ...alertaFiscal(
+        'alerta.fel.contingencia_desactivada',
+        'Contingencia FEL desactivada ({{empresa.nombre}})',
+        'Se desactivó la contingencia FEL de {{empresa.nombre}} el {{alerta.hasta}}{{#alerta.duracion}} (estuvo activa desde el {{alerta.desde}}, {{alerta.duracion}}){{/alerta.duracion}}.' +
+            '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '\nLos DTE en contingencia se envían al certificador en la próxima corrida de la cola FEL. Revisa en el panel que todos queden certificados.',
+    ),
+    ...alertaFiscal(
+        'alerta.nota_credito.anulada',
+        'Nota de crédito {{alerta.nota_credito_id}} anulada ({{empresa.nombre}})',
+        'Se anuló la nota de crédito {{alerta.nota_credito_id}} de la factura {{alerta.factura}} por {{alerta.monto_q}}{{#alerta.cliente}} (cliente {{alerta.cliente}}){{/alerta.cliente}}.' +
+            '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '\nSu asiento se revirtió y el monto volvió al saldo de la factura. Si el crédito sigue siendo válido, emite una nota nueva con los datos corregidos.',
+    ),
 ]
 
 export const PLANTILLAS_BASE: PlantillaBase[] = [

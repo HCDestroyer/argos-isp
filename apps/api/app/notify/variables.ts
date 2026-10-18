@@ -177,6 +177,27 @@ function soporte(empresa: {
     }
 }
 
+/**
+ * Serie y número del DTE certificado de la factura (`fiscal.dte`, A3): el de la factura o, para una
+ * mora, su NDEB. Vale el certificado (también con la anulación pendiente o ya anulado: el documento
+ * tuvo ese número); un DTE pendiente, en contingencia o rechazado no tiene número. Las columnas
+ * `billing.facturas.fel_*` son del sistema anterior y ya no se escriben (se migraron a `fiscal.dte`).
+ */
+const DTE_CERTIFICADO = `(select %s from fiscal.dte d
+    where d.documento_id = f.id
+      and d.documento_tipo = case when f.tipo = 'mora' then 'nota_debito' else 'factura' end
+      and d.estado in ('certificado', 'anulacion_pendiente', 'anulado')
+      and d.serie is not null and d.numero is not null
+    order by d.id desc limit 1)`
+
+function columnasFel(cliente: QueryClientContract) {
+    return [
+        cliente.raw(`${DTE_CERTIFICADO.replace('%s', 'd.serie')} as fel_serie`),
+        cliente.raw(`${DTE_CERTIFICADO.replace('%s', 'd.numero')} as fel_numero`),
+        cliente.raw(`${DTE_CERTIFICADO.replace('%s', 'd.autorizacion')} as fel_autorizacion`),
+    ]
+}
+
 /** Variables de una factura: del payload, completadas con la fila de `billing.facturas` si existe. */
 export async function variablesFactura(
     cliente: QueryClientContract,
@@ -185,17 +206,16 @@ export async function variablesFactura(
     ahora: DateTime,
 ): Promise<Variables> {
     const fila = await cliente
-        .from('billing.facturas')
-        .where('id', facturaId)
+        .from('billing.facturas as f')
+        .where('f.id', facturaId)
         .select(
-            'id',
-            'total',
-            'pagado',
-            'estado',
-            'fel_serie',
-            'fel_numero',
-            cliente.raw('periodo::text as periodo'),
-            cliente.raw('vence_en::text as vence_en'),
+            'f.id',
+            'f.total',
+            'f.pagado',
+            'f.estado',
+            ...columnasFel(cliente),
+            cliente.raw('f.periodo::text as periodo'),
+            cliente.raw('f.vence_en::text as vence_en'),
         )
         .first()
 
@@ -209,8 +229,10 @@ export async function variablesFactura(
 
     return {
         id: facturaId,
-        numero:
-            fila?.fel_serie && fila?.fel_numero ? `${fila.fel_serie}-${fila.fel_numero}` : String(facturaId),
+        numero: fila ? numeroFactura(fila) : String(facturaId),
+        /** UUID de autorización de la SAT; vacío sin DTE certificado */
+        autorizacion: fila?.fel_autorizacion ?? '',
+        certificada: Boolean(fila?.fel_autorizacion),
         estado: fila?.estado ?? null,
         total: monto(total),
         total_q: quetzales(total),
@@ -278,6 +300,16 @@ function numeroFactura(fila: { id: number; fel_serie: string | null; fel_numero:
     return fila.fel_serie && fila.fel_numero ? `${fila.fel_serie}-${fila.fel_numero}` : String(fila.id)
 }
 
+/** Número visible de una factura: serie-número del DTE certificado o, sin él, su id. */
+export async function numeroDeFactura(cliente: QueryClientContract, facturaId: number): Promise<string> {
+    const fila = (await cliente
+        .from('billing.facturas as f')
+        .where('f.id', facturaId)
+        .select('f.id', ...columnasFel(cliente))
+        .first()) as { id: number; fel_serie: string | null; fel_numero: string | null } | null
+    return fila ? numeroFactura(fila) : String(facturaId)
+}
+
 /**
  * Lo que un pago aplicó a las facturas de un cliente (pago de terceros): `facturas_cliente`
  * (números separados por coma), `varias_facturas`, `monto_cliente` y `monto_cliente_q`.
@@ -293,7 +325,7 @@ async function aplicadoAlCliente(
         .where('a.pago_id', pagoId)
         .where('f.cliente_id', clienteId)
         .orderBy('a.id', 'asc')
-        .select('f.id', 'f.fel_serie', 'f.fel_numero', 'a.monto')) as Array<{
+        .select('f.id', ...columnasFel(cliente), 'a.monto')) as Array<{
         id: number
         fel_serie: string | null
         fel_numero: string | null
