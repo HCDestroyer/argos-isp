@@ -7435,6 +7435,147 @@
         "x-implementado": true
       }
     },
+    "/api/v1/compras/{id}/constancias": {
+      "post": {
+        "operationId": "comprasRegistrarConstancia",
+        "summary": "Registrar la constancia de retención emitida al proveedor por una retención de la compra",
+        "description": "No mueve el libro (la retención ya está en 2.1.04 o 2.1.05). Monto = el de la retención de la compra. 409 constancia_registrada, constancia_duplicada, compra_anulada.",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "impuesto_codigo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40,
+                    "description": "Retención de la compra que ampara (RET_IVA_ESP_C, RET_ISR_OPC_C…)"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy"
+                  }
+                },
+                "required": [
+                  "impuesto_codigo",
+                  "numero"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Constancia registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConstanciaRetencion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.registrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/compras/desde-egreso/{egresoId}": {
       "post": {
         "operationId": "comprasDesdeEgreso",
@@ -8417,6 +8558,172 @@
           }
         },
         "x-permiso": "comprobantes.rechazar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/constancias": {
+      "get": {
+        "operationId": "constanciasListar",
+        "summary": "Constancias de retención recibidas de clientes y emitidas a proveedores",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "direccion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "recibida",
+                "emitida"
+              ]
+            }
+          },
+          {
+            "name": "impuesto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "iva",
+                "isr"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "vigente",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de constancias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConstanciaRetencion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.ver",
         "x-implementado": true
       }
     },
@@ -21501,6 +21808,52 @@
                     ],
                     "minimum": 1,
                     "description": "Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id)"
+                  },
+                  "retenciones": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "codigo": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 40,
+                          "description": "Retención recibida (RET_IVA_ESP, RET_IVA_PUB, RET_IVA_EXP, RET_IVA_TAR, RET_IVA_TAR_COMB, RET_IVA_PEQ, RET_ISR_OPC)"
+                        },
+                        "numero": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "fecha": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                          "format": "date"
+                        },
+                        "monto": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "codigo",
+                        "numero",
+                        "monto"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10,
+                    "description": "Constancias de retención que entrega el cliente: el pago aplica monto + Σ constancias; a caja o banco entra monto (1.1.05/1.1.06 por cada constancia)"
                   }
                 },
                 "required": [
@@ -21566,6 +21919,537 @@
           }
         },
         "x-permiso": "pagos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos-proveedores": {
+      "get": {
+        "operationId": "pagosProveedoresListar",
+        "summary": "Pagos a proveedores con sus aplicaciones a compras",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "proveedor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "registrado",
+                "anulado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de pagos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PagoProveedor"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "pagosProveedoresRegistrar",
+        "summary": "Pagar compras al crédito de un proveedor (Proveedores / Caja | Banco)",
+        "description": "Aplica a las compras pedidas y luego a la más antigua por vencimiento. No pasa del saldo pendiente (422 pago_excede_saldo). En efectivo sale del turno abierto de la caja (baja su esperado). La cuenta es de la empresa del proveedor (422 cuenta_de_otra_empresa).",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proveedor_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "caja",
+                      "banco",
+                      "cuenta_bancaria"
+                    ],
+                    "description": "caja, banco (del libro) o cuenta_bancaria propia"
+                  },
+                  "caja_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Cheque, transferencia…"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "compras": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 200,
+                    "description": "Compras a pagar primero (en ese orden); luego la más antigua por vencimiento"
+                  }
+                },
+                "required": [
+                  "proveedor_id",
+                  "monto",
+                  "metodo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pago registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoProveedor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.pagar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos-proveedores/{id}": {
+      "get": {
+        "operationId": "pagosProveedoresVer",
+        "summary": "Ver pago a proveedor",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoProveedor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos-proveedores/{id}/anular": {
+      "post": {
+        "operationId": "pagosProveedoresAnular",
+        "summary": "Anular un pago a proveedor (asiento de reverso)",
+        "description": "Reverso con fecha de hoy; sus compras vuelven a quedar con saldo. 409 pago_anulado.",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pago anulado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoProveedor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso compras.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "compras.pagar",
         "x-implementado": true
       }
     },
@@ -27942,6 +28826,108 @@
         "x-implementado": true
       }
     },
+    "/api/v1/proveedores/{id}/estado-cuenta": {
+      "get": {
+        "operationId": "proveedoresEstadoCuenta",
+        "summary": "Auxiliar del proveedor en 2.1.03: compras, NCRE, pagos, saldo y documentos pendientes",
+        "tags": [
+          "compras"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoCuentaProveedor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso proveedores.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "proveedores.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/eventos": {
       "get": {
         "operationId": "redEventosListar",
@@ -28733,6 +29719,115 @@
                   "items": {
                     "$ref": "#/components/schemas/ResumenConciliacionBancaria"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/reportes/cuentas-por-pagar": {
+      "get": {
+        "operationId": "reportesCuentasPorPagar",
+        "summary": "Antigüedad de proveedores (por vencer, 1-30, 31-60, 61-90, +90 días)",
+        "description": "Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad). Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "corte",
+            "in": "query",
+            "required": false,
+            "description": "Día de referencia de la antigüedad (hoy por defecto)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "proveedor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteCuentasPorPagar"
                 }
               }
             }
@@ -39359,6 +40454,121 @@
           }
         }
       },
+      "ConstanciaRetencion": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "direccion",
+          "impuesto",
+          "impuesto_codigo",
+          "numero",
+          "fecha",
+          "monto",
+          "pago_id",
+          "cliente_id",
+          "cliente_nombre",
+          "compra_id",
+          "proveedor_id",
+          "proveedor_nombre",
+          "vigente",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "direccion": {
+            "type": "string",
+            "enum": [
+              "recibida",
+              "emitida"
+            ],
+            "description": "recibida de un cliente (con su pago) o emitida a un proveedor (con su compra)"
+          },
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva",
+              "isr"
+            ]
+          },
+          "impuesto_codigo": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pago_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "proveedor_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "proveedor_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vigente": {
+            "type": "boolean",
+            "description": "El pago o la compra sigue vigente"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ConsumoHorus": {
         "type": "object",
         "required": [
@@ -41609,6 +42819,125 @@
               "$ref": "#/components/schemas/SeccionEstadoCuenta"
             },
             "description": "Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo"
+          }
+        }
+      },
+      "EstadoCuentaProveedor": {
+        "type": "object",
+        "required": [
+          "proveedor",
+          "desde",
+          "hasta",
+          "saldo_inicial",
+          "movimientos",
+          "saldo_final",
+          "pendientes"
+        ],
+        "properties": {
+          "proveedor": {
+            "$ref": "#/components/schemas/Proveedor"
+          },
+          "desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "saldo_inicial": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "asiento_id",
+                "fecha",
+                "tipo",
+                "documento",
+                "descripcion",
+                "debe",
+                "haber",
+                "saldo"
+              ],
+              "properties": {
+                "asiento_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "compra",
+                    "nota_credito",
+                    "pago",
+                    "anulacion",
+                    "ajuste"
+                  ]
+                },
+                "documento": {
+                  "type": "string"
+                },
+                "descripcion": {
+                  "type": "string"
+                },
+                "debe": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "haber": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "saldo": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Lo que la empresa le debe después del movimiento"
+                }
+              }
+            }
+          },
+          "saldo_final": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo del auxiliar en 2.1.03 al corte"
+          },
+          "pendientes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "compra_id",
+                "documento",
+                "vence_en",
+                "saldo",
+                "dias_vencida"
+              ],
+              "properties": {
+                "compra_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "documento": {
+                  "type": "string"
+                },
+                "vence_en": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "saldo": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_vencida": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         }
       },
@@ -44705,10 +46034,51 @@
             ]
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo que el pago aplica a la deuda (efectivo o depósito + constancias de retención)"
           },
           "comision": {
             "$ref": "#/components/schemas/Dinero"
+          },
+          "retenido": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Parte del monto cubierta con constancias de retención del cliente (fase 5): a caja o banco entró monto − comision − retenido"
+          },
+          "constancias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "impuesto",
+                "impuesto_codigo",
+                "numero",
+                "fecha",
+                "monto"
+              ],
+              "properties": {
+                "impuesto": {
+                  "type": "string",
+                  "enum": [
+                    "iva",
+                    "isr"
+                  ]
+                },
+                "impuesto_codigo": {
+                  "type": "string"
+                },
+                "numero": {
+                  "type": "string"
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            },
+            "description": "Constancias de retención recibidas con el pago (1.1.05 IVA, 1.1.06 ISR)"
           },
           "referencia": {
             "type": [
@@ -44899,6 +46269,182 @@
           "dias": {
             "type": "integer",
             "description": "Días desde el pago"
+          }
+        }
+      },
+      "PagoProveedor": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "proveedor_id",
+          "proveedor_nombre",
+          "fecha",
+          "metodo",
+          "caja_id",
+          "turno_id",
+          "banco_id",
+          "cuenta_bancaria_id",
+          "cuenta_id",
+          "cuenta_codigo",
+          "monto",
+          "referencia",
+          "descripcion",
+          "asiento_id",
+          "estado",
+          "anulado_en",
+          "motivo_anulacion",
+          "asiento_reverso_id",
+          "registrado_por",
+          "created_at",
+          "aplicaciones"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "caja",
+              "banco",
+              "cuenta_bancaria"
+            ]
+          },
+          "caja_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "turno_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Turno de caja del que salió el efectivo (baja su esperado)"
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "registrado",
+              "anulado"
+            ]
+          },
+          "anulado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_reverso_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "aplicaciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "compra_id",
+                "documento",
+                "monto"
+              ],
+              "properties": {
+                "compra_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "documento": {
+                  "type": "string"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
           }
         }
       },
@@ -48910,6 +50456,227 @@
                 ]
               },
               "monto_anulado": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteCuentasPorPagar": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "proveedor_id",
+                "proveedor",
+                "nit",
+                "compras",
+                "por_vencer",
+                "dias_0_30",
+                "dias_31_60",
+                "dias_61_90",
+                "dias_mas_90",
+                "vencido",
+                "total"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "proveedor_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "proveedor": {
+                  "type": "string"
+                },
+                "nit": {
+                  "type": "string"
+                },
+                "compras": {
+                  "type": "integer"
+                },
+                "por_vencer": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_0_30": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_31_60": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_61_90": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "dias_mas_90": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "vencido": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "total": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "proveedor_id",
+              "proveedor",
+              "nit",
+              "compras",
+              "por_vencer",
+              "dias_0_30",
+              "dias_31_60",
+              "dias_61_90",
+              "dias_mas_90",
+              "vencido",
+              "total"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "proveedor_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "proveedor": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "nit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "compras": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "por_vencer": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_0_30": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_31_60": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_61_90": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dias_mas_90": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vencido": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "total": {
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/Dinero"

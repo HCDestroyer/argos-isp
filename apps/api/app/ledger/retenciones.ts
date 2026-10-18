@@ -1,5 +1,8 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import type { Transaccion } from '#shared/domain_action'
+import { usuarioDelActor } from '#shared/contexto'
+import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { impuesto as impuestoVigente, type ImpuestoVigente } from '#fiscal/impuestos'
 import { valorParametro } from '#fiscal/parametros'
@@ -171,4 +174,177 @@ export function totalRetenido(retenciones: RetencionCalculada[], impuesto?: 'iva
     return retenciones
         .filter((r) => impuesto === undefined || r.impuesto === impuesto)
         .reduce((suma, r) => suma.plus(r.monto), CERO)
+}
+
+/*
+|--------------------------------------------------------------------------
+| Retenciones recibidas en un pago (constancias del cliente, §3.5)
+|--------------------------------------------------------------------------
+*/
+
+export interface PedidoConstancia {
+    /** impuesto de retención recibida (`RET_IVA_ESP`, `RET_IVA_PUB`, `RET_IVA_TAR_COMB`, `RET_ISR_OPC`…) */
+    codigo: string
+    numero: string
+    /** fecha de la constancia; por defecto hoy */
+    fecha?: string | null
+    monto: string
+}
+
+export interface ConstanciaRecibida {
+    impuesto_codigo: string
+    impuesto: 'iva' | 'isr'
+    numero: string
+    fecha: string
+    monto: Dec
+    cuenta: string
+    cuadricula: string
+}
+
+/** Montos de las constancias pedidas (422 si alguno no es dinero positivo) y su total. */
+export function leerRetencionesRecibidas(pedidos: PedidoConstancia[]): {
+    pedidos: PedidoConstancia[]
+    total: Dec
+} {
+    const errores: ErrorCampo[] = []
+    let total = CERO
+    pedidos.forEach((pedido, i) => {
+        const monto = dec(pedido.monto)
+        if (monto.lte(0) || monto.decimalPlaces() > 2) {
+            errores.push({
+                field: `retenciones.${i}.monto`,
+                message: 'El monto de la constancia es mayor que 0 con hasta 2 decimales',
+                rule: 'monto',
+            })
+        }
+        if (!pedido.numero?.trim()) {
+            errores.push({
+                field: `retenciones.${i}.numero`,
+                message: 'Falta el número de la constancia',
+                rule: 'required',
+            })
+        }
+        total = total.plus(monto)
+    })
+    if (errores.length > 0) throw new ValidacionFallida(errores, 'Constancias inválidas')
+    return { pedidos, total }
+}
+
+/**
+ * Valida las constancias de un pago de la empresa: impuesto de retención **recibida** (uso
+ * `venta`, signo −1) con versión vigente en la fecha de la constancia; número no usado por otra
+ * constancia del mismo impuesto en un pago vigente (409 `constancia_duplicada`).
+ */
+export async function validarRetencionesRecibidas(
+    trx: QueryClientContract,
+    empresaId: number,
+    pedidos: PedidoConstancia[],
+): Promise<ConstanciaRecibida[]> {
+    const hoy = hoyGuatemala()
+    const errores: ErrorCampo[] = []
+    const salida: ConstanciaRecibida[] = []
+    for (const [i, pedido] of pedidos.entries()) {
+        const codigo = pedido.codigo.trim().toUpperCase()
+        const fecha = pedido.fecha ? fechaValida(pedido.fecha, `retenciones.${i}.fecha`) : hoy
+        if (fecha > hoy) {
+            errores.push({
+                field: `retenciones.${i}.fecha`,
+                message: 'La constancia no puede ser futura',
+                rule: 'futuro',
+            })
+            continue
+        }
+        let vigente: ImpuestoVigente
+        try {
+            vigente = await impuestoVigente(empresaId, codigo, fecha, trx)
+        } catch {
+            errores.push({
+                field: `retenciones.${i}.codigo`,
+                message: `El impuesto ${codigo} no existe o no tiene tasa vigente al ${fecha}`,
+                rule: 'exists',
+            })
+            continue
+        }
+        const impuesto = impuestoDe(vigente.grupo)
+        if (!impuesto || vigente.uso !== 'venta' || vigente.signo !== -1) {
+            errores.push({
+                field: `retenciones.${i}.codigo`,
+                message: `${codigo} no es una retención recibida de un cliente (las emitidas llevan _C)`,
+                rule: 'retencion',
+            })
+            continue
+        }
+        const numero = pedido.numero.trim().toUpperCase()
+        if (salida.some((c) => c.impuesto === impuesto && c.numero === numero)) {
+            errores.push({
+                field: `retenciones.${i}.numero`,
+                message: `Constancia ${numero} repetida`,
+                rule: 'repetido',
+            })
+            continue
+        }
+        salida.push({
+            impuesto_codigo: codigo,
+            impuesto,
+            numero,
+            fecha,
+            monto: dec(pedido.monto),
+            cuenta: vigente.cuenta_cuota,
+            cuadricula: vigente.cuadricula_cuota,
+        })
+    }
+    if (errores.length > 0) throw new ValidacionFallida(errores, 'Constancias inválidas')
+    for (const constancia of salida) {
+        // dos pagos simultáneos con la misma constancia: el segundo espera y ve el primero
+        await trx.rawQuery('SELECT pg_advisory_xact_lock(?, hashtext(?))', [
+            3014,
+            `${empresaId}:${constancia.impuesto}:${constancia.numero}`,
+        ])
+        const usada = await trx
+            .from('ledger.constancias_retencion as k')
+            .join('billing.pagos as p', 'p.id', 'k.pago_id')
+            .where('k.empresa_id', empresaId)
+            .where('k.direccion', 'recibida')
+            .where('k.impuesto', constancia.impuesto)
+            .where('k.numero', constancia.numero)
+            .whereNot('p.estado', 'anulado')
+            .select('k.pago_id')
+            .first()
+        if (usada) {
+            throw new Conflicto(
+                `La constancia de ${constancia.impuesto.toUpperCase()} ${constancia.numero} ya está en el pago ${usada.pago_id}`,
+                'constancia_duplicada',
+                'Constancia duplicada',
+            )
+        }
+    }
+    return salida
+}
+
+/** Filas de `ledger.constancias_retencion` (recibidas) del pago. */
+export async function insertarConstanciasRecibidas(
+    t: Transaccion,
+    pagoId: number,
+    empresaId: number,
+    clienteId: number,
+    constancias: ConstanciaRecibida[],
+): Promise<void> {
+    if (constancias.length === 0) return
+    await t.trx
+        .insertQuery()
+        .table('ledger.constancias_retencion')
+        .multiInsert(
+            constancias.map((c) => ({
+                empresa_id: empresaId,
+                direccion: 'recibida',
+                impuesto: c.impuesto,
+                impuesto_codigo: c.impuesto_codigo,
+                numero: c.numero,
+                fecha: c.fecha,
+                monto: aTexto(c.monto),
+                pago_id: pagoId,
+                cliente_id: clienteId,
+                registrado_por: usuarioDelActor(t.ctx.actor),
+            })),
+        )
 }

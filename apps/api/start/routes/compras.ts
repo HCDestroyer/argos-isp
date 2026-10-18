@@ -16,7 +16,28 @@ import { resolverEmpresaActiva } from '#core/empresas'
 import { exportar, TIPOS_CONTENIDO } from '#billing/reportes/exportar'
 import type { Reporte } from '#billing/reportes/definicion'
 import * as v from '#ledger/validators_compras'
-import { Compra, CuadreCompras, Proveedor, ReporteLibroCompras } from '#ledger/esquemas_compras'
+import {
+    Compra,
+    Constancia,
+    CuadreCompras,
+    EstadoCuentaProveedor,
+    PagoProveedor,
+    Proveedor,
+    ReporteCuentasPorPagar,
+    ReporteLibroCompras,
+} from '#ledger/esquemas_compras'
+import {
+    cuentasPorPagar,
+    empresaDePagoProveedor,
+    estadoCuentaProveedor,
+    listarPagosProveedores,
+    verPagoProveedor,
+} from '#ledger/pagos_proveedores'
+import { existeCaja } from '#ledger/cajas'
+import RegistrarPagoProveedor from '#ledger/actions/registrar_pago_proveedor'
+import AnularPagoProveedor from '#ledger/actions/anular_pago_proveedor'
+import { listarConstancias } from '#ledger/constancias'
+import RegistrarConstanciaEmitida from '#ledger/actions/registrar_constancia_emitida'
 import { empresaDeProveedor, listarProveedores, verProveedor } from '#ledger/proveedores'
 import { empresaDeCompra, listarCompras, verCompra } from '#ledger/compras'
 import { dimensionesDeEgreso } from '#ledger/egresos'
@@ -196,6 +217,143 @@ const compras: Ruta[] = [
     }),
 ]
 
+const constancias: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/constancias',
+        operacion: 'constanciasListar',
+        resumen: 'Constancias de retención recibidas de clientes y emitidas a proveedores',
+        etiqueta: 'compras',
+        permiso: 'compras.ver',
+        query: v.listarConstanciasValidator,
+        respuesta: { status: 200, descripcion: 'Página de constancias', esquema: pagina(Constancia) },
+        handler: (ctx, { query }) => listarConstancias(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/compras/:id/constancias',
+        operacion: 'comprasRegistrarConstancia',
+        resumen: 'Registrar la constancia de retención emitida al proveedor por una retención de la compra',
+        etiqueta: 'compras',
+        permiso: 'compras.registrar',
+        cuerpo: v.constanciaEmitidaValidator,
+        idempotente: true,
+        descripcion:
+            'No mueve el libro (la retención ya está en 2.1.04 o 2.1.05). Monto = el de la retención de la compra. 409 constancia_registrada, constancia_duplicada, compra_anulada.',
+        respuesta: { status: 201, descripcion: 'Constancia registrada', esquema: Constancia },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeCompra(id))
+            return new RegistrarConstanciaEmitida().execute(
+                { ...cuerpo, compra_id: id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+]
+
+const pagosProveedores: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pagos-proveedores',
+        operacion: 'pagosProveedoresListar',
+        resumen: 'Pagos a proveedores con sus aplicaciones a compras',
+        etiqueta: 'compras',
+        permiso: 'compras.ver',
+        query: v.listarPagosProveedoresValidator,
+        respuesta: { status: 200, descripcion: 'Página de pagos', esquema: pagina(PagoProveedor) },
+        handler: (ctx, { query }) =>
+            listarPagosProveedores(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/pagos-proveedores/:id',
+        operacion: 'pagosProveedoresVer',
+        resumen: 'Ver pago a proveedor',
+        etiqueta: 'compras',
+        permiso: 'compras.ver',
+        respuesta: { status: 200, descripcion: 'Pago', esquema: PagoProveedor },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDePagoProveedor(id))
+            return verPagoProveedor(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pagos-proveedores',
+        operacion: 'pagosProveedoresRegistrar',
+        resumen: 'Pagar compras al crédito de un proveedor (Proveedores / Caja | Banco)',
+        etiqueta: 'compras',
+        permiso: 'compras.pagar',
+        cuerpo: v.registrarPagoProveedorValidator,
+        idempotente: true,
+        descripcion:
+            'Aplica a las compras pedidas y luego a la más antigua por vencimiento. No pasa del saldo pendiente (422 pago_excede_saldo). En efectivo sale del turno abierto de la caja (baja su esperado). La cuenta es de la empresa del proveedor (422 cuenta_de_otra_empresa).',
+        respuesta: { status: 201, descripcion: 'Pago registrado', esquema: PagoProveedor },
+        handler: async (ctx, { cuerpo }) => {
+            exigirAcceso(ctx, await empresaDeProveedor(cuerpo.proveedor_id))
+            if (cuerpo.metodo === 'caja' && cuerpo.caja_id) {
+                exigirAcceso(ctx, await existeCaja(cuerpo.caja_id))
+            }
+            return new RegistrarPagoProveedor().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pagos-proveedores/:id/anular',
+        operacion: 'pagosProveedoresAnular',
+        resumen: 'Anular un pago a proveedor (asiento de reverso)',
+        etiqueta: 'compras',
+        permiso: 'compras.pagar',
+        cuerpo: v.anularPagoProveedorValidator,
+        idempotente: true,
+        descripcion: 'Reverso con fecha de hoy; sus compras vuelven a quedar con saldo. 409 pago_anulado.',
+        respuesta: { status: 200, descripcion: 'Pago anulado', esquema: PagoProveedor },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDePagoProveedor(id))
+            return new AnularPagoProveedor().execute(
+                { pago_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/proveedores/:id/estado-cuenta',
+        operacion: 'proveedoresEstadoCuenta',
+        resumen: 'Auxiliar del proveedor en 2.1.03: compras, NCRE, pagos, saldo y documentos pendientes',
+        etiqueta: 'compras',
+        permiso: 'proveedores.ver',
+        query: v.estadoCuentaProveedorValidator,
+        respuesta: { status: 200, descripcion: 'Estado de cuenta', esquema: EstadoCuentaProveedor },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await empresaDeProveedor(id))
+            return estadoCuentaProveedor(id, query)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/cuentas-por-pagar',
+        operacion: 'reportesCuentasPorPagar',
+        resumen: 'Antigüedad de proveedores (por vencer, 1-30, 31-60, 61-90, +90 días)',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.cuentasPorPagarValidator,
+        descripcion:
+            'Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad).' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteCuentasPorPagar },
+        handler: async (ctx, { query }) => {
+            const empresas = empresasDeLaLista(ctx.empresa, query.empresas)
+            const consolidado = query.empresas === 'todas' || empresas === null || empresas.length > 1
+            return responderReporte(ctx, await cuentasPorPagar(query, empresas, consolidado), query.formato)
+        },
+    }),
+]
+
 const libros: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -229,4 +387,4 @@ const libros: Ruta[] = [
     }),
 ]
 
-export default [...proveedores, ...compras, ...libros]
+export default [...proveedores, ...compras, ...constancias, ...pagosProveedores, ...libros]

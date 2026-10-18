@@ -17,6 +17,7 @@ import { esquemaReporte } from '#billing/reportes/definicion'
 import { COLUMNAS_LIBRO_COMPRAS } from '#fiscal/libros'
 import { TIPOS_DOCUMENTO_COMPRA, TIPOS_LINEA_COMPRA } from '#ledger/compras'
 import { REGIMENES_PROVEEDOR, TIPOS_DOCUMENTO_PROVEEDOR, TIPOS_PROVEEDOR } from '#ledger/proveedores'
+import { COLUMNAS_CXP } from '#ledger/pagos_proveedores'
 
 /**
  * Schemas de respuesta de proveedores y compras (contrato de localización fiscal §3.4, fase 5).
@@ -132,3 +133,89 @@ export const CuadreCompras = definirEsquema(
         cuadra: booleano,
     }),
 )
+
+export const Constancia = definirEsquema(
+    'ConstanciaRetencion',
+    objeto({
+        id,
+        empresa_id: id,
+        direccion: {
+            ...enumerado(['recibida', 'emitida']),
+            description: 'recibida de un cliente (con su pago) o emitida a un proveedor (con su compra)',
+        },
+        impuesto: enumerado(['iva', 'isr']),
+        impuesto_codigo: texto,
+        numero: texto,
+        fecha,
+        monto: Dinero,
+        pago_id: nulable(id),
+        cliente_id: nulable(id),
+        cliente_nombre: nulable(texto),
+        compra_id: nulable(id),
+        proveedor_id: nulable(id),
+        proveedor_nombre: nulable(texto),
+        vigente: { ...booleano, description: 'El pago o la compra sigue vigente' },
+        registrado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const PagoProveedor = definirEsquema(
+    'PagoProveedor',
+    objeto({
+        id,
+        empresa_id: id,
+        proveedor_id: id,
+        proveedor_nombre: texto,
+        fecha,
+        metodo: enumerado(['caja', 'banco', 'cuenta_bancaria']),
+        caja_id: nulable(id),
+        turno_id: {
+            ...nulable(id),
+            description: 'Turno de caja del que salió el efectivo (baja su esperado)',
+        },
+        banco_id: nulable(id),
+        cuenta_bancaria_id: nulable(id),
+        cuenta_id: id,
+        cuenta_codigo: texto,
+        monto: Dinero,
+        referencia: nulable(texto),
+        descripcion: nulable(texto),
+        asiento_id: nulable(id),
+        estado: enumerado(['registrado', 'anulado']),
+        anulado_en: nulable(instante),
+        motivo_anulacion: nulable(texto),
+        asiento_reverso_id: nulable(id),
+        registrado_por: nulable(id),
+        created_at: instante,
+        aplicaciones: lista(objeto({ compra_id: id, documento: texto, monto: Dinero })),
+    }),
+)
+
+export const EstadoCuentaProveedor = definirEsquema(
+    'EstadoCuentaProveedor',
+    objeto({
+        proveedor: Proveedor,
+        desde: nulable(fecha),
+        hasta: fecha,
+        saldo_inicial: Dinero,
+        movimientos: lista(
+            objeto({
+                asiento_id: id,
+                fecha,
+                tipo: enumerado(['compra', 'nota_credito', 'pago', 'anulacion', 'ajuste']),
+                documento: texto,
+                descripcion: texto,
+                debe: Dinero,
+                haber: Dinero,
+                saldo: { ...Dinero, description: 'Lo que la empresa le debe después del movimiento' },
+            }),
+        ),
+        saldo_final: { ...Dinero, description: 'Saldo del auxiliar en 2.1.03 al corte' },
+        pendientes: lista(
+            objeto({ compra_id: id, documento: texto, vence_en: fecha, saldo: Dinero, dias_vencida: entero }),
+        ),
+    }),
+)
+
+export const ReporteCuentasPorPagar = esquemaReporte('ReporteCuentasPorPagar', COLUMNAS_CXP)

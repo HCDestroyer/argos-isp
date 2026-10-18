@@ -8,6 +8,7 @@ import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { egresosDelTurno } from '#ledger/egresos'
 import { resolverCuentaBanco, type PedidoCuentaBanco } from '#ledger/cuentas_banco'
 import { depositosDelTurno, verDeposito, type DepositoVista } from '#ledger/transitos'
+import { pagosProveedoresDelTurno } from '#ledger/pagos_proveedores'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -87,12 +88,13 @@ export default class DepositarCaja extends DomainAction<EntradaDepositarCaja, De
             .from('billing.pagos')
             .where('turno_id', turno.id)
             .whereNot('estado', 'anulado')
-            .select(t.trx.raw('coalesce(sum(monto), 0)::text as total'))
+            .select(t.trx.raw('coalesce(sum(monto - retenido), 0)::text as total'))
             .first()) as { total: string }
         const efectivo = dec(turno.fondo_inicial)
             .plus(cobrado.total)
             .minus(await egresosDelTurno(t.trx, turno.id))
             .minus(await depositosDelTurno(t.trx, turno.id))
+            .minus(await pagosProveedoresDelTurno(t.trx, turno.id))
         if (monto.gt(efectivo)) {
             throw new Problema(
                 422,

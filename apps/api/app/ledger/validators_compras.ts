@@ -235,4 +235,77 @@ export const cuadreComprasValidator = vine.compile(
     }),
 )
 
+/*
+| Constancias de retención
+*/
+
+export const constanciaEmitidaValidator = vine.compile(
+    vine.object({
+        impuesto_codigo: vine.string().trim().minLength(3).maxLength(40).meta({
+            description: 'Retención de la compra que ampara (RET_IVA_ESP_C, RET_ISR_OPC_C…)',
+        }),
+        numero: vine.string().trim().minLength(1).maxLength(60),
+        fecha: fechaIso().nullable().optional().meta({ description: 'Por defecto hoy' }),
+    }),
+)
+
+export const listarConstanciasValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        direccion: vine.enum(['recibida', 'emitida'] as const).optional(),
+        impuesto: vine.enum(['iva', 'isr'] as const).optional(),
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
+        vigente: vine.boolean().optional(),
+    }),
+)
+
+/*
+| Pagos a proveedores y antigüedad
+*/
+
+export const registrarPagoProveedorValidator = vine.compile(
+    vine.object({
+        proveedor_id: idEntidad(),
+        monto: dinero(),
+        metodo: vine
+            .enum(METODOS_EGRESO)
+            .meta({ description: 'caja, banco (del libro) o cuenta_bancaria propia' }),
+        caja_id: idEntidad().nullable().optional(),
+        banco_id: idEntidad().nullable().optional(),
+        cuenta_bancaria_id: idEntidad().nullable().optional(),
+        fecha: fechaIso().nullable().optional().meta({ description: 'Por defecto hoy; no futura' }),
+        referencia: texto(100).nullable().optional().meta({ description: 'Cheque, transferencia…' }),
+        descripcion: texto(500).nullable().optional(),
+        compras: vine.array(idEntidad()).maxLength(200).nullable().optional().meta({
+            description: 'Compras a pagar primero (en ese orden); luego la más antigua por vencimiento',
+        }),
+    }),
+)
+
+export const anularPagoProveedorValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const listarPagosProveedoresValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        proveedor_id: idEntidad().optional(),
+        desde: fechaIso().optional(),
+        hasta: fechaIso().optional(),
+        estado: vine.enum(['registrado', 'anulado'] as const).optional(),
+    }),
+)
+
+export const cuentasPorPagarValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        formato,
+        corte: fechaIso()
+            .optional()
+            .meta({ description: 'Día de referencia de la antigüedad (hoy por defecto)' }),
+        proveedor_id: idEntidad().optional(),
+    }),
+)
+
 export { dinero, fechaIso, idEntidad, motivo, formato, texto }
