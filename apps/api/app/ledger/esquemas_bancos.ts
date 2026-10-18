@@ -99,3 +99,63 @@ export const LiquidacionCobro = definirEsquema(
         pagos: lista(objeto({ pago_id: id, tipo: enumerado(['cobro', 'contracargo']), monto: Dinero })),
     }),
 )
+
+const estadoTransito = {
+    ...enumerado(['en_transito', 'acreditado']),
+    description: 'en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino',
+}
+
+export const Deposito = definirEsquema(
+    'Deposito',
+    objeto({
+        id,
+        empresa_id: id,
+        caja_id: id,
+        caja_nombre: texto,
+        turno_id: { ...id, description: 'Turno del que salió el efectivo (baja su esperado)' },
+        cuenta_id: { ...id, description: 'Subcuenta 1.1.02.NN que recibe el depósito' },
+        cuenta_codigo: texto,
+        cuenta_nombre: texto,
+        cuenta_bancaria_id: nulable(id),
+        banco_id: nulable(id),
+        monto: Dinero,
+        boleta: texto,
+        fecha,
+        estado: estadoTransito,
+        acreditado_en: { ...nulable(fecha), description: 'Fecha de la línea del extracto que lo concilió' },
+        registrado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const Traslado = definirEsquema(
+    'Traslado',
+    objeto({
+        id,
+        empresa_id: id,
+        cuenta_origen_id: id,
+        cuenta_origen_codigo: texto,
+        cuenta_destino_id: id,
+        cuenta_destino_codigo: texto,
+        monto: Dinero,
+        fecha,
+        referencia: texto,
+        estado: estadoTransito,
+        acreditado_en: nulable(fecha),
+        registrado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const ResumenFondosEnTransito = definirEsquema(
+    'ResumenFondosEnTransito',
+    objeto({
+        empresa_id: id,
+        saldo_libro: { ...Dinero, description: 'Saldo de 1.1.11 en el libro de la empresa' },
+        pendiente: { ...Dinero, description: 'Σ depósitos y traslados sin acreditar' },
+        diferencia: Dinero,
+        cuadra: booleano,
+        depositos: { ...entero, description: 'Depósitos en tránsito' },
+        traslados: { ...entero, description: 'Traslados en tránsito' },
+    }),
+)

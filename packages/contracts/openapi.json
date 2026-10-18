@@ -458,6 +458,531 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bancos/depositos": {
+      "get": {
+        "operationId": "bancosDepositos",
+        "summary": "Depósitos de caja (en tránsito o acreditados)",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en_transito",
+                "acreditado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de depósitos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Deposito"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/fondos-en-transito": {
+      "get": {
+        "operationId": "bancosFondosEnTransito",
+        "summary": "Check fondos_transito: 1.1.11 = depósitos y traslados sin acreditar, por empresa",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenFondosEnTransito"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/trasladar": {
+      "post": {
+        "operationId": "bancosTrasladar",
+        "summary": "Trasladar fondos entre cuentas propias de la empresa (1.1.11 / Banco A)",
+        "description": "La llegada a la cuenta de destino (Banco B / 1.1.11) la registra la conciliación de su línea del extracto. Las dos cuentas son de la misma empresa (422 cuenta_de_otra_empresa). 409 traslado_duplicado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "origen": {
+                    "type": "object",
+                    "properties": {
+                      "cuenta_bancaria_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: cuenta bancaria propia (GET /cuentas-bancarias)"
+                      },
+                      "banco_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: banco del libro (GET /libro/bancos)"
+                      },
+                      "cuenta_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "cuenta_bancaria_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: cuenta bancaria propia (GET /cuentas-bancarias)"
+                      },
+                      "banco_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: banco del libro (GET /libro/bancos)"
+                      },
+                      "cuenta_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "monto",
+                  "referencia",
+                  "origen",
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Traslado registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Traslado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.trasladar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.trasladar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/traslados": {
+      "get": {
+        "operationId": "bancosTraslados",
+        "summary": "Traslados entre cuentas propias (en tránsito o acreditados)",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en_transito",
+                "acreditado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de traslados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Traslado"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bitacora/acciones": {
       "get": {
         "operationId": "bitacoraAcciones",
@@ -1273,6 +1798,174 @@
           }
         },
         "x-permiso": "cajas.cerrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/{id}/depositar": {
+      "post": {
+        "operationId": "cajasDepositar",
+        "summary": "Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)",
+        "description": "Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "boleta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "Número de la boleta"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "monto",
+                  "boleta"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Depósito registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deposito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.depositar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.depositar",
         "x-implementado": true
       }
     },
@@ -32524,6 +33217,112 @@
           }
         }
       },
+      "Deposito": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "caja_id",
+          "caja_nombre",
+          "turno_id",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre",
+          "cuenta_bancaria_id",
+          "banco_id",
+          "monto",
+          "boleta",
+          "fecha",
+          "estado",
+          "acreditado_en",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "turno_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Turno del que salió el efectivo (baja su esperado)"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta 1.1.02.NN que recibe el depósito"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "boleta": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_transito",
+              "acreditado"
+            ],
+            "description": "en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino"
+          },
+          "acreditado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Fecha de la línea del extracto que lo concilió"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "DeudaEvaluada": {
         "type": "object",
         "required": [
@@ -42064,6 +42863,46 @@
           }
         }
       },
+      "ResumenFondosEnTransito": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "saldo_libro",
+          "pendiente",
+          "diferencia",
+          "cuadra",
+          "depositos",
+          "traslados"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "saldo_libro": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.11 en el libro de la empresa"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ depósitos y traslados sin acreditar"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuadra": {
+            "type": "boolean"
+          },
+          "depositos": {
+            "type": "integer",
+            "description": "Depósitos en tránsito"
+          },
+          "traslados": {
+            "type": "integer",
+            "description": "Traslados en tránsito"
+          }
+        }
+      },
       "ResumenSesionesRouter": {
         "type": "object",
         "required": [
@@ -43341,6 +44180,84 @@
               "null"
             ],
             "description": "alta, edicion: <campos>, retiro: <motivo> o inicial (migración)"
+          }
+        }
+      },
+      "Traslado": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cuenta_origen_id",
+          "cuenta_origen_codigo",
+          "cuenta_destino_id",
+          "cuenta_destino_codigo",
+          "monto",
+          "fecha",
+          "referencia",
+          "estado",
+          "acreditado_en",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_origen_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_origen_codigo": {
+            "type": "string"
+          },
+          "cuenta_destino_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_destino_codigo": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_transito",
+              "acreditado"
+            ],
+            "description": "en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino"
+          },
+          "acreditado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

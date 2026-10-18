@@ -121,6 +121,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bancos/depositos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Depósitos de caja (en tránsito o acreditados) */
+        get: operations["bancosDepositos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/fondos-en-transito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check fondos_transito: 1.1.11 = depósitos y traslados sin acreditar, por empresa */
+        get: operations["bancosFondosEnTransito"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/trasladar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trasladar fondos entre cuentas propias de la empresa (1.1.11 / Banco A)
+         * @description La llegada a la cuenta de destino (Banco B / 1.1.11) la registra la conciliación de su línea del extracto. Las dos cuentas son de la misma empresa (422 cuenta_de_otra_empresa). 409 traslado_duplicado.
+         */
+        post: operations["bancosTrasladar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/traslados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Traslados entre cuentas propias (en tránsito o acreditados) */
+        get: operations["bancosTraslados"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bitacora/acciones": {
         parameters: {
             query?: never;
@@ -210,6 +281,26 @@ export interface paths {
          * @description esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.
          */
         post: operations["cajasCerrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cajas/{id}/depositar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)
+         * @description Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.
+         */
+        post: operations["cajasDepositar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4855,6 +4946,37 @@ export interface components {
              */
             estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
         };
+        Deposito: {
+            id: number;
+            empresa_id: number;
+            caja_id: number;
+            caja_nombre: string;
+            /** @description Turno del que salió el efectivo (baja su esperado) */
+            turno_id: number;
+            /** @description Subcuenta 1.1.02.NN que recibe el depósito */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            cuenta_bancaria_id: number | null;
+            banco_id: number | null;
+            monto: components["schemas"]["Dinero"];
+            boleta: string;
+            /** Format: date */
+            fecha: string;
+            /**
+             * @description en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino
+             * @enum {string}
+             */
+            estado: "en_transito" | "acreditado";
+            /**
+             * Format: date
+             * @description Fecha de la línea del extracto que lo concilió
+             */
+            acreditado_en: string | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
             vencida: components["schemas"]["Dinero"];
@@ -7210,6 +7332,19 @@ export interface components {
                 resumen_promesas: string | null;
             };
         };
+        ResumenFondosEnTransito: {
+            empresa_id: number;
+            /** @description Saldo de 1.1.11 en el libro de la empresa */
+            saldo_libro: components["schemas"]["Dinero"];
+            /** @description Σ depósitos y traslados sin acreditar */
+            pendiente: components["schemas"]["Dinero"];
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
+            /** @description Depósitos en tránsito */
+            depositos: number;
+            /** @description Traslados en tránsito */
+            traslados: number;
+        };
         ResumenSesionesRouter: {
             router_id: number;
             /**
@@ -7555,6 +7690,28 @@ export interface components {
             fin: string | null;
             /** @description alta, edicion: <campos>, retiro: <motivo> o inicial (migración) */
             motivo: string | null;
+        };
+        Traslado: {
+            id: number;
+            empresa_id: number;
+            cuenta_origen_id: number;
+            cuenta_origen_codigo: string;
+            cuenta_destino_id: number;
+            cuenta_destino_codigo: string;
+            monto: components["schemas"]["Dinero"];
+            /** Format: date */
+            fecha: string;
+            referencia: string;
+            /**
+             * @description en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino
+             * @enum {string}
+             */
+            estado: "en_transito" | "acreditado";
+            /** Format: date */
+            acreditado_en: string | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         Usuario: {
             id: number;
@@ -7964,6 +8121,264 @@ export interface operations {
             };
         };
     };
+    bancosDepositos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "en_transito" | "acreditado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de depósitos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Deposito"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosFondosEnTransito: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenFondosEnTransito"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosTrasladar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy; no futura
+                     */
+                    fecha?: string | null;
+                    referencia: string;
+                    origen: {
+                        /** @description Cuenta de la que sale: cuenta bancaria propia (GET /cuentas-bancarias) */
+                        cuenta_bancaria_id?: number | null;
+                        /** @description Cuenta de la que sale: banco del libro (GET /libro/bancos) */
+                        banco_id?: number | null;
+                        /** @description Cuenta de la que sale: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                        cuenta_id?: number | null;
+                    };
+                    destino: {
+                        /** @description Cuenta a la que llega: cuenta bancaria propia (GET /cuentas-bancarias) */
+                        cuenta_bancaria_id?: number | null;
+                        /** @description Cuenta a la que llega: banco del libro (GET /libro/bancos) */
+                        banco_id?: number | null;
+                        /** @description Cuenta a la que llega: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                        cuenta_id?: number | null;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Traslado registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Traslado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.trasladar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosTraslados: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "en_transito" | "acreditado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de traslados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Traslado"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     bitacoraAcciones: {
         parameters: {
             query?: {
@@ -8335,6 +8750,99 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso cajas.cerrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cajasDepositar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /** @description Número de la boleta */
+                    boleta: string;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy; no futura
+                     */
+                    fecha?: string | null;
+                    /** @description Cuenta que recibe el depósito: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Cuenta que recibe el depósito: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Cuenta que recibe el depósito: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Depósito registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deposito"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.depositar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -54,6 +54,9 @@ export const INMUTABLES: Record<string, string> = {
     // fase 4 (A3): cobros por liquidar (§10.3)
     'ledger.liquidaciones_cobro': 'liquidación de un proveedor de cobro (§10.3)',
     'ledger.liquidaciones_pagos': 'pago o contracargo incluido en una liquidación (§10.3)',
+    'ledger.depositos': 'depósito de caja a banco (§10.3)',
+    'ledger.traslados': 'traslado entre cuentas propias (§10.3)',
+    'ledger.transitos_acreditados': 'llegada al banco de un depósito o traslado, al conciliar (§10.3)',
     // §10.10 integridad, activos y diferidos
     'ledger.asientos_sellos': 'cadena de hash de asientos (§10.10)',
     'ledger.activos': 'activo fijo; la baja es activos_bajas (§10.10)',
