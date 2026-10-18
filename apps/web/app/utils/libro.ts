@@ -13,6 +13,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     cierre_caja: { etiqueta: 'Cierre de caja', icono: 'i-lucide-lock' },
     ajuste: { etiqueta: 'Ajuste', icono: 'i-lucide-scale' },
     reclasificacion: { etiqueta: 'Reclasificación de IVA', icono: 'i-lucide-arrow-left-right' },
+    lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {

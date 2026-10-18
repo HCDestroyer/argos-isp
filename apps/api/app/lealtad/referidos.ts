@@ -1,26 +1,15 @@
-import { randomInt } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 
 /**
- * Referidos (`contratos/lealtad.md` §3 y §4): un cliente se refiere una vez por empresa con el
- * código de 8 caracteres de otro cliente. El referido cuenta en la empresa de su servicio nuevo.
+ * Referidos (`contratos/lealtad.md` §3, §4 y §9). El código y quién refirió a quién son de A1
+ * (`core.codigos_referido`, `core.clientes.referido_por_id` / `referido_empresa_id`, capturados en
+ * el alta del cliente); aquí vive el seguimiento del programa: `lealtad.referidos`, uno por
+ * cliente referido y empresa, que se registra al consumir `servicio.creado` del referido en la
+ * empresa del código y se califica cuando paga las facturas mínimas de la regla.
  */
-
-/** Sin 0/O, 1/I/L: se dicta por teléfono sin ambigüedad. */
-export const ALFABETO_CODIGO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-
-export function nuevoCodigo(): string {
-    let codigo = ''
-    for (let i = 0; i < 8; i++) codigo += ALFABETO_CODIGO[randomInt(ALFABETO_CODIGO.length)]
-    return codigo
-}
-
-export function normalizarCodigo(codigo: string): string {
-    return codigo.trim().toUpperCase().replace(/[\s-]/g, '')
-}
 
 export const ESTADOS_REFERIDO = ['pendiente', 'calificado', 'rechazado'] as const
 export type EstadoReferido = (typeof ESTADOS_REFERIDO)[number]
@@ -87,7 +76,7 @@ export async function verReferido(
 }
 
 /** Referido (pendiente o calificado) del cliente en la empresa, o null. */
-export async function referidoDeCliente(
+export async function referidoEnEmpresa(
     cliente: QueryClientContract,
     empresaId: number,
     clienteId: number,
@@ -116,19 +105,6 @@ export async function listarReferidos(
         .if(filtros.referido_id !== undefined, (c) => c.where('r.referido_id', filtros.referido_id!))
     const pagina = await paginar(q, filtros, { columna: 'r.id' })
     return { data: pagina.data.map(aVista), nextCursor: pagina.nextCursor }
-}
-
-/** Dueño de un código de referido (cualquier empresa), o null. */
-export async function duenoDeCodigo(
-    cliente: QueryClientContract,
-    codigo: string,
-): Promise<{ cliente_id: number; empresa_id: number } | null> {
-    const fila = (await cliente
-        .from('lealtad.codigos_referido')
-        .where('codigo', normalizarCodigo(codigo))
-        .select('cliente_id', 'empresa_id')
-        .first()) as { cliente_id: number; empresa_id: number } | null
-    return fila ? { cliente_id: Number(fila.cliente_id), empresa_id: Number(fila.empresa_id) } : null
 }
 
 export function camposAuditables(r: ReferidoVista): Record<string, unknown> {

@@ -17,7 +17,8 @@ import {
     rachaHasta,
     serviciosDelCliente,
 } from '#lealtad/condiciones'
-import { referidoDeCliente, camposAuditables, verReferido, type ReferidoVista } from '#lealtad/referidos'
+import { referidoEnEmpresa, camposAuditables, verReferido, type ReferidoVista } from '#lealtad/referidos'
+import { codigoReferidoDe, referidoDeCliente } from '#core/referidos'
 import { otorgar, resultadoVacio, revertirClave, vigenciaDe, type Resultado } from '#lealtad/otorgamientos'
 import {
     CONDICIONES_POR_DEFECTO,
@@ -38,6 +39,7 @@ import {
  * | `factura.emitida` | pago a tiempo de una factura que nació pagada (anticipo aplicado al emitir) |
  * | `pago.anulado` | revierte lo que ya no cumple (pago a tiempo de sus facturas, adelantado del pago, referido) |
  * | `factura.anulada`, `nota_credito.emitida`, `nota_credito.anulada` | vuelve a evaluar el pago a tiempo de la factura y el referido de su dueño |
+ * | `servicio.creado` | registra el referido del cliente (código del alta, A1) en la empresa del código |
  * | `servicio.estado_cambiado` (`a = retirado`) | rechaza el referido pendiente que se quedó sin servicio en la empresa |
  *
  * Solo otorga con el programa activo y vigente hoy, y por pagos dentro de la vigencia de la regla
@@ -68,6 +70,7 @@ export const EVENTOS_LEALTAD = [
     'factura.anulada',
     'nota_credito.emitida',
     'nota_credito.anulada',
+    'servicio.creado',
     'servicio.estado_cambiado',
 ] as const
 
@@ -137,6 +140,11 @@ export default class EvaluarEventoLealtad extends DomainAction<EntradaEvaluarEve
                 if (clienteId !== null) {
                     await this.referido(ctx, clienteId, { origen_tipo: 'nota_credito', origen_id: notaId })
                 }
+                break
+            }
+            case 'servicio.creado': {
+                const clienteId = id(p.cliente_id)
+                if (clienteId !== null) await this.registrarReferido(ctx, clienteId)
                 break
             }
             case 'servicio.estado_cambiado': {
@@ -289,7 +297,7 @@ export default class EvaluarEventoLealtad extends DomainAction<EntradaEvaluarEve
      * anulado), revierte lo otorgado y vuelve a pendiente.
      */
     private async referido(c: Contexto, clienteId: number, origen: Origen) {
-        const encontrado = await referidoDeCliente(c.t.trx, c.empresaId, clienteId)
+        const encontrado = await referidoEnEmpresa(c.t.trx, c.empresaId, clienteId)
         if (!encontrado || encontrado.estado === 'rechazado') return
         for (const cliente of [encontrado.referidor_id, encontrado.referido_id].sort((a, b) => a - b)) {
             await bloquearClienteLealtad(c.t.trx, cliente)
@@ -407,6 +415,40 @@ export default class EvaluarEventoLealtad extends DomainAction<EntradaEvaluarEve
         }
     }
 
+    /**
+     * `servicio.creado` (§4 y §9): si A1 guardó en el alta que el cliente llegó con el código de
+     * otro (`referidoDeCliente` de `#core/referidos`) y el servicio es de la empresa del código, se
+     * registra el referido `pendiente` en esa empresa (una vez: único por empresa y cliente). No
+     * necesita programa activo: el seguimiento empieza con el alta y califica después.
+     */
+    private async registrarReferido(c: Contexto, clienteId: number) {
+        const origen = await referidoDeCliente(clienteId, c.t.trx)
+        if (!origen || origen.referido_empresa_id !== c.empresaId) return
+        if (await referidoEnEmpresa(c.t.trx, c.empresaId, clienteId)) return
+        const codigo = (await codigoReferidoDe(origen.referido_por_id, c.empresaId, c.t.trx)) ?? ''
+        const insertados = (await c.t.trx
+            .insertQuery()
+            .table('lealtad.referidos')
+            .insert({
+                empresa_id: c.empresaId,
+                referidor_id: origen.referido_por_id,
+                referido_id: clienteId,
+                codigo,
+            })
+            .knexQuery.onConflict(['empresa_id', 'referido_id'])
+            .ignore()
+            .returning('id')) as Array<{ id: number }>
+        if (insertados.length === 0) return
+        const ref = await verReferido(Number(insertados[0]!.id), c.t.trx)
+        c.t.fijarEntidad('referido_lealtad', ref.id)
+        await c.t.registrarCambios({ tipo: 'referido_lealtad', id: ref.id }, null, {
+            referidor_id: ref.referidor_id,
+            referido_id: ref.referido_id,
+            codigo: ref.codigo,
+            estado: ref.estado,
+        })
+    }
+
     /** Un referido pendiente que se queda sin servicios en la empresa se rechaza. */
     private async servicioRetirado(c: Contexto, servicioId: number) {
         const servicio = (await c.t.trx
@@ -415,7 +457,7 @@ export default class EvaluarEventoLealtad extends DomainAction<EntradaEvaluarEve
             .select('cliente_id', 'empresa_id')
             .first()) as { cliente_id: number; empresa_id: number } | null
         if (!servicio || Number(servicio.empresa_id) !== c.empresaId) return
-        const ref = await referidoDeCliente(c.t.trx, c.empresaId, Number(servicio.cliente_id))
+        const ref = await referidoEnEmpresa(c.t.trx, c.empresaId, Number(servicio.cliente_id))
         if (!ref || ref.estado !== 'pendiente') return
         const restantes = await serviciosDelCliente(c.t.trx, c.empresaId, ref.referido_id)
         if (restantes.length > 0) return

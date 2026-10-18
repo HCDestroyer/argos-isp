@@ -13,7 +13,8 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
  *    canjes), con sus puntos y su valor. Solo inserción; un trigger impide consumir más de lo que
  *    tiene el lote.
  *  - `avisos_vencimiento`: un aviso `lealtad.puntos_por_vencer` por lote (solo inserción).
- *  - `codigos_referido` (solo inserción) y `referidos` (estado por acción).
+ *  - `referidos` (estado por acción): el seguimiento del referido. El código y quién refirió a quién
+ *    son de A1 (`core.codigos_referido`, `core.clientes.referido_por_id`).
  *
  * Sin datos previos: el schema nace vacío y ninguna empresa tiene programa (§9).
  */
@@ -162,16 +163,6 @@ export default class extends BaseSchema {
                 created_at timestamptz NOT NULL DEFAULT now()
             );
 
-            CREATE TABLE lealtad.codigos_referido (
-                id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                cliente_id bigint NOT NULL REFERENCES core.clientes (id),
-                empresa_id bigint NOT NULL REFERENCES core.empresas (id),
-                codigo text NOT NULL CHECK (codigo ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$'),
-                created_at timestamptz NOT NULL DEFAULT now(),
-                CONSTRAINT codigos_referido_codigo UNIQUE (codigo),
-                CONSTRAINT codigos_referido_cliente UNIQUE (cliente_id, empresa_id)
-            );
-
             CREATE TABLE lealtad.referidos (
                 id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 empresa_id bigint NOT NULL REFERENCES core.empresas (id),
@@ -204,10 +195,6 @@ export default class extends BaseSchema {
                 FOR EACH ROW EXECUTE FUNCTION audit.rechazar_modificacion();
             CREATE TRIGGER avisos_vencimiento_sin_truncate BEFORE TRUNCATE ON lealtad.avisos_vencimiento
                 FOR EACH STATEMENT EXECUTE FUNCTION audit.rechazar_modificacion();
-            CREATE TRIGGER codigos_referido_inmutable BEFORE UPDATE OR DELETE ON lealtad.codigos_referido
-                FOR EACH ROW EXECUTE FUNCTION audit.rechazar_modificacion();
-            CREATE TRIGGER codigos_referido_sin_truncate BEFORE TRUNCATE ON lealtad.codigos_referido
-                FOR EACH STATEMENT EXECUTE FUNCTION audit.rechazar_modificacion();
 
             DO $do$
             BEGIN
@@ -218,10 +205,10 @@ export default class extends BaseSchema {
                     REVOKE DELETE, TRUNCATE ON lealtad.programas, lealtad.reglas, lealtad.referidos
                         FROM argosisp_app;
                     GRANT SELECT, INSERT
-                        ON lealtad.movimientos, lealtad.consumos, lealtad.avisos_vencimiento, lealtad.codigos_referido
+                        ON lealtad.movimientos, lealtad.consumos, lealtad.avisos_vencimiento
                         TO argosisp_app;
                     REVOKE UPDATE, DELETE, TRUNCATE
-                        ON lealtad.movimientos, lealtad.consumos, lealtad.avisos_vencimiento, lealtad.codigos_referido
+                        ON lealtad.movimientos, lealtad.consumos, lealtad.avisos_vencimiento
                         FROM argosisp_app;
                     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA lealtad TO argosisp_app;
                 END IF;

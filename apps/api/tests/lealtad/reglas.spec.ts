@@ -1,12 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { generar } from '#tests/billing/ayudas_billing'
-import {
-    errorDe,
-    facturasDelServicio,
-    prepararEmpresas,
-    servicioEn,
-} from '#tests/contabilidad/ayudas_contabilidad'
+import { facturasDelServicio, prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { contextoPrueba, soloEmpresaPrincipal } from '#tests/ayudas'
 import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarPago from '#billing/actions/registrar_pago'
@@ -14,12 +9,13 @@ import AnularPago from '#billing/actions/anular_pago'
 import { saldoPuntos } from '#lealtad/puntos'
 import { sumarMeses } from '#lealtad/condiciones'
 import OtorgarAntiguedad from '#lealtad/actions/otorgar_antiguedad'
-import GenerarCodigoReferido from '#lealtad/actions/generar_codigo_referido'
-import RegistrarReferido from '#lealtad/actions/registrar_referido'
+import { codigoReferidoDe } from '#core/referidos'
+import { crearClienteFila } from '#tests/core/fabricas'
 import RechazarReferido from '#lealtad/actions/rechazar_referido'
 import { ejecutarCron } from '#billing/jobs'
 import {
     afirmarLibroLealtad,
+    entregar,
     entregarEvento,
     movimientosDe,
     programaConReglas,
@@ -221,42 +217,29 @@ test.group('Lealtad · reglas para ganar', (group) => {
             },
         ])
         const referidor = await servicioEn(e.B)
-        const nuevo = await servicioEn(e.B, { precio: '100.00', instalacion: '2026-11-01' })
-        const { codigo } = await new GenerarCodigoReferido().execute(
-            { cliente_id: referidor.clienteId, empresa_id: e.B },
-            e.ctx,
-        )
-        assert.match(codigo, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/)
-        const otra = await new GenerarCodigoReferido().execute(
-            { cliente_id: referidor.clienteId, empresa_id: e.B },
-            e.ctx,
-        )
-        assert.equal(otra.codigo, codigo)
-
-        const propio = await errorDe(
-            new RegistrarReferido().execute(
-                { empresa_id: e.B, referido_id: referidor.clienteId, codigo },
-                e.ctx,
-            ),
-        )
-        assert.equal(propio.codigo, 'referido_invalido')
-        const inexistente = await errorDe(
-            new RegistrarReferido().execute(
-                { empresa_id: e.B, referido_id: nuevo.clienteId, codigo: 'ZZZZZZZZ' },
-                e.ctx,
-            ),
-        )
-        assert.equal(inexistente.codigo, 'referido_invalido')
-
-        const referido = await new RegistrarReferido().execute(
-            { empresa_id: e.B, referido_id: nuevo.clienteId, codigo: codigo.toLowerCase() },
-            e.ctx,
-        )
-        assert.equal(referido.estado, 'pendiente')
-        const repetido = await errorDe(
-            new RegistrarReferido().execute({ empresa_id: e.B, referido_id: nuevo.clienteId, codigo }, e.ctx),
-        )
-        assert.equal(repetido.codigo, 'referido_invalido')
+        const codigo = await codigoReferidoDe(referidor.clienteId, e.B)
+        assert.match(String(codigo), /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/)
+        // A1 resolvió el código en el alta: el cliente nuevo llegó referido a la empresa B
+        const clienteNuevo = await crearClienteFila({
+            referido_por_id: referidor.clienteId,
+            referido_empresa_id: e.B,
+        })
+        const nuevo = await servicioEn(e.B, {
+            precio: '100.00',
+            instalacion: '2026-11-01',
+            clienteId: clienteNuevo,
+        })
+        const enOtra = await servicioEn(e.C, { clienteId: clienteNuevo })
+        const creado = (servicioId: number, empresaId: number) => ({
+            id: `creado-${servicioId}`,
+            evento: 'servicio.creado',
+            payload: { servicio_id: servicioId, empresa_id: empresaId, cliente_id: clienteNuevo },
+        })
+        await entregar([creado(nuevo.servicioId, e.B), creado(enOtra.servicioId, e.C)], 2)
+        const registrados = await db.from('lealtad.referidos').where('referido_id', clienteNuevo)
+        assert.lengthOf(registrados, 1)
+        assert.include(registrados[0], { estado: 'pendiente', codigo, referidor_id: referidor.clienteId })
+        const referido = { id: Number(registrados[0]!.id) }
 
         await generar(nuevo.servicioId, '2026-12-01')
         const [nov, dic] = await facturasDelServicio(nuevo.servicioId)

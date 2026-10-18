@@ -62,7 +62,6 @@ export const INMUTABLES: Record<string, string> = {
     'lealtad.movimientos': 'auxiliar de puntos: lotes y salidas; corregir = reverso (lealtad §3)',
     'lealtad.consumos': 'qué lote paga cada salida de puntos (lealtad §3)',
     'lealtad.avisos_vencimiento': 'aviso de puntos por vencer, uno por lote (lealtad §6.1)',
-    'lealtad.codigos_referido': 'código de referido del cliente, para siempre (lealtad §3)',
 }
 
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */

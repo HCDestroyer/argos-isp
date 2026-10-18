@@ -131,6 +131,9 @@ export interface CatalogoEventos {
      * recalcula el estado deseado del servicio y limpia lo del tipo anterior.
      * `empresa` (multiempresa): el servicio pasó a otra empresa (`servicios.cambiar_empresa`);
      * `empresa_anterior_id` solo viene en ese caso. No cambia nada en la red.
+     * `motivo: 'plan_temporal'` (lealtad, aditivo): inicio, fin o cancelación de un plan temporal
+     * (`core.servicios_planes_temporales`, `plan_temporal_id`); llega con `campos: ['plan']` y se
+     * aplica como cualquier cambio de plan (CoA de velocidad, sin cortar la sesión).
      */
     'servicio.config_cambiada': {
         servicio_id: number
@@ -139,6 +142,8 @@ export interface CatalogoEventos {
             'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac' | 'empresa'
         >
         empresa_anterior_id?: number
+        motivo?: 'plan_temporal'
+        plan_temporal_id?: number
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,

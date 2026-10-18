@@ -29,6 +29,10 @@ export const PERMISOS = {
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
+    'servicios.programar_plan_temporal':
+        'Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)',
+    'servicios.cancelar_plan_temporal':
+        'Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
@@ -138,14 +142,27 @@ export const PERMISOS = {
     'declaraciones.revisar': 'Marcar como revisado un borrador de declaración',
     'declaraciones.presentar': 'Marcar una declaración como presentada en la SAT (el sistema no la envía)',
     'declaraciones.pagar': 'Registrar el pago de una declaración',
-    // Programa de lealtad (`contratos/lealtad.md` §14, fase 1); los endpoints son de A3
-    'lealtad.ver': 'Ver el programa de lealtad, sus reglas, los puntos de los clientes y los referidos',
-    'lealtad.configurar': 'Crear, editar, activar y desactivar el programa de lealtad y sus reglas',
-    'lealtad.ajustar': 'Ajustar puntos a mano (con motivo) y rechazar referidos',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
     'documentos.editar': 'Editar plantillas de documentos (aviso de cobro)',
+
+    // Programa de lealtad (`contratos/lealtad.md` §14); los endpoints son de A3
+    'lealtad.ver': 'Ver el programa de lealtad, reglas, premios, puntos de clientes, canjes y referidos',
+    'lealtad.configurar': 'Configurar el programa de lealtad de la empresa: activarlo, reglas y premios',
+    'lealtad.ajustar': 'Ajustar puntos a mano (con motivo) y rechazar referidos',
+    'lealtad.canjear': 'Canjear puntos de un cliente por un premio (panel o caja)',
+    'lealtad.revertir_canje':
+        'Revertir un canje reservado o aplicado a una factura anulada (devuelve los puntos)',
+    'lealtad.entregar': 'Registrar la entrega física de un premio en bienes (con constancia)',
+    'sorteos.ver': 'Ver sorteos, sus bases, participantes, resultados y acta',
+    'sorteos.gestionar': 'Crear y editar sorteos en borrador',
+    'sorteos.publicar': 'Publicar bases, abrir, cerrar el corte o cancelar un sorteo',
+    'sorteos.marcar_requisito':
+        'Marcar requisitos legales del sorteo con evidencia (DIACO, Gobernación, ISR)',
+    'sorteos.exportar': 'Exportar la lista de participantes de un sorteo (CSV o XLSX)',
+    'sorteos.ejecutar': 'Ejecutar un sorteo y cerrar su acta (con checklist legal completo)',
+    'sorteos.entregar': 'Registrar la entrega de un premio de sorteo o marcarlo no reclamado',
 
     'bitacora.ver': 'Ver bitácora de acciones y cambios',
     'usuarios.ver': 'Ver usuarios',
@@ -196,6 +213,13 @@ const SOLO_ADMIN_FISCAL: readonly Permiso[] = [
 export const PERMISOS_FISCALES_CONTABILIDAD = PERMISOS_FISCALES.filter((p) => !SOLO_ADMIN_FISCAL.includes(p))
 
 /**
+ * Programa de lealtad (`contratos/lealtad.md` §14): `contabilidad` recibe todos menos
+ * `sorteos.ejecutar`; `cajero` y `soporte`, ver y canjear (soporte además ve sorteos).
+ */
+const PERMISOS_LEALTAD = NOMBRES_PERMISOS.filter((p) => /^(lealtad|sorteos)\./.test(p))
+export const PERMISOS_LEALTAD_CONTABILIDAD = PERMISOS_LEALTAD.filter((p) => p !== 'sorteos.ejecutar')
+
+/**
  * Roles base. `admin` tiene todo. `cajero` NO tiene `routers.*` ni `servicios.suspender`.
  */
 export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonly Permiso[] }> = {
@@ -227,6 +251,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.rechazar',
             'fel.ver',
             'lealtad.ver',
+            'lealtad.canjear',
         ],
     },
     soporte: {
@@ -265,7 +290,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'ip.resolver',
             'bitacora.ver',
             'notificaciones.ver',
+            'servicios.programar_plan_temporal',
+            'servicios.cancelar_plan_temporal',
             'lealtad.ver',
+            'lealtad.canjear',
+            'sorteos.ver',
         ],
     },
     tecnico: {
@@ -334,10 +363,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
-            'lealtad.ver',
-            'lealtad.configurar',
-            'lealtad.ajustar',
             ...PERMISOS_FISCALES_CONTABILIDAD,
+            ...PERMISOS_LEALTAD_CONTABILIDAD,
         ],
     },
     lectura: {
