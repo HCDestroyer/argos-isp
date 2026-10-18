@@ -22,7 +22,8 @@ export default class extends BaseSchema {
                 anio integer NOT NULL CHECK (anio BETWEEN 2000 AND 2100),
                 fecha date NOT NULL,
                 base numeric(14,2) NOT NULL CHECK (base >= 0),
-                porcentaje numeric(9,6) NOT NULL CHECK (porcentaje >= 0 AND porcentaje <= 100),
+                -- tasa, no dinero: texto exacto del parámetro (ledger solo admite dinero numeric(14,2))
+                porcentaje text NOT NULL CHECK (porcentaje ~ '^[0-9]{1,3}([.][0-9]{1,6}){0,1}$'),
                 tope numeric(14,2) NOT NULL CHECK (tope >= 0),
                 saldo_anterior numeric(14,2) NOT NULL,
                 monto numeric(14,2) NOT NULL CHECK (monto >= 0),
