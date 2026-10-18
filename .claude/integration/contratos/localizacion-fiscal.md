@@ -887,7 +887,7 @@ Todos con `errors[]` por campo cuando aplica.
 8. Numeración (§10.7): una sola inserción en `ledger.asientos_numeros` para los asientos existentes, en orden `(fecha, id)` por empresa y diario derivado; `ledger.asientos_partidas` para los meses ya cerrados. `ledger.asientos` no se actualiza.
 9. Cadena de hash (§10.10): el sellador sella los asientos existentes en su primera corrida, en orden de id; el primer `hash_anterior` es 64 ceros.
 10. Etiquetas de impuesto (§10.2) y diarios: solo en asientos nuevos. Los checks que dependen de ellas (`iva_cuadrado`) empiezan en `inicio_libros`.
-11. Pagos de pasarela, agente y débito ya registrados contra `1.1.02.01` quedan así; desde la fase 4 los nuevos van a `1.1.10.NN`. Los anteriores sin conciliar se concilian contra el extracto como cualquier movimiento del banco.
+11. Pagos de pasarela, agente y débito ya registrados contra `1.1.02.01` quedan así; desde la fase 4 los nuevos van a `1.1.10.NN`. Los anteriores sin conciliar se concilian contra el extracto como cualquier movimiento del banco. Implementación: la fecha de corte es la del proveedor de cobro de cada empresa, sin asiento de reclasificación (§18, desvío a).
 
 ## 13. Pruebas mínimas (Japa, contra Postgres)
 
@@ -1027,3 +1027,49 @@ Revisados por el líder con el informe del auditor (hallazgos H5–H10; 2026-10-
 - **Contingencia**: el número de acceso (`NumeroAcceso`) del XML se deriva del `identificador` del DTE. **Confirmar**: procedimiento oficial (NO VERIFICADO 7).
 - **Auditor contable** (`tests/contabilidad/verificar_libro.ts`; el auditor independiente restauró la regla estricta en `auditor/fase3`: un aviso lleva todo su IVA en `2.1.11` y nada en `2.1.02`, el resto al revés, y la nota debita `2.1.11` solo si su aviso no estaba reclasificado al emitirla). En la primera versión de A3: el IVA de una factura o nota podía estar en `2.1.02` o en `2.1.11`; la mora con `mora_con_iva` puede llevar IVA; `por_certificar` no sigue `estadoSegunPago`; `reclasificacion` es un origen conocido. Invariantes nuevos: `12.iva_por_certificar_distinto`, `12.por_certificar_con_asiento_o_evento`, `12.reclasificacion_sin_dte_certificado` y `12.dte_certificado_sin_autorizacion o duplicado`.
 - **INFILE, por confirmar con el certificador** (cubierto con el proveedor falso en las pruebas; nunca se llama a INFILE en pruebas): (1) si pruebas y producción usan las mismas URL y el ambiente lo da la credencial; (2) la ruta exacta de la consulta por identificador (`/fel/consulta/dte/v2/identificador_unico`) y su respuesta; (3) cómo avisa de un `identificador` ya certificado (se asume que devuelve el mismo documento); (4) si el proceso unificado (`/fel/procesounificado/transaccion/v2/xml`) aplica también a la anulación (hoy: firma con `es_anulacion = S` y `/fel/anulacion/v2/dte/`); (5) versión del namespace del DTE (`0.2.0`) y de la anulación (`0.1.0`), unidad de medida (`UNI`) y el complemento `ReferenciasNota` (versión `0.0`); (6) si `probarCredenciales` por consulta de NIT del propio emisor es aceptable o hay un endpoint de validación.
+
+## 18. Implementación de la fase 4 (cobros y bancos, A3): pendiente de aprobación del líder
+
+Rama `a3/fase4-bancos`. Lo que sigue cumple §10.3 y §10.9; cada punto marcado **desvío** se aparta de la letra del contrato y espera aprobación.
+
+**Cobros por liquidar (`1.1.10.NN`).**
+
+- **Desvío (a) · proveedor de cobro y fecha de corte.** `ledger.proveedores_cobro` (`empresa_id`, `metodo` `pasarela`/`agente`/`debito`, `codigo` = nombre normalizado de la pasarela o el método, `cuenta_id` = su subcuenta `1.1.10.NN` de la empresa, `cuenta_liquidacion_id`, `desde`, `activo`, `version`). Los pagos de un proveedor **activo** con fecha desde su `desde` van a su `1.1.10.NN` por el bruto, sin comisión (`billing.pagos.proveedor_cobro_id`); un pago de un proveedor sin configurar sigue contra el banco como antes. Así el punto 11 de §12 se cumple por empresa y proveedor: nada se reescribe ni se reclasifica, la fecha de corte es `desde` (hoy o futura; 422 en el pasado) y lo anterior se concilia contra el extracto como cualquier movimiento del banco. **No hay asiento de reclasificación**: los pagos viejos ya están en el banco por el neto y su comisión ya está en `5.1.02`. Pendiente de decidir: si la migración crea proveedores para las empresas con pagos de pasarela (paso automático de todas) o si cada empresa lo activa cuando empiece a registrar liquidaciones (hoy). El paso automático rompe tres invariantes del auditor que suponen el mundo anterior (abajo).
+- **Contracargos.** Un pago liquidado y después anulado deja `1.1.10.NN` negativo por su monto; la siguiente liquidación lo descuenta en `contracargos[]` (`ledger.liquidaciones_pagos.tipo = contracargo`). Invariante: `1.1.10.NN = Σ pagos vigentes sin liquidar − Σ contracargos pendientes`.
+- `cobros.liquidar`: `bruto = Σ pagos − Σ contracargos` (422 `liquidacion_descuadrada`), `neto = bruto − comisión`; 409 `pago_ya_liquidado` y `liquidacion_duplicada` (referencia por proveedor). El archivo de la liquidación no viaja: se guarda su nombre y el `sha256` que calcula quien lo leyó. **Desvío (b)**: permiso nuevo `cobros.configurar` para el alta y la edición de proveedores (no estaba en §11.2).
+- Antigüedad: `GET /cobros/por-liquidar` marca como anomalía cada pago sin liquidar con más de `cobros_liquidar_dias`. El check `cobros_por_liquidar` del cierre (§10.5, fase 6) usará la misma función (`resumenCobrosPorLiquidar`).
+
+**Depósitos y traslados (`1.1.11`).**
+
+- `cajas.depositar`: necesita el turno abierto y no supera su efectivo (422 `deposito_excede_efectivo`); `cerrarCaja` resta los depósitos del turno del esperado. `bancos.trasladar`: solo entre cuentas de la misma empresa (o comunes).
+- **Desvío (c) · llegada.** La llegada al banco (`Banco / 1.1.11`) es un asiento **nuevo** con el mismo origen que el documento (`deposito` o `traslado`) que escribe `bancos.conciliar` cuando la línea del extracto se concilia con el depósito o traslado (`depositos[]`, `traslados[]` en el cuerpo); `ledger.transitos_acreditados` guarda una llegada por documento con su línea. Deshacer la conciliación no deshace la llegada (el dinero llegó): su movimiento vuelve a estar disponible para conciliar. Sin extractos, un depósito se queda en `1.1.11`.
+- Las cuentas se piden como `cuenta_bancaria_id`, `banco_id` (banco del libro) o `cuenta_id` (subcuenta `1.1.02.NN`); el libro guarda siempre la subcuenta.
+
+**Extractos y conciliación.**
+
+- **Desvío (d) · cuenta del extracto.** `ledger.extractos.cuenta_id` es la subcuenta del libro (obligatoria) y `cuenta_bancaria_id` es opcional: la cuenta común `1.1.02.01` (banco principal, donde caen los pagos de pasarela antiguos) también se concilia. La huella es única por (empresa, cuenta).
+- Huella = sha256 de fecha, monto, referencia y descripción normalizadas más el número de aparición de esa combinación en el archivo (dos depósitos iguales el mismo día son dos líneas; reimportar un archivo que se solapa da 409 `extracto_duplicado`). **Desvío (e)**: 422 `extracto_descuadrado` si Σ líneas ≠ saldo final − saldo inicial (código nuevo).
+- `ledger.conciliaciones`: una fila por movimiento, `grupo` común al acto, `monto` = neto del movimiento en la cuenta; un trigger exige misma empresa y cuenta y que nada quede en dos conciliaciones vigentes. `POST /bancos/conciliaciones/:id/anular` deshace el grupo entero.
+- `bancos.registrar_desde_extracto`: cargo → `contrapartida (5.3.07 por defecto) / Banco`; abono → `Banco / contrapartida` (obligatoria). Origen `banco`, `origen_id` = la línea, fecha de la línea.
+- Reglas: `contiene` (sin mayúsculas) o `regex`, rango de monto con signo, cuenta opcional; acción `contrapartida` (registra y concilia) o `cliente` (el único pago bancario vigente con esa referencia y ese monto en la cuenta). `bancos.aplicar_reglas` por extracto.
+- Reporte `GET /reportes/conciliacion-bancaria?cuenta_id&fecha`: saldo del libro, saldo del extracto (saldo inicial del primer extracto + Σ líneas al día), diferencia de apertura, partidas en tránsito de cada lado y `diferencia` = extracto − (libro − tránsito del libro + tránsito del extracto). Una conciliación cuenta al día F si su línea y sus movimientos son de fecha ≤ F.
+- Fechas bajo bloqueo: hoy un mes cerrado rechaza la llegada, la partida del extracto y la liquidación (422 `periodo_cerrado`). El traslado al primer día abierto con `fecha_documento` (§10.4) llega con los bloqueos por tipo (fase 6).
+
+**Cartera y diferencias (§10.9).**
+
+- **Desvío (f) · diferencia por nota.** `pagos.cerrar_diferencia` emite por factura una nota de crédito (`facturas.nota_credito` anidada): NCRE si hay DTE; si no, nota interna proporcional con la **base a `5.3.05`** y el IVA a `2.1.11` (aviso) o `2.1.02` (FEL desactivada). El origen del asiento es `nota_credito` (no `diferencia_cobro`) para que el libro de ventas, `2.1.11` y los invariantes de notas sigan valiendo; `billing.diferencias_cobro` liga pago, factura y nota (una vez). Solo cierra faltantes; un sobrante pequeño sigue en anticipos.
+- `cartera.provisionar`: tope = Σ saldos deudores de `1.1.03` al corte × `reserva_incobrables_max`; registra lo que falta para llegar (`5.3.02 / 1.1.12`) o una fila con monto 0. Corte por defecto el 31-dic (o hoy en el año en curso). **Confirmar con contador**: la base incluye el IVA de los avisos.
+- `cartera.castigar`: un cliente y una empresa por castigo; 422 `castigo_sin_evidencia`. IVA de avisos sin DTE desde `2.1.11` **proporcional** al saldo castigado (`saldo × IVA por certificar / neto por certificar`; todo si nada se pagó); con DTE o FEL desactivada el IVA no se toca (§15 fila 30). El resto contra la estimación `1.1.12` disponible y luego `5.3.02`. **Desvío (g)**: la factura castigada queda con `pagado = total` y estado `pagada` (como cualquier abono; el castigo está en `ledger.castigos_facturas`) y la cola FEL no la certifica (`omitir('castigada')`; 409 `factura_castigada` a mano). **Confirmar con contador**: el IVA de la parte pagada de un aviso castigado queda en `2.1.11` sin DTE (`certificar_pago_parcial = no`).
+
+**Invariantes del auditor que la fase 4 deja atrás** (no se relajó ninguno; en las pruebas de A3, `tests/ledger/verificar_bancos.ts` corre el auditor completo y, solo para estos, su versión ampliada):
+
+| Invariante del auditor | Por qué ya no aplica tal cual | Versión de la fase 4 (A3) |
+| --- | --- | --- |
+| `4.saldo_de_caja_o_banco_distinto_de_sus_documentos` | Los pagos con proveedor no tocan el banco; liquidaciones, depósitos, llegadas, traslados y partidas del extracto son documentos nuevos | `F4.saldo_de_caja_o_banco…` |
+| `4.caja_cerrada_no_cuadra` | El esperado resta los depósitos del turno | `F4.caja_cerrada_no_cuadra` |
+| `5.pago_vigente_mal_contabilizado` | Pago con proveedor: `1.1.10.NN` por el bruto, sin banco ni comisión | `F4.pago_vigente…` |
+| `9.origen_de_asiento_desconocido` | Orígenes `liquidacion_cobro`, `deposito`, `traslado`, `banco`, `provision`, `castigo` | `F4.origen…` |
+| `5.factura_pagado_inconsistente` | El castigo cubre la factura | `F4.factura_pagado…` (con castigos) |
+| `12.iva_por_certificar_distinto`, `12.iva_por_certificar_del_documento`, `12.movimiento_en_2.1.11_de_origen_inesperado` | El castigo saca IVA de `2.1.11` | `F4.iva_por_certificar_distinto` y `F4.castigo_mal_contabilizado` (solo agregados; el del documento queda para el auditor) |
+
+Nuevos de la fase 4: `F4.cobros_por_liquidar_distinto`, `F4.liquidacion_mal_contabilizada`, `F4.fondos_en_transito_distinto`, `F4.conciliacion_descuadrada`, `F4.conciliacion_duplicada`.

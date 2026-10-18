@@ -96,7 +96,7 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cajas.abrir`  | `actions/abrir_caja.ts`  | Abre un turno con `fondo_inicial` y `abierto_por`. Uno abierto por caja (409 `turno_abierto`). Sin asiento: el fondo ya está en la cuenta de la caja                                                                                                                                                |
-| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto` |
+| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto` |
 
 - Cada pago en efectivo guarda el turno abierto de su caja (`billing.pagos.turno_id`, con `FOR SHARE` frente al cierre). `POST /pagos` con `caja` sin `caja_id` usa la caja del turno abierto del cajero (`cajaDelCajero`: el que él abrió o una caja asignada a él, dentro de su alcance) y, si no tiene, la principal.
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
@@ -142,6 +142,31 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
 | GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                               | `cajas.ver`    |
 
+## Cobros y bancos (fase 4, contrato de localización fiscal §10.3 y §10.9)
+
+Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REVOKE`) salvo la configuración (`proveedores_cobro`, `reglas_conciliacion`: `version` y `audit.cambios`). Las cuentas bancarias se piden como `cuenta_bancaria_id`, `banco_id` o `cuenta_id` (`cuentas_banco.ts`); el libro guarda la subcuenta `1.1.02.NN`.
+
+| Acción (permiso) | Ruta | Asiento |
+| --- | --- | --- |
+| `cobros.crear_proveedor`, `cobros.editar_proveedor` (`cobros.configurar`) | `GET/POST /cobros/proveedores`, `PUT /cobros/proveedores/:id` | Crea la subcuenta `1.1.10.NN`; `desde` = fecha de corte (no se edita) |
+| `cobros.liquidar` | `POST /cobros/liquidaciones` | `Banco (neto) + 5.1.02 (comisión) / 1.1.10.NN (bruto)`; bruto = Σ pagos − contracargos |
+| `cajas.depositar` | `POST /cajas/:id/depositar` | `1.1.11 / Caja`; baja el esperado del turno |
+| `bancos.trasladar` | `POST /bancos/trasladar` | `1.1.11 / Banco A` (misma empresa) |
+| `bancos.importar_extracto` | `POST /bancos/extractos` | Ninguno (neutral al origen; huella única por cuenta) |
+| `bancos.conciliar` | `POST /bancos/conciliaciones` | Ninguno sobre lo existente; la llegada de un depósito o traslado es un asiento nuevo `Banco / 1.1.11` |
+| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Ninguno (fila de anulación por fila del grupo) |
+| `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
+| `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
+| `cartera.provisionar` | `POST /cartera/provisionar` | `5.3.02 / 1.1.12` hasta el tope (`reserva_incobrables_max` de los saldos deudores) |
+| `cartera.castigar` | `POST /cartera/castigos` | `2.1.11 (IVA de avisos sin DTE) + 1.1.12 (o 5.3.02) / CxC` |
+
+- `registrarPago`: pasarela, agente o débito de un proveedor activo (desde su fecha de corte) → su `1.1.10.NN` por el bruto, sin comisión (`pagos.proveedor_cobro_id`); sin proveedor, al banco como antes.
+- Lecturas (`bancos.ver`): `GET /cobros/por-liquidar` (puente = pagos sin liquidar − contracargos, antigüedad sobre `cobros_liquidar_dias`), `/cobros/liquidaciones[/:id]`, `/bancos/depositos`, `/bancos/traslados`, `/bancos/fondos-en-transito` (`1.1.11` = sin acreditar), `/bancos/extractos[/:id][/lineas]`, `/bancos/movimientos-sin-conciliar`, `/bancos/reglas`. `reportes.ver`: `GET /reportes/conciliacion-bancaria`, `/cartera/provisiones`, `/cartera/castigos`.
+- Errores: 409 `proveedor_cobro_duplicado`, `pago_ya_liquidado`, `liquidacion_duplicada`, `deposito_duplicado`, `traslado_duplicado`, `extracto_duplicado`, `linea_conciliada`, `movimiento_conciliado`, `conciliacion_anulada`, `linea_registrada`, `sin_turno_abierto`; 422 `liquidacion_descuadrada`, `deposito_excede_efectivo`, `extracto_descuadrado`, `extracto_no_encadena`, `conciliacion_descuadrada`, `castigo_sin_evidencia`, `cuenta_de_otra_empresa` (por campo).
+- Eventos: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado`, `cartera.castigada`.
+- Diarios: `liquidacion_cobro` → `COB` (o `BAN-n` si va a una cuenta propia), depósito → `CAJ-n`, el resto `BAN-n` o `VAR`. Los asientos de estos orígenes no se revierten directo (`reversos.ts`).
+- Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibroFase4` (`tests/ledger/verificar_bancos.ts`: el auditor completo más sus reemplazos de la fase 4).
+
 ## Eventos
 
-Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
