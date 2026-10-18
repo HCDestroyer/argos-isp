@@ -133,6 +133,26 @@ export function errorUrl(valor: string): string | null {
     return 'Solo https://'
 }
 
+/**
+ * Origen de la API de Horus (`contratos/horus.md` §1.4, 1.5.0): `https://host[:puerto]`, sin ruta,
+ * consulta, fragmento ni credenciales. Se tolera que venga con `/api/v1` (o una `/` final), que se
+ * quita: Argos añade `/api/v1` a cada llamada.
+ */
+export function origenHorus(
+    valor: string,
+): { origen: string; error: null } | { origen: null; error: string } {
+    const error = errorUrl(valor)
+    if (error) return { origen: null, error }
+    const url = new URL(valor)
+    if (url.username || url.password) return { origen: null, error: 'La URL no lleva usuario ni contraseña' }
+    if (url.search || url.hash) return { origen: null, error: 'La URL no lleva consulta ni fragmento' }
+    const ruta = url.pathname.replace(/\/+$/, '')
+    if (ruta !== '' && ruta !== '/api/v1') {
+        return { origen: null, error: 'Se espera el origen de Horus (https://host[:puerto]), sin ruta' }
+    }
+    return { origen: url.origin, error: null }
+}
+
 // ── Caché ────────────────────────────────────────────────────────────────────────────────────
 
 let actual: ConfigHorus | null = null

@@ -366,6 +366,58 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
             await horus.detener()
         }
     })
+
+    test('servicio.config_cambiada: solo plan o empresa llegan a Horus (1.7.0), con empresa_id', async ({
+        assert,
+    }) => {
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            horus.responder('/receptor', () => ({ status: 200 }))
+            await fijarConector({
+                url_base: horus.url,
+                webhook_salida_url: `${horus.url}/receptor`,
+                webhook_salida_secreto: SECRETO_SALIDA,
+            })
+            const servicioId = await crearServicio(await crearCliente())
+            // cambio de red (IP, MAC, router): llega por asignacion.cambiada o no le sirve a Horus
+            await evento('servicio.config_cambiada', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                campos: ['mac', 'ips'],
+            })
+            await evento('servicio.config_cambiada', {
+                servicio_id: servicioId,
+                empresa_id: 2,
+                campos: ['empresa'],
+                empresa_anterior_id: 1,
+            })
+            await evento('servicio.config_cambiada', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                campos: ['plan', 'router'],
+            })
+            await entregarPendientes()
+            const cuerpos = horus.de('/receptor').map((p) => p.json)
+            assert.lengthOf(cuerpos, 2)
+            assert.containsSubset(cuerpos, [
+                {
+                    evento: 'servicio.config_cambiada',
+                    payload: {
+                        servicio_id: servicioId,
+                        empresa_id: 2,
+                        campos: ['empresa'],
+                        empresa_anterior_id: 1,
+                    },
+                },
+                {
+                    evento: 'servicio.config_cambiada',
+                    payload: { servicio_id: servicioId, empresa_id: 1, campos: ['plan'] },
+                },
+            ])
+        } finally {
+            await horus.detener()
+        }
+    })
 })
 
 /** POST firmado al receptor de Argos. */

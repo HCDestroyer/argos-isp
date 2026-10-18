@@ -1811,7 +1811,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir un ticket de autologin para un usuario de Horus (servidor a servidor)
-         * @description Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje abre la sesión del usuario local vinculado, o pide su login.
+         * @description Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `horus_apagado` mientras el conector esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje abre la sesión del usuario local vinculado, o pide su login.
          */
         post: operations["integracionesHorusSsoTicket"];
         delete?: never;
@@ -15061,8 +15061,8 @@ export interface operations {
                     };
                     destino: {
                         /** @enum {string} */
-                        tipo: "cliente" | "servicio" | "router";
-                        /** @description Id del recurso en ArgosIsp (cliente, servicio o router) */
+                        tipo: "cliente" | "servicio";
+                        /** @description Id del cliente o del servicio en ArgosIsp */
                         id_externo: string;
                     };
                 };
