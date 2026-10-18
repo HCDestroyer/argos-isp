@@ -48,6 +48,10 @@ Todas las tablas llevan `empresa_id NOT NULL` (FK a `core.empresas`) salvo los c
 
 ### 3.1 Núcleo (A1)
 
+| Tabla           | Cambio                                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §11)                                                                                                                |
+| `core.clientes` | Datos del receptor: `tipo_documento_fiscal` (`nit`, `cui`, `pasaporte`, `cf`; por defecto `cf`), `nit_cui` (ya existe), `nombre_fiscal`, `direccion_fiscal`, `pais_fiscal`, `agente_retencion_iva` (bool), `sector_publico` (bool) y la marca `nit_cui_invalido` (migración, §11.1). Van en `audit.cambios` |
 | Tabla           | Cambio                                                                                                                                                                                                                                                     |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `core.empresas` | `pais char(2) NOT NULL DEFAULT 'GT'`. Cambiar el país de una empresa con documentos: 409 `empresa_con_documentos`. `regimen_isr` y `codigo_establecimiento` quedan de solo lectura (ver §12)                                                               |
@@ -435,6 +439,44 @@ Errores visibles: si una parte no se puede calcular (falta un parámetro, una vi
 
 Todos llevan el aviso **"Referencia; valídelo con su contador"**. Se pueden ocultar por empresa (queda auditado).
 
+## 10. API, permisos, eventos y errores
+
+### 10.1 Endpoints (`/api/v1`)
+
+| Método       | Ruta                                                                                                         | Permiso                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| POST         | `/empresas/:id/cambiar-pais` `{ pais, version }` (A1)                                                        | `empresas.cambiar_pais`                                                     |
+| GET          | `/empresas/paises` (selector de país; A1)                                                                    | `empresas.ver`                                                              |
+| GET          | `/fiscal/localizaciones`, `/fiscal/empresas/:id/localizacion`                                                | `fiscal.ver`                                                                |
+| POST         | `/fiscal/empresas/:id/actualizar-localizacion` `{ codigo }`                                                  | `fiscal.instalar`                                                           |
+| GET          | `/fiscal/parametros?fecha=` (valores vigentes con su origen y fuente), `/fiscal/parametros/:clave/historial` | `fiscal.ver`                                                                |
+| POST         | `/fiscal/parametros/:clave/valores` `{ valor, vigente_desde, motivo }`                                       | `fiscal.editar_parametros`                                                  |
+| POST         | `/fiscal/regimen` `{ regimen, vigente_desde, aviso_sat }`                                                    | `fiscal.cambiar_regimen`                                                    |
+| GET/POST/PUT | `/fiscal/establecimientos[/:id]`                                                                             | `fiscal.ver` / `fiscal.configurar`                                          |
+| GET/POST     | `/fiscal/frases`                                                                                             | `fiscal.ver` / `fiscal.configurar`                                          |
+| GET/PUT      | `/fel/configuracion` (con `version`)                                                                         | `fel.ver` / `fel.configurar`                                                |
+| PUT          | `/fel/credenciales/:ambiente` (multipart o JSON; responde sin secretos)                                      | `fel.configurar`                                                            |
+| POST         | `/fel/credenciales/:ambiente/probar`                                                                         | `fel.configurar`                                                            |
+| POST         | `/fel/activar-contingencia`, `/fel/desactivar-contingencia` `{ motivo }`                                     | `fel.contingencia`                                                          |
+| GET          | `/dte`, `/dte/:id`, `/dte/:id/xml`, `/dte/:id/pdf`                                                           | `fel.ver`                                                                   |
+| POST         | `/facturas/:id/certificar`, `/fel/lotes` `{ facturas[] \| desde, hasta }`                                    | `fel.certificar`                                                            |
+| POST         | `/dte/:id/reintentar`                                                                                        | `fel.certificar`                                                            |
+| GET/POST/PUT | `/proveedores[/:id]`                                                                                         | `proveedores.ver` / `proveedores.editar`                                    |
+| GET          | `/compras`, `/compras/:id`                                                                                   | `compras.ver`                                                               |
+| POST         | `/compras`, `/compras/desde-egreso/:egreso_id`                                                               | `compras.registrar`                                                         |
+| POST         | `/compras/:id/anular` `{ motivo }`                                                                           | `compras.anular`                                                            |
+| POST         | `/pagos-proveedores`, `/pagos-proveedores/:id/anular`                                                        | `compras.pagar`                                                             |
+| GET          | `/libros/:libro?desde&hasta&formato` (vista previa)                                                          | `libros.ver`                                                                |
+| POST         | `/libros/:libro/emitir` `{ desde, hasta, formato }`                                                          | `libros.emitir`                                                             |
+| GET/POST     | `/libros/habilitaciones`                                                                                     | `libros.ver` / `libros.habilitar`                                           |
+| POST         | `/libro/ejercicios/:anio/cerrar`, `/libro/ejercicios/:anio/reabrir`                                          | `libro.cerrar_ejercicio` / `libro.reabrir_ejercicio`                        |
+| GET/POST     | `/libro/bloqueos` `{ tipo, hasta, motivo }`                                                                  | `libro.ver` / `libro.bloquear`, `libro.bloquear_duro`                       |
+| POST         | `/libro/bloqueos/desbloquear` `{ hasta, motivo }`                                                            | `libro.desbloquear`                                                         |
+| GET          | `/fiscal/obligaciones`, `/declaraciones`, `/declaraciones/:id[?formato=pdf\|xlsx]`                           | `declaraciones.ver`                                                         |
+| POST         | `/declaraciones/calcular` `{ impuesto, periodo }`                                                            | `declaraciones.calcular`                                                    |
+| POST         | `/declaraciones/:id/revisar`, `/marcar-presentada`, `/registrar-pago`                                        | `declaraciones.revisar` / `declaraciones.presentar` / `declaraciones.pagar` |
+| GET          | `/fiscal/tablero`, `/fiscal/comparador?crecimiento=`                                                         | `fiscal.ver`                                                                |
+| POST         | `/fiscal/consejos/:clave/ocultar`                                                                            | `fiscal.configurar`                                                         |
 ## 10. Contabilidad completa (referencia: Odoo 20)
 
 Decisión del PM (17 oct): la contabilidad se entrega al 100 % y toma como referencia la documentación oficial de Odoo. Esta sección baja a reglas los diez cambios del estudio de Odoo 20 y 18 del líder (`odoo/odoo-contabilidad.md`, citado como **odoo §n**). Cuando ArgosIsp se aparta de Odoo, aquí se dice por qué (casi siempre por la regla 4 o por la ley de Guatemala).
@@ -752,6 +794,37 @@ Todas las listas con cursor y `?empresas=todas` (solo alcance global). Las que m
 
 Cambio de significado: en modo `obligatoria` con `certificar_al = emitir`, `factura.emitida` sale al certificarse. El payload no cambia. Se actualiza `contratos/eventos.md` y la tabla de `CLAUDE.md` en la PR que lo implemente.
 
+### 10.4 Errores (RFC 9457)
+
+| `type` (sufijo)                 | Estado | Cuándo                                                                     |
+| ------------------------------- | ------ | -------------------------------------------------------------------------- |
+| `pais_no_soportado`             | 422    | País sin paquete                                                           |
+| `campo_solo_lectura`            | 422    | `PUT /empresas/:id` con otro `regimen_isr` o `codigo_establecimiento` (A1) |
+| `empresa_con_documentos`        | 409    | Cambiar el país de una empresa con documentos                              |
+| `localizacion_no_instalada`     | 422    | Operación fiscal en una empresa sin localización                           |
+| `parametro_no_editable`         | 422    | Alcance `N`                                                                |
+| `parametro_fuera_de_rango`      | 422    | Fuera de `minimo`/`maximo`                                                 |
+| `parametro_sin_confirmar`       | 422    | Falta un valor marcado contador                                            |
+| `vigencia_en_periodo_bloqueado` | 422    | `vigente_desde` bajo bloqueo                                               |
+| `regimen_fuera_de_plazo`        | 422    | Cambio de régimen que no empieza el 1-ene                                  |
+| `fel_no_configurada`            | 422    | Certificar sin proveedor o credenciales                                    |
+| `fel_proveedor_no_disponible`   | 503    | El certificador no responde (en la petición síncrona de prueba)            |
+| `tipo_dte_no_permitido`         | 422    | DTE que no corresponde al régimen                                          |
+| `receptor_requerido`            | 422    | CF desde el límite                                                         |
+| `certificar_al_incompatible`    | 422    | `nunca` con FEL obligatoria                                                |
+| `dte_en_proceso`                | 409    | Acción sobre un DTE `enviando`                                             |
+| `anulacion_fuera_de_plazo`      | 422    | Fuera de la ventana de anulación                                           |
+| `nota_fuera_de_plazo`           | 422    | Nota después de 2 meses                                                    |
+| `compra_duplicada`              | 409    | Mismo proveedor, tipo, serie y número                                      |
+| `credito_fiscal_extemporaneo`   | 422    | `periodo_iva` fuera de la ventana                                          |
+| `periodo_sin_bloqueo`           | 422    | Emitir un libro oficial sin bloqueo                                        |
+| `folios_agotados`               | 422    | Sin rango habilitado                                                       |
+| `bloqueo_duro`                  | 409    | Reabrir o fechar bajo bloqueo duro                                         |
+| `bloqueo_regresivo`             | 422    | Mover el bloqueo duro hacia atrás                                          |
+| `ejercicio_incompleto`          | 422    | Meses abiertos, DTE pendientes o ISR anual sin revisar                     |
+| `ejercicio_cerrado`             | 409    | Cerrar dos veces                                                           |
+| `declaracion_desactualizada`    | 409    | El `datos_hash` cambió                                                     |
+| `declaracion_presentada`        | 409    | Recalcular una presentada (se crea una sustitutiva)                        |
 ### 11.4 Errores (RFC 9457)
 
 | `type` (sufijo)                 | Estado | Cuándo                                                                        |

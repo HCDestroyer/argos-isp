@@ -18,6 +18,7 @@ import { CANALES } from '#shared/contexto'
 import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
+import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
@@ -41,21 +42,53 @@ export const loginValidator = vine.compile(
 |--------------------------------------------------------------------------
 */
 
-/** NIT guatemalteco (dígitos + verificador numérico o K) o CUI de 13 dígitos; "CF" para consumidor final. */
+/**
+ * Número del documento fiscal del receptor. El formato fino depende de `tipo_documento_fiscal` y
+ * lo valida la acción (`#core/nit_cui`): NIT con verificador, CUI de 13 dígitos, pasaporte o CF.
+ */
 const nitCui = () =>
     vine
         .string()
         .trim()
         .toUpperCase()
-        .regex(/^(CF|\d{13}|\d{1,12}-?[0-9K])$/)
-        .meta({ description: 'NIT (con dígito verificador), CUI de 13 dígitos o CF' })
+        .regex(/^[0-9A-Z][0-9A-Z -]{0,24}$/)
+        .meta({
+            description:
+                'NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, ' +
+                'según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios',
+        })
+
+/** País ISO 3166-1 alfa-2 en mayúsculas. */
+const pais = () =>
+    vine
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z]{2}$/)
 
 const camposCliente = {
     nombre: vine.string().trim().minLength(2).maxLength(200),
     tipo: vine.enum(['persona', 'empresa'] as const).optional(),
+    tipo_documento_fiscal: vine
+        .enum(TIPOS_DOCUMENTO_FISCAL)
+        .optional()
+        .meta({
+            description:
+                'Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` ' +
+                '(vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)',
+        }),
     nit_cui: nitCui().nullable().optional(),
     nombre_fiscal: vine.string().trim().maxLength(200).nullable().optional(),
     direccion_fiscal: vine.string().trim().maxLength(300).nullable().optional(),
+    pais_fiscal: pais().optional().meta({
+        description: 'País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte',
+    }),
+    agente_retencion_iva: vine.boolean().optional().meta({
+        description: 'El cliente es agente de retención de IVA (retiene al pagar)',
+    }),
+    sector_publico: vine.boolean().optional().meta({
+        description: 'Entidad del sector público (reglas propias de retención)',
+    }),
     email: vine.string().trim().email().nullable().optional(),
     telefono: vine.string().trim().maxLength(30).nullable().optional(),
     movil: vine.string().trim().maxLength(30).nullable().optional(),
@@ -104,6 +137,10 @@ export const listarClientesValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: con alguna factura vencida; false: sin ninguna' }),
+        nit_cui_invalido: vine.boolean().optional().meta({
+            description:
+                'true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal)',
+        }),
         con_promesa_activa: vine
             .boolean()
             .optional()
@@ -534,7 +571,11 @@ const camposEmpresa = {
         .enum(REGIMENES_ISR)
         .nullable()
         .optional()
-        .meta({ description: 'Régimen de ISR para las frases de FEL' }),
+        .meta({
+            description:
+                'Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del ' +
+                'parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)',
+        }),
     codigo_establecimiento: vine
         .number()
         .withoutDecimals()
@@ -542,7 +583,11 @@ const camposEmpresa = {
         .max(999999)
         .nullable()
         .optional()
-        .meta({ description: 'Código de establecimiento en la SAT (FEL)' }),
+        .meta({
+            description:
+                'Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); ' +
+                'al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)',
+        }),
 }
 
 const nitEmpresa = () =>
@@ -560,7 +605,23 @@ export const crearEmpresaValidator = vine.compile(
         nit: nitEmpresa(),
         razon_social: vine.string().trim().minLength(1).maxLength(200),
         nombre_comercial: vine.string().trim().minLength(1).maxLength(200),
+        pais: pais()
+            .optional()
+            .meta({
+                description:
+                    'País de la localización fiscal (por defecto GT; hoy solo GT, ver GET /empresas/paises). ' +
+                    '422 `pais_no_soportado` sin paquete',
+            }),
         ...camposEmpresa,
+    }),
+)
+
+export const cambiarPaisEmpresaValidator = vine.compile(
+    vine.object({
+        pais: pais().meta({ description: 'País nuevo (ISO 3166-1 alfa-2); ver GET /empresas/paises' }),
+        version: vine.number().withoutDecimals().min(0).meta({
+            description: 'version leída de la empresa; si cambió responde 409',
+        }),
     }),
 )
 

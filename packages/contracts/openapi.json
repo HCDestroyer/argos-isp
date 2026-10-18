@@ -1502,6 +1502,15 @@
             }
           },
           {
+            "name": "nit_cui_invalido",
+            "in": "query",
+            "required": false,
+            "description": "true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal)",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "con_promesa_activa",
             "in": "query",
             "required": false,
@@ -1630,13 +1639,23 @@
                       "empresa"
                     ]
                   },
+                  "tipo_documento_fiscal": {
+                    "type": "string",
+                    "enum": [
+                      "nit",
+                      "cui",
+                      "pasaporte",
+                      "cf"
+                    ],
+                    "description": "Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)"
+                  },
                   "nit_cui": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "pattern": "^(CF|\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT (con dígito verificador), CUI de 13 dígitos o CF"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios"
                   },
                   "nombre_fiscal": {
                     "type": [
@@ -1651,6 +1670,19 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "pais_fiscal": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte"
+                  },
+                  "agente_retencion_iva": {
+                    "description": "El cliente es agente de retención de IVA (retiene al pagar)",
+                    "type": "boolean"
+                  },
+                  "sector_publico": {
+                    "description": "Entidad del sector público (reglas propias de retención)",
+                    "type": "boolean"
                   },
                   "email": {
                     "type": [
@@ -1913,13 +1945,23 @@
                       "empresa"
                     ]
                   },
+                  "tipo_documento_fiscal": {
+                    "type": "string",
+                    "enum": [
+                      "nit",
+                      "cui",
+                      "pasaporte",
+                      "cf"
+                    ],
+                    "description": "Documento del receptor (FEL): nit, cui, pasaporte o cf. Sin él se deduce de `nit_cui` (vacío o CF → cf, 13 dígitos → cui, NIT válido → nit)"
+                  },
                   "nit_cui": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "pattern": "^(CF|\\d{13}|\\d{1,12}-?[0-9K])$",
-                    "description": "NIT (con dígito verificador), CUI de 13 dígitos o CF"
+                    "pattern": "^[0-9A-Z][0-9A-Z -]{0,24}$",
+                    "description": "NIT (con dígito verificador módulo 11), CUI de 13 dígitos, pasaporte (3-20 letras o dígitos) o CF, según `tipo_documento_fiscal`. Se guarda sin guiones ni espacios"
                   },
                   "nombre_fiscal": {
                     "type": [
@@ -1934,6 +1976,19 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "pais_fiscal": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País del receptor (por defecto GT); NIT y CUI exigen GT, un extranjero usa pasaporte"
+                  },
+                  "agente_retencion_iva": {
+                    "description": "El cliente es agente de retención de IVA (retiene al pagar)",
+                    "type": "boolean"
+                  },
+                  "sector_publico": {
+                    "description": "Entidad del sector público (reglas propias de retención)",
+                    "type": "boolean"
                   },
                   "email": {
                     "type": [
@@ -5248,6 +5303,11 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "pais": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País de la localización fiscal (por defecto GT; hoy solo GT, ver GET /empresas/paises). 422 `pais_no_soportado` sin paquete"
+                  },
                   "direccion_fiscal": {
                     "type": [
                       "string",
@@ -5345,7 +5405,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Régimen de ISR para las frases de FEL"
+                    "description": "Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)"
                   },
                   "codigo_establecimiento": {
                     "type": [
@@ -5354,7 +5414,7 @@
                     ],
                     "minimum": 1,
                     "maximum": 999999,
-                    "description": "Código de establecimiento en la SAT (FEL)"
+                    "description": "Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)"
                   }
                 },
                 "required": [
@@ -5648,7 +5708,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Régimen de ISR para las frases de FEL"
+                    "description": "Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen)"
                   },
                   "codigo_establecimiento": {
                     "type": [
@@ -5657,7 +5717,7 @@
                     ],
                     "minimum": 1,
                     "maximum": 999999,
-                    "description": "Código de establecimiento en la SAT (FEL)"
+                    "description": "Código de establecimiento en la SAT (FEL). Solo lectura: se acepta al crear (establecimiento 1); al editar, otro valor responde 422 `campo_solo_lectura` (/fiscal/establecimientos)"
                   }
                 },
                 "required": [
@@ -5731,6 +5791,137 @@
           }
         },
         "x-permiso": "empresas.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/{id}/cambiar-pais": {
+      "post": {
+        "operationId": "empresasCambiarPais",
+        "summary": "Cambiar el país de la localización fiscal de la empresa",
+        "description": "Instala la localización del país nuevo en la misma transacción. 422 `pais_no_soportado` sin paquete; 409 `empresa_con_documentos` si ya tiene facturas, notas, pagos, asientos, egresos o documentos fiscales; 409 si `version` cambió. Mismo país: 200 sin cambios.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pais": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$",
+                    "description": "País nuevo (ISO 3166-1 alfa-2); ver GET /empresas/paises"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída de la empresa; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "pais",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa con su país",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaGrupo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.cambiar_pais; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.cambiar_pais",
         "x-implementado": true
       }
     },
@@ -6031,6 +6222,61 @@
           }
         },
         "x-permiso": "empresas.cambiar_logo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresas/paises": {
+      "get": {
+        "operationId": "empresasPaises",
+        "summary": "Países con localización fiscal (selector de país)",
+        "description": "Los que se pueden elegir al crear una empresa o en `cambiar-pais`. Hoy solo GT. Contrato: `.claude/integration/contratos/localizacion-fiscal.md`.",
+        "tags": [
+          "empresas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Países",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaisLocalizacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresas.ver",
         "x-implementado": true
       }
     },
@@ -19351,11 +19597,20 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "compras.anular",
+                        "compras.pagar",
+                        "compras.registrar",
+                        "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.calcular",
+                        "declaraciones.pagar",
+                        "declaraciones.presentar",
+                        "declaraciones.revisar",
+                        "declaraciones.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "egresos.anular",
@@ -19364,6 +19619,7 @@
                         "empresa.editar",
                         "empresa.ver",
                         "empresas.cambiar_logo",
+                        "empresas.cambiar_pais",
                         "empresas.crear",
                         "empresas.desactivar",
                         "empresas.editar",
@@ -19372,6 +19628,16 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "fel.anular",
+                        "fel.certificar",
+                        "fel.configurar",
+                        "fel.contingencia",
+                        "fel.ver",
+                        "fiscal.cambiar_regimen",
+                        "fiscal.configurar",
+                        "fiscal.editar_parametros",
+                        "fiscal.instalar",
+                        "fiscal.ver",
                         "horus.abrir",
                         "horus.configurar",
                         "horus.generar_token",
@@ -19381,11 +19647,19 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.bloquear",
+                        "libro.bloquear_duro",
+                        "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
+                        "libro.desbloquear",
+                        "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "libros.emitir",
+                        "libros.habilitar",
+                        "libros.ver",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -19404,6 +19678,8 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "proveedores.editar",
+                        "proveedores.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.ver",
@@ -19563,11 +19839,20 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "compras.anular",
+                        "compras.pagar",
+                        "compras.registrar",
+                        "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.calcular",
+                        "declaraciones.pagar",
+                        "declaraciones.presentar",
+                        "declaraciones.revisar",
+                        "declaraciones.ver",
                         "documentos.editar",
                         "documentos.ver",
                         "egresos.anular",
@@ -19576,6 +19861,7 @@
                         "empresa.editar",
                         "empresa.ver",
                         "empresas.cambiar_logo",
+                        "empresas.cambiar_pais",
                         "empresas.crear",
                         "empresas.desactivar",
                         "empresas.editar",
@@ -19584,6 +19870,16 @@
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.ver",
+                        "fel.anular",
+                        "fel.certificar",
+                        "fel.configurar",
+                        "fel.contingencia",
+                        "fel.ver",
+                        "fiscal.cambiar_regimen",
+                        "fiscal.configurar",
+                        "fiscal.editar_parametros",
+                        "fiscal.instalar",
+                        "fiscal.ver",
                         "horus.abrir",
                         "horus.configurar",
                         "horus.generar_token",
@@ -19593,11 +19889,19 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "libro.bloquear",
+                        "libro.bloquear_duro",
+                        "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
+                        "libro.desbloquear",
+                        "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
                         "libro.revertir_asiento",
                         "libro.ver",
+                        "libros.emitir",
+                        "libros.habilitar",
+                        "libros.ver",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -19616,6 +19920,8 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "proveedores.editar",
+                        "proveedores.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.ver",
@@ -24244,11 +24550,20 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "compras.anular",
+                            "compras.pagar",
+                            "compras.registrar",
+                            "compras.ver",
                             "comprobantes.aprobar",
                             "comprobantes.rechazar",
                             "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
+                            "declaraciones.calcular",
+                            "declaraciones.pagar",
+                            "declaraciones.presentar",
+                            "declaraciones.revisar",
+                            "declaraciones.ver",
                             "documentos.editar",
                             "documentos.ver",
                             "egresos.anular",
@@ -24257,6 +24572,7 @@
                             "empresa.editar",
                             "empresa.ver",
                             "empresas.cambiar_logo",
+                            "empresas.cambiar_pais",
                             "empresas.crear",
                             "empresas.desactivar",
                             "empresas.editar",
@@ -24265,6 +24581,16 @@
                             "facturas.generar",
                             "facturas.nota_credito",
                             "facturas.ver",
+                            "fel.anular",
+                            "fel.certificar",
+                            "fel.configurar",
+                            "fel.contingencia",
+                            "fel.ver",
+                            "fiscal.cambiar_regimen",
+                            "fiscal.configurar",
+                            "fiscal.editar_parametros",
+                            "fiscal.instalar",
+                            "fiscal.ver",
                             "horus.abrir",
                             "horus.configurar",
                             "horus.generar_token",
@@ -24274,11 +24600,19 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "libro.bloquear",
+                            "libro.bloquear_duro",
+                            "libro.cerrar_ejercicio",
                             "libro.cerrar_periodo",
+                            "libro.desbloquear",
+                            "libro.reabrir_ejercicio",
                             "libro.reabrir_periodo",
                             "libro.registrar_asiento",
                             "libro.revertir_asiento",
                             "libro.ver",
+                            "libros.emitir",
+                            "libros.habilitar",
+                            "libros.ver",
                             "notificaciones.configurar",
                             "notificaciones.editar",
                             "notificaciones.probar",
@@ -24297,6 +24631,8 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "proveedores.editar",
+                            "proveedores.ver",
                             "red.ver",
                             "redes.crear",
                             "redes.ver",
@@ -26924,11 +27260,26 @@
               "empresa"
             ]
           },
+          "tipo_documento_fiscal": {
+            "type": "string",
+            "enum": [
+              "nit",
+              "cui",
+              "pasaporte",
+              "cf"
+            ],
+            "description": "Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)"
+          },
           "nit_cui": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf"
+          },
+          "nit_cui_invalido": {
+            "type": "boolean",
+            "description": "true: el número no pasó la validación al migrar a la localización fiscal (se conservó); se apaga al corregirlo"
           },
           "nombre_fiscal": {
             "type": [
@@ -26941,6 +27292,19 @@
               "string",
               "null"
             ]
+          },
+          "pais_fiscal": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "País del receptor (ISO 3166-1 alfa-2)"
+          },
+          "agente_retencion_iva": {
+            "type": "boolean",
+            "description": "Agente de retención de IVA"
+          },
+          "sector_publico": {
+            "type": "boolean",
+            "description": "Entidad del sector público"
           },
           "email": {
             "type": [
@@ -29244,6 +29608,11 @@
             ],
             "description": "`#RRGGBB`; solo PDF y correo"
           },
+          "pais": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+          },
           "regimen_isr": {
             "type": [
               "string",
@@ -29253,13 +29622,15 @@
               "sujeto_pagos_trimestrales",
               "retencion_definitiva",
               "pequeno_contribuyente"
-            ]
+            ],
+            "description": "Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen"
           },
           "codigo_establecimiento": {
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "description": "Solo lectura (localización fiscal): establecimiento por defecto en la SAT"
           },
           "logo_url": {
             "type": [
@@ -31640,6 +32011,23 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PaisLocalizacion": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "ISO 3166-1 alfa-2"
+          },
+          "nombre": {
+            "type": "string"
           }
         }
       },

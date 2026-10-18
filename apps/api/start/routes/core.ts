@@ -87,6 +87,8 @@ import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
 import CambiarLogoEmpresa from '#core/actions/cambiar_logo_empresa'
+import CambiarPaisEmpresa from '#core/actions/cambiar_pais_empresa'
+import { NOMBRES_PAIS, paisesSoportados } from '#core/localizacion'
 import { filaEmpresa, listarEmpresas, verEmpresaCompleta } from '#core/empresas'
 import { TAMANO_MAXIMO_LOGO, leerArchivoLogo } from '#core/logos'
 import {
@@ -102,6 +104,7 @@ import {
     DependientePago,
     CredencialesPpp,
     EmpresaGrupo,
+    PaisLocalizacion,
     Me,
     Permiso,
     ResolucionIp,
@@ -954,6 +957,24 @@ const empresas: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/empresas/paises',
+        operacion: 'empresasPaises',
+        resumen: 'Países con localización fiscal (selector de país)',
+        descripcion:
+            'Los que se pueden elegir al crear una empresa o en `cambiar-pais`. Hoy solo GT. Contrato: ' +
+            '`.claude/integration/contratos/localizacion-fiscal.md`.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.ver',
+        respuesta: {
+            status: 200,
+            descripcion: 'Países',
+            esquema: { type: 'array', items: PaisLocalizacion },
+        },
+        handler: async () =>
+            paisesSoportados().map((codigo) => ({ codigo, nombre: NOMBRES_PAIS[codigo] ?? codigo })),
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/empresas/:id',
         operacion: 'empresasVer',
         resumen: 'Ver empresa',
@@ -994,6 +1015,29 @@ const empresas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Empresa desactivada', esquema: EmpresaGrupo },
         handler: (ctx, { cuerpo, params }) =>
             new DesactivarEmpresa().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/empresas/:id/cambiar-pais',
+        operacion: 'empresasCambiarPais',
+        resumen: 'Cambiar el país de la localización fiscal de la empresa',
+        descripcion:
+            'Instala la localización del país nuevo en la misma transacción. 422 `pais_no_soportado` sin ' +
+            'paquete; 409 `empresa_con_documentos` si ya tiene facturas, notas, pagos, asientos, egresos o ' +
+            'documentos fiscales; 409 si `version` cambió. Mismo país: 200 sin cambios.',
+        etiqueta: 'empresas',
+        permiso: 'empresas.cambiar_pais',
+        cuerpo: v.cambiarPaisEmpresaValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Empresa con su país', esquema: EmpresaGrupo },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAccesoEmpresa(ctx.contextoAccion(), Number(params.id))
+            return new CambiarPaisEmpresa().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',

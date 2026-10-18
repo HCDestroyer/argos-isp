@@ -5,6 +5,7 @@ import type { ContextoAccion } from '#shared/contexto'
 import { EmpresaRequerida, exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { normalizarNitCui } from '#core/nit_cui'
 import { PREFIJO_API } from '#shared/rutas'
+import { instaladorLocalizacion } from '#core/localizacion'
 
 /**
  * Empresas (NIT) de la instalación (`contratos/multiempresa.md`). La empresa 1 es la principal: la
@@ -42,6 +43,14 @@ export const CAMPOS_DATOS_EMPRESA = [
 ] as const
 export type CampoDatoEmpresa = (typeof CAMPOS_DATOS_EMPRESA)[number]
 
+/**
+ * De solo lectura desde la localización fiscal (`contratos/localizacion-fiscal.md` §2 y §11): se
+ * aceptan en el alta (son la semilla del parámetro `regimen` y del establecimiento 1 que instala
+ * `fiscal`) y después solo cambian por `/fiscal/regimen` y `/fiscal/establecimientos` (A3).
+ * `empresas.editar` responde 422 `campo_solo_lectura` si se manda otro valor.
+ */
+export const CAMPOS_SOLO_LECTURA_EMPRESA = ['regimen_isr', 'codigo_establecimiento'] as const
+
 export interface DatosEmpresaCompleta {
     nit: string | null
     razon_social: string | null
@@ -63,6 +72,8 @@ export interface DatosEmpresaCompleta {
 
 export interface EmpresaCompleta extends DatosEmpresaCompleta {
     id: number
+    /** País de la localización fiscal (ISO 3166-1 alfa-2); cambia con `empresas.cambiar_pais` */
+    pais: string
     /** `/api/v1/empresas/:id/logo?v=<etag>`; null sin logo */
     logo_url: string | null
     logo_tipo: 'image/png' | 'image/svg+xml' | null
@@ -82,6 +93,7 @@ export interface FilaEmpresa extends Omit<EmpresaCompleta, 'logo_url' | 'princip
 const COLUMNAS = [
     'id',
     ...CAMPOS_DATOS_EMPRESA,
+    'pais',
     'logo',
     'logo_tipo',
     'logo_etag',
@@ -122,11 +134,32 @@ export async function filaEmpresa(
     return fila
 }
 
+/**
+ * Régimen y establecimiento vigentes según `fiscal` cuando su instalador sabe leerlos
+ * (`InstaladorLocalizacion.datosFiscales`); si no, quedan los guardados en `core.empresas`.
+ */
+async function conDatosFiscales(
+    empresas: EmpresaCompleta[],
+    cliente: QueryClientContract,
+): Promise<EmpresaCompleta[]> {
+    const instalador = instaladorLocalizacion()
+    if (!instalador?.datosFiscales || empresas.length === 0) return empresas
+    const datos = await instalador.datosFiscales(
+        empresas.map((e) => e.id),
+        cliente,
+    )
+    return empresas.map((e) => {
+        const fiscales = datos.get(e.id)
+        return fiscales ? { ...e, ...fiscales } : e
+    })
+}
+
 export async function verEmpresaCompleta(
     id: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<EmpresaCompleta> {
-    return aVista(await filaEmpresa(id, cliente))
+    const [empresa] = await conDatosFiscales([aVista(await filaEmpresa(id, cliente))], cliente)
+    return empresa!
 }
 
 /**
@@ -140,7 +173,7 @@ export async function listarEmpresas(
     const consulta = cliente.from('core.empresas').select(COLUMNAS).orderBy('id', 'asc')
     if (opciones.ids) consulta.whereIn('id', opciones.ids)
     if (opciones.soloActivas) consulta.where('activa', true)
-    return ((await consulta) as FilaEmpresa[]).map(aVista)
+    return conDatosFiscales(((await consulta) as FilaEmpresa[]).map(aVista), cliente)
 }
 
 /** Ids de las empresas activas, en orden. */
