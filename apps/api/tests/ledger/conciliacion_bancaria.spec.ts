@@ -19,9 +19,13 @@ import { resumenFondosEnTransito } from '#ledger/transitos'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { errorDe, lineas, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
-import { fotoLibro, compararFotoLibro, marcasAuditoria } from '#tests/contabilidad/verificar_libro'
+import {
+    fotoLibro,
+    compararFotoLibro,
+    marcasAuditoria,
+    afirmarLibro,
+} from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
 
 /**
  * Fase 4 (§10.3): extractos y conciliación bancaria de solo inserción. Conciliar liga líneas con lo
@@ -282,7 +286,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         // nada de lo que ya estaba en el libro cambió: conciliar solo agrega filas
         const despues = await fotoLibro([e.B], marcas.acciones, marcas.outbox)
         assert.deepEqual(compararFotoLibro(antes, despues), [])
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
         const eventos = await db
             .from('audit.outbox')
             .whereIn('evento', ['banco.extracto_importado', 'banco.conciliado'])
@@ -337,6 +341,6 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         assert.equal(await saldoCuenta(e.B, a.codigo), '-50.00')
         const [reporte] = await reporteConciliacion([e.B], { cuenta_id: destino.cuenta_id })
         assert.isTrue(reporte!.cuadra)
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

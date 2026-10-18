@@ -16,8 +16,8 @@ import {
     servicioFacturado,
 } from '#tests/contabilidad/ayudas_contabilidad'
 import { cola, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
 
 /**
  * Fase 4 (§10.9): cierre de diferencias de cobro, estimación y castigo de cartera.
@@ -73,7 +73,7 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         )
         const sobre = await errorDe(new CerrarDiferenciaPago().execute({ pago_id: corto.id }, e.ctx))
         assert.equal(sobre.codigo, 'diferencia_sobre_tope')
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('cerrar diferencia de un aviso sin DTE: nota interna con IVA de 2.1.11 y el aviso se certifica por el neto', async ({
@@ -104,7 +104,7 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         assert.equal(dte!.estado, 'certificado')
         assert.equal(dte!.total, '149.50')
         assert.equal(await saldoCuenta(e.B, IVA_POR_CERTIFICAR), '0.00')
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
     })
 
     test('estimación hasta el 3 % y castigo de un aviso sin DTE: IVA de 2.1.11, estimación y 5.3.02; no se certifica', async ({
@@ -167,7 +167,7 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
             .whereRaw(`(payload->>'castigo_id')::bigint = ?`, [castigo.id])
             .first()
         assert.exists(evento)
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('castigo de un aviso con pago parcial: sale de 2.1.11 solo el IVA proporcional del saldo', async ({
@@ -195,6 +195,6 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         assert.equal(castigo.estimacion, '0.00')
         assert.equal(castigo.gasto, '89.29')
         assert.equal(await saldoCuenta(e.B, IVA_POR_CERTIFICAR), '-5.36')
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
     })
 })

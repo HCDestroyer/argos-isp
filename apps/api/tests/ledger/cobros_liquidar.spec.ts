@@ -12,8 +12,7 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import { errorDe, lineas, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Fase 4 (§10.3): cobros por liquidar. Un pago por pasarela de un proveedor configurado va a su
@@ -128,7 +127,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             resumen!.anomalias.map((a) => a.pago_id),
             [p1.id, p2.id],
         )
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // descuadrada y con un pago ajeno
         const descuadre = await errorDe(
@@ -223,16 +222,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             ),
         )
         assert.equal(dup.codigo, 'liquidacion_duplicada')
-        await afirmarLibroFase4(assert, [e.B, e.C])
-        // lo que bloquea al auditor original (para el reporte): exactamente los invariantes del mundo
-        // anterior a la fase 4, nada más
-        const violaciones = await verificarLibro([e.B])
-        const originales = [...new Set(violaciones.map((v) => v.invariante.split(' ')[0]))]
-        assert.sameMembers(originales, [
-            '5.pago_vigente_mal_contabilizado',
-            '9.origen_de_asiento_desconocido',
-            '4.saldo_de_caja_o_banco_distinto_de_sus_documentos',
-        ])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('contracargo: un pago liquidado y anulado deja 1.1.10 en negativo y la siguiente liquidación lo descuenta', async ({
@@ -271,7 +261,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             resumen!.pagos.map((p) => [p.pago_id, p.tipo]),
             [[p1.id, 'contracargo']],
         )
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
 
         const p2 = await pagarPasarela(e, e.B, s.clienteId, '120.00')
         // el contracargo de un pago no liquidado no existe
@@ -311,7 +301,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
         ;[resumen] = await resumenCobrosPorLiquidar([e.B])
         assert.equal(resumen!.pendiente, '0.00')
         assert.isTrue(resumen!.cuadra)
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
     })
 
     test('agente y débito: un proveedor por método; desactivado, los pagos nuevos vuelven al banco', async ({
@@ -384,7 +374,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
         )
         assert.isNull(despues.proveedor_cobro_id)
         assert.equal(await saldoCuenta(e.C, agente.cuenta_codigo), '25.00')
-        await afirmarLibroFase4(assert, [e.C])
+        await afirmarLibro(assert, [e.C])
         // sin proveedores ni orígenes nuevos, el auditor original sigue en verde en otra empresa
         await afirmarLibro(assert, e.B)
     })

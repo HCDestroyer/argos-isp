@@ -165,7 +165,7 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 - Errores: 409 `proveedor_cobro_duplicado`, `pago_ya_liquidado`, `liquidacion_duplicada`, `deposito_duplicado`, `traslado_duplicado`, `extracto_duplicado`, `linea_conciliada`, `movimiento_conciliado`, `conciliacion_anulada`, `linea_registrada`, `sin_turno_abierto`; 422 `liquidacion_descuadrada`, `deposito_excede_efectivo`, `extracto_descuadrado`, `extracto_no_encadena`, `conciliacion_descuadrada`, `castigo_sin_evidencia`, `cuenta_de_otra_empresa` (por campo).
 - Eventos: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado`, `cartera.castigada`.
 - Diarios: `liquidacion_cobro` → `COB` (o `BAN-n` si va a una cuenta propia), depósito → `CAJ-n`, el resto `BAN-n` o `VAR`. Los asientos de estos orígenes no se revierten directo (`reversos.ts`).
-- Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibroFase4` (`tests/ledger/verificar_bancos.ts`: el auditor completo más sus reemplazos de la fase 4).
+- Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibro` (el auditor completo, con los invariantes de la fase 4 que agregó el auditor).
 
 ## Eventos
 
